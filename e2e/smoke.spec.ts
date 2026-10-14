@@ -14,6 +14,24 @@ async function visit(page: Page, path: string) {
   expect(errors, `${path} page errors`).toEqual([]);
 }
 
+/** Turns on meeting notes, uploads one piece of audio (demo transcription) and stops. Returns the meeting id. */
+async function recordMeeting(page: Page, botId: string): Promise<string> {
+  expect((await page.request.post(`/api/bots/${botId}/connections`, { data: { connectorId: "meetings" } })).ok()).toBeTruthy();
+  const started = await page.request.post(`/api/bots/${botId}/meetings`, { data: { app: "meet" } });
+  expect(started.status()).toBe(201);
+  const { meeting } = await started.json();
+  const audio = await page.request.post(`/api/bots/${botId}/meetings/${meeting.id}/audio?track=mic&chunk=0&startMs=0&durationMs=6000`, {
+    headers: { "content-type": "audio/webm" },
+    data: Buffer.alloc(4000),
+  });
+  expect(audio.ok()).toBeTruthy();
+  expect((await page.request.post(`/api/bots/${botId}/meetings/${meeting.id}/finish`)).ok()).toBeTruthy();
+  await expect
+    .poll(async () => (await (await page.request.get(`/api/bots/${botId}/meetings/${meeting.id}`)).json()).meeting.status, { timeout: 30_000 })
+    .toBe("ready");
+  return meeting.id as string;
+}
+
 test("public pages render", async ({ page }) => {
   for (const path of ["/", "/pricing", "/safety", "/explore", "/r/inbox-zero", "/legal/terms", "/legal/privacy", "/login", "/build"]) {
     await visit(page, path);
@@ -54,10 +72,21 @@ test("every dashboard page renders for a signed-in owner", async ({ page }) => {
   });
   expect(created.ok()).toBeTruthy();
   const { id } = await created.json();
-  for (const tab of ["", "/activity", "/tools", "/channels", "/routines", "/memory", "/settings"]) {
+  for (const tab of ["", "/meetings", "/activity", "/tools", "/channels", "/routines", "/memory", "/settings"]) {
     await visit(page, `/app/bots/${id}${tab}`);
   }
+  // A meeting: notes on, a piece of (demo) audio, stop; then the meeting page and the chat that got the notes.
+  const meetingId = await recordMeeting(page, id);
+  await visit(page, `/app/bots/${id}/meetings`);
+  await visit(page, `/app/bots/${id}/meetings/${meetingId}`);
+  await visit(page, `/app/bots/${id}`);
   for (const path of ["/app?all=1", "/app/approvals", "/app/billing", "/app/bridge", "/app/account"]) {
     await visit(page, path);
+  }
+});
+
+test("the desktop app's meeting buddy renders in every phase", async ({ page }) => {
+  for (const phase of ["asking", "listening", "paused", "saving", "done", "error"]) {
+    await visit(page, `/desktop/buddy?phase=${phase}&app=zoom&elapsed=754&caption=Others:Hi%20there&message=Something%20went%20wrong`);
   }
 });

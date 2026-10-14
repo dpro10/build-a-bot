@@ -237,11 +237,21 @@ Built (research: `docs/research/meetings-2026-10-14.md`):
   - The pop-up offers a one-tap heads-up to paste in the call chat.
   - Each meeting records who said yes, when, where, and whether the heads-up was copied.
 - **What we keep:**
-  - Audio is transcribed in memory and never stored.
+  - Audio is transcribed in memory and never stored on our servers. The desktop app writes audio to a temporary folder on the owner's own computer only when an upload fails or the app quits mid-upload, and deletes it once it's uploaded.
   - Transcripts are kept 90 days by default (30 days, 90 days or forever in the Meetings tab), and can be deleted while keeping the notes.
   - Notes stay until deleted.
   - Meetings are in the account export and go with account deletion.
 - **New hard limit,** shown everywhere the others are: "It only listens to a meeting after you say yes, and it stays on your screen the whole time it's listening."
+- **Web recorder choices:**
+  - Starting takes up to three clicks: the one-time consent note, sharing the call's tab, then Start. Start opens the floating window and the mic in one click, because browsers need a click for each.
+  - Recording runs only while the floating window is open; closing it stops and writes the notes.
+  - Safari and phones can't open the floating window, so they're pointed to Chrome or Edge on a computer, or the desktop app.
+  - A paused recording (web or desktop) tells the server it's paused, so it isn't wrapped up as abandoned after 20 minutes. It still counts toward the 4-hour cap.
+- **Desktop app choices:**
+  - FaceTime and phone calls aren't detected.
+  - On a Mac, reading browser tab titles (to spot Google Meet in a browser) needs an Automation permission, so it's off unless the owner turns it on from the menu bar.
+  - When a Mac can't get the call's audio, the app says it's a permission problem and keeps going with the mic only.
+  - "Unpair" revokes the computer's token on the server, not just on the computer.
 
 ## Gotchas found while building
 

@@ -291,12 +291,25 @@ export function meetingUrl(m: Pick<Meeting, "botId" | "id">): string {
   return `${appUrl()}/app/bots/${m.botId}/meetings/${m.id}`;
 }
 
+/** What the chat's meeting-notes card needs without looking the meeting up. */
+function cardMeta(m: Meeting): Record<string, unknown> {
+  return {
+    meetingId: m.id,
+    kind: "meeting_notes",
+    app: m.app,
+    title: m.title,
+    inPerson: (m.meta as { inPerson?: boolean } | null)?.inPerson === true,
+    durationSec: m.durationSec,
+    actionItems: m.actionItems?.length ?? 0,
+  };
+}
+
 /** Full notes into the web chat; a short version on the owner's best messaging channel. */
 export async function deliverNotes(db: Db, bot: Bot, owner: User, m: Meeting) {
   const url = meetingUrl(m);
   const head = `📝 Notes from “${m.title}” (${formatDuration(m.durationSec)})`;
   if (!m.notes) {
-    await postToWebInbox(db, bot, `${head}\n\n${m.error ?? "No notes this time."}\n\n[Open the transcript](${url})`, { meetingId: m.id, kind: "meeting_notes" });
+    await postToWebInbox(db, bot, `${head}\n\n${m.error ?? "No notes this time."}\n\n[Open the transcript](${url})`, cardMeta(m));
     return;
   }
   const items = (m.actionItems ?? []).slice(0, 6).map((a) => `- [ ] ${a.owner ? `${a.owner} — ` : ""}${a.text}${a.due ? ` (by ${a.due})` : ""}`);
@@ -309,7 +322,7 @@ export async function deliverNotes(db: Db, bot: Bot, owner: User, m: Meeting) {
     db,
     bot,
     `${head}${tally ? ` — ${tally}` : ""}\n\n${m.notes}\n\n[Open the full transcript](${url})\n\nThe audio is already gone; I only keep the text. ${offer}`,
-    { meetingId: m.id, kind: "meeting_notes" },
+    cardMeta(m),
   );
   const elsewhere = (await ownerChannels(db, bot.id)).filter((c) => (OWNER_PRIORITY as string[]).includes(c.kind));
   if (!elsewhere.length) return;

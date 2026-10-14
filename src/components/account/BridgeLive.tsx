@@ -2,7 +2,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, CircleCheck, KeyRound, Laptop, LoaderCircle, Monitor, PartyPopper, Plus, RefreshCw, Settings, Timer, Unplug } from "lucide-react";
+import { ArrowRight, AudioLines, CircleCheck, KeyRound, Laptop, LoaderCircle, Monitor, PartyPopper, Plus, RefreshCw, Settings, Timer, Unplug } from "lucide-react";
 import { Avatar } from "@/components/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import { toast } from "@/components/ui/toaster";
 import { api } from "@/lib/client/api";
 import { cn, relativeTime } from "@/lib/utils";
 import type { AvatarId, ColorwayId } from "@/lib/avatars";
-import { cliVersion, type DeviceView } from "./bridge-shared";
+import { cliVersion, isDesktopApp, type DeviceView } from "./bridge-shared";
 import { clock, useNow } from "./time";
 
 export type SubscriptionBot = {
@@ -84,7 +84,11 @@ export function BridgeLive({
     baseline.current = null;
     setJustPaired(fresh.id);
     setPairing(null);
-    toast.success(`${fresh.name} is paired!`, { description: "Now start the Bridge on it so your bots can think there." });
+    toast.success(`${fresh.name} is paired!`, {
+      description: isDesktopApp(fresh.platform)
+        ? "Your bot will pop up there when a call starts, and ask before it takes notes."
+        : "Now start the Bridge on it so your bots can think there.",
+    });
     router.refresh();
   }, [devices, pairing, router]);
 
@@ -132,7 +136,11 @@ export function BridgeLive({
     setDevices((ds) => ds.filter((d) => d.id !== device.id));
     try {
       await api(`/api/bridge/devices/${device.id}`, { method: "DELETE" });
-      toast(`${device.name} is unpaired.`, { description: "On that computer, run `npx build-a-bot-bridge unpair` to remove its saved key too." });
+      toast(`${device.name} is unpaired.`, {
+        description: isDesktopApp(device.platform)
+          ? "The desktop app there stops taking notes right away."
+          : "On that computer, run `npx build-a-bot-bridge unpair` to remove its saved key too.",
+      });
       router.refresh();
     } catch (err) {
       setDevices((ds) => [device, ...ds]);
@@ -141,7 +149,9 @@ export function BridgeLive({
   };
 
   const onlineWith = (cli: "claude" | "codex") => devices.some((d) => d.online && d.clis[cli]);
-  const anyOnline = devices.some((d) => d.online);
+  // The desktop app (meeting notes) pairs here too, but only the Bridge thinks for subscription bots.
+  const bridgeDevices = devices.filter((d) => !isDesktopApp(d.platform));
+  const anyOnline = bridgeDevices.some((d) => d.online);
   const hasDevices = devices.length > 0;
 
   const setup = (
@@ -249,13 +259,15 @@ export function BridgeLive({
             {hasDevices
               ? anyOnline
                 ? "Your subscription bots think on whichever one is online."
-                : "None are online right now. Start the Bridge on one to wake your bots."
+                : bridgeDevices.length
+                  ? "None are online right now. Start the Bridge on one to wake your bots."
+                  : "The desktop app takes meeting notes. To use your own Claude or ChatGPT, pair a computer with the Bridge too."
               : "Computers you pair show up here."}
           </p>
         </div>
         {hasDevices ? (
-          <Badge tone={anyOnline ? "success" : "neutral"} className="px-3 py-1 text-sm">
-            <span className={cn("size-2 rounded-full", anyOnline ? "bg-success" : "bg-muted-foreground")} />
+          <Badge tone={devices.some((d) => d.online) ? "success" : "neutral"} className="px-3 py-1 text-sm">
+            <span className={cn("size-2 rounded-full", devices.some((d) => d.online) ? "bg-success" : "bg-muted-foreground")} />
             {devices.filter((d) => d.online).length} of {devices.length} online
           </Badge>
         ) : null}
@@ -358,13 +370,17 @@ export function BridgeLive({
           <DialogHeader>
             <DialogTitle>Unpair {revoking?.name}?</DialogTitle>
             <DialogDescription>
-              Your bots won&apos;t think on this computer anymore. Its saved key stops working right away, so pairing again needs a new code.
+              {revoking && isDesktopApp(revoking.platform)
+                ? "Your bots won't take meeting notes on this computer anymore. Its saved key stops working right away, so pairing again needs a new code."
+                : "Your bots won't think on this computer anymore. Its saved key stops working right away, so pairing again needs a new code."}
             </DialogDescription>
           </DialogHeader>
-          <DialogBody>
-            <p className="text-sm text-muted-foreground">To clean up on that computer too, run:</p>
-            <CommandBlock command="npx build-a-bot-bridge unpair" className="mt-2" />
-          </DialogBody>
+          {revoking && isDesktopApp(revoking.platform) ? null : (
+            <DialogBody>
+              <p className="text-sm text-muted-foreground">To clean up on that computer too, run:</p>
+              <CommandBlock command="npx build-a-bot-bridge unpair" className="mt-2" />
+            </DialogBody>
+          )}
           <DialogFooter className="flex-col-reverse items-stretch sm:flex-row sm:items-center [&>*]:w-full sm:[&>*]:w-auto">
             <DialogClose asChild>
               <Button variant="ghost">Keep it</Button>
@@ -442,7 +458,12 @@ function DeviceRow({ device, now, fresh, onRevoke }: { device: DeviceView; now: 
           {device.platformLabel} · paired {paired}
         </div>
         <div className="mt-2 flex flex-wrap gap-1.5">
-          {(["claude", "codex"] as const).map((cli) => {
+          {isDesktopApp(device.platform) ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-primary-soft px-2.5 py-0.5 text-xs font-medium text-primary">
+              <AudioLines className="size-3" aria-hidden /> Desktop app (meeting notes)
+            </span>
+          ) : null}
+          {(isDesktopApp(device.platform) ? [] : (["claude", "codex"] as const)).map((cli) => {
             const version = cliVersion(device.clis[cli]);
             return (
               <span

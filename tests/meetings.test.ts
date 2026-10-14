@@ -241,6 +241,29 @@ describe("meeting notes", () => {
     const body = await live.json();
     expect(body.meeting.status).toBe("recording");
     expect(body.segments).toHaveLength(1);
+
+    // Unpairing from the desktop app revokes the token for good.
+    const sessionRoute = await import("@/app/api/desktop/session/route");
+    const me = await sessionRoute.GET(new Request("http://localhost/api", { headers }));
+    expect((await me.json()).bots.find((b: { id: string }) => b.id === bot.id)).toMatchObject({ meetingsOn: true });
+    expect((await sessionRoute.DELETE(new Request("http://localhost/api", { method: "DELETE", headers }))).status).toBe(200);
+    expect((await sessionRoute.GET(new Request("http://localhost/api", { headers }))).status).toBe(401);
+  });
+
+  it("leaves a paused recording alone, and real audio un-pauses it", async () => {
+    const bot = await makeBot({ who: await newOwner("usr_pause") });
+    const who = (await db.select().from(schema.users).where(eq(schema.users.id, bot.ownerId)))[0];
+    const m = await record(bot, who, 1);
+    const { setPaused, meetingView, staleRecordings } = await import("@/lib/meetings");
+    const paused = await setPaused(db, m, true);
+    expect(meetingView(paused).paused).toBe(true);
+    await db.update(schema.meetings).set({ updatedAt: new Date(Date.now() - 60 * 60_000) }).where(eq(schema.meetings.id, m.id));
+    expect((await staleRecordings(db)).map((r) => r.id)).not.toContain(m.id);
+    // A tiny silent "still here" ping keeps it paused; real audio clears it.
+    await addChunk(db, { meeting: paused, owner: who, track: "mic", chunk: 1, startMs: 6000, durationMs: 1, audio: new ArrayBuffer(0), mime: "audio/webm", silent: true });
+    expect(meetingView((await db.select().from(schema.meetings).where(eq(schema.meetings.id, m.id)))[0]).paused).toBe(true);
+    await addChunk(db, { meeting: paused, owner: who, track: "mic", chunk: 2, startMs: 6000, durationMs: 6000, audio: AUDIO, mime: "audio/webm" });
+    expect(meetingView((await db.select().from(schema.meetings).where(eq(schema.meetings.id, m.id)))[0]).paused).toBe(false);
   });
 
   it("wraps up recordings whose recorder disappeared", async () => {

@@ -57,6 +57,8 @@ export type MeetingView = {
   transcriptDeleted: boolean;
   /** The owner copied the heads-up for the call (before or during the recording). */
   noticeCopied: boolean;
+  /** Recording, but paused by the owner. */
+  paused: boolean;
 };
 
 /** Transcripts are kept this long unless the owner picks otherwise (notes stay until deleted). */
@@ -86,6 +88,7 @@ export function meetingView(m: Meeting): MeetingView {
     inPerson: meta.inPerson === true,
     transcriptDeleted: typeof meta.transcriptDeletedAt === "string",
     noticeCopied: Boolean((meta.consent as { noticeCopied?: boolean } | undefined)?.noticeCopied),
+    paused: m.status === "recording" && typeof meta.pausedAt === "string",
   };
 }
 
@@ -305,10 +308,12 @@ export async function addChunk(db: Db, input: ChunkInput): Promise<{ ok: true; s
 
   // Meeting length (and the plan's meeting minutes) follows wall-clock time, whichever track gets there first.
   const reach = Math.ceil((input.startMs + input.durationMs) / 1000);
+  let meta = provider ? sql`meetings.meta || jsonb_build_object('transcribedBy', ${provider}::text)` : sql`meetings.meta`;
+  // Real audio means it's recording again; a tiny silent "still here" ping from a paused recorder doesn't.
+  if (!(input.silent && input.durationMs < 1000)) meta = sql`(${meta}) - 'pausedAt'`;
   const bumped = await db.execute(sql`
     with prev as (select duration_sec from meetings where id = ${meeting.id} for update)
-    update meetings set duration_sec = greatest(meetings.duration_sec, ${reach}), updated_at = now(),
-      meta = case when ${provider ?? null}::text is null then meetings.meta else meetings.meta || jsonb_build_object('transcribedBy', ${provider ?? null}::text) end
+    update meetings set duration_sec = greatest(meetings.duration_sec, ${reach}), updated_at = now(), meta = ${meta}
     from prev where meetings.id = ${meeting.id}
     returning prev.duration_sec as before, meetings.duration_sec as after`);
   const row = (bumped as unknown as { rows?: { before: number; after: number }[] }).rows?.[0] ?? (bumped as unknown as { before: number; after: number }[])[0];
@@ -425,11 +430,27 @@ export async function searchSegments(db: Db, botId: string, query: string, limit
     .limit(limit);
 }
 
-/** Recordings whose recorder disappeared: stop them so the notes still get written. */
+/** Recordings whose recorder disappeared: stop them so the notes still get written. A paused one is left alone (up to the 4-hour cap). */
 export async function staleRecordings(db: Db, now = new Date()): Promise<Meeting[]> {
-  return db
+  const rows = await db
     .select()
     .from(schema.meetings)
     .where(and(eq(schema.meetings.status, "recording"), lt(schema.meetings.updatedAt, new Date(now.getTime() - STALE_RECORDING_MS))))
-    .limit(20);
+    .limit(40);
+  return rows
+    .filter((m) => {
+      const pausedAt = (m.meta as { pausedAt?: string } | null)?.pausedAt;
+      return !pausedAt || now.getTime() - Date.parse(pausedAt) > MAX_MEETING_MS;
+    })
+    .slice(0, 20);
+}
+
+/** The owner paused (or resumed) the recording; a paused meeting isn't wrapped up as abandoned. */
+export async function setPaused(db: Db, meeting: Meeting, paused: boolean): Promise<Meeting> {
+  if (meeting.status !== "recording") return meeting;
+  const meta = { ...((meeting.meta ?? {}) as Record<string, unknown>) };
+  if (paused) meta.pausedAt = new Date().toISOString();
+  else delete meta.pausedAt;
+  const [updated] = await db.update(schema.meetings).set({ meta, updatedAt: new Date() }).where(eq(schema.meetings.id, meeting.id)).returning();
+  return updated ?? meeting;
 }

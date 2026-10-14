@@ -15,10 +15,15 @@ export type DeviceView = {
   createdAt: string;
 };
 
-/** "darwin-arm64" → "Mac (Apple silicon)" */
+/** The desktop app (meeting notes) pairs like the Bridge, with a "desktop-" platform. */
+export function isDesktopApp(platform: string | null | undefined): boolean {
+  return Boolean(platform?.startsWith("desktop-"));
+}
+
+/** "darwin-arm64" → "Mac (Apple silicon)" (also "desktop-darwin-arm64", from the desktop app) */
 export function platformLabel(platform: string | null): string {
   if (!platform) return "Computer";
-  const [os, arch] = platform.split("-");
+  const [os, arch] = platform.replace(/^desktop-/, "").split("-");
   if (os === "darwin") return arch === "arm64" ? "Mac (Apple silicon)" : "Mac (Intel)";
   if (os === "win32") return "Windows PC";
   if (os === "linux") return "Linux";

@@ -7,6 +7,7 @@ import { AppWall } from "@/components/marketing/landing/AppWall";
 import { TrustSection } from "@/components/marketing/landing/TrustSection";
 import { InjectionSection } from "@/components/marketing/landing/InjectionSection";
 import { Channels } from "@/components/marketing/landing/Channels";
+import { MeetingNotes } from "@/components/marketing/landing/MeetingNotes";
 import { Recipes } from "@/components/marketing/landing/Recipes";
 import { Promises } from "@/components/marketing/landing/Promises";
 import { PricingTeaser } from "@/components/marketing/landing/PricingTeaser";
@@ -34,6 +35,10 @@ const FAQ: { q: string; text: string }[] = [
     text: "Full faith lets your bot act on its own across the apps you connect: sending, posting, updating and deleting for you, with a receipt for every action. A few hard limits still apply. It asks before sending your data to someone new right after reading outside content, before deleting more than 10 things at once, and before spending past your cap. It never shares passwords or keys and never pretends to be human. Full faith comes with Plus and Pro.",
   },
   {
+    q: "Can it take notes in my meetings?",
+    text: "Yes, when you say yes. The desktop app notices when a call starts in Zoom, Meet, Teams and others, and your bot asks before it listens. You can also start notes from your browser. While it listens, it stays on your screen with a red dot. The audio is turned into text and thrown away, and you get a summary, decisions and action items. Recording laws differ by place, so let everyone on the call know.",
+  },
+  {
     q: "What if it makes a mistake?",
     text: "Every action gets a receipt, so you can see exactly what happened and why. Text STOP from any channel to pause everything at once. Want more control? Turn the dial down: on Ask me first, nothing happens without your tap. Start low and raise it as you get comfortable.",
   },
@@ -52,6 +57,12 @@ const FAQ: { q: string; text: string }[] = [
 ];
 
 const LINKS: Record<string, React.ReactNode> = {
+  "Can it take notes in my meetings?": (
+    <>
+      {" "}
+      <Link href="/safety#recording">How recording stays fair</Link>.
+    </>
+  ),
   "Is my data safe?": (
     <>
       {" "}
@@ -85,6 +96,7 @@ export default function LandingPage() {
       <TrustSection />
       <InjectionSection />
       <Channels />
+      <MeetingNotes />
       <Recipes />
       <Promises />
       <PricingTeaser />

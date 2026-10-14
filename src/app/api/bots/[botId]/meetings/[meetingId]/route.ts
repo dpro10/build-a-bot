@@ -3,7 +3,7 @@ import { after } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { schema } from "@/lib/db";
 import { apiError, json, parseJson, type RouteCtx } from "@/lib/api";
-import { deleteMeeting, deleteTranscript, getMeeting, getSegments, markNoticeCopied, meetingView, renameMeeting, segmentView, setActionItemDone } from "@/lib/meetings";
+import { deleteMeeting, deleteTranscript, getMeeting, getSegments, markNoticeCopied, meetingView, renameMeeting, segmentView, setActionItemDone, setPaused } from "@/lib/meetings";
 import { meetingAuth } from "@/lib/meetings/auth";
 import { writeMeetingNotes } from "@/lib/meetings/notes";
 
@@ -41,12 +41,15 @@ export async function PATCH(req: Request, ctx: Ctx) {
       noticeCopied: z.literal(true).optional(),
       /** Throw away the transcript, keep the notes. */
       deleteTranscript: z.literal(true).optional(),
+      /** The owner paused or resumed the recording. */
+      paused: z.boolean().optional(),
     }),
   );
   if (!parsed.ok) return parsed.res;
   if (parsed.data.title) meeting = await renameMeeting(a.db, meeting, parsed.data.title);
   if (parsed.data.actionItem) meeting = await setActionItemDone(a.db, meeting, parsed.data.actionItem.index, parsed.data.actionItem.done);
   if (parsed.data.noticeCopied) meeting = await markNoticeCopied(a.db, meeting);
+  if (typeof parsed.data.paused === "boolean") meeting = await setPaused(a.db, meeting, parsed.data.paused);
   if (parsed.data.deleteTranscript) {
     if (meeting.status === "recording" || meeting.status === "processing") return apiError(409, "Wait until the notes are written, then delete the transcript.");
     meeting = await deleteTranscript(a.db, a.bot, meeting, "owner");

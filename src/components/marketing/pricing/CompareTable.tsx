@@ -32,10 +32,11 @@ function groups(): Group[] {
       ],
     },
     {
-      title: "Apps & routines",
+      title: "Apps, routines & meetings",
       rows: [
         { label: "Apps per bot", hint: "built-ins don't count", cells: per((p) => n(p.limits.connectors)) },
         { label: "Routines", hint: "morning briefs, check-ins", cells: per((p) => n(p.limits.routines)) },
+        { label: "Meeting notes", hint: "hours per month", cells: per((p) => (p.limits.meetingMinutes ? n(Math.round((p.limits.meetingMinutes / 60) * 10) / 10) : false)) },
       ],
     },
     {
