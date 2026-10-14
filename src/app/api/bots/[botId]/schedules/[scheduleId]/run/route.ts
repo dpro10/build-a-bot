@@ -18,6 +18,7 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string; schedule
     .where(and(eq(schema.schedules.id, scheduleId), eq(schema.schedules.botId, botId)))
     .returning();
   if (!row) return apiError(404, "Not found");
-  const result = await runDueSchedules(a.db, new Date(), 5);
+  // Only this schedule — never anyone else's that happens to be due.
+  const result = await runDueSchedules(a.db, new Date(), 1, { scheduleId: row.id });
   return json({ ok: true, ...result });
 }

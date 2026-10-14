@@ -10,6 +10,7 @@ import { readResult, type ApprovalBot, type ApprovalField, type ApprovalItem } f
 import { PageContainer, PageHeader } from "@/components/account/PageHeader";
 import { TRUST, isTrustLevel } from "@/lib/trust";
 import { truncate } from "@/lib/utils";
+import { readWebFormPreview } from "@/lib/web-actions/types";
 import type { AvatarId, ColorwayId } from "@/lib/avatars";
 
 export const metadata: Metadata = { title: "Approvals" };
@@ -71,7 +72,9 @@ function toItem(a: Approval, now: number): ApprovalItem {
     expiresAt: a.expiresAt.toISOString(),
     decidedAt: a.decidedAt?.toISOString() ?? null,
     decidedVia: a.decidedVia,
-    fields: fieldsFromArgs(a.args),
+    // A web form's preview replaces the raw tool arguments (session ids mean nothing to people).
+    webForm: readWebFormPreview(a.args),
+    fields: readWebFormPreview(a.args) ? [] : fieldsFromArgs(a.args),
     result: readResult(a.result),
     app: app ? { name: app.name, icon: <BrandTile icon={app.icon} size={40} variant="soft" /> } : null,
   };

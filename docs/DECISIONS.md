@@ -190,6 +190,29 @@ Cost basis: Nemotron 3.5 Lightning ≈ $0.0004 a turn; Tavily $0.008 a search af
   - the waitlist, chat, sign-in links and verification codes.
 - IP-based limits are skipped when there is no proxy IP, and are 10× looser in demo mode.
 
+## Build choice (Claude; Diego to confirm): web actions on Browser Use Cloud
+
+Diego decided on 2026-10-13 that bots act on the web. Built as a beta:
+- **Provider:** Browser Use Cloud (API v2, plain `fetch`, no new dependencies).
+  - A hosted browser agent takes one plain-language task per step.
+  - A session stays open after "fill", so "send" runs in the same browser after the owner approves.
+  - `allowedDomains` keeps it on the form's site.
+  - It reports exactly what it typed.
+  - Stagehand + Browserbase remains the fallback behind the same interface.
+- **Tools:**
+  - `web_browse` (read).
+  - `web_form_fill` (stops before sending; the site counts as a recipient).
+  - `web_form_submit` (always asks, at every trust level — new hard limit).
+- **What the owner sees:** the approval card shows each field and value and a picture of the filled form, built from the stored fill, not the model's words.
+- **Refused in code:**
+  - payment pages, card or bank details;
+  - passwords, one-time codes and login pages;
+  - private addresses;
+  - secrets.
+- **Limits:** 40 live browser tasks per bot per day.
+- `BROWSER_USE_API_KEY` turns it on; demo mode simulates it.
+- Details: `docs/research/web-actions-2026-10-14.md`.
+
 ## Gotchas found while building
 
 - Nemotron and other reasoning models: thinking eats `max_tokens`. Included models get 8–16K, and thinking is off on "Quick".
@@ -203,6 +226,6 @@ Cost basis: Nemotron 3.5 Lightning ≈ $0.0004 a turn; Tavily $0.008 a search af
 
 1. First users: tinkerers or everyday iPhone users? (unchanged)
 2. Pricing: confirm or change the table above. Is Full faith a paid feature?
-3. Web actions: provider and model (see `docs/research/web-actions-2026-10-14.md` once written).
+3. Web actions: confirm Browser Use Cloud (see above), then test with a live key on about 10 real forms before turning it on for everyone.
 4. Buy a brand-free domain for bot inboxes; Twilio A2P registration; Composio plan.
 5. Trademark clearance before brand spend (unchanged).

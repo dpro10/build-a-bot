@@ -133,14 +133,18 @@ function labelFor(kind: ChannelKind): string {
   )[kind] ?? "Message";
 }
 
-const OWNER_PRIORITY: ChannelKind[] = ["telegram", "sms", "slack", "discord", "email"];
+/** Where "your usual place" means, best first. Web is always reached through the inbox; calls are never automatic. */
+export const OWNER_PRIORITY: ChannelKind[] = ["telegram", "sms", "slack", "discord", "email"];
 
-/** Channels where the owner is verified and the bot can reach them, best first. */
+const rank = (kind: string) => {
+  const i = OWNER_PRIORITY.indexOf(kind as ChannelKind);
+  return i === -1 ? OWNER_PRIORITY.length : i;
+};
+
+/** Channels where the owner is verified and the bot can reach them, best first (web and calls last). */
 export async function ownerChannels(db: Db, botId: string): Promise<Channel[]> {
   const rows = await db.select().from(schema.channels).where(eq(schema.channels.botId, botId));
-  return rows
-    .filter((c) => c.status === "active" && c.ownerAddress && c.ownerVerifiedAt)
-    .sort((a, b) => OWNER_PRIORITY.indexOf(a.kind as ChannelKind) - OWNER_PRIORITY.indexOf(b.kind as ChannelKind));
+  return rows.filter((c) => c.status === "active" && c.ownerAddress && c.ownerVerifiedAt).sort((a, b) => rank(a.kind) - rank(b.kind));
 }
 
 /**
@@ -159,7 +163,8 @@ export async function messageOwner(
   if (opts.channel && opts.channel !== "auto" && opts.channel !== "web") {
     target = verified.find((c) => c.kind === opts.channel);
   }
-  if (!target && (!opts.channel || opts.channel === "auto")) target = verified.find((c) => c.kind !== "voice");
+  // "auto": the owner's best messaging channel; the web inbox always gets a copy below.
+  if (!target && (!opts.channel || opts.channel === "auto")) target = verified.find((c) => OWNER_PRIORITY.includes(c.kind as ChannelKind));
 
   if (opts.alsoWeb !== false || !target) await postToWebInbox(db, bot, text);
 

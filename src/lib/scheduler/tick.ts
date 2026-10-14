@@ -14,11 +14,11 @@ const PROACTIVE_TURNS_PER_DAY = 24;
 /** Subscription brains: keep proactive use "ordinary, individual" (vendor terms). */
 const PROACTIVE_TURNS_PER_DAY_SUBSCRIPTION = 10;
 
-export async function runDueSchedules(db: Db, now = new Date(), limit = 25) {
+export async function runDueSchedules(db: Db, now = new Date(), limit = 25, only?: { scheduleId: string }) {
   const due = await db
     .select()
     .from(schema.schedules)
-    .where(and(eq(schema.schedules.active, true), lte(schema.schedules.nextRunAt, now)))
+    .where(and(eq(schema.schedules.active, true), lte(schema.schedules.nextRunAt, now), only ? eq(schema.schedules.id, only.scheduleId) : undefined))
     .orderBy(asc(schema.schedules.nextRunAt))
     .limit(limit);
 

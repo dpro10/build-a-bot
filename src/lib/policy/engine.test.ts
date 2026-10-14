@@ -157,6 +157,15 @@ describe("policy engine", () => {
     expect(evaluate({ ...base, trust: "full", effect: "read", sensitive: true }).verdict).toBe("allow");
   });
 
+  it("an owner allow rule never auto-allows changes in sensitive apps", () => {
+    const d = evaluate({ ...base, trust: "trusted", effect: "write", sensitive: true, ownerRule: "allow" });
+    expect(d.verdict).toBe("ask");
+    expect(d.reasons).toContain("sensitive_app");
+    expect(evaluate({ ...base, trust: "full", effect: "write", sensitive: true, ownerRule: "allow" }).verdict).toBe("ask");
+    // Reading them is still fine.
+    expect(evaluate({ ...base, trust: "full", effect: "read", sensitive: true, ownerRule: "allow" }).verdict).toBe("allow");
+  });
+
   it("quiet hours hold messages to other people", () => {
     expect(
       evaluate({ ...base, trust: "full", effect: "send", recipients: [friend], inQuietHours: true }).reasons,

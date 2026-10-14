@@ -4,6 +4,7 @@ import "@fontsource-variable/bricolage-grotesque";
 import "./globals.css";
 import "@/components/avatar/avatar.css";
 import { Toaster } from "@/components/ui/toaster";
+import { ThemeSync } from "@/components/ThemeSync";
 import { appUrl } from "@/lib/env";
 
 export const metadata: Metadata = {
@@ -47,6 +48,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-dvh antialiased">
         {children}
         <Toaster />
+        <ThemeSync />
       </body>
     </html>
   );

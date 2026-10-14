@@ -177,7 +177,7 @@ export function BotPreviewStrip({ state: s, step, typing }: { state: BuilderStat
     <div className="flex items-center gap-3 rounded-2xl border border-border bg-card px-3 py-2 shadow-soft">
       <Avatar avatar={s.avatar} color={s.color} size={52} mood={moodFor(step, s, typing)} />
       <div className="min-w-0 flex-1">
-        <div className={cn("truncate font-display text-lg font-bold leading-tight", !s.name.trim() && "text-muted-foreground/80")}>{s.name.trim() || "Your bot"}</div>
+        <div className={cn("truncate font-display text-lg font-bold leading-tight", !s.name.trim() && "text-muted-foreground")}>{s.name.trim() || "Your bot"}</div>
         <div key={speech(step, s)} className="animate-fade-up truncate text-xs text-muted-foreground">
           {speech(step, s)}
         </div>
