@@ -339,6 +339,9 @@ A code review of the server and the desktop app. Each fix has a test that fails 
 - Document Picture-in-Picture windows can't be positioned by the page, so "bottom of the screen" is exact only in the desktop app.
 - Times a model passes to tools are the owner's local time. The demo brain must do its time math on the owner's clock (the time zone is in the system prompt), not the server's: on a UTC server, a Chicago owner's "remind me in 1 minute" fired 5 hours late. The unit test now pins "in 20 minutes" to under 25.
 - The demo brain is what people meet first without keys, so every starter idea in `src/lib/jobs.ts` should get a real answer from it. Check them all after changing either file.
+- **A Date in a `sql` template broke sign-in on Supabase.** The first sign-in on the live site failed with a 500. drizzle makes postgres.js pass date values through untouched, so a Date written straight into `sql` (the rate limiter, the admin numbers) reached the wire as an object. PGlite, which the tests use, accepts that, so every test passed.
+  - The fix: `createPostgres` sends Dates as ISO text.
+  - `tests/postgres.test.ts` and the e2e suite run against a real Postgres; see ARCHITECTURE → Testing.
 
 ## Open questions (updated 2026-10-14)
 

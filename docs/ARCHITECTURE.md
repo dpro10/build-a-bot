@@ -174,5 +174,8 @@ Every flow in the product can be tried with zero keys, and nothing real is sent 
   - meeting notes in the browser with a fake microphone: consent, the floating window, the transcript, the notes, deleting;
   - every page loads;
   - axe accessibility scans in light and dark.
+- **On real Postgres.** Supabase runs the server through postgres.js, which is stricter than the in-memory database the tests use, so check database changes on a real one too. Start a local Postgres, port 6543 (that makes the client skip prepared statements, like Supabase's pooler).
+  - `TEST_DATABASE_URL=postgres://postgres@127.0.0.1:6543/bab_test npx vitest run tests/postgres.test.ts` wipes that database and covers sign-in, rate limits, the admin numbers and the cron tick.
+  - `DATABASE_URL=postgres://postgres@127.0.0.1:6543/bab_e2e ENCRYPTION_KEY=$(openssl rand -base64 32) npm run test:e2e` runs the whole e2e suite there.
 - `cd desktop && npm test`: call detection on each OS (parsers on captured-style output), the call state machine, the controller's safety rules, the upload queue, placement, token storage.
 - `cd desktop && npm run test:e2e`: the real Electron app under Xvfb against a running dev server: pair, a fake call, ask, take notes, pause, stop, notes ready, stop and delete, and the mic-only path.

@@ -56,6 +56,14 @@ async function createPostgres(url: string): Promise<DbState> {
     idle_timeout: 20,
   });
   const db = drizzle(client, { schema }) as unknown as Db;
+  // drizzle makes postgres.js pass date values through untouched (its columns hand over strings),
+  // so a Date written straight into a sql`` template would reach the wire as an object and fail
+  // the query. PGlite takes Dates as they are, which is why only real Postgres shows this.
+  const serializers = (client as unknown as { options: { serializers: Record<string, (x: unknown) => unknown> } }).options.serializers;
+  for (const type of ["1082", "1114", "1184"]) {
+    const passThrough = serializers[type];
+    serializers[type] = (x) => (x instanceof Date ? x.toISOString() : passThrough ? passThrough(x) : x);
+  }
   const ready = (async () => {
     if (process.env.AUTO_MIGRATE === "0") return;
     // One migrator at a time across cold starts.
