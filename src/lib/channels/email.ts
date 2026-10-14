@@ -58,19 +58,37 @@ export const emailAdapter: ChannelAdapter = {
   },
 };
 
-/** Login emails (magic links) for the product itself. */
-export async function sendLoginEmail(to: string, link: string) {
-  if (!config.email.resendKey) return false;
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { authorization: `Bearer ${config.email.resendKey}`, "content-type": "application/json" },
-    body: JSON.stringify({
-      from: config.email.from,
-      to: [to],
-      subject: "Your Build-a-bot sign-in link",
-      text: `Tap to sign in to Build-a-bot:\n\n${link}\n\nThis link works once and expires in 20 minutes. If you didn't ask for it, ignore this email.`,
-      html: loginEmailHtml(link),
-    }),
-  });
-  return res.ok;
+/**
+ * Why a sign-in email didn't go out: no provider on this server (the operator's to fix), or the
+ * provider refused or couldn't be reached (worth trying again in a minute).
+ */
+export type LoginEmailResult = { ok: true } | { ok: false; reason: "not_configured" | "failed" };
+
+/** Login emails (magic links) for the product itself. Failures are logged here, never with the key. */
+export async function sendLoginEmail(to: string, link: string): Promise<LoginEmailResult> {
+  if (!config.email.resendKey) return { ok: false, reason: "not_configured" };
+  let res: Response;
+  try {
+    res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { authorization: `Bearer ${config.email.resendKey}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        from: config.email.from,
+        to: [to],
+        subject: "Your Build-a-bot sign-in link",
+        text: `Tap to sign in to Build-a-bot:\n\n${link}\n\nThis link works once and expires in 20 minutes. If you didn't ask for it, ignore this email.`,
+        html: loginEmailHtml(link),
+      }),
+    });
+  } catch (err) {
+    console.error(`[sign-in email] Couldn't reach Resend: ${(err as Error).message}`);
+    return { ok: false, reason: "failed" };
+  }
+  if (!res.ok) {
+    // Resend explains itself in the body ("domain not verified", "rate limited"…).
+    const body = await res.text().catch(() => "");
+    console.error(`[sign-in email] Resend ${res.status}: ${body.slice(0, 500) || "(no body)"}`);
+    return { ok: false, reason: "failed" };
+  }
+  return { ok: true };
 }

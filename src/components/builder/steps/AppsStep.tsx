@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { FieldHint, Input, Label } from "@/components/ui/input";
-import { PLANS, type PlanId } from "@/lib/billing/plans";
+import { PAID_PLANS_SOON, PLANS, type PlanId } from "@/lib/billing/plans";
 import { ALL_CONNECTORS, getConnector, type ConnectorDef } from "@/lib/connectors";
 import { JOBS, JOB_BY_ID } from "@/lib/jobs";
 import { cn } from "@/lib/utils";
@@ -24,6 +24,7 @@ export function AppsStep({
   onCustomMcp,
   plan,
   demo,
+  paidPlans,
 }: {
   botName: string;
   jobs: string[];
@@ -34,6 +35,7 @@ export function AppsStep({
   onCustomMcp: (servers: { url: string; name?: string }[]) => void;
   plan: PlanId;
   demo: boolean;
+  paidPlans: boolean;
 }) {
   const [mcpOpen, setMcpOpen] = React.useState(false);
   const name = botName.trim() || "your bot";
@@ -106,7 +108,8 @@ export function AppsStep({
           <div className="flex items-start gap-2 rounded-2xl bg-warning-soft px-3.5 py-2.5 text-sm text-warning">
             <Info className="mt-0.5 size-4 shrink-0" />
             <span>
-              {PLANS[plan].name} connects {limit} apps per bot. The first {limit} will be added now; upgrade to {plan === "free" ? "Plus" : "Pro"} anytime to add the rest.
+              {PLANS[plan].name} connects {limit} apps per bot. The first {limit} will be added now
+              {paidPlans ? `; upgrade to ${plan === "free" ? "Plus" : "Pro"} anytime to add the rest.` : `. ${PAID_PLANS_SOON}`}
             </span>
           </div>
         ) : null}

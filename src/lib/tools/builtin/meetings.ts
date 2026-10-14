@@ -4,10 +4,16 @@ import { schema } from "@/lib/db";
 import { ownerName } from "@/lib/agent/prompt";
 import { formatDuration, getSegments, searchSegments, transcriptLines, clock } from "@/lib/meetings";
 import { meetingAppName } from "@/lib/meetings/apps";
+import { available } from "@/lib/env";
 import { truncate } from "@/lib/utils";
 import { defineTool, type ToolContext } from "../types";
 
 const PART_CHARS = 24_000;
+
+/** Nothing recorded yet: how the owner starts (the desktop app only once people can get it). */
+const NO_MEETINGS = `No meetings yet. The owner can start one from the Meetings tab in the app${
+  available("desktopApp") ? ", or with the desktop app, which offers to take notes when a call starts" : ""
+}.`;
 
 function when(d: Date, ctx: ToolContext): string {
   try {
@@ -36,13 +42,7 @@ export const listMeetings = defineTool({
       .where(eq(schema.meetings.botId, ctx.bot.id))
       .orderBy(desc(schema.meetings.startedAt))
       .limit(args.limit ?? 10);
-    if (!rows.length) {
-      return {
-        ok: true,
-        content: "No meetings yet. The owner can start one from the Meetings tab in the app, or with the desktop app, which offers to take notes when a call starts.",
-        summary: "None yet",
-      };
-    }
+    if (!rows.length) return { ok: true, content: NO_MEETINGS, summary: "None yet" };
     const lines = rows.map((m) => {
       const status = m.status === "recording" ? " · recording now" : m.status === "processing" ? " · notes being written" : "";
       return `- ${m.id} · “${m.title}” · ${meetingAppName(m.app)} · ${when(m.startedAt, ctx)} · ${formatDuration(m.durationSec)}${status}${m.summary ? `\n  ${truncate(m.summary, 240)}` : ""}${m.actionItems?.length ? `\n  ${m.actionItems.length} action item${m.actionItems.length === 1 ? "" : "s"}` : ""}`;
@@ -80,13 +80,7 @@ export const readMeeting = defineTool({
             .from(schema.meetings)
             .where(and(eq(schema.meetings.botId, ctx.bot.id), eq(schema.meetings.id, args.meeting_id)))
             .limit(1);
-    if (!m && args.meeting_id === "latest") {
-      return {
-        ok: true,
-        content: "No meetings yet. The owner can start one from the Meetings tab in the app, or with the desktop app, which offers to take notes when a call starts.",
-        summary: "None yet",
-      };
-    }
+    if (!m && args.meeting_id === "latest") return { ok: true, content: NO_MEETINGS, summary: "None yet" };
     if (!m) return { ok: false, error: `No meeting with id ${args.meeting_id}. Use list_meetings.` };
 
     const lines = transcriptLines(await getSegments(ctx.db, m.id), ownerName(ctx.owner));

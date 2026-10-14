@@ -31,7 +31,12 @@ export async function POST(req: Request) {
   const current = await getUser();
   const link = await createLoginLink(db, { email: parsed.data.email, anonymousUserId: current && !current.email ? current.id : null, next: parsed.data.next });
   const sent = await sendLoginEmail(parsed.data.email, link);
-  if (!sent && !demoMode) return apiError(503, "Email isn't set up on this server yet.");
+  if (!sent.ok && !demoMode) {
+    // Not about the address they typed: say which problem it is (sendLoginEmail logged the details).
+    return sent.reason === "not_configured"
+      ? apiError(503, "Sign-in by email isn't set up on this server yet.", { code: "email_not_configured" })
+      : apiError(502, "We couldn't send the email just now. Try again in a minute.", { code: "email_send_failed" });
+  }
   // Demo mode (no email provider): hand the link back so the flow can be tried end to end.
-  return json({ sent, demoLink: sent ? null : link });
+  return json({ sent: sent.ok, demoLink: sent.ok ? null : link });
 }

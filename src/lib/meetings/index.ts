@@ -13,8 +13,8 @@ import { and, asc, desc, eq, gt, ilike, inArray, lt, ne, or, sql } from "drizzle
 import { schema, type Db } from "@/lib/db";
 import type { Bot, Meeting, MeetingSegment, User } from "@/lib/db/schema";
 import { checkLimit, recordUsage } from "@/lib/billing/usage";
-import { demoMode } from "@/lib/env";
-import type { PlanId } from "@/lib/billing/plans";
+import { config, demoMode, paidPlansOpen } from "@/lib/env";
+import { PAID_PLANS_SOON, type PlanId } from "@/lib/billing/plans";
 import { receipt } from "@/lib/agent/run";
 import { transcribe, transcriptionAvailable, TranscriptionError } from "@/lib/transcribe";
 import { newId, sortableId, truncate } from "@/lib/utils";
@@ -31,6 +31,17 @@ export const STALE_RECORDING_MS = 20 * 60_000;
 
 export type MeetingTrack = "mic" | "system";
 export const TRACKS: MeetingTrack[] = ["mic", "system"];
+
+/**
+ * The desktop app (desktop/) as the pages show it: its download once signed builds are published
+ * (NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL), how to run it from the repo in demo mode, or "Coming soon".
+ */
+export type DesktopApp = { status: "download"; url: string } | { status: "repo" } | { status: "soon" };
+
+export function desktopApp(): DesktopApp {
+  if (config.desktop.downloadUrl) return { status: "download", url: config.desktop.downloadUrl };
+  return demoMode ? { status: "repo" } : { status: "soon" };
+}
 
 export type MeetingView = {
   id: string;
@@ -182,12 +193,15 @@ export async function startMeeting(
 ): Promise<{ ok: true; meeting: Meeting; replaced: string[] } | MeetingFailure> {
   const { bot, owner } = input;
   if (bot.status === "paused") return { ok: false, status: 409, code: "paused", error: `${bot.name} is paused. Resume it to take notes.` };
-  if (!transcriptionAvailable()) return { ok: false, status: 503, code: "unavailable", error: "Meeting notes aren't set up on this server yet." };
+  if (!transcriptionAvailable()) return { ok: false, status: 503, code: "unavailable", error: "Meeting notes are coming soon." };
   if (!(await meetingsEnabled(db, bot.id))) {
     return { ok: false, status: 409, code: "meetings_off", error: `Turn on Meeting notes for ${bot.name} first.` };
   }
   const limit = await checkLimit(db, owner, "meetingMinutes");
-  if (!limit.ok) return { ok: false, status: 402, code: "limit", error: `${limit.message} Upgrade for more meeting notes.`, upgrade: limit.plan.id === "free" ? "plus" : "pro" };
+  if (!limit.ok) {
+    const more = paidPlansOpen ? "Upgrade for more meeting notes." : PAID_PLANS_SOON;
+    return { ok: false, status: 402, code: "limit", error: `${limit.message} ${more}`, upgrade: limit.plan.id === "free" ? "plus" : "pro" };
+  }
 
   // One recording per bot at a time. A leftover from the same recorder (crash, closed tab) is wrapped up instead.
   const active = await db

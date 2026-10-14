@@ -12,6 +12,8 @@ import { Segmented } from "@/components/ui/segmented";
 import { toast } from "@/components/ui/toaster";
 import { dayKey, dayLabel, timeLabel, useNow } from "@/components/bot/activity/time";
 import { api, ApiError } from "@/lib/client/api";
+import { PAID_PLANS_SOON } from "@/lib/billing/plans";
+import type { DesktopApp } from "@/lib/meetings";
 import { BrowserRecorder, type RecorderBlock } from "./BrowserRecorder";
 import type { BotFace } from "./RecorderSetup";
 import { formatDuration, meetingAppIcon, recordingHere, STATUS, statusOf, type MeetingView } from "./shared";
@@ -29,9 +31,12 @@ type Props = {
   enabled: boolean;
   available: boolean;
   plan: { id: string; name: string; minutes: number };
+  /** Paid plans can be bought here; otherwise there's no "get more" link. */
+  paidPlans: boolean;
   minutesUsed: number;
   resetsOn: string;
   transcriptDays: number | null;
+  desktopApp: DesktopApp;
   desktopDevices: DesktopDevice[];
 };
 
@@ -113,7 +118,7 @@ export function MeetingsView(props: Props) {
   const block: RecorderBlock = !enabled
     ? { kind: "off", text: `Turn on meeting notes for ${bot.name} first.` }
     : !props.available
-      ? { kind: "unavailable", text: "Meeting notes aren't set up on this server yet." }
+      ? { kind: "unavailable", text: "Meeting notes are coming soon." }
       : bot.paused
         ? { kind: "paused", text: `${bot.name} is paused. Resume it at the top of the page to take notes.` }
         : active && (active.source === "desktop" || elsewhereHere)
@@ -133,7 +138,7 @@ export function MeetingsView(props: Props) {
     return out;
   }, [meetings, timezone]);
 
-  const desktopCard = <DesktopCard botName={bot.name} devices={props.desktopDevices} />;
+  const desktopCard = <DesktopCard botName={bot.name} app={props.desktopApp} devices={props.desktopDevices} />;
 
   return (
     <div className="flex flex-col gap-8">
@@ -194,6 +199,8 @@ export function MeetingsView(props: Props) {
               minutesLeft={minutesLeft}
               block={block}
               desktopCard={desktopCard}
+              desktopApp={props.desktopApp.status !== "soon"}
+              paidPlans={props.paidPlans}
               onStarted={(m) => {
                 setOwnId(m.id);
                 setMeetings((ms) => [m, ...ms.filter((x) => x.id !== m.id)]);
@@ -213,7 +220,7 @@ export function MeetingsView(props: Props) {
           </section>
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <MinutesCard plan={plan} used={props.minutesUsed} resetsOn={props.resetsOn} />
+            <MinutesCard plan={plan} used={props.minutesUsed} resetsOn={props.resetsOn} paidPlans={props.paidPlans} />
             <KeepCard botId={botId} initial={props.transcriptDays} />
           </div>
         </>
@@ -338,9 +345,10 @@ function TurnOnCard({ bot, onTurnOn, busy }: { bot: BotFace; onTurnOn: () => voi
   );
 }
 
-function DesktopCard({ botName, devices }: { botName: string; devices: DesktopDevice[] }) {
+function DesktopCard({ botName, app, devices }: { botName: string; app: DesktopApp; devices: DesktopDevice[] }) {
   const apps = ["zoom", "meet", "teams", "webex", "slack"] as const;
   const online = devices.find((d) => d.online);
+  const soon = app.status === "soon";
   return (
     <div className="flex flex-col gap-4 rounded-3xl border border-border bg-card p-5 shadow-soft">
       <div className="flex items-start gap-3">
@@ -349,7 +357,7 @@ function DesktopCard({ botName, devices }: { botName: string; devices: DesktopDe
         </span>
         <div className="min-w-0">
           <h3 className="flex flex-wrap items-center gap-2 font-display text-lg leading-tight font-semibold">
-            With the desktop app <Badge tone="primary">Beta</Badge>
+            With the desktop app {soon ? <Badge tone="neutral">Coming soon</Badge> : <Badge tone="primary">Beta</Badge>}
           </h3>
           <p className="mt-1 text-sm text-muted-foreground">
             Notices when a call starts in Zoom, Meet, Teams…, asks first, and sits at the bottom of your screen while it listens.
@@ -367,21 +375,26 @@ function DesktopCard({ botName, devices }: { botName: string; devices: DesktopDe
             ? online
               ? `Paired on ${online.name} · online`
               : `Paired on ${devices[0].name} · offline`
-            : `Mac and Windows. ${botName} pops up when a call starts.`}
+            : soon
+              ? "For Mac and Windows. For now, take notes in this browser."
+              : `Mac and Windows. ${botName} pops up when a call starts.`}
         </span>
       </div>
-      <div className="mt-auto">
-        <Button asChild variant="outline">
-          <Link href="/app/bridge#desktop">
-            {devices.length ? "Manage the desktop app" : "Set up the desktop app"} <ArrowRight />
-          </Link>
-        </Button>
-      </div>
+      {/* Coming soon: nothing to set up yet (no repo instructions for testers). */}
+      {soon ? null : (
+        <div className="mt-auto">
+          <Button asChild variant="outline">
+            <Link href="/app/bridge#desktop">
+              {devices.length ? "Manage the desktop app" : "Set up the desktop app"} <ArrowRight />
+            </Link>
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
 
-function MinutesCard({ plan, used, resetsOn }: { plan: { id: string; name: string; minutes: number }; used: number; resetsOn: string }) {
+function MinutesCard({ plan, used, resetsOn, paidPlans }: { plan: { id: string; name: string; minutes: number }; used: number; resetsOn: string; paidPlans: boolean }) {
   const left = Math.max(0, plan.minutes - used);
   const pct = (Math.min(used, plan.minutes) / Math.max(1, plan.minutes)) * 100;
   const low = left <= Math.max(15, plan.minutes * 0.15);
@@ -394,7 +407,7 @@ function MinutesCard({ plan, used, resetsOn }: { plan: { id: string; name: strin
         </span>
         <span className="flex shrink-0 items-center gap-2">
           <Badge tone="primary">{plan.name}</Badge>
-          {plan.id !== "pro" ? (
+          {plan.id !== "pro" && paidPlans ? (
             <Link href="/app/billing" className="text-xs font-semibold text-primary hover:underline">
               {low ? "Get more" : "Plans"}
             </Link>
@@ -405,12 +418,16 @@ function MinutesCard({ plan, used, resetsOn }: { plan: { id: string; name: strin
       <div className="text-xs text-muted-foreground">
         {left === 0 ? "None left this month." : `${hours(left)} left this month.`} Resets {resetsOn}.
         {low && plan.id !== "pro" ? (
-          <>
-            {" "}
-            <Link href="/app/billing" className="font-semibold text-primary hover:underline">
-              {plan.id === "free" ? "Plus has 15 hours a month." : "Pro has 50 hours a month."}
-            </Link>
-          </>
+          paidPlans ? (
+            <>
+              {" "}
+              <Link href="/app/billing" className="font-semibold text-primary hover:underline">
+                {plan.id === "free" ? "Plus has 15 hours a month." : "Pro has 50 hours a month."}
+              </Link>
+            </>
+          ) : (
+            ` ${PAID_PLANS_SOON}`
+          )
         ) : null}
       </div>
     </div>

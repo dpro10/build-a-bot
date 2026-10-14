@@ -68,21 +68,24 @@ export default async function BillingPage({
     },
     {
       q: "What happens if I run out?",
-      a: `No surprise charges. Your bot tells you it hit the limit and that part waits until ${labels.reset}. You can upgrade anytime, or switch a bot to your own key or subscription in its Settings → Brain to keep going.`,
+      a: `No surprise charges. Your bot tells you it hit the limit and that part waits until ${labels.reset}. ${mode === "off" ? "To keep going sooner, switch" : "You can upgrade anytime, or switch"} a bot to your own key or subscription in its Settings → Brain${mode === "off" ? "." : " to keep going."}`,
     },
     {
       q: "When does my usage reset?",
       a: `On the 1st of every month (UTC). Your next reset is ${labels.reset}.`,
     },
-    {
-      q: "Can I cancel or switch plans?",
-      a:
-        mode === "stripe"
-          ? "Anytime, from Manage billing. If you cancel, you keep your plan until the end of the period you paid for, then move to Free. Your bots and their memories stay."
-          : mode === "demo"
-            ? "In this demo, switch freely with the buttons above. Nothing is charged, and your bots keep everything they know."
-            : "Yes. Your bots and their memories stay whichever plan you're on.",
-    },
+    mode === "off"
+      ? {
+          q: "Can I switch plans?",
+          a: "Not yet: Plus and Pro are coming soon. Join a waitlist above and we'll email you when they're ready. Your bots and their memories stay whichever plan you're on.",
+        }
+      : {
+          q: "Can I cancel or switch plans?",
+          a:
+            mode === "stripe"
+              ? "Anytime, from Manage billing. If you cancel, you keep your plan until the end of the period you paid for, then move to Free. Your bots and their memories stay."
+              : "In this demo, switch freely with the buttons above. Nothing is charged, and your bots keep everything they know.",
+        },
   ];
 
   return (
@@ -117,7 +120,7 @@ export default async function BillingPage({
             {canManage ? <ManageBillingButton /> : null}
             <Button asChild variant={plan.id === "pro" ? "outline" : "soft"}>
               <a href="#plans">
-                {plan.id === "pro" ? "Compare plans" : "See upgrades"} <ChevronDown />
+                {plan.id === "pro" ? "Compare plans" : mode === "off" ? "See plans" : "See upgrades"} <ChevronDown />
               </a>
             </Button>
           </div>
@@ -129,13 +132,23 @@ export default async function BillingPage({
               {labels.month} · resets {labels.reset}
             </p>
           </div>
-          <UsageMeters plan={plan} used={used} resetLabel={labels.reset} />
+          <UsageMeters plan={plan} used={used} resetLabel={labels.reset} paidPlans={mode !== "off"} />
         </div>
       </section>
 
       <section id="plans" aria-labelledby="plans-title" className="mb-12 scroll-mt-6">
-        <SectionHeading id="plans-title" title="Plans" description="Change anytime. Your bots keep everything they know." />
-        <PlanPicker current={plan.id} mode={mode} anonymous={isAnonymous(user)} hasSubscription={Boolean(user.stripeSubscriptionId)} />
+        <SectionHeading
+          id="plans-title"
+          title="Plans"
+          description={mode === "off" ? "Plus and Pro are coming soon. Your bots keep everything they know." : "Change anytime. Your bots keep everything they know."}
+        />
+        <PlanPicker
+          current={plan.id}
+          mode={mode}
+          anonymous={isAnonymous(user)}
+          hasSubscription={Boolean(user.stripeSubscriptionId)}
+          email={isAnonymous(user) ? null : user.email}
+        />
       </section>
 
       <section aria-labelledby="faq-title">

@@ -7,8 +7,9 @@ import { getPlan } from "@/lib/billing/plans";
 import { getUsage } from "@/lib/billing/usage";
 import { DEVICE_ONLINE_MS } from "@/lib/bridge/jobs";
 import { ownerName } from "@/lib/agent/prompt";
-import { DEFAULT_TRANSCRIPT_DAYS, listMeetings, meetingsEnabled, meetingView } from "@/lib/meetings";
+import { DEFAULT_TRANSCRIPT_DAYS, desktopApp, listMeetings, meetingsEnabled, meetingView } from "@/lib/meetings";
 import { transcriptionAvailable } from "@/lib/transcribe";
+import { paidPlansOpen } from "@/lib/env";
 import { safeTimeZone } from "@/components/bot/activity/time";
 import { MeetingsView } from "@/components/meetings/MeetingsView";
 import type { AvatarId, ColorwayId } from "@/lib/avatars";
@@ -44,6 +45,8 @@ export default async function MeetingsPage({ params }: { params: Promise<{ botId
           enabled={enabled}
           available={transcriptionAvailable()}
           plan={{ id: plan.id, name: plan.name, minutes: plan.limits.meetingMinutes }}
+          paidPlans={paidPlansOpen}
+          desktopApp={desktopApp()}
           minutesUsed={Math.floor(usage.meetingSeconds / 60)}
           resetsOn={resetsOn}
           transcriptDays={transcriptDays}
