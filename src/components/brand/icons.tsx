@@ -10,6 +10,7 @@ import {
   Calculator,
   CloudSun,
   Globe,
+  Hexagon,
   ImagePlus,
   Inbox,
   Mail,
@@ -37,6 +38,8 @@ const LUCIDE: Record<string, LucideIcon> = {
   Calculator,
   CloudSun,
   Globe,
+  // A plain mark for brands simple-icons doesn't ship a logo for (OpenAI, ChatGPT).
+  Hexagon,
   ImagePlus,
   Inbox,
   Mail,

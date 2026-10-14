@@ -44,13 +44,16 @@ export type AppsTrustProps = {
   /** Paid plans can be bought here; otherwise plan prompts say they're coming soon, with no link. */
   paidPlans: boolean;
   composioLive: boolean;
+  /** Built-ins this server can't run yet: "Coming soon", never added or listed as working. */
+  comingSoon: string[];
   timezone: string;
   /** From the sign-in callbacks: ?connected=1 or ?connect_error=… */
   flash: { connected: boolean; error: string | null };
 };
 
-export function AppsTrustView({ bot, connections: initial, planBadges, paidPlans, composioLive, timezone, flash }: AppsTrustProps) {
+export function AppsTrustView({ bot, connections: initial, planBadges, paidPlans, composioLive, comingSoon, timezone, flash }: AppsTrustProps) {
   const botId = bot.id;
+  const soon = React.useMemo(() => new Set(comingSoon), [comingSoon]);
   const [trust, setTrust] = React.useState<TrustLevel>(bot.trust);
   const [limits, setLimits] = React.useState<LimitsView>(bot.limits);
   const [connections, setConnections] = React.useState<ConnectionView[]>(initial);
@@ -74,14 +77,14 @@ export function AppsTrustView({ bot, connections: initial, planBadges, paidPlans
   const pickerApps = React.useMemo(
     () =>
       [...apps, ...builtins]
-        .filter((c) => c.status !== "disabled")
+        .filter((c) => c.status !== "disabled" && !soon.has(c.connectorId))
         .map((c) => {
           const def = connectorFor(c);
           return def ? { ...def, name: displayName(c, def) } : null;
         })
         .filter((d): d is ConnectorDef => Boolean(d))
         .sort((a, b) => Number(a.category === "custom") - Number(b.category === "custom") || Number(!!b.popular) - Number(!!a.popular)),
-    [apps, builtins],
+    [apps, builtins, soon],
   );
 
   const setBusyFor = (id: string, action: string | null) =>
@@ -298,6 +301,7 @@ export function AppsTrustView({ bot, connections: initial, planBadges, paidPlans
         spendCapUsd={spendCapUsd}
         plan={connectPlan(conn, def, composioLive)}
         builtin={builtin}
+        comingSoon={builtin && soon.has(conn.connectorId)}
         highlighted={target === conn.connectorId}
         expanded={expanded.has(conn.id)}
         onExpandedChange={(open) => toggleExpanded(conn.id, open)}
@@ -308,7 +312,9 @@ export function AppsTrustView({ bot, connections: initial, planBadges, paidPlans
     );
   };
 
-  const moreBuiltins = BUILTIN_CONNECTORS.filter((d) => isAvailable(d) && !ALWAYS_ON.has(d.id) && d.id !== "custom_mcp" && !addedIds.includes(d.id));
+  const notAdded = BUILTIN_CONNECTORS.filter((d) => d.status !== "soon" && !ALWAYS_ON.has(d.id) && d.id !== "custom_mcp" && !addedIds.includes(d.id));
+  const moreBuiltins = notAdded.filter((d) => isAvailable(d, soon));
+  const soonBuiltins = notAdded.filter((d) => !isAvailable(d, soon));
 
   const addBuiltin = async (d: ConnectorDef) => {
     setBusyFor(`add:${d.id}`, "add");
@@ -428,6 +434,19 @@ export function AppsTrustView({ bot, connections: initial, planBadges, paidPlans
               ))}
             </div>
           ) : null}
+          {soonBuiltins.length ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="mr-1 text-xs font-semibold text-muted-foreground">Coming soon:</span>
+              {soonBuiltins.map((d) => (
+                <Tooltip key={d.id} content={d.description}>
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-muted/60 py-1 pr-3 pl-1 text-xs font-medium text-muted-foreground">
+                    <BrandTile icon={d.icon} size={20} className="opacity-60 grayscale" />
+                    {d.name}
+                  </span>
+                </Tooltip>
+              ))}
+            </div>
+          ) : null}
         </Section>
       </div>
 
@@ -449,6 +468,7 @@ export function AppsTrustView({ bot, connections: initial, planBadges, paidPlans
         spendCapUsd={spendCapUsd}
         composioLive={composioLive}
         paidPlans={paidPlans}
+        comingSoon={comingSoon}
         onAdded={(conn) => {
           setConnections((list) => (list.some((c) => c.id === conn.id) ? list.map((c) => (c.id === conn.id ? conn : c)) : [...list, conn]));
           // Scrolling behind an open dialog fights its scroll lock: show the row once it closes.

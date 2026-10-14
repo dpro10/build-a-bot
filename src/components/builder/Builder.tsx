@@ -19,7 +19,7 @@ import { PLANS, type PlanId } from "@/lib/billing/plans";
 import type { RecipeData } from "@/lib/recipes";
 import { cn } from "@/lib/utils";
 import { BotPreview, BotPreviewStrip } from "./BotPreview";
-import { clearDraft, initialState, loadDraft, saveDraft, STEPS, stepError, type BuilderState, type StepId } from "./state";
+import { clearDraft, fitToServer, initialState, loadDraft, saveDraft, STEPS, stepError, type BuilderState, type StepId } from "./state";
 import { AppsStep } from "./steps/AppsStep";
 import { BrainStep, type KeyStatus } from "./steps/BrainStep";
 import { ChannelsStep, type LiveFlags } from "./steps/ChannelsStep";
@@ -34,6 +34,8 @@ export type BuilderProps = {
   /** Paid plans can be bought (or switched to in demo mode); otherwise plan notes say they're coming soon. */
   paidPlans: boolean;
   live: LiveFlags;
+  /** Built-ins this server can't run yet (shown as "Coming soon"). */
+  comingSoon: string[];
   recipe: (RecipeData & { slug: string; tagline?: string }) | null;
   botCount: number;
   signedIn: boolean;
@@ -57,9 +59,9 @@ function currentEntry(): StepEntry | null {
   return typeof s?.babStep === "number" ? { babStep: s.babStep, babPrev: s.babPrev ?? null } : null;
 }
 
-export function Builder({ plan, demo, paidPlans, live, recipe, botCount, signedIn }: BuilderProps) {
+export function Builder({ plan, demo, paidPlans, live, comingSoon, recipe, botCount, signedIn }: BuilderProps) {
   const router = useRouter();
-  const [state, setState] = React.useState<BuilderState>(() => initialState(recipe));
+  const [state, setState] = React.useState<BuilderState>(() => initialState(recipe, comingSoon));
   const [stepIndex, setStepIndex] = React.useState(0);
   const [maxReached, setMaxReached] = React.useState(recipe ? STEPS.length - 1 : 0);
   const [apiKey, setApiKeyState] = React.useState("");
@@ -74,6 +76,8 @@ export function Builder({ plan, demo, paidPlans, live, recipe, botCount, signedI
 
   const step = STEPS[stepIndex].id;
   const atBotLimit = botCount >= PLANS[plan].limits.bots;
+  // How many apps the plan connects (demo mode connects them all).
+  const appLimit = demo ? undefined : PLANS[plan].limits.connectors;
   const error = stepError(step, state, { apiKey, keyStatus });
 
   const update = React.useCallback((patch: Partial<BuilderState>) => {
@@ -93,7 +97,7 @@ export function Builder({ plan, demo, paidPlans, live, recipe, botCount, signedI
     const usable = draft && (draft.state.name || draft.step > 0) && (!recipe || (draft.state.recipeSlug === recipe.slug && draft.step > 0));
     if (draft && usable) {
       start = draft.step;
-      setState((s) => ({ ...s, ...draft.state, brief: draft.state.brief ?? s.brief, ageConfirmed: false }));
+      setState((s) => fitToServer({ ...s, ...draft.state, brief: draft.state.brief ?? s.brief, ageConfirmed: false }, { plan, demo, comingSoon }));
       setStepIndex(start);
       setMaxReached((m) => Math.max(m, start));
       toast("Picked up where you left off", {
@@ -101,7 +105,7 @@ export function Builder({ plan, demo, paidPlans, live, recipe, botCount, signedI
           label: "Start over",
           onClick: () => {
             clearDraft();
-            setState(initialState(recipe));
+            setState(initialState(recipe, comingSoon));
             setStepIndex(0);
             setMaxReached(recipe ? STEPS.length - 1 : 0);
             window.history.replaceState({ babStep: 0, babPrev: null } satisfies StepEntry, "", stepUrl(0));
@@ -113,6 +117,8 @@ export function Builder({ plan, demo, paidPlans, live, recipe, botCount, signedI
     const entry = currentEntry();
     window.history.replaceState(entry?.babStep === start ? entry : ({ babStep: start, babPrev: null } satisfies StepEntry), "", stepUrl(start));
     setHydrated(true);
+    // The server's answers (plan, demo, what's coming soon) don't change while the builder is open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recipe]);
 
   // The browser's Back and Forward move between steps.
@@ -416,7 +422,7 @@ export function Builder({ plan, demo, paidPlans, live, recipe, botCount, signedI
       <main className="relative mx-auto grid max-w-6xl gap-8 px-4 pt-6 pb-40 sm:px-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-10 lg:pt-10">
         {/* min-w-0: the strip's one-line speech bubble truncates instead of widening the page on phones. */}
         <div className="min-w-0 lg:hidden">
-          <BotPreviewStrip state={state} step={step} typing={typing} />
+          <BotPreviewStrip state={state} step={step} typing={typing} appLimit={appLimit} />
         </div>
         <section key={step} className="min-w-0 animate-fade-up" aria-live="polite">
           {step === "face" ? (
@@ -447,6 +453,7 @@ export function Builder({ plan, demo, paidPlans, live, recipe, botCount, signedI
               onValidate={() => void validateRef.current()}
               plan={plan}
               demo={demo}
+              paidPlans={paidPlans}
               botName={name}
             />
           ) : null}
@@ -462,6 +469,7 @@ export function Builder({ plan, demo, paidPlans, live, recipe, botCount, signedI
               plan={plan}
               demo={demo}
               paidPlans={paidPlans}
+              comingSoon={comingSoon}
             />
           ) : null}
           {step === "trust" ? (
@@ -507,7 +515,7 @@ export function Builder({ plan, demo, paidPlans, live, recipe, botCount, signedI
         <aside className="hidden lg:block" aria-label="Your bot so far">
           <div className="sticky top-24">
             {/* Shows everything chosen so far, including steps a recipe filled in or ones you went back from. */}
-            <BotPreview state={state} step={step} stepIndex={maxReached} typing={typing} />
+            <BotPreview state={state} step={step} stepIndex={maxReached} typing={typing} appLimit={appLimit} />
             {demo ? <p className="mt-3 px-2 text-center text-xs text-muted-foreground">Demo mode: apps and channels are simulated, so you can try everything.</p> : null}
           </div>
         </aside>

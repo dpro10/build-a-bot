@@ -64,8 +64,8 @@ export type ProviderDef = {
   baseUrl: string;
   keyUrl?: string;
   keyPlaceholder?: string;
-  /** simple-icons slug or a letter fallback. */
-  icon: { simpleIcon?: string; letter?: string; color: string };
+  /** simple-icons slug, a Lucide mark, or a letter fallback. */
+  icon: { simpleIcon?: string; lucide?: string; letter?: string; color: string };
   models: ModelDef[];
   /** Free-text model id allowed (OpenRouter, custom). */
   freeformModel?: boolean;
@@ -185,7 +185,7 @@ export const INCLUDED_MODELS: ModelDef[] = [
     id: "MiniMaxAI/MiniMax-M3",
     label: "MiniMax M3",
     maker: "MiniMax",
-    blurb: "Strong agent model with a 1M-token memory.",
+    blurb: "Strong agent model with a 1M-token context.",
     tier: "balanced",
     context: 1_048_576,
     priceIn: 0.3,
@@ -267,6 +267,12 @@ export const INCLUDED_MODELS: ModelDef[] = [
   },
 ];
 
+/** How much a model can take in at once, for the pickers: "128K", "256K", "1M" (K = 1,024 tokens, as vendors count). */
+export function contextLabel(tokens?: number): string | null {
+  if (!tokens) return null;
+  return tokens >= 1_000_000 ? `${Math.round(tokens / 1_000_000)}M` : `${Math.round(tokens / 1024)}K`;
+}
+
 /**
  * Request knobs for an included (Token Factory) model at a given effort.
  * low → thinking off (fast chat); medium/high → thinking on with more room.
@@ -299,6 +305,9 @@ export function resolveIncludedModelId(model: ModelDef): string {
 // ---------------------------------------------------------------------------
 // Bring your own key
 // ---------------------------------------------------------------------------
+
+/** simple-icons doesn't ship OpenAI's logo, so OpenAI and ChatGPT get a plain mark instead of letters. */
+export const OPENAI_MARK = { lucide: "Hexagon", color: "10A37F" };
 
 export const PROVIDERS: ProviderDef[] = [
   {
@@ -365,7 +374,7 @@ export const PROVIDERS: ProviderDef[] = [
     baseUrl: "https://api.openai.com/v1",
     keyUrl: "https://platform.openai.com/api-keys",
     keyPlaceholder: "sk-…",
-    icon: { letter: "AI", color: "10A37F" },
+    icon: OPENAI_MARK,
     freeformModel: true,
     models: [
       { id: "gpt-6.1-sol", label: "GPT-6.1 Sol", blurb: "OpenAI's flagship.", tier: "smart", priceIn: 2, priceOut: 10, tools: true, default: true },
@@ -502,7 +511,7 @@ export type SubscriptionDef = {
   cli: string;
   how: string;
   status: "available" | "api_key_only" | "waitlist";
-  icon: { simpleIcon?: string; letter?: string; color: string };
+  icon: { simpleIcon?: string; lucide?: string; letter?: string; color: string };
   models: { id: string; label: string }[];
 };
 
@@ -529,7 +538,7 @@ export const SUBSCRIPTIONS: SubscriptionDef[] = [
     cli: "codex",
     how: "Runs through your own Codex CLI on your computer, signed in with your ChatGPT account.",
     status: "available",
-    icon: { letter: "AI", color: "10A37F" },
+    icon: OPENAI_MARK,
     models: [{ id: "default", label: "Your Codex default" }],
   },
   {

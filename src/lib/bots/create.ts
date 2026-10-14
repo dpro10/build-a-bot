@@ -9,6 +9,7 @@ import { AVATAR_IDS, COLORWAY_IDS } from "@/lib/avatars";
 import { TRUST_LEVELS, type TrustLevel } from "@/lib/trust";
 import { CHANNEL_BY_KIND, CHANNEL_KINDS, type ChannelKind } from "@/lib/channels/catalog";
 import { getConnector, isBuiltinConnector } from "@/lib/connectors";
+import { connectorUsable } from "@/lib/connectors/availability";
 import { INCLUDED_MODELS, PROVIDER_BY_ID, type ProviderId } from "@/lib/models/catalog";
 import { JOB_BY_ID } from "@/lib/jobs";
 import { PAID_PLANS_SOON, getPlan, planAllowsChannel, planAllowsTrust } from "@/lib/billing/plans";
@@ -199,7 +200,8 @@ export async function createBot(db: Db, owner: User, input: CreateBotInput): Pro
   let thirdParty = 0;
   for (const connectorId of connectorIds) {
     const def = getConnector(connectorId);
-    if (!def || def.status === "soon") continue;
+    // "Coming soon" ones are left out: not built yet, or a built-in whose service isn't set up here.
+    if (!def || !connectorUsable(def)) continue;
     if (isBuiltinConnector(def)) {
       await db.insert(schema.connections).values({ id: newId("con"), botId: id, connectorId, mode: "builtin", status: "connected" }).onConflictDoNothing();
       continue;
@@ -215,7 +217,7 @@ export async function createBot(db: Db, owner: User, input: CreateBotInput): Pro
     // Demo mode starts every app as a simulated connection (works instantly); "Connect for real" upgrades it.
     const mode = demoMode && !(via?.kind === "composio") ? "demo" : via?.kind === "composio" ? "composio" : "mcp";
     if (!demoMode && !via) {
-      notes.push(`${def.name} can't be connected on this server yet.`);
+      notes.push(`${def.name} is coming soon, so it wasn't added.`);
       continue;
     }
     await db

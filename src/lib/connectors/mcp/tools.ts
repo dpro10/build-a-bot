@@ -95,7 +95,7 @@ export async function mcpToolsForConnection(conn: Connection, def: ConnectorDef,
         } catch (err) {
           if (err instanceof McpAuthRequired) {
             await c.db.update(schema.connections).set({ status: "needs_auth", error: "Sign in again" }).where(eq(schema.connections.id, conn.id));
-            return { ok: false, error: `${def.name} needs you to sign in again (Tools tab).` };
+            return { ok: false, error: `${def.name} needs you to sign in again, in Apps & trust.` };
           }
           return { ok: false, error: (err as Error).message.slice(0, 300) };
         }

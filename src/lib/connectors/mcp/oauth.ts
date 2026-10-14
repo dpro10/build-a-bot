@@ -13,6 +13,7 @@ import type { Connection } from "@/lib/db/schema";
 import { appUrl } from "@/lib/env";
 import { pkcePair, randomToken } from "@/lib/crypto";
 import { readCredential, replaceCredential, storeCredential } from "@/lib/channels/secrets";
+import { getConnector } from "@/lib/connectors";
 import { fetchWithTimeout } from "@/lib/tools/net";
 import { McpAuthRequired, MCP_CLIENT_VERSION, parseWwwAuthenticate } from "./client";
 
@@ -70,6 +71,10 @@ async function getJson<T>(url: string): Promise<T | null> {
   }
 }
 
+/**
+ * An unsigned `initialize`. A 401/403 means sign-in, with its challenge. Any other answer
+ * proves nothing: Google's servers answer 200 (and even list their tools), then refuse every call.
+ */
 async function probe(url: string): Promise<{ needsAuth: boolean; challenge: ReturnType<typeof parseWwwAuthenticate> }> {
   try {
     const res = await fetchWithTimeout(url, {
@@ -120,23 +125,41 @@ function preRegistered(issuer: string): { client_id: string; client_secret?: str
   }
 }
 
+/** How the catalog signs in to this connection's server; null for a server the owner pasted (custom MCP). */
+function catalogAuth(connection: Connection, url: string): "oauth" | "bearer" | "none" | null {
+  if (connection.connectorId.startsWith("custom_mcp:")) return null;
+  const via = getConnector(connection.connectorId)?.via.find((v) => v.kind === "mcp" && v.url === url);
+  // A catalog app signs in unless its entry says it needs none.
+  return via?.kind === "mcp" ? via.auth : "oauth";
+}
+
+/** "no_auth": connect without signing in, once its tools really load (the caller checks). */
 export type StartResult = { kind: "redirect"; url: string } | { kind: "no_auth" } | { kind: "error"; message: string };
 
+type ProtectedResource = { resource?: string; authorization_servers?: string[]; scopes_supported?: string[] };
+
+/**
+ * Only the catalog can say an app needs no sign-in (auth "none"): every other catalog app goes
+ * through sign-in, whatever its server answers. A server the owner pasted needs none only when
+ * it lets us in and advertises no sign-in.
+ */
 export async function startMcpOAuth(
   db: Db,
   input: { ownerId: string; botId: string; connection: Connection; redirectTo: string },
 ): Promise<StartResult> {
   const url = String((input.connection.config as { url?: string }).url ?? "");
   if (!url) return { kind: "error", message: "This connector has no server URL." };
+  const listed = catalogAuth(input.connection, url);
+  if (listed === "none") return { kind: "no_auth" };
   const resource = canonicalResource(url);
   const { needsAuth, challenge } = await probe(url);
-  if (!needsAuth) return { kind: "no_auth" };
 
   const r = new URL(resource);
   const prm =
-    (challenge.resourceMetadata ? await getJson<{ resource?: string; authorization_servers?: string[]; scopes_supported?: string[] }>(challenge.resourceMetadata) : null) ??
-    (await getJson<{ resource?: string; authorization_servers?: string[]; scopes_supported?: string[] }>(`${r.origin}/.well-known/oauth-protected-resource${r.pathname}`)) ??
-    (await getJson<{ resource?: string; authorization_servers?: string[]; scopes_supported?: string[] }>(`${r.origin}/.well-known/oauth-protected-resource`));
+    (challenge.resourceMetadata ? await getJson<ProtectedResource>(challenge.resourceMetadata) : null) ??
+    (await getJson<ProtectedResource>(`${r.origin}/.well-known/oauth-protected-resource${r.pathname}`)) ??
+    (await getJson<ProtectedResource>(`${r.origin}/.well-known/oauth-protected-resource`));
+  if (listed === null && !needsAuth && !prm?.authorization_servers?.length) return { kind: "no_auth" };
   const issuer = prm?.authorization_servers?.[0] ?? r.origin;
   const as = await discoverAs(issuer);
   if (!as) return { kind: "error", message: "That server's sign-in couldn't be discovered." };

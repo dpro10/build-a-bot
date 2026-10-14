@@ -8,6 +8,7 @@ import { schema } from "@/lib/db";
 import type { Connection } from "@/lib/db/schema";
 import { DEFAULT_BUILTINS } from "@/lib/connectors/builtin";
 import { getConnector, isBuiltinConnector } from "@/lib/connectors";
+import { connectorUsable } from "@/lib/connectors/availability";
 import { demoToolsFor } from "@/lib/connectors/demo-tools";
 import { evaluate } from "@/lib/policy/engine";
 import { isTrustLevel, type TrustLevel } from "@/lib/trust";
@@ -65,7 +66,8 @@ export async function buildToolset(ctx: ToolContext): Promise<Toolset> {
   const enabledBuiltins = new Set<string>(DEFAULT_BUILTINS);
   for (const c of connections) {
     const def = getConnector(c.connectorId);
-    if (def && isBuiltinConnector(def) && c.status !== "disabled") enabledBuiltins.add(def.id);
+    // A built-in whose service isn't set up here ("Coming soon") gives the model no tools to promise with.
+    if (def && isBuiltinConnector(def) && c.status !== "disabled" && connectorUsable(def)) enabledBuiltins.add(def.id);
   }
 
   const tools: AnyToolSpec[] = [];

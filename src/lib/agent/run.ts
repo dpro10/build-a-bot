@@ -65,7 +65,7 @@ export type AgentEvent =
       sources?: ToolSource[];
     }
   | { type: "approval"; approval: Pick<Approval, "id" | "title" | "detail" | "risk" | "reasons" | "tool" | "expiresAt" | "args"> }
-  | { type: "notice"; tone: "info" | "warn" | "danger"; text: string }
+  | { type: "notice"; tone: "info" | "warn" | "danger"; text: string; /** A page in the app the notice links to. */ href?: string }
   | { type: "done"; messageId: string | null; text: string; status: RunStatus }
   | { type: "error"; message: string };
 
@@ -179,11 +179,11 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
     return finish(input, text, "paused", emit, { parts: [] });
   }
 
-  // 4. Brain + plan limits.
+  // 4. Brain + plan limits. A turn that can't run says why once, in its reply (which channels get too);
+  // the "done" status tells the chat it wasn't answered.
   const brain = await resolveBrain(db, bot);
   if (brain.kind === "unavailable") {
-    emit({ type: "notice", tone: "warn", text: brain.reason });
-    return finish(input, `I can't think right now: ${brain.reason}`, "unavailable", emit, { parts: [] });
+    return finish(input, `I can't think right now. ${brain.reason}`, "unavailable", emit, { parts: [] });
   }
   // Meeting notes the platform posted were written from other people's words. While they're
   // in what the model sees (this chat's history, or "recently elsewhere"), the run counts as
@@ -196,16 +196,18 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
   }
   const limit = await checkLimit(db, owner, brain.included ? "includedMessages" : "byoMessages");
   if (!limit.ok && input.message?.author === "owner") {
-    const text = limit.signIn
-      ? limit.message
-      : `${limit.message} ${paidPlansOpen ? "Upgrade your plan, or switch" : "Switch"} me to your own AI key or subscription in Settings → Brain to keep going.`;
-    emit({ type: "notice", tone: "warn", text: limit.message });
+    // What helps: the owner's own brain gets around the included brain's limit; upgrading, only where paid plans are sold.
+    const advice = brain.included
+      ? `${paidPlansOpen ? "Upgrade your plan, or switch" : "Switch"} me to your own AI key or subscription in Settings → Brain to keep going.`
+      : paidPlansOpen
+        ? "Upgrade your plan to keep going."
+        : "";
+    const text = limit.signIn ? limit.message : `${limit.message} ${advice}`.trim();
     return finish(input, text, "limited", emit, { parts: [] });
   }
   // The whole site's daily ceiling on the included brain (see billing/ceiling.ts).
   if (brain.included && !(await underDailyCeiling(db, "included"))) {
     const forOwner = input.message?.author !== "contact";
-    if (forOwner) emit({ type: "notice", tone: "warn", text: "The free brain has reached today's limit." });
     const text = forOwner
       ? "So many people are trying Build-a-bot today that the free brain has reached its daily limit. It resets at midnight UTC. To keep going now, switch me to your own AI key or subscription in Settings → Brain."
       : "I can't answer right now. Please try again later.";
@@ -316,12 +318,12 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
       }
     } catch (err) {
       if ((err as Error)?.name === "AbortError") break;
+      // Said once, in the reply.
       const friendly = err instanceof LlmError ? err.friendly : "Something went wrong while thinking.";
-      emit({ type: "notice", tone: "danger", text: friendly });
       await receipt(db, bot, "system", "error", "Brain error", { error: truncate(errorMessage(err), 300), model: brain.model });
       finalText = finalText ? `${finalText}\n\n${friendly}` : friendly;
-      lastStepHadTools = false;
       brainFailed = true;
+      lastStepHadTools = false;
       break;
     }
 
