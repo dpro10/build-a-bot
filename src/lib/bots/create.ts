@@ -2,7 +2,7 @@
  * Creating a bot from the builder's answers.
  */
 import { z } from "zod";
-import { count, eq } from "drizzle-orm";
+import { count, eq, sql } from "drizzle-orm";
 import { schema, type Db } from "@/lib/db";
 import type { Bot, BrainConfig, User } from "@/lib/db/schema";
 import { AVATAR_IDS, COLORWAY_IDS } from "@/lib/avatars";
@@ -14,7 +14,9 @@ import { JOB_BY_ID } from "@/lib/jobs";
 import { getPlan, planAllowsChannel, planAllowsTrust } from "@/lib/billing/plans";
 import { available, demoMode, live } from "@/lib/env";
 import { storeCredential } from "@/lib/channels/secrets";
-import { isValidTimeZone } from "@/lib/scheduler/time";
+import { computeNextRun, isValidTimeZone } from "@/lib/scheduler/time";
+import { canonicalResource } from "@/lib/connectors/mcp/oauth";
+import { findFeatured, recipeSchema, type RecipeData } from "@/lib/recipes";
 import { isEmail, newId, normalizePhone, shortCode, slugify, sortableId } from "@/lib/utils";
 
 const brainSchema = z.discriminatedUnion("kind", [
@@ -52,6 +54,11 @@ export const createBotSchema = z.object({
   instructions: z.string().max(4000).optional(),
   brain: brainSchema,
   connectors: z.array(z.string().max(60)).max(200).default([]),
+  /** Any MCP servers the owner pasted (https only); they sign in after the bot is born. */
+  customMcp: z
+    .array(z.object({ url: z.string().url().max(500).refine((u) => u.startsWith("https://"), "Use an https:// URL"), name: z.string().trim().max(60).optional() }))
+    .max(5)
+    .default([]),
   trust: z.enum(TRUST_LEVELS),
   channels: z.array(z.enum(CHANNEL_KINDS)).max(12).default([]),
   contact: z
@@ -67,7 +74,9 @@ export const createBotSchema = z.object({
   recipeId: z.string().max(60).optional(),
 });
 
-export type CreateBotInput = z.infer<typeof createBotSchema>;
+type ParsedInput = z.infer<typeof createBotSchema>;
+/** Parsed builder input; `customMcp` may be left out by server-side callers. */
+export type CreateBotInput = Omit<ParsedInput, "customMcp"> & { customMcp?: ParsedInput["customMcp"] };
 
 export type CreateBotResult =
   | { ok: true; bot: Bot; notes: string[]; upgrade?: "plus" | "pro" }
@@ -204,6 +213,58 @@ export async function createBot(db: Db, owner: User, input: CreateBotInput): Pro
       .onConflictDoNothing();
   }
 
+  // Custom MCP servers: added now, signed in to from Apps & trust.
+  for (const server of input.customMcp ?? []) {
+    if (thirdParty >= thirdPartyLimit && !demoMode) {
+      upgrade = upgrade ?? "plus";
+      notes.push(`The ${plan.name} plan connects ${thirdPartyLimit} apps. ${server.name || new URL(server.url).host} was skipped — upgrade to add more.`);
+      continue;
+    }
+    thirdParty++;
+    const resource = new URL(canonicalResource(server.url));
+    await db
+      .insert(schema.connections)
+      .values({
+        id: newId("con"),
+        botId: id,
+        connectorId: `custom_mcp:${resource.host}${resource.pathname}`.slice(0, 80),
+        mode: "mcp",
+        status: "needs_auth",
+        config: { url: server.url, auth: "unknown", name: server.name || resource.host },
+      })
+      .onConflictDoNothing();
+  }
+
+  // Routines from the recipe this bot was made from.
+  const recipe = input.recipeId ? await loadRecipe(db, input.recipeId) : null;
+  if (recipe?.routines?.length) {
+    const tz = input.timezone && isValidTimeZone(input.timezone) ? input.timezone : owner.timezone || "UTC";
+    let made = 0;
+    for (const r of recipe.routines) {
+      if (made >= plan.limits.routines && !demoMode) {
+        notes.push(`The ${plan.name} plan includes ${plan.limits.routines} routines; the rest of this recipe's routines were skipped.`);
+        break;
+      }
+      const sched = { type: "daily" as const, time: r.time, ...(r.days?.length ? { days: r.days } : {}) };
+      const nextRunAt = computeNextRun(sched, tz, new Date());
+      if (!nextRunAt) continue;
+      await db.insert(schema.schedules).values({
+        id: newId("sch"),
+        botId: id,
+        kind: "routine",
+        title: r.title,
+        prompt: r.instruction,
+        schedule: sched,
+        timezone: tz,
+        nextRunAt,
+      });
+      made++;
+    }
+  }
+  if (input.recipeId && !findFeatured(input.recipeId)) {
+    await db.update(schema.recipes).set({ clones: sql`${schema.recipes.clones} + 1` }).where(eq(schema.recipes.slug, input.recipeId));
+  }
+
   // Channels: web is always on.
   await db.insert(schema.channels).values({
     id: newId("chn"),
@@ -257,4 +318,14 @@ export async function createBot(db: Db, owner: User, input: CreateBotInput): Pro
   });
 
   return { ok: true, bot, notes, upgrade };
+}
+
+/** A featured recipe, or a public one someone published. */
+async function loadRecipe(db: Db, slug: string): Promise<RecipeData | null> {
+  const featured = findFeatured(slug);
+  if (featured) return featured;
+  const [row] = await db.select().from(schema.recipes).where(eq(schema.recipes.slug, slug)).limit(1);
+  if (!row || !row.public) return null;
+  const parsed = recipeSchema.safeParse(row.data);
+  return parsed.success ? parsed.data : null;
 }

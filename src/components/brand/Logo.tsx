@@ -4,7 +4,7 @@
  * the avatars: soft gradient, bean eyes, rounded geometry. Holds up as a 16px
  * favicon (see src/app/icon.svg). Server-component safe.
  */
-import type { JSX } from "react";
+import { useId, type JSX } from "react";
 
 type LogoMarkProps = {
   /** px number or any CSS length (e.g. "1.5em"). Default 32. */
@@ -27,11 +27,12 @@ const LOGO = {
 
 export function LogoMark({ size = 32, className, title }: LogoMarkProps): JSX.Element {
   const a11y = title ? { role: "img", "aria-label": title } : { "aria-hidden": true, focusable: "false" as const };
+  const fillId = `bab-logo-fill-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width={size} height={size} className={className} {...a11y}>
       {title ? <title>{title}</title> : null}
       <defs>
-        <linearGradient id="bab-logo-fill" x1="8" y1="12" x2="40" y2="46" gradientUnits="userSpaceOnUse">
+        <linearGradient id={fillId} x1="8" y1="12" x2="40" y2="46" gradientUnits="userSpaceOnUse">
           <stop offset="0" stopColor={LOGO.violet[0]} />
           <stop offset="0.5" stopColor={LOGO.violet[1]} />
           <stop offset="1" stopColor={LOGO.violet[2]} />
@@ -39,7 +40,7 @@ export function LogoMark({ size = 32, className, title }: LogoMarkProps): JSX.El
       </defs>
       <path d={LOGO.antenna} stroke={LOGO.violet[1]} strokeWidth="2.8" strokeLinecap="round" />
       <path d={LOGO.spark} fill={LOGO.sparkColor} />
-      <path d={LOGO.bubble} fill="url(#bab-logo-fill)" />
+      <path d={LOGO.bubble} fill={`url(#${fillId})`} />
       <path d={LOGO.sheen} fill="none" stroke="#FFFFFF" strokeOpacity="0.5" strokeWidth="2" strokeLinecap="round" />
       <ellipse cx="18.5" cy="27.5" rx="3.1" ry="4" fill="#FFFFFF" />
       <ellipse cx="29.5" cy="27.5" rx="3.1" ry="4" fill="#FFFFFF" />

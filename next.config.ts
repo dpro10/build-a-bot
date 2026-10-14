@@ -4,6 +4,8 @@ const nextConfig: NextConfig = {
   // PGlite ships WASM + data files it loads from disk; postgres.js uses Node sockets.
   serverExternalPackages: ["@electric-sql/pglite", "postgres"],
   poweredByHeader: false,
+  // AGENTS.md is the Cookbook workspace's file; don't let `next dev` append to it.
+  agentRules: false,
   async headers() {
     return [
       {

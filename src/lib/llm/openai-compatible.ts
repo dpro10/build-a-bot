@@ -138,6 +138,8 @@ export function createOpenAiCompatibleProvider(opts: OpenAiCompatibleOptions): L
         },
         body: JSON.stringify(body),
         signal: req.signal,
+        // Model APIs don't redirect; refusing keeps a custom endpoint from bouncing us elsewhere.
+        redirect: "error",
       });
     } catch (err) {
       if ((err as Error)?.name === "AbortError") throw err;
