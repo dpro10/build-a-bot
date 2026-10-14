@@ -4,7 +4,7 @@ import { schema } from "@/lib/db";
 import { apiError, authedBot, json, parseJson, sameOrigin, type RouteCtx } from "@/lib/api";
 import { getConnector, isBuiltinConnector } from "@/lib/connectors";
 import { getPlan } from "@/lib/billing/plans";
-import { demoMode, live } from "@/lib/env";
+import { available, demoMode, live } from "@/lib/env";
 import { canonicalResource } from "@/lib/connectors/mcp/oauth";
 import { newId } from "@/lib/utils";
 import { receipt } from "@/lib/agent/run";
@@ -27,7 +27,7 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string }>) {
   }
   const def = getConnector(connectorId);
   if (!def && !connectorId.startsWith("custom_mcp:")) return apiError(404, "Unknown connector");
-  if (def?.status === "soon") return apiError(409, `${def.name} is coming soon.`);
+  if (def?.status === "soon" || (def?.requires && !available(def.requires))) return apiError(409, `${def.name} is coming soon.`);
 
   const plan = getPlan(a.user.plan);
   if (def && !isBuiltinConnector(def) && !demoMode) {

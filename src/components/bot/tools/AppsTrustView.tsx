@@ -42,12 +42,14 @@ export type AppsTrustProps = {
   connections: ConnectionView[];
   planBadges: Partial<Record<TrustLevel, string>>;
   composioLive: boolean;
+  /** Built-ins whose service isn't set up on this server: shown as coming soon. */
+  unavailable: string[];
   timezone: string;
   /** From the sign-in callbacks: ?connected=1 or ?connect_error=… */
   flash: { connected: boolean; error: string | null };
 };
 
-export function AppsTrustView({ bot, connections: initial, planBadges, composioLive, timezone, flash }: AppsTrustProps) {
+export function AppsTrustView({ bot, connections: initial, planBadges, composioLive, unavailable, timezone, flash }: AppsTrustProps) {
   const botId = bot.id;
   const [trust, setTrust] = React.useState<TrustLevel>(bot.trust);
   const [limits, setLimits] = React.useState<LimitsView>(bot.limits);
@@ -66,7 +68,11 @@ export function AppsTrustView({ bot, connections: initial, planBadges, composioL
   const focusAfterDialog = React.useRef<string | null>(null);
 
   const spendCapUsd = limits.spendCapUsd && limits.spendCapUsd > 0 ? limits.spendCapUsd : undefined;
-  const { apps, builtins } = React.useMemo(() => groupConnections(connections), [connections]);
+  const { apps, builtins } = React.useMemo(() => {
+    const grouped = groupConnections(connections);
+    // A built-in whose service isn't set up here does nothing yet: it shows with the ones coming soon.
+    return { ...grouped, builtins: grouped.builtins.filter((c) => !unavailable.includes(c.connectorId)) };
+  }, [connections, unavailable]);
   const addedIds = React.useMemo(() => connections.map((c) => c.connectorId), [connections]);
   // For the trust preview: popular catalog apps first, the owner's own servers last, by the names they gave them.
   const pickerApps = React.useMemo(
@@ -306,7 +312,8 @@ export function AppsTrustView({ bot, connections: initial, planBadges, composioL
     );
   };
 
-  const moreBuiltins = BUILTIN_CONNECTORS.filter((d) => isAvailable(d) && !ALWAYS_ON.has(d.id) && d.id !== "custom_mcp" && !addedIds.includes(d.id));
+  const moreBuiltins = BUILTIN_CONNECTORS.filter((d) => isAvailable(d) && !ALWAYS_ON.has(d.id) && d.id !== "custom_mcp" && !addedIds.includes(d.id) && !unavailable.includes(d.id));
+  const soonBuiltins = BUILTIN_CONNECTORS.filter((d) => unavailable.includes(d.id));
 
   const addBuiltin = async (d: ConnectorDef) => {
     setBusyFor(`add:${d.id}`, "add");
@@ -426,6 +433,18 @@ export function AppsTrustView({ bot, connections: initial, planBadges, composioL
               ))}
             </div>
           ) : null}
+          {soonBuiltins.length ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {soonBuiltins.map((d) => (
+                <Tooltip key={d.id} content={d.description}>
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-muted/60 py-1 pr-3 pl-1 text-xs font-medium text-muted-foreground">
+                    <BrandTile icon={d.icon} size={20} className="opacity-60 grayscale" />
+                    {d.name} · Coming soon
+                  </span>
+                </Tooltip>
+              ))}
+            </div>
+          ) : null}
         </Section>
       </div>
 
@@ -443,6 +462,7 @@ export function AppsTrustView({ bot, connections: initial, planBadges, composioL
         botName={bot.name}
         jobs={bot.jobs}
         added={addedIds}
+        unavailable={unavailable}
         trust={trust}
         spendCapUsd={spendCapUsd}
         composioLive={composioLive}

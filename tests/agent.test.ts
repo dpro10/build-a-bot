@@ -276,7 +276,8 @@ describe("agent pipeline (demo brain)", () => {
       name: "Briefy",
       jobs: ["calendar", "inbox"],
       brain: { kind: "included", model: "nvidia/Nemotron-3_5-Lightning" },
-      connectors: [],
+      // The brief only covers the calendar when the bot has one.
+      connectors: ["google_calendar"],
       trust: "ask",
       channels: [],
       contact: {},

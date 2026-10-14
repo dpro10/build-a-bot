@@ -34,6 +34,7 @@ export function AddAppsDialog({
   botName,
   jobs,
   added,
+  unavailable,
   trust,
   spendCapUsd,
   composioLive,
@@ -48,6 +49,8 @@ export function AddAppsDialog({
   jobs: string[];
   /** Connector ids the bot already has. */
   added: string[];
+  /** Built-ins whose service isn't set up on this server: shown as coming soon. */
+  unavailable: string[];
   trust: TrustLevel;
   spendCapUsd: number | undefined;
   composioLive: boolean;
@@ -136,6 +139,7 @@ export function AddAppsDialog({
                 onToggle={(d) => void add(d)}
                 jobs={jobs}
                 added={added}
+                unavailable={unavailable}
                 onCustomMcp={() => setView("custom")}
                 autoFocus
                 maxHeight="calc(var(--sheet-h) - 234px)"

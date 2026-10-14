@@ -5,7 +5,8 @@
  */
 import { AVATARS, type AvatarId, type ColorwayId } from "@/lib/avatars";
 import type { TrustLevel } from "@/lib/trust";
-import type { ChannelKind } from "@/lib/channels/catalog";
+import { CHANNEL_BY_KIND, channelAvailability, isChannelKind, type ChannelKind, type LiveFlags } from "@/lib/channels/catalog";
+import { PLANS, planAllowsChannel, type PlanId } from "@/lib/billing/plans";
 import { INCLUDED_MODELS, PROVIDER_BY_ID, type ProviderId } from "@/lib/models/catalog";
 import { isJobId, JOB_BY_ID } from "@/lib/jobs";
 import type { RecipeData } from "@/lib/recipes";
@@ -51,7 +52,40 @@ export type BuilderState = {
 
 export const DEFAULT_MODEL = INCLUDED_MODELS.find((m) => m.default)!.id;
 
-export function initialState(recipe?: (RecipeData & { slug?: string }) | null): BuilderState {
+/** What this server offers the builder, so a recipe or a saved draft only brings what works here. */
+export type BuilderContext = {
+  demo: boolean;
+  live: LiveFlags;
+  plan: PlanId;
+  /** Built-ins whose service isn't set up here (see unavailableConnectors). */
+  unavailableApps: string[];
+  /** The signed-in account's email, for the Email channel. */
+  ownerEmail: string | null;
+};
+
+/**
+ * Channels a recipe or a saved draft may bring. Demo mode keeps them all (it simulates what
+ * isn't set up); otherwise one that's coming soon, or that needs a plan nobody can buy yet, is left out.
+ */
+export function usableChannels(channels: unknown, ctx: BuilderContext): ChannelKind[] {
+  const kinds = Array.isArray(channels) ? channels.filter(isChannelKind) : [];
+  return [...new Set(kinds)].filter((kind) => {
+    if (kind === "web") return false;
+    if (ctx.demo) return true;
+    const availability = channelAvailability(CHANNEL_BY_KIND[kind], ctx.demo, ctx.live);
+    if (availability === "soon") return false;
+    // Anyone can join a waitlist.
+    return availability === "waitlist" || Boolean(ctx.live.stripe) || planAllowsChannel(PLANS[ctx.plan], kind);
+  });
+}
+
+/** Apps a recipe or a saved draft may bring: not built-ins whose service isn't set up here. */
+function usableApps(connectors: unknown, ctx: BuilderContext): string[] {
+  const ids = Array.isArray(connectors) ? connectors.filter((c): c is string => typeof c === "string") : [];
+  return [...new Set(ids)].filter((id) => !ctx.unavailableApps.includes(id));
+}
+
+export function initialState(recipe: (RecipeData & { slug?: string }) | null | undefined, ctx: BuilderContext): BuilderState {
   const base: BuilderState = {
     avatar: "blip",
     color: AVATARS.blip.defaultColor,
@@ -65,7 +99,7 @@ export function initialState(recipe?: (RecipeData & { slug?: string }) | null): 
     trust: "ask",
     channels: [],
     phone: "",
-    email: "",
+    email: ctx.ownerEmail ?? "",
     instructions: "",
     ageConfirmed: false,
     recipeSlug: null,
@@ -81,13 +115,27 @@ export function initialState(recipe?: (RecipeData & { slug?: string }) | null): 
     name: recipe.name,
     jobs,
     // Jobs bring their built-in tools (web search for research, and so on), just like picking them by hand.
-    connectors: [...new Set([...recipe.connectors, ...jobs.flatMap((j) => JOB_BY_ID[j].builtins).filter((b) => !ALWAYS_ON.has(b))])],
+    connectors: usableApps([...recipe.connectors, ...jobs.flatMap((j) => JOB_BY_ID[j].builtins).filter((b) => !ALWAYS_ON.has(b))], ctx),
     trust: recipe.trust,
-    channels: recipe.channels.filter((c): c is ChannelKind => c !== "web") as ChannelKind[],
+    channels: usableChannels(recipe.channels, ctx),
     instructions: recipe.instructions,
     recipeSlug: recipe.slug ?? null,
     // The recipe brings its own routines.
     brief: { ...base.brief, on: !recipe.routines?.length },
+  };
+}
+
+/** A saved draft on top of a fresh state, keeping only the channels and apps that work here. */
+export function withDraft(base: BuilderState, draft: Partial<BuilderState>, ctx: BuilderContext): BuilderState {
+  return {
+    ...base,
+    ...draft,
+    brief: draft.brief ?? base.brief,
+    ageConfirmed: false,
+    channels: usableChannels(draft.channels ?? base.channels, ctx),
+    connectors: usableApps(draft.connectors ?? base.connectors, ctx),
+    // A draft saved before signing in takes the account's email.
+    email: typeof draft.email === "string" && draft.email.trim() ? draft.email : base.email,
   };
 }
 

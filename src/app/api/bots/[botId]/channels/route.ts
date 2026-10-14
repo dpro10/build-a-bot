@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { apiError, authedBot, clientIp, json, parseJson, sameOrigin, type RouteCtx } from "@/lib/api";
-import { CHANNEL_KINDS } from "@/lib/channels/catalog";
-import { channelAction } from "@/lib/channels/setup";
+import { CHANNEL_BY_KIND, CHANNEL_KINDS } from "@/lib/channels/catalog";
+import { channelAction, type SetupResult } from "@/lib/channels/setup";
 import { getBotSetup } from "@/lib/data";
 
 export async function GET(_req: Request, ctx: RouteCtx<{ botId: string }>) {
@@ -30,7 +30,16 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string }>) {
   if (!a.ok) return a.res;
   const parsed = await parseJson(req, z.object({ kind: z.enum(CHANNEL_KINDS), action: z.string().min(2).max(30), payload: z.record(z.string(), z.unknown()).optional() }));
   if (!parsed.ok) return parsed.res;
-  const result = await channelAction(a.db, a.user, a.bot, parsed.data.kind, parsed.data.action, parsed.data.payload ?? {}, { ip: clientIp(req) ?? undefined });
+  const { kind, action } = parsed.data;
+  let result: SetupResult;
+  try {
+    result = await channelAction(a.db, a.user, a.bot, kind, action, parsed.data.payload ?? {}, { ip: clientIp(req) ?? undefined });
+  } catch (err) {
+    // A provider (Twilio, the email service, Telegram...) or our own code failed. The details
+    // go to the server log; the page gets a plain sentence.
+    console.error(`[channels] ${kind} ${action} failed:`, err);
+    return apiError(502, `Something went wrong with ${CHANNEL_BY_KIND[kind].name}. Try again in a moment.`);
+  }
   if (!result.ok) return apiError(result.status ?? 400, result.error);
   return json({ ok: true, ...(result.data ?? {}) });
 }

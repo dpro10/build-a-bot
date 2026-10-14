@@ -12,7 +12,7 @@ import { VerifyCodeForm } from "./VerifyCodeForm";
 
 export function EmailSetup({ channel, ctx }: { channel: ChannelView; ctx: ChannelCtx }) {
   const [changing, setChanging] = React.useState(false);
-  const botAddress = channel.address ?? ctx.botEmail;
+  const botAddress = channel.address ?? ctx.botEmail ?? "";
   if (channel.ownerVerified && channel.status !== "needs_setup" && !changing) {
     return <EmailActive channel={channel} ctx={ctx} botAddress={botAddress} onChange={() => setChanging(true)} />;
   }
@@ -111,10 +111,12 @@ function EmailVerify({
           />
         </Step>
       </Steps>
-      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-dashed border-border px-3 py-2.5 text-[13px] text-muted-foreground">
-        <AtSign className="size-4 shrink-0" />
-        Its own address will be <span className="font-mono text-foreground">{botAddress}</span>
-      </div>
+      {botAddress ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-dashed border-border px-3 py-2.5 text-[13px] text-muted-foreground">
+          <AtSign className="size-4 shrink-0" />
+          Its own address will be <span className="font-mono text-foreground">{botAddress}</span>
+        </div>
+      ) : null}
     </div>
   );
 }

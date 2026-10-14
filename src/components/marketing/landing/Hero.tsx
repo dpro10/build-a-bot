@@ -2,7 +2,9 @@ import Link from "next/link";
 import { ArrowRight, Check, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BrandTile } from "@/components/brand/icons";
-import { CHANNEL_BY_KIND } from "@/lib/channels/catalog";
+import { CHANNEL_BY_KIND, channelUsable, comingSoonLine, talkChannels } from "@/lib/channels/catalog";
+import { demoMode, live } from "@/lib/env";
+import { joinList } from "@/lib/utils";
 import { Container } from "../ui";
 import { channelIcon } from "../icons";
 import { HeroStage } from "./HeroStage";
@@ -10,14 +12,12 @@ import { HeroStage } from "./HeroStage";
 const TALK_ANYWHERE = ["voice", "sms", "email", "telegram", "discord", "slack"] as const;
 
 export function Hero() {
+  // Only the channels that work here: the rest are named as coming soon.
+  const ready = TALK_ANYWHERE.filter((k) => channelUsable(CHANNEL_BY_KIND[k], demoMode, live));
+  const words = talkChannels(demoMode, live);
+  const talk = words.soon.length ? `talk to it on the web, ${joinList(words.ready, "or")}. ${comingSoonLine(words.soon)}` : `talk to it anywhere: ${words.ready.join(", ")}.`;
   const tile = (kind: keyof typeof CHANNEL_BY_KIND) => <BrandTile icon={channelIcon(CHANNEL_BY_KIND[kind])} size={18} />;
-  const channelIcons = {
-    slack: tile("slack"),
-    telegram: tile("telegram"),
-    sms: tile("sms"),
-    voice: tile("voice"),
-    email: tile("email"),
-  };
+  const channelIcons = Object.fromEntries((["slack", "telegram", "sms", "voice", "email"] as const).filter((k) => ready.includes(k)).map((k) => [k, tile(k)]));
 
   return (
     <section className="relative overflow-hidden">
@@ -45,7 +45,7 @@ export function Hero() {
             Your own AI agent, <span className="mk-gradient-text">in about a minute.</span>
           </h1>
           <p className="mt-6 max-w-xl text-lg text-pretty text-muted-foreground sm:text-xl sm:leading-relaxed">
-            Pick a face, name it, give it a brain and your apps, and talk to it anywhere: calls, texts, email, Telegram, Discord, Slack.
+            Pick a face, name it, give it a brain and your apps, and {talk}
           </p>
 
           <div className="mt-8 flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
@@ -70,7 +70,7 @@ export function Hero() {
 
           <div className="mt-9 flex items-center gap-3">
             <div className="flex -space-x-1.5" aria-hidden="true">
-              {TALK_ANYWHERE.map((k) => (
+              {ready.map((k) => (
                 <span key={k} className="rounded-[30%] ring-2 ring-background">
                   <BrandTile icon={channelIcon(CHANNEL_BY_KIND[k])} size={28} />
                 </span>

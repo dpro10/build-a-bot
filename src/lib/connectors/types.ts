@@ -11,6 +11,7 @@
  *  - composio   managed OAuth + tools through Composio (needs COMPOSIO_API_KEY).
  *  - custom_mcp the user pastes any MCP server URL.
  */
+import type { live } from "@/lib/env";
 
 export type Effect = "read" | "write" | "send" | "delete" | "spend" | "admin";
 export type Risk = "low" | "medium" | "high";
@@ -62,6 +63,9 @@ export type JobId =
   | "shopping"
   | "travel"
   | "other";
+
+/** What a bot's apps let it see, for ideas that only make sense with one (see appKinds()). */
+export type AppKind = "email" | "calendar" | "code" | "smart_home";
 
 export type ConnectorVia =
   | { kind: "builtin" }
@@ -118,6 +122,8 @@ export type ConnectorDef = {
   sensitive?: boolean;
   /** Short note shown under the connector (e.g. "Uses Google's audited access"). */
   note?: string;
+  /** A built-in that needs a service set up on this server (or demo mode); until then it's coming soon. */
+  requires?: keyof typeof live;
 };
 
 export const CATEGORY_LABELS: Record<ConnectorCategory, string> = {

@@ -7,6 +7,7 @@ import type { Channel } from "@/lib/db/schema";
 import type { ChannelAdapter, OutboundButton } from "./outbound";
 import { channelSecret } from "./secrets";
 import { appUrl } from "@/lib/env";
+import { UnreachableError } from "@/lib/utils";
 
 const API = "https://api.telegram.org";
 
@@ -15,6 +16,8 @@ export async function telegramCall<T = unknown>(token: string, method: string, b
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
+  }).catch((cause) => {
+    throw new UnreachableError("Telegram", { cause });
   });
   const data = (await res.json().catch(() => ({}))) as { ok?: boolean; result?: T; description?: string };
   if (!data.ok) throw new Error(`Telegram ${method}: ${data.description ?? res.status}`);

@@ -15,8 +15,9 @@ import { api, ApiError } from "@/lib/client/api";
 import { cn } from "@/lib/utils";
 import { ago, useNow, whenLabel } from "@/components/bot/activity/time";
 import { RoutineDialog, blankForm, formFrom, type DeliverOption, type RoutineForm } from "./RoutineDialog";
-import { TEMPLATES, describeSchedule, isFinished, routineEmoji, type ScheduleView, type Template } from "./schedule";
+import { describeSchedule, isFinished, routineEmoji, templatesFor, type ScheduleView, type Template } from "./schedule";
 import { PLANS } from "@/lib/billing/plans";
+import type { AppKind } from "@/lib/connectors/types";
 
 type DialogState = { open: boolean; initial: RoutineForm; editing: ScheduleView | null };
 
@@ -68,6 +69,7 @@ export function RoutinesView({
   plan,
   deliverOptions,
   autoHint,
+  apps,
 }: {
   botId: string;
   botName: string;
@@ -78,10 +80,13 @@ export function RoutinesView({
   plan: { id: string; name: string; limit: number };
   deliverOptions: DeliverOption[];
   autoHint: string;
+  /** What the bot's apps can see, so templates only mention those. */
+  apps: AppKind[];
 }) {
   const router = useRouter();
   const live = useBotLive();
   const now = useNow(serverNow);
+  const templates = React.useMemo(() => templatesFor(new Set(apps)), [apps]);
   const [items, setItems] = React.useState<ScheduleView[]>(initial);
   const [dialog, setDialog] = React.useState<DialogState>(() => ({ open: false, initial: blankForm("routine", timezone), editing: null }));
   const [confirm, setConfirm] = React.useState<ScheduleView | null>(null);
@@ -259,7 +264,7 @@ export function RoutinesView({
           <p className="text-sm text-muted-foreground">One tap fills everything in. Change anything before you save.</p>
         </div>
         <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-3">
-          {TEMPLATES.map((t) => {
+          {templates.map((t) => {
             const added = takenTitles.has(t.title.toLowerCase());
             return (
               <button
@@ -313,7 +318,7 @@ export function RoutinesView({
             icon={<Repeat className="size-8" />}
             title="No routines yet"
             action={
-              <Button variant="soft" onClick={() => openTemplate(TEMPLATES[0])}>
+              <Button variant="soft" onClick={() => openTemplate(templates[0])}>
                 <Sparkles /> Try a morning brief
               </Button>
             }

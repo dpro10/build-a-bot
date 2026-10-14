@@ -3,7 +3,10 @@
  * and shapes the bot's first message and system prompt. The #1 reason people
  * abandon personal agents is not knowing what to use them for (research, 10-13).
  */
-import type { JobId } from "@/lib/connectors/types";
+import type { AppKind, JobId } from "@/lib/connectors/types";
+
+/** A starter idea. One that looks at the owner's email, calendar, code or home says which kind of app it needs. */
+export type Starter = string | { text: string; needs: AppKind };
 
 export type JobDef = {
   id: JobId;
@@ -12,8 +15,8 @@ export type JobDef = {
   blurb: string;
   /** Added to the system prompt when the job is picked. */
   prompt: string;
-  /** Ideas the bot offers in its first message. */
-  starters: string[];
+  /** Ideas the bot offers in its first message and over the chat (see startersFor). */
+  starters: Starter[];
   /** Built-in connectors this job turns on. Third-party suggestions come from the catalog. */
   builtins: string[];
 };
@@ -26,7 +29,7 @@ export const JOBS: JobDef[] = [
     blurb: "Triage, summarize, draft replies",
     prompt:
       "Help the owner get through email: summarize what matters, flag what needs a reply, and draft replies in their voice.",
-    starters: ["Summarize what came in today", "Draft a polite no to that meeting", "What needs a reply from me?"],
+    starters: [{ text: "Summarize what came in today", needs: "email" }, "Draft a polite no to that meeting", { text: "What needs a reply from me?", needs: "email" }],
     builtins: ["bot_inbox"],
   },
   {
@@ -35,7 +38,11 @@ export const JOBS: JobDef[] = [
     emoji: "🗓️",
     blurb: "Plan your day, find time, prep meetings",
     prompt: "Help the owner plan their days: what's coming up, conflicts, prep for meetings, and finding free time.",
-    starters: ["What's on my plate tomorrow?", "Find an hour for deep work this week", "Prep me for my next meeting"],
+    starters: [
+      { text: "What's on my plate tomorrow?", needs: "calendar" },
+      { text: "Find an hour for deep work this week", needs: "calendar" },
+      { text: "Prep me for my next meeting", needs: "calendar" },
+    ],
     builtins: [],
   },
   {
@@ -95,7 +102,7 @@ export const JOBS: JobDef[] = [
     blurb: "GitHub, issues, PRs, code questions",
     prompt:
       "Help with software work: GitHub issues and pull requests, explaining code, writing small scripts, and keeping projects tidy.",
-    starters: ["What PRs need my review?", "Open an issue for this bug", "Explain this error message"],
+    starters: [{ text: "What PRs need my review?", needs: "code" }, { text: "Open an issue for this bug", needs: "code" }, "Explain this error message"],
     builtins: ["web_search", "web_reader"],
   },
   {
@@ -133,7 +140,7 @@ export const JOBS: JobDef[] = [
     emoji: "🏡",
     blurb: "Chores, smart home, family logistics",
     prompt: "Help run the household: chores, family logistics, shopping lists and smart-home routines.",
-    starters: ["Make a weekly chore chart", "Who's picking up the kids Thursday?", "Turn off the lights at 11"],
+    starters: ["Make a weekly chore chart", { text: "Who's picking up the kids Thursday?", needs: "calendar" }, { text: "Turn off the lights at 11", needs: "smart_home" }],
     builtins: ["notes", "reminders"],
   },
   {
@@ -169,4 +176,31 @@ export const JOB_BY_ID = Object.fromEntries(JOBS.map((j) => [j.id, j])) as Recor
 
 export function isJobId(value: unknown): value is JobId {
   return typeof value === "string" && value in JOB_BY_ID;
+}
+
+/** The jobs' starter ideas that fit a bot: ones about an app it doesn't have are left out. */
+export function startersFor(jobs: string[], apps: ReadonlySet<AppKind>): string[] {
+  const out: string[] = [];
+  for (const id of jobs) {
+    for (const s of JOB_BY_ID[id as JobId]?.starters ?? []) {
+      const text = typeof s === "string" ? s : apps.has(s.needs) ? s.text : null;
+      if (text && !out.includes(text)) out.push(text);
+    }
+  }
+  return out;
+}
+
+export type BriefPart = "calendar" | "email" | "reminders" | "headline" | "bills" | "habits" | "weather";
+
+/** What the morning brief covers: it follows the jobs, with the calendar and email only when the bot's apps can see them. */
+export function briefParts(jobs: string[], apps: ReadonlySet<AppKind>): BriefPart[] {
+  const parts: BriefPart[] = [];
+  if (jobs.includes("calendar") && apps.has("calendar")) parts.push("calendar");
+  if (jobs.includes("inbox") && apps.has("email")) parts.push("email");
+  if (jobs.includes("reminders") || !parts.length) parts.push("reminders");
+  if (jobs.includes("research")) parts.push("headline");
+  if (jobs.includes("money")) parts.push("bills");
+  if (jobs.includes("health")) parts.push("habits");
+  parts.push("weather");
+  return parts;
 }

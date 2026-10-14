@@ -24,6 +24,7 @@ export function AppsStep({
   onCustomMcp,
   plan,
   demo,
+  unavailable,
 }: {
   botName: string;
   jobs: string[];
@@ -34,6 +35,8 @@ export function AppsStep({
   onCustomMcp: (servers: { url: string; name?: string }[]) => void;
   plan: PlanId;
   demo: boolean;
+  /** Built-ins whose service isn't set up here: shown as coming soon, never picked. */
+  unavailable: string[];
 }) {
   const [mcpOpen, setMcpOpen] = React.useState(false);
   const name = botName.trim() || "your bot";
@@ -44,8 +47,8 @@ export function AppsStep({
   const toggleJob = (id: string) => {
     const on = !jobs.includes(id);
     const nextJobs = on ? [...jobs, id] : jobs.filter((j) => j !== id);
-    // Jobs bring their built-in tools along (web search for research, and so on).
-    const builtins = new Set(JOB_BY_ID[id as keyof typeof JOB_BY_ID]?.builtins ?? []);
+    // Jobs bring their built-in tools along (web search for research, and so on), when they work here.
+    const builtins = new Set((JOB_BY_ID[id as keyof typeof JOB_BY_ID]?.builtins ?? []).filter((b) => !unavailable.includes(b)));
     const stillNeeded = new Set(nextJobs.flatMap((j) => JOB_BY_ID[j as keyof typeof JOB_BY_ID]?.builtins ?? []));
     let next = connectors;
     if (on) next = [...new Set([...connectors, ...[...builtins].filter((b) => !ALWAYS_ON.has(b))])];
@@ -110,7 +113,7 @@ export function AppsStep({
             </span>
           </div>
         ) : null}
-        <ConnectorBrowser selected={connectors} onToggle={toggle} jobs={jobs} onCustomMcp={() => setMcpOpen(true)} />
+        <ConnectorBrowser selected={connectors} onToggle={toggle} jobs={jobs} unavailable={unavailable} onCustomMcp={() => setMcpOpen(true)} />
       </section>
 
       <section className="flex flex-col gap-2 rounded-3xl border border-border bg-background-2/60 p-4">
