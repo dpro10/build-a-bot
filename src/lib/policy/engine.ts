@@ -13,6 +13,8 @@
  *  3. Money is off unless the owner set a cap; the cap is never exceeded.
  *  4. Secrets never leave.
  *  5. STOP (paused) beats everything.
+ *  6. Some actions always wait for the owner's tap, at every trust level (a tool's
+ *     `alwaysAsk`, e.g. submitting a form on a website after showing a preview).
  */
 import type { Effect, Risk } from "@/lib/connectors/types";
 import type { TrustLevel } from "@/lib/trust";
@@ -34,7 +36,8 @@ export type ReasonCode =
   | "over_spend_cap"
   | "bulk_delete"
   | "daily_action_cap"
-  | "secret_in_payload";
+  | "secret_in_payload"
+  | "always_ask";
 
 export type Recipient = {
   address: string;
@@ -64,6 +67,8 @@ export type ActionContext = {
   /** Text that would leave (email body, message, file contents) — scanned for secrets. */
   outboundText?: string;
   inQuietHours?: boolean;
+  /** The tool always needs the owner's tap, whatever the trust level or owner rules (only STOP or an owner's "off" beat it). */
+  alwaysAsk?: boolean;
 };
 
 export type Decision = {
@@ -91,6 +96,7 @@ const REASON_TEXT: Record<ReasonCode, string> = {
   bulk_delete: `Deleting more than ${BULK_DELETE_THRESHOLD} items at once needs the owner's OK.`,
   daily_action_cap: "The bot hit its daily limit of unattended actions; the owner can approve more.",
   secret_in_payload: "This looks like it contains a password or API key. Secrets never leave.",
+  always_ask: "This kind of action always waits for the owner's OK, at every trust level (like sending a form on a website after a preview).",
 };
 
 /** Patterns for credentials that must never be sent anywhere. */
@@ -133,7 +139,10 @@ export function evaluate(ctx: ActionContext): Decision {
 
   // 3. Reading is allowed at every level (it can still be turned off per app above).
   if (ctx.effect === "read") {
-    return ctx.ownerRule === "ask" ? decide("ask", ["owner_rule_ask"]) : decide("allow", []);
+    const asks: ReasonCode[] = [];
+    if (ctx.alwaysAsk) asks.push("always_ask");
+    if (ctx.ownerRule === "ask") asks.push("owner_rule_ask");
+    return asks.length ? decide("ask", asks) : decide("allow", []);
   }
 
   // 4. Look only: nothing but reads.
@@ -150,6 +159,8 @@ export function evaluate(ctx: ActionContext): Decision {
   const newRecipients = externalRecipients.filter((r) => !r.isKnownContact);
 
   // 5. Hard floors — apply at every trust level, including full faith.
+  if (ctx.alwaysAsk) bump("ask", "always_ask");
+
   if (containsSecret(ctx.outboundText)) {
     // Even to the owner we ask; to anyone else, never.
     bump(externalRecipients.length ? "deny" : "ask", "secret_in_payload");
@@ -195,6 +206,7 @@ export function evaluate(ctx: ActionContext): Decision {
   // An owner "allow" rule relaxes the trust matrix, never the hard floors.
   if (ctx.ownerRule === "allow" && verdict === "ask") {
     const floors: ReasonCode[] = [
+      "always_ask",
       "secret_in_payload",
       "tainted_send_new_recipient",
       "quiet_hours",

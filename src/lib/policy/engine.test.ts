@@ -91,6 +91,32 @@ describe("policy engine", () => {
     expect(evaluate({ ...base, trust: "ask", effect: "write", ownerRule: "allow" }).verdict).toBe("allow");
   });
 
+  it("always-ask actions (e.g. sending a web form) wait for the owner at every trust level", () => {
+    for (const trust of ["ask", "trusted", "full"] as const) {
+      const d = evaluate({ ...base, trust, effect: "send", risk: "high", alwaysAsk: true, recipients: [friend] });
+      expect(d.verdict).toBe("ask");
+      expect(d.reasons).toContain("always_ask");
+    }
+    // Full faith, a clean run, a known recipient and an owner "allow" rule: still asks.
+    expect(
+      evaluate({ ...base, trust: "full", effect: "send", risk: "high", alwaysAsk: true, ownerRule: "allow", recipients: [friend] }),
+    ).toMatchObject({ verdict: "ask", reasons: ["always_ask"] });
+    // The same call without the flag runs on its own.
+    expect(evaluate({ ...base, trust: "full", effect: "send", risk: "high", recipients: [friend] }).verdict).toBe("allow");
+    // Reads that set it ask too.
+    expect(evaluate({ ...base, trust: "full", effect: "read", alwaysAsk: true })).toMatchObject({ verdict: "ask", reasons: ["always_ask"] });
+  });
+
+  it("always-ask never loosens anything: STOP, an owner's off switch, Look only and the secret rule still win", () => {
+    expect(evaluate({ ...base, trust: "full", effect: "send", alwaysAsk: true, paused: true }).verdict).toBe("deny");
+    expect(evaluate({ ...base, trust: "full", effect: "send", alwaysAsk: true, ownerRule: "deny" }).verdict).toBe("deny");
+    expect(evaluate({ ...base, trust: "look", effect: "send", alwaysAsk: true }).verdict).toBe("deny");
+    const leaked = `card on file, key ${["sk", "live", "x".repeat(30)].join("_")}`;
+    const d = evaluate({ ...base, trust: "full", effect: "send", alwaysAsk: true, recipients: [stranger], outboundText: leaked });
+    expect(d.verdict).toBe("deny");
+    expect(d.reasons).toEqual(expect.arrayContaining(["always_ask", "secret_in_payload"]));
+  });
+
   it("money is off without a cap and the cap is never exceeded", () => {
     expect(evaluate({ ...base, trust: "full", effect: "spend", amountUsd: 5 }).reasons).toContain("money_off");
     expect(

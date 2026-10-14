@@ -56,12 +56,36 @@ export type AgentEvent =
       approvalId?: string;
       sources?: ToolSource[];
     }
-  | { type: "approval"; approval: Pick<Approval, "id" | "title" | "detail" | "risk" | "reasons" | "tool" | "expiresAt"> }
+  | { type: "approval"; approval: Pick<Approval, "id" | "title" | "detail" | "risk" | "reasons" | "tool" | "expiresAt" | "args"> }
   | { type: "notice"; tone: "info" | "warn" | "danger"; text: string }
   | { type: "done"; messageId: string | null; text: string; status: RunStatus }
   | { type: "error"; message: string };
 
 export type RunStatus = "ok" | "paused" | "command" | "limited" | "queued" | "unavailable" | "error";
+
+/** What an approval card shows, built by the tool from trusted server state (see ToolApprovalExtras). */
+export type ApprovalPreview = {
+  title?: string;
+  detail?: string;
+  /** Stored as approval.args: what runs on approve (re-validated by the tool's input schema) plus display-only extras. */
+  args?: Record<string, unknown>;
+  /** Earlier than the usual 24 hours when the action can't wait that long (e.g. a cloud browser closes). */
+  expiresAt?: Date;
+};
+
+/**
+ * Optional tool fields the agent loop honors on top of ToolSpec (src/lib/tools/builtin/browser.ts uses them):
+ * - alwaysAsk: the policy engine holds every call for the owner's tap, at every trust level.
+ * - approvalPreview: builds the approval card from what will really happen, not from the model's arguments.
+ */
+export type ToolApprovalExtras = {
+  alwaysAsk?: boolean;
+  approvalPreview?: (args: Record<string, unknown>, ctx: ToolContext) => Promise<ApprovalPreview | null>;
+};
+
+function extrasOf(spec: AnyToolSpec): ToolApprovalExtras {
+  return spec as AnyToolSpec & ToolApprovalExtras;
+}
 
 export type RunInput = {
   db: Db;
@@ -410,7 +434,7 @@ export async function executeToolCall(
     emit({ type: "tool", id: call.id, name: spec.name, title: spec.title, summary, state: "pending_approval", detail: decision.message, approvalId: approval.id });
     emit({
       type: "approval",
-      approval: { id: approval.id, title: approval.title, detail: approval.detail, risk: approval.risk, reasons: approval.reasons, tool: approval.tool, expiresAt: approval.expiresAt },
+      approval: { id: approval.id, title: approval.title, detail: approval.detail, risk: approval.risk, reasons: approval.reasons, tool: approval.tool, expiresAt: approval.expiresAt, args: approval.args },
     });
     return {
       content: JSON.stringify({
@@ -511,6 +535,7 @@ async function decide(spec: AnyToolSpec, args: Record<string, unknown>, ctx: Too
     itemCount: spec.itemCount?.(args),
     outboundText: outbound,
     inQuietHours: inQuietHours(bot, ctx.owner, ctx.now),
+    alwaysAsk: extrasOf(spec).alwaysAsk === true,
   });
 }
 
@@ -540,6 +565,13 @@ async function countActionsToday(db: Db, botId: string): Promise<number> {
 }
 
 async function createApproval(ctx: ToolContext, spec: AnyToolSpec, args: Record<string, unknown>, toolCallId: string, summary: string, decision: Decision) {
+  let preview: ApprovalPreview | null = null;
+  try {
+    preview = (await extrasOf(spec).approvalPreview?.(args, ctx)) ?? null;
+  } catch {
+    preview = null; // fall back to the plain argument list
+  }
+  const latest = Date.now() + APPROVAL_TTL_MS;
   const [row] = await ctx.db
     .insert(schema.approvals)
     .values({
@@ -550,12 +582,12 @@ async function createApproval(ctx: ToolContext, spec: AnyToolSpec, args: Record<
       toolCallId,
       tool: spec.name,
       connectorId: spec.connectorId,
-      args,
-      title: summary,
-      detail: approvalDetail(spec, args),
+      args: preview?.args ?? args,
+      title: preview?.title ? truncate(preview.title, 200) : summary,
+      detail: preview?.detail ?? approvalDetail(spec, args),
       risk: spec.risk,
       reasons: decision.reasons,
-      expiresAt: new Date(Date.now() + APPROVAL_TTL_MS),
+      expiresAt: new Date(Math.min(latest, preview?.expiresAt?.getTime() ?? latest)),
     })
     .returning();
   return row;
