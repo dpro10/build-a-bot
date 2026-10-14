@@ -33,7 +33,13 @@ export function BotHeader({
   const router = useRouter();
   const pathname = usePathname();
   const [busy, setBusy] = React.useState(false);
+  const activeTab = React.useRef<HTMLAnchorElement>(null);
   const base = `/app/bots/${bot.id}`;
+
+  // On phones the tab bar scrolls sideways: keep the current tab in view.
+  React.useEffect(() => {
+    activeTab.current?.scrollIntoView({ inline: "center", block: "nearest", behavior: "auto" });
+  }, [pathname]);
   const trust = TRUST[isTrustLevel(bot.trust) ? bot.trust : "ask"];
 
   const togglePause = async () => {
@@ -106,6 +112,8 @@ export function BotHeader({
             <Link
               key={t.label}
               href={href}
+              ref={active ? activeTab : undefined}
+              aria-current={active ? "page" : undefined}
               className={cn(
                 "relative shrink-0 rounded-t-xl px-3 py-2.5 text-sm font-medium transition",
                 active ? "text-foreground" : "text-muted-foreground hover:text-foreground",

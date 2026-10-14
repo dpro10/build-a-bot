@@ -68,8 +68,9 @@ export const TRUST: Record<TrustLevel, TrustDef> = {
     can: ["Everything in Trusted helper", "Send, post, update and delete on your behalf", "Reach out to new people for you"],
     asks: [
       "Anything that would send your data to someone new right after reading outside content (prompt-injection guard)",
+      "Sending a form on a website (you see exactly what it filled in first)",
+      "Changes in money, health or identity apps",
       "Bulk deletes (more than 10 items)",
-      "Money moves over your cap",
     ],
     never: ["Share your passwords or keys", "Pretend to be human"],
     dailyActions: 100,
@@ -87,6 +88,7 @@ export const HARD_LIMITS = [
   "It won't email or message your data to someone new right after reading outside content (a common prompt-injection trick) without your OK.",
   "It never sends passwords, API keys or other secrets anywhere.",
   "Money is off unless you set a monthly cap, and it can never exceed it.",
+  "Changes in money, health or identity apps, and forms sent on websites, always wait for your tap.",
   "Messages it sends to other people are labeled as coming from your AI assistant.",
   "Every action gets a receipt you can review.",
 ] as const;

@@ -2,7 +2,8 @@ import { z } from "zod";
 import { apiError, authed, json, parseJson, sameOrigin, type RouteCtx } from "@/lib/api";
 import { decideApproval } from "@/lib/agent/approvals";
 
-export const maxDuration = 120;
+// Approving a web form fill can run a cloud browser for up to ~150 s.
+export const maxDuration = 300;
 
 export async function POST(req: Request, ctx: RouteCtx<{ approvalId: string }>) {
   if (!sameOrigin(req)) return apiError(403, "Bad origin");

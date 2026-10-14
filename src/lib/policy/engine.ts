@@ -177,6 +177,8 @@ export function evaluate(ctx: ActionContext): Decision {
   }
 
   if (newRecipients.length > 0 && ctx.tainted) bump("ask", "tainted_send_new_recipient");
+  // Money, health and identity apps: changes always need a tap (the catalog promises "never auto-allowed").
+  if (ctx.sensitive && ctx.effect !== "spend") bump("ask", "sensitive_app");
   if (externalRecipients.length > 0 && ctx.inQuietHours) bump("ask", "quiet_hours");
   if (ctx.effect === "delete" && (ctx.itemCount ?? 1) > BULK_DELETE_THRESHOLD) bump("ask", "bulk_delete");
 
@@ -194,13 +196,10 @@ export function evaluate(ctx: ActionContext): Decision {
       if (ctx.effect === "delete" || ctx.effect === "admin") bump("ask", "needs_approval");
       if (ctx.risk === "high") bump("ask", "high_risk");
       if (newRecipients.length > 0) bump("ask", "new_recipient");
-      if (ctx.sensitive && ctx.effect !== "spend") bump("ask", "sensitive_app");
       break;
     }
-    case "full": {
-      if (ctx.sensitive && ctx.effect !== "spend") bump("ask", "sensitive_app");
+    case "full":
       break;
-    }
   }
 
   // An owner "allow" rule relaxes the trust matrix, never the hard floors.
@@ -212,6 +211,7 @@ export function evaluate(ctx: ActionContext): Decision {
       "quiet_hours",
       "bulk_delete",
       "daily_action_cap",
+      "sensitive_app",
       "needs_approval",
     ];
     const remaining = reasons.filter((r) => floors.includes(r) && !(r === "needs_approval" && ctx.effect !== "spend"));

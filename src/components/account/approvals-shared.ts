@@ -4,6 +4,7 @@
  */
 import type * as React from "react";
 import type { AvatarId, ColorwayId } from "@/lib/avatars";
+import type { WebFormPreview } from "@/lib/web-actions/types";
 
 export type ApprovalBot = { id: string; name: string; avatar: AvatarId; color: ColorwayId; paused: boolean; trustName: string };
 export type ApprovalField = { label: string; value: string; long: boolean };
@@ -20,6 +21,8 @@ export type ApprovalItem = {
   decidedAt: string | null;
   decidedVia: string | null;
   fields: ApprovalField[];
+  /** Web form submits: exactly what will be sent, with a picture of the filled form. */
+  webForm?: WebFormPreview | null;
   result: ApprovalResult | null;
   app: { name: string; icon: React.ReactNode } | null;
 };

@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
+import { readWebFormPreview } from "@/lib/web-actions/types";
+import { WebFormPreview } from "./WebFormPreview";
 
 export type ApprovalView = {
   id: string;
@@ -15,6 +17,8 @@ export type ApprovalView = {
   tool: string;
   status?: string;
   expiresAt?: string | Date;
+  /** The stored tool call; web form submits carry a preview of what will be sent. */
+  args?: unknown;
 };
 
 const REASON_LABEL: Record<string, string> = {
@@ -69,6 +73,7 @@ export function ApprovalCard({
   };
 
   const decided = status !== "pending";
+  const webForm = readWebFormPreview(approval.args);
   return (
     <div
       className={cn(
@@ -87,8 +92,10 @@ export function ApprovalCard({
             <Badge tone={approval.risk === "high" ? "danger" : approval.risk === "medium" ? "warning" : "neutral"}>{approval.risk} risk</Badge>
           </div>
           <div className="mt-1 font-semibold leading-snug">{approval.title}</div>
-          {approval.detail ? (
-            <pre className="scrollbar-thin mt-2 max-h-48 overflow-auto rounded-2xl bg-muted/70 p-3 font-sans text-[13px] leading-relaxed whitespace-pre-wrap text-foreground/90">
+          {webForm ? (
+            <WebFormPreview preview={webForm} compact={compact} />
+          ) : approval.detail ? (
+            <pre className="scrollbar-thin mt-2 max-h-48 overflow-auto rounded-2xl bg-muted/70 p-3 font-sans text-[13px] leading-relaxed whitespace-pre-wrap text-foreground">
               {approval.detail}
             </pre>
           ) : null}

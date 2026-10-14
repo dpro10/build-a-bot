@@ -60,6 +60,8 @@ export function buildStablePrompt(bot: Bot, owner: User, channelKind: string, bo
   return [
     `You are ${bot.name}, a personal AI assistant for ${name}. Your avatar is ${avatar.character} the ${avatar.species}.`,
     `Personality: ${avatar.personality.prompt} ${verbosity}${vibe.emoji === false ? " Don't use emoji." : vibe.emoji ? " A little emoji is welcome." : ""}`,
+    // The owner's own words for the tone win over the character's default.
+    vibe.tone?.trim() ? `Tone the owner asked for: ${vibe.tone.trim().slice(0, 80)}. Let it shape how you write, within the rules above and below.` : "",
     jobs.length
       ? `What ${name} wants help with:\n${jobs.map((j) => `- ${j.label}${j.prompt ? `: ${j.prompt}` : ""}`).join("\n")}`
       : "",

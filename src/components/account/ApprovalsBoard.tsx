@@ -37,6 +37,7 @@ import type { AvatarId, ColorwayId } from "@/lib/avatars";
 import { reasonCopy, type ReasonIcon } from "./approval-reasons";
 import { readResult, type ApprovalBot, type ApprovalItem, type ApprovalResult } from "./approvals-shared";
 import { timeLeft, useNow } from "./time";
+import { WebFormPreview } from "@/components/chat/WebFormPreview";
 
 type Local = { status: string; decidedAt: string; followUp?: string | null; result?: ApprovalResult | null };
 type Decided = ApprovalItem & { followUp?: string | null; local?: boolean };
@@ -329,6 +330,8 @@ function PendingCard({
           <RiskBadge risk={item.risk} />
         </div>
       </div>
+
+      {item.webForm ? <WebFormPreview preview={item.webForm} /> : null}
 
       {item.fields.length ? (
         <dl className="mt-4 divide-y divide-border overflow-hidden rounded-2xl border border-border bg-background-2/50">

@@ -63,7 +63,10 @@ function formFields(text: string): { field: string; value: string }[] {
   const t = text.toLowerCase();
   const fields: { field: string; value: string }[] = [];
   if (/\bmy\b[^.,]{0,24}\bname\b/.test(t)) fields.push({ field: "Name", value: "{{my_name}}" });
-  if (/\bmy\b[^.,]{0,24}\be-?mail\b/.test(t)) fields.push({ field: "Email", value: "{{my_email}}" });
+  // An address typed in the message wins over the account's own email.
+  const typedEmail = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/.exec(text)?.[0];
+  if (typedEmail) fields.push({ field: "Email", value: typedEmail });
+  else if (/\bmy\b[^.,]{0,24}\be-?mail\b/.test(t)) fields.push({ field: "Email", value: "{{my_email}}" });
   const message = /\b(?:saying|that says|with the message|message:?)\s+["“]?(.+?)["”]?\s*$/i.exec(text)?.[1];
   if (message) fields.push({ field: "Message", value: message.charAt(0).toUpperCase() + message.slice(1).replace(/[.!]*$/, ".") });
   if (!fields.length) fields.push({ field: "Name", value: "{{my_name}}" }, { field: "Email", value: "{{my_email}}" });

@@ -66,7 +66,9 @@ export async function listMessages(db: Db, conversationId: string, opts: { limit
 }
 
 export async function listReceipts(db: Db, ownerId: string, opts: { botId?: string; before?: Date; limit?: number; kind?: string } = {}) {
-  const conds = [eq(schema.receipts.ownerId, ownerId)];
+  // Receipts are append-only, so the owner id on old ones can't follow an account merge;
+  // ownership is decided by the bot instead.
+  const conds = [inArray(schema.receipts.botId, db.select({ id: schema.bots.id }).from(schema.bots).where(eq(schema.bots.ownerId, ownerId)))];
   if (opts.botId) conds.push(eq(schema.receipts.botId, opts.botId));
   if (opts.before) conds.push(lt(schema.receipts.createdAt, opts.before));
   if (opts.kind) conds.push(eq(schema.receipts.kind, opts.kind));

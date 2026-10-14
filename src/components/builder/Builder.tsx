@@ -408,7 +408,7 @@ export function Builder({ plan, demo, live, recipe, botCount, signedIn }: Builde
 
       <footer className="fixed inset-x-0 bottom-0 z-30 border-t border-border/70 bg-background/85 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 sm:px-6">
-          <Button variant="ghost" size="lg" onClick={back} disabled={stepIndex === 0 || Boolean(creating)} className="px-3 sm:px-5">
+          <Button variant="ghost" size="lg" onClick={back} disabled={stepIndex === 0 || Boolean(creating)} className="px-3 sm:px-5" aria-label="Back">
             <ArrowLeft /> <span className="hidden sm:inline">Back</span>
           </Button>
           <div className="min-w-0 flex-1 text-center text-sm" aria-live="polite">

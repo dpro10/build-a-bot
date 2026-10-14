@@ -40,6 +40,7 @@ export default async function BotChatPage({ params }: { params: Promise<{ botId:
           tool: a.tool,
           status: a.status,
           expiresAt: a.expiresAt.toISOString(),
+          args: a.args,
         }))}
         starters={starters}
         needsGreeting={visible.length === 0}
