@@ -29,13 +29,14 @@ const MCP_TOKEN_TTL_S = 30 * 60;
 
 export async function onlineDevice(db: Db, ownerId: string) {
   const since = new Date(Date.now() - DEVICE_ONLINE_MS);
-  const [device] = await db
+  const devices = await db
     .select()
     .from(schema.bridgeDevices)
     .where(and(eq(schema.bridgeDevices.ownerId, ownerId), isNull(schema.bridgeDevices.revokedAt), gt(schema.bridgeDevices.lastSeenAt, since)))
     .orderBy(desc(schema.bridgeDevices.lastSeenAt))
-    .limit(1);
-  return device ?? null;
+    .limit(5);
+  // Only a computer with Claude Code or Codex can think for the bot (the desktop app alone takes meeting notes).
+  return devices.find((d) => Boolean(d.clis?.claude || d.clis?.codex)) ?? null;
 }
 
 export function mcpTokenFor(job: Pick<BridgeJob, "id" | "botId" | "ownerId">): string {
@@ -109,6 +110,7 @@ export async function runViaBridge(
       directive: input.directive ?? null,
       channelKind: input.channelKind,
       mcpUrl: `${appUrl()}/api/mcp/${bot.id}`,
+      meta: input.jobMeta ?? null,
     },
     output: { tainted: Boolean(input.startTainted) || input.message?.author === "contact" },
     progress: null,
@@ -174,6 +176,25 @@ export async function completeJob(
   const [conversation] = await db.select().from(schema.conversations).where(eq(schema.conversations.id, job.conversationId)).limit(1);
   if (!conversation) return;
 
+  const usedReceipt = {
+    id: sortableId("rcp"),
+    botId: bot.id,
+    ownerId: owner.id,
+    kind: "billing",
+    status: result.ok ? "ok" : "error",
+    title: `Thought on your computer (${(job.input as { cli?: string }).cli === "codex" ? "ChatGPT/Codex" : "Claude Code"})`,
+    detail: { jobId: job.id, model: result.model ?? null, paidBy: "your subscription", costUsdReportedByCli: result.costUsd ?? null },
+  };
+
+  // Meeting notes written on the owner's computer land on the meeting, which then tells the owner.
+  const meetingId = (job.input as { meta?: { meetingId?: string } | null }).meta?.meetingId;
+  if (meetingId) {
+    await db.insert(schema.receipts).values(usedReceipt);
+    const { applyBridgeNotes } = await import("@/lib/meetings/notes");
+    await applyBridgeNotes(db, meetingId, result);
+    return;
+  }
+
   const text = result.ok
     ? (result.text?.trim() || "Done.")
     : `My brain on your computer hit a problem: ${truncate(result.error ?? "unknown error", 200)}`;
@@ -187,15 +208,7 @@ export async function completeJob(
     channelKind: conversation.channelKind,
     meta: { via: "bridge", model: result.model ?? (job.input as { cli?: string }).cli, costUsd: result.costUsd ?? null },
   });
-  await db.insert(schema.receipts).values({
-    id: sortableId("rcp"),
-    botId: bot.id,
-    ownerId: owner.id,
-    kind: "billing",
-    status: result.ok ? "ok" : "error",
-    title: `Thought on your computer (${(job.input as { cli?: string }).cli === "codex" ? "ChatGPT/Codex" : "Claude Code"})`,
-    detail: { jobId: job.id, model: result.model ?? null, paidBy: "your subscription", costUsdReportedByCli: result.costUsd ?? null },
-  });
+  await db.insert(schema.receipts).values(usedReceipt);
   if (conversation.channelKind !== "web") {
     await deliver(db, bot, conversation.channelKind as ChannelKind, { to: conversation.externalId, text, toOwner: true }, { owner });
   }

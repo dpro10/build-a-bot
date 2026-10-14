@@ -114,6 +114,9 @@ function arms(mood: AvatarMood): Arm[] {
       return [{ ...L, d: OUTER_UP, wave: "l" }, ...inner, { ...R, d: mirror(OUTER_UP), wave: "r" }];
     case "thinking":
       return [{ x: 62, y: 112, d: OUTER_CHEEK }, ...inner, { ...R, d: mirror(OUTER_IDLE), wave: "r" }];
+    case "listening":
+      // A tentacle cupped to its ear, on the side the sound waves come from.
+      return [{ ...L, d: OUTER_IDLE, wave: "l" }, ...inner, { x: 138, y: 112, d: mirror(OUTER_CHEEK) }];
     case "sleeping":
       return [
         { ...L, d: OUTER_TUCK },

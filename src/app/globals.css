@@ -113,6 +113,8 @@
   --animate-fade-up: fade-up 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
   --animate-shimmer: shimmer 2.2s linear infinite;
   --animate-pulse-ring: pulse-ring 1.8s ease-out infinite;
+  --animate-peek: peek 0.7s cubic-bezier(0.2, 0.9, 0.25, 1.15) both;
+  --animate-bubble: bubble 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
 
   @keyframes float {
     0%,
@@ -149,6 +151,25 @@
     }
     100% {
       background-position: 200% 0;
+    }
+  }
+  /* The bot peeking up from the bottom edge of the screen. */
+  @keyframes peek {
+    0% {
+      transform: translateY(105%);
+    }
+    100% {
+      transform: translateY(0);
+    }
+  }
+  @keyframes bubble {
+    0% {
+      transform: translateY(14px) scale(0.94);
+      opacity: 0;
+    }
+    100% {
+      transform: translateY(0) scale(1);
+      opacity: 1;
     }
   }
   @keyframes pulse-ring {
@@ -393,4 +414,11 @@
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* The meeting buddy's desktop surface (/desktop/buddy): a transparent window at the bottom of the screen. */
+html[data-surface="overlay"],
+html[data-surface="overlay"] body {
+  background: transparent !important;
+  overflow: hidden;
 }

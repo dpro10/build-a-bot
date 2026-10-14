@@ -432,6 +432,71 @@ export const schedules = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// Meetings (meeting notes: recorded only after the owner says yes; audio is never stored)
+// ---------------------------------------------------------------------------
+
+export type MeetingActionItem = { text: string; owner?: string; due?: string; done?: boolean };
+
+export const meetings = pgTable(
+  "meetings",
+  {
+    id: text("id").primaryKey(),
+    botId: text("bot_id")
+      .notNull()
+      .references(() => bots.id, { onDelete: "cascade" }),
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    /** Where it happened: zoom | meet | teams | webex | slack | discord | facetime | browser | other */
+    app: text("app").notNull().default("other"),
+    /** How it was captured: browser | desktop */
+    source: text("source").notNull(),
+    deviceId: text("device_id"),
+    status: text("status").notNull().default("recording"), // recording | processing | ready | failed
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+    /** Seconds of audio received (the longest track). */
+    durationSec: integer("duration_sec").notNull().default(0),
+    /** One short paragraph, written by the bot after the meeting. */
+    summary: text("summary"),
+    /** The full notes in Markdown (summary, decisions, action items, follow-ups). */
+    notes: text("notes"),
+    actionItems: jsonb("action_items").$type<MeetingActionItem[]>().notNull().default([]),
+    error: text("error"),
+    meta: jsonb("meta").$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("meetings_bot_idx").on(t.botId, t.startedAt), index("meetings_owner_status_idx").on(t.ownerId, t.status)],
+);
+
+/** Transcript lines. One audio chunk (about 30 seconds of one track) becomes zero or more segments. */
+export const meetingSegments = pgTable(
+  "meeting_segments",
+  {
+    id: text("id").primaryKey(), // time-sortable: clients poll for ids after the last one they saw
+    meetingId: text("meeting_id")
+      .notNull()
+      .references(() => meetings.id, { onDelete: "cascade" }),
+    /** mic = the owner ("You"); system = everyone else in the call. */
+    track: text("track").notNull(),
+    chunk: integer("chunk").notNull(),
+    /** Position within the chunk; -1 marks a chunk that had no speech (so retries are idempotent). */
+    idx: integer("idx").notNull(),
+    startMs: integer("start_ms").notNull(),
+    endMs: integer("end_ms").notNull(),
+    speaker: text("speaker").notNull(),
+    text: text("text").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("meeting_segments_meeting_idx").on(t.meetingId, t.startMs),
+    uniqueIndex("meeting_segments_chunk_uq").on(t.meetingId, t.track, t.chunk, t.idx),
+  ],
+);
+
+// ---------------------------------------------------------------------------
 // Billing & usage
 // ---------------------------------------------------------------------------
 
@@ -450,6 +515,8 @@ export const usage = pgTable(
     searches: integer("searches").notNull().default(0),
     actions: integer("actions").notNull().default(0),
     voiceSeconds: integer("voice_seconds").notNull().default(0),
+    /** Seconds of meeting audio transcribed (meeting notes). */
+    meetingSeconds: integer("meeting_seconds").notNull().default(0),
     smsSegments: integer("sms_segments").notNull().default(0),
     emailsSent: integer("emails_sent").notNull().default(0),
     costMicros: bigint("cost_micros", { mode: "number" }).notNull().default(0),
@@ -612,4 +679,6 @@ export type ScheduleRow = typeof schedules.$inferSelect;
 export type Usage = typeof usage.$inferSelect;
 export type BridgeDevice = typeof bridgeDevices.$inferSelect;
 export type BridgeJob = typeof bridgeJobs.$inferSelect;
+export type Meeting = typeof meetings.$inferSelect;
+export type MeetingSegment = typeof meetingSegments.$inferSelect;
 export type Recipe = typeof recipes.$inferSelect;

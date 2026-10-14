@@ -21,6 +21,8 @@ const ANGLES: Record<AvatarMood, readonly [left: number, right: number]> = {
   working: [34, 40],
   sleeping: [2, 6],
   alert: [64, 66],
+  // One leaf perks up like an ear.
+  listening: [32, 62],
 };
 
 function Leaf({ side, angle, length, fill }: { side: "l" | "r"; angle: number; length: number; fill: string }) {

@@ -593,6 +593,61 @@
   animation: bab-av-gust 1.1s ease-out infinite;
 }
 
+/* ---------- listening (taking meeting notes) ---------- */
+
+@keyframes bab-av-nod {
+  0%,
+  100% {
+    transform: rotate(0deg) translateY(0);
+  }
+  30% {
+    transform: rotate(-2.5deg) translateY(1px);
+  }
+  60% {
+    transform: rotate(1.5deg) translateY(-1px);
+  }
+}
+.bab-av--listening .bab-av-motion {
+  animation: bab-av-nod 3.2s ease-in-out infinite;
+}
+.bab-av--listening .bab-av-shadow {
+  animation: bab-av-shadow 3.2s ease-in-out infinite;
+}
+
+@keyframes bab-av-wave {
+  0% {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+  35% {
+    opacity: 0.95;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(4px);
+  }
+}
+/* Visible when still (reduced motion): the waves stay on as a plain icon. */
+.bab-av-wave {
+  opacity: 0.9;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: bab-av-wave 2.5s ease-out infinite;
+}
+
+@keyframes bab-av-rec {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+.bab-av-rec {
+  animation: bab-av-rec 2s ease-in-out infinite;
+}
+
 /* ---------- still poses ---------- */
 
 .bab-av-still,

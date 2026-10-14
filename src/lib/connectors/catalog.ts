@@ -145,7 +145,7 @@ export const CONNECTORS: ConnectorDef[] = [
       cap("delete_event", "Delete events", "delete", "high"),
     ],
     popular: true,
-    jobs: ["calendar", "reminders", "work", "school", "errands"],
+    jobs: ["calendar", "reminders", "work", "school", "errands", "meetings"],
     keywords: ["gcal", "schedule", "events", "meetings", "agenda", "appointments"],
   },
   {
@@ -163,7 +163,7 @@ export const CONNECTORS: ConnectorDef[] = [
       cap("invite_people", "Invite people to events", "send", "high"),
       cap("delete_event", "Delete events", "delete", "high"),
     ],
-    jobs: ["calendar", "reminders", "work", "school"],
+    jobs: ["calendar", "reminders", "work", "school", "meetings"],
     keywords: ["microsoft calendar", "office 365 calendar", "exchange calendar", "hotmail calendar", "schedule", "meetings"],
     // Shares Composio's "outlook" toolkit (mail + calendar) with the outlook connector.
     note: "Uses the same Microsoft sign-in as Outlook email",
@@ -253,7 +253,7 @@ export const CONNECTORS: ConnectorDef[] = [
       cap("send_chat", "Send chat messages", "send", "high"),
     ],
     popular: true,
-    jobs: ["work", "inbox", "school"],
+    jobs: ["work", "inbox", "school", "meetings"],
     keywords: ["teams", "ms teams", "microsoft 365", "office 365", "chat", "meetings"],
   },
   {
@@ -669,7 +669,7 @@ export const CONNECTORS: ConnectorDef[] = [
       cap("read_notes", "Read meeting notes", "read", "low"),
       cap("read_transcripts", "Read transcripts", "read", "low"),
     ],
-    jobs: ["work"],
+    jobs: ["work", "meetings"],
     keywords: ["meeting notes", "ai notetaker", "transcripts", "meetings", "notetaker"],
     note: "Free plans share the last 30 days of notes, without transcripts",
   },
@@ -685,7 +685,7 @@ export const CONNECTORS: ConnectorDef[] = [
       cap("read_transcripts", "Read transcripts", "read", "low"),
       cap("read_summaries", "Read summaries and action items", "read", "low"),
     ],
-    jobs: ["work"],
+    jobs: ["work", "meetings"],
     keywords: ["meeting notes", "ai notetaker", "transcripts", "meeting recorder", "fred"],
   },
 
@@ -2157,7 +2157,7 @@ export const CONNECTORS: ConnectorDef[] = [
       cap("delete_meeting", "Cancel meetings", "delete", "high"),
     ],
     popular: true,
-    jobs: ["calendar", "work", "school"],
+    jobs: ["calendar", "work", "school", "meetings"],
     keywords: ["video calls", "meetings", "webinars", "conference call"],
   },
   {
@@ -2172,7 +2172,7 @@ export const CONNECTORS: ConnectorDef[] = [
       cap("read_meetings", "See past meetings", "read", "low"),
       cap("read_transcripts", "Read transcripts", "read", "low"),
     ],
-    jobs: ["calendar", "work", "school"],
+    jobs: ["calendar", "work", "school", "meetings"],
     keywords: ["video calls", "meet", "hangouts", "meetings", "conference"],
   },
   {
@@ -3107,6 +3107,7 @@ export const POPULAR_CONNECTOR_IDS: string[] = [
 export const JOB_SUGGESTIONS: Record<JobId, string[]> = {
   inbox: ["gmail", "outlook", "slack", "microsoft_teams", "google_contacts"],
   calendar: ["google_calendar", "outlook_calendar", "calendly", "zoom", "google_meet", "cal_com"],
+  meetings: ["google_calendar", "outlook_calendar", "zoom", "google_meet", "microsoft_teams", "notion"],
   reminders: ["todoist", "google_tasks", "microsoft_todo", "ticktick", "google_calendar"],
   research: ["exa", "firecrawl", "notion", "readwise", "semantic_scholar", "perplexity"],
   errands: ["google_maps", "yelp", "google_calendar", "gmail", "todoist"],

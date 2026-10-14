@@ -15,6 +15,13 @@
       "when": 1791940812410,
       "tag": "0001_safety",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791948842974,
+      "tag": "0002_meetings",
+      "breakpoints": true
     }
   ]
 }
