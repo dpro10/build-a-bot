@@ -74,8 +74,10 @@ export type ConnectorVia =
       /** Extra headers some servers want. */
       headers?: Record<string, string>;
       verified?: boolean;
+      /** Regex (case-insensitive) over tool names, when several connectors share one server. */
+      toolFilter?: string;
     }
-  | { kind: "composio"; toolkit: string }
+  | { kind: "composio"; toolkit: string; toolFilter?: string }
   | { kind: "custom_mcp" };
 
 export type Capability = {

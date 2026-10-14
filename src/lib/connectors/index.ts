@@ -2,7 +2,25 @@ import { BUILTIN_CONNECTORS } from "./builtin";
 import { CONNECTORS } from "./catalog";
 import type { ConnectorDef } from "./types";
 
-export const ALL_CONNECTORS: ConnectorDef[] = [...BUILTIN_CONNECTORS, ...CONNECTORS];
+/**
+ * Connectors that share one toolkit/server only see their own slice of its tools
+ * (e.g. Outlook Calendar must not get Outlook's send-mail tools).
+ */
+const TOOL_FILTERS: Record<string, string> = {
+  outlook_calendar: "calendar|event|meeting|schedule|availability|free_?busy|attendee|room",
+  microsoft_word: "doc|word|file|item|search|download|upload|share|folder",
+  jira: "jira|issue|project|sprint|board|transition|worklog|filter|user|search|comment",
+  confluence: "confluence|page|space|content|blog|search|comment|label|attachment",
+  bitbucket: "bitbucket|repo|pull|commit|branch|pipeline|workspace",
+};
+
+function withFilters(c: ConnectorDef): ConnectorDef {
+  const filter = TOOL_FILTERS[c.id];
+  if (!filter) return c;
+  return { ...c, via: c.via.map((v) => (v.kind === "mcp" || v.kind === "composio" ? { ...v, toolFilter: v.toolFilter ?? filter } : v)) };
+}
+
+export const ALL_CONNECTORS: ConnectorDef[] = [...BUILTIN_CONNECTORS, ...CONNECTORS.map(withFilters)];
 
 export const CONNECTOR_BY_ID: Record<string, ConnectorDef> = Object.fromEntries(ALL_CONNECTORS.map((c) => [c.id, c]));
 
