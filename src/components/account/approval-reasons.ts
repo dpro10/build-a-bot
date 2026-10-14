@@ -10,6 +10,12 @@ export type ReasonIcon = "trust" | "stakes" | "person" | "guard" | "sensitive" |
 export type ReasonCopy = { label: string; text: string; tone: ReasonTone; icon: ReasonIcon };
 
 const REASONS: Record<ReasonCode, ReasonCopy> = {
+  always_ask: {
+    label: "Always asks first",
+    text: "Sending a form on a website always waits for your OK, at every trust level. Check the preview of what will be submitted.",
+    tone: "warning",
+    icon: "eye",
+  },
   needs_approval: {
     label: "Your trust setting",
     text: "This bot's trust level says to check with you before doing this.",

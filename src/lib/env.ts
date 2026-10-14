@@ -30,6 +30,15 @@ export const config = {
     baseUrl: v("TOKEN_FACTORY_BASE_URL") ?? "https://api.tokenfactory.nebius.com/v1",
   },
   tavily: { apiKey: v("TAVILY_API_KEY") },
+  /** Web actions (beta): Browser Use Cloud drives a cloud browser for reading sites and filling forms. */
+  browserUse: {
+    apiKey: v("BROWSER_USE_API_KEY"),
+    baseUrl: v("BROWSER_USE_BASE_URL") ?? "https://api.browser-use.com/api/v2",
+    /** Agent model (Browser Use's `llm`); unset = their default. */
+    model: v("BROWSER_USE_MODEL"),
+    /** Proxy country for the cloud browser ("us", "de"...; "off" = none); unset = their default (US). */
+    proxyCountry: v("BROWSER_USE_PROXY_COUNTRY"),
+  },
   composio: { apiKey: v("COMPOSIO_API_KEY"), baseUrl: v("COMPOSIO_BASE_URL") ?? "https://backend.composio.dev" },
   telegram: {
     /** Our "manager" bot that creates each user's own bot (Managed Bots, Bot API 9.6). */
@@ -78,6 +87,7 @@ export const config = {
 export const live = {
   includedBrain: Boolean(config.tokenFactory.apiKey),
   webSearch: Boolean(config.tavily.apiKey),
+  browser: Boolean(config.browserUse.apiKey),
   composio: Boolean(config.composio.apiKey),
   telegramManaged: Boolean(config.telegram.managerToken && config.telegram.managerUsername),
   twilio: Boolean(config.twilio.accountSid && config.twilio.authToken && config.twilio.phoneNumber),

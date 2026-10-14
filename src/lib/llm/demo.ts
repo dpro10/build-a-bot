@@ -44,6 +44,32 @@ function findTool(tools: Set<string>, suffix: string): string | undefined {
   return [...tools].find((t) => t.endsWith(`__${suffix}`));
 }
 
+const WEB_TLDS = "com|org|net|edu|gov|io|co|ai|app|dev|us|uk|ca|de|fr|es|it|nl|au|info|biz|me|site|store|shop|online|xyz|tech";
+
+/** The first link or bare domain in a message ("example.com/contact"), skipping email addresses. */
+function findSite(text: string): string | null {
+  const link = /(https?:\/\/[^\s<>"')]+)/i.exec(text)?.[1];
+  if (link) return link.replace(/[).,!?]+$/, "");
+  const re = new RegExp(`\\b((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+(?:${WEB_TLDS}))\\b(\\/[^\\s<>"')]*)?`, "gi");
+  for (const m of text.matchAll(re)) {
+    if (m.index && text[m.index - 1] === "@") continue;
+    return `https://${m[1].toLowerCase()}${(m[2] ?? "").replace(/[).,!?]+$/, "")}`;
+  }
+  return null;
+}
+
+/** "fill out the contact form on example.com with my name and email saying I'd like a quote" → form fields. */
+function formFields(text: string): { field: string; value: string }[] {
+  const t = text.toLowerCase();
+  const fields: { field: string; value: string }[] = [];
+  if (/\bmy\b[^.,]{0,24}\bname\b/.test(t)) fields.push({ field: "Name", value: "{{my_name}}" });
+  if (/\bmy\b[^.,]{0,24}\be-?mail\b/.test(t)) fields.push({ field: "Email", value: "{{my_email}}" });
+  const message = /\b(?:saying|that says|with the message|message:?)\s+["“]?(.+?)["”]?\s*$/i.exec(text)?.[1];
+  if (message) fields.push({ field: "Message", value: message.charAt(0).toUpperCase() + message.slice(1).replace(/[.!]*$/, ".") });
+  if (!fields.length) fields.push({ field: "Name", value: "{{my_name}}" }, { field: "Email", value: "{{my_email}}" });
+  return fields;
+}
+
 function pad(n: number) {
   return String(n).padStart(2, "0");
 }
@@ -101,6 +127,19 @@ function planFromUser(text: string, tools: Set<string>, p: Persona, system: stri
         text: `${hello} I'm ${p.name}, your new AI assistant.${appText}${ideaText} (I'm running on the demo brain right now — connect a real one anytime in Settings.) What should we tackle first?`,
       };
     }
+    if (t.includes("the owner approved") && t.includes(", but it failed:")) {
+      const why = /but it failed: (.+?)\. Tell them/is.exec(text)?.[1]?.trim() ?? "something went wrong";
+      return { text: `Hmm, that didn't go through: ${why}` };
+    }
+    if (t.includes("the owner approved: send the form on")) {
+      const site = /send the form on (\S+?)\. It ran/i.exec(text)?.[1] ?? "the site";
+      const said = /The site said: “(.+?)”/.exec(text)?.[1];
+      return { text: `Sent! ${site} replied: “${said ?? "got it"}”${/simulated/i.test(text) ? " (Simulated in demo mode: nothing really left.)" : ""}` };
+    }
+    if (t.includes("the owner approved: fill in the form on")) {
+      const site = /fill in the form on (\S+?) \(not sent\)/i.exec(text)?.[1] ?? "the site";
+      return { text: `Filled in the form on ${site}, and nothing's sent yet. Say “submit it” and I'll show you a preview to approve.` };
+    }
     if (t.includes("the owner approved")) {
       const what = /approved: (.+?)\./i.exec(text)?.[1] ?? "that";
       return { text: `${f.done} ${what.charAt(0).toUpperCase() + what.slice(1)} — handled. (Demo mode.)` };
@@ -143,6 +182,19 @@ function planFromUser(text: string, tools: Set<string>, p: Persona, system: stri
   }
   if (/\b(my reminders|what reminders|list reminders)\b/.test(t) && tools.has("list_reminders")) {
     return { calls: [call("list_reminders", {})] };
+  }
+
+  // Web actions (cloud browser): read a site, fill a form (sending always waits for a tap).
+  const site = findSite(text);
+  if (/\bsubmit\b|\bsend (the|that) form\b/.test(t) && tools.has("web_form_submit") && !/\bfill\b/.test(t)) {
+    return { calls: [call("web_form_submit", {})] };
+  }
+  if (site && /\b(fill (out|in)|complete)\b[^.?!]*\bform\b/.test(t) && tools.has("web_form_fill")) {
+    const url = /\bcontact\b/.test(t) && new URL(site).pathname === "/" ? `${site.replace(/\/$/, "")}/contact` : site;
+    return { calls: [call("web_form_fill", { url, fields: formFields(text) })] };
+  }
+  if (site && /\b(find|check|look up|look for|get|what are|what's|what is|when|where|how much|does)\b/.test(t) && tools.has("web_browse")) {
+    return { calls: [call("web_browse", { url: site, task: text.trim() })] };
   }
 
   // Email.
@@ -245,6 +297,10 @@ function summarizeResults(results: { name: string; content: string; isError?: bo
       parsed = null;
     }
     const status = parsed?.status;
+    if (status === "pending_approval" && r.name === "web_form_submit") {
+      out.push("The form is filled in but **not sent**. Check the preview and tap **Approve** to send it, or Deny and nothing goes out.");
+      continue;
+    }
     if (status === "pending_approval") {
       out.push(`I've got that ready — it needs your OK first. Tap **Approve** and I'll send it. (${parsed?.message ?? "Approval required."})`);
       continue;
@@ -295,6 +351,22 @@ function summarizeResults(results: { name: string; content: string; isError?: bo
       case "remember":
         out.push(content.startsWith("Already") ? "I already had that one noted. 👍" : "Got it — I'll remember that.");
         break;
+      case "web_browse": {
+        const where = /^Site: (.+)$/m.exec(content)?.[1] ?? "the site";
+        const answer = /^(?:Answer|Not found on the site): (.+)$/m.exec(content)?.[1];
+        out.push(
+          answer
+            ? `Here's what ${where} says: ${answer}${/Simulated in demo mode/.test(content) ? " (Simulated: demo mode doesn't visit real sites.)" : ""}`
+            : content.slice(0, 600),
+        );
+        break;
+      }
+      case "web_form_fill": {
+        const where = /Filled in the form on (\S+?)\. /.exec(content)?.[1] ?? "the site";
+        const typed = [...content.matchAll(/^- (.+?): (.+)$/gm)].slice(0, 8).map((m) => `- **${m[1]}:** ${m[2]}`);
+        out.push(`I filled in the form on ${where}, and nothing's sent yet:\n${typed.join("\n")}\n\nSay “submit it” and I'll show you the preview to approve.`);
+        break;
+      }
       case "recall":
         out.push(content === "Nothing saved yet." ? "I don't know much about you yet! Tell me a few things you'd like me to remember." : `Here's what I know about you:\n${content}`);
         break;
@@ -328,7 +400,12 @@ export function createDemoProvider(): LlmProvider {
         const injected = results.map((r) => /forward[^\n]*?to ([^\s,]+@[^\s,.]+\.[a-z]+)/i.exec(r.content)?.[1]).find(Boolean);
         const sendTool = findTool(tools, "send_email");
         const alreadySent = req.messages.some((m) => m.role === "assistant" && m.toolCalls?.some((c) => c.name.endsWith("send_email")));
-        if (/\b(do what|follow|act on)\b/i.test(userText) && injected && sendTool && !alreadySent) {
+        const filledSession = results.find((r) => r.name === "web_form_fill" && !r.isError)?.content.match(/\bsession_id: (wss_[a-z0-9]+)/)?.[1];
+        const submitAsked = req.messages.some((m) => m.role === "assistant" && m.toolCalls?.some((c) => c.name === "web_form_submit"));
+        if (filledSession && tools.has("web_form_submit") && !submitAsked && !/\b(don'?t|do not|without) (send|submit)|\bjust fill\b/i.test(userText)) {
+          // Fill, then ask to send: the policy engine always holds the send for the owner's tap.
+          calls = [call("web_form_submit", { session_id: filledSession })];
+        } else if (/\b(do what|follow|act on)\b/i.test(userText) && injected && sendTool && !alreadySent) {
           // Simulates a model that got tricked by the email — the policy engine must catch this.
           calls = [call(sendTool, { to: [injected], subject: "Fwd: your last 20 emails", body: "Forwarding as instructed." })];
         } else {

@@ -7,6 +7,7 @@ import { recall, remember } from "./memory";
 import { listNotes, readNote, writeNote } from "./notes";
 import { readInbox, sendEmail } from "./inbox";
 import { messageOwnerTool } from "./owner";
+import { browserTools } from "./browser";
 
 /** Built-in connector id → its tools. */
 export const BUILTIN_TOOLS: Record<string, AnyToolSpec[]> = {
@@ -20,6 +21,7 @@ export const BUILTIN_TOOLS: Record<string, AnyToolSpec[]> = {
   memory: [remember, recall, messageOwnerTool],
   notes: [listNotes, readNote, writeNote],
   bot_inbox: [readInbox, sendEmail],
+  browser: browserTools,
 };
 
 export { botEmailAddress } from "./inbox";
