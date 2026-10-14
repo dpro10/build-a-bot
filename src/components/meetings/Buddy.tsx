@@ -10,7 +10,7 @@
  *  - "pip":    inside a Document Picture-in-Picture window that floats over other apps
  */
 import * as React from "react";
-import { Check, Copy, ExternalLink, Mic, Pause, Play, Square, X } from "lucide-react";
+import { Check, Copy, ExternalLink, Mic, Pause, Play, Square, Trash2, X } from "lucide-react";
 import { Avatar } from "@/components/avatar";
 import type { AvatarMood } from "@/lib/avatars";
 import { cn } from "@/lib/utils";
@@ -36,7 +36,12 @@ const MOOD: Record<BuddyPhase, AvatarMood> = {
   error: "alert",
 };
 
-export const DEFAULT_CONSENT_NOTE = "Heads up: I'm using my AI assistant to take notes in this call.";
+export const DEFAULT_CONSENT_NOTE = "Heads-up: I'm using my AI assistant to take notes on this call (a transcript and a summary). Let me know if you'd rather I didn't.";
+
+/** The heads-up with the bot's name in it. */
+export function consentNoteFor(botName: string): string {
+  return `Heads-up: I'm using my assistant ${botName} to take notes on this call (a transcript and a summary). Let me know if you'd rather I didn't.`;
+}
 
 export function formatClock(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -118,6 +123,13 @@ export function Buddy(props: BuddyProps) {
   const { variant, phase, bot, app, level, caption, message, minutesLeft, onAction, onInteractive, onCopy, className } = props;
   const elapsed = useElapsed(props.elapsedMs, phase === "listening" ? props.runningSince : null);
   const [hover, setHover] = React.useState(false);
+  // "Stop and delete" takes a second tap, so nothing is thrown away by accident.
+  const [confirmDiscard, setConfirmDiscard] = React.useState(false);
+  React.useEffect(() => {
+    if (!confirmDiscard) return;
+    const t = setTimeout(() => setConfirmDiscard(false), 4000);
+    return () => clearTimeout(t);
+  }, [confirmDiscard]);
   const now = useNow(Boolean(caption) && phase === "listening", 1000);
   const showCaption = Boolean(caption && phase === "listening" && now - caption.at < 7000);
   const act = (a: BuddyAction) => onAction?.(a);
@@ -171,7 +183,7 @@ export function Buddy(props: BuddyProps) {
         </div>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-border pt-2.5 text-xs text-muted-foreground">
           <span>
-            Let everyone know. <CopyNote note={props.consentNote ?? DEFAULT_CONSENT_NOTE} onCopy={onCopy} />
+            Only if everyone's OK with it. <CopyNote note={props.consentNote ?? consentNoteFor(bot.name)} onCopy={onCopy} />
           </span>
           {appName ? (
             <button type="button" onClick={() => act("never")} className="hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-primary">
@@ -250,7 +262,7 @@ export function Buddy(props: BuddyProps) {
       <span
         className={cn(
           "flex items-center gap-1 overflow-hidden transition-all duration-200",
-          controlsAlways || hover ? "ml-1 max-w-32 opacity-100" : "max-w-0 opacity-0",
+          controlsAlways || hover ? "ml-1 max-w-56 opacity-100" : "max-w-0 opacity-0",
         )}
       >
         {phase === "listening" ? (
@@ -265,6 +277,19 @@ export function Buddy(props: BuddyProps) {
         <IconButton label="Stop and write notes" tone="danger" onClick={() => act("stop")}>
           <Square className="size-3.5 fill-current" />
         </IconButton>
+        {confirmDiscard ? (
+          <button
+            type="button"
+            onClick={() => act("discard")}
+            className="h-8 shrink-0 rounded-full bg-danger-soft px-3 text-xs font-semibold whitespace-nowrap text-danger hover:brightness-95 focus-visible:outline-2 focus-visible:outline-primary"
+          >
+            Delete it all?
+          </button>
+        ) : (
+          <IconButton label="Stop and delete everything" onClick={() => setConfirmDiscard(true)}>
+            <Trash2 className="size-4" />
+          </IconButton>
+        )}
       </span>
     </div>
   ) : null;

@@ -31,6 +31,7 @@ The app is one Next.js project plus a Postgres database. Recommended: **Vercel +
 | Web search & reader | `TAVILY_API_KEY` | 1,000 free credits/month, then $0.008/credit. Searches are metered per plan. |
 | Managed app sign-in | `COMPOSIO_API_KEY` | Without it, only apps with an open MCP server (and custom MCP URLs) can connect for real. |
 | MCP servers needing a pre-registered app | `MCP_OAUTH_CLIENTS` | JSON map of issuer/host → client id/secret, once you register Build-a-bot with that vendor. |
+| Meeting notes (speech-to-text) | `TRANSCRIBE_API_KEY` (+ `TRANSCRIBE_PROVIDER`, optional `TRANSCRIBE_FALLBACK_*`) | Groq's Whisper large-v3 turbo by default (~$0.04/audio hour). **Use Groq's paid tier**: the free tier allows only 7,200 audio-seconds an hour per organization. Together AI is the suggested fallback. Token Factory has no speech-to-text. |
 
 Own-key (BYOK) and subscription brains need nothing from you.
 
@@ -59,4 +60,8 @@ Own-key (BYOK) and subscription brains need nothing from you.
 - [ ] Support email set (`NEXT_PUBLIC_SUPPORT_EMAIL`); crisis protocol page live (`/safety`).
 - [ ] Publish the Bridge so `npx build-a-bot-bridge` works: `cd bridge && npm publish` (until then: `node bridge/bab-bridge.mjs pair CODE --server $APP_URL`).
 - [ ] Re-render avatar pictures if characters change: `npm run avatars`.
+- [ ] Meeting notes:
+  - a lawyer reviews the consent flow and transcript retention;
+  - check the speech-to-text provider's data-retention and training terms;
+  - sign and notarize the desktop app (Apple Developer Program for Mac, a code-signing certificate for Windows) and publish its downloads. See `desktop/README.md`.
 - [ ] Smoke test: build a bot, chat, approve an action, STOP from a channel, a reminder fires, upgrade with a Stripe test card.

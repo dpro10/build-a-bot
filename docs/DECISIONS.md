@@ -213,6 +213,36 @@ Diego decided on 2026-10-13 that bots act on the web. Built as a beta:
 - `BROWSER_USE_API_KEY` turns it on; demo mode simulates it.
 - Details: `docs/research/web-actions-2026-10-14.md`.
 
+## Decision: the bot can take notes in meetings (Diego, 2026-10-14)
+
+Diego (an idea from his mom): "One of the options for what the agent can do is kind of like Whisper, where it detects when you're in a meeting and it pops up and says, do you want to record this meeting? And then the agents will be able to transcribe it… there should be the cute little agent maybe on like the very, very bottom of the screen that's kind of there so you can see when it's being transcribed."
+
+Built (research: `docs/research/meetings-2026-10-14.md`):
+- **Two ways in, no bot joins the call:**
+  - The desktop app (`desktop/`, Electron) notices when an app starts using the microphone (Zoom, Meet, Teams, Webex, Slack, Discord…). The bot then peeks up from the bottom of the screen and asks "Want me to take notes?".
+  - The Meetings tab records in Chrome or Edge: the call's tab audio plus the mic.
+- **While it listens,** the bot sits at the very bottom of the screen with a red dot, a timer, a level meter and live captions; Pause, Stop and "Stop and delete" are one click away. In the browser it floats in a picture-in-picture window.
+- **Two tracks:** the mic is the owner ("You"); the call's audio is everyone else ("Others"). In-person meetings use one mic, labeled "Room". No voiceprints.
+- **Speech-to-text:** any OpenAI-compatible endpoint. The default is Groq's Whisper large-v3 turbo (about $0.04 per audio hour), with Together AI as an automatic fallback. Nebius Token Factory has no speech-to-text model.
+- **Notes:** the bot writes a summary, decisions and action items with a tool-free model call, then sends them to the web chat and the owner's best channel. Bots on the owner's own Claude/ChatGPT plan write them on the owner's computer.
+- **The bot's meeting tools** (list, read, search) count as outside content, so a line said in a call can't make it email anyone without the owner's tap (tested under Full faith).
+- **Limits:** Free 2 hours, Plus 15 hours, Pro 50 hours a month. That costs us about $0.09 / $0.69 / $2.30 a month on Groq. Meetings are capped at 4 hours, and recording stops after 15 minutes of silence.
+
+## Build choice (Claude; Diego to confirm): meeting-notes safety rules
+
+- **It never records before the owner says yes.** No auto-record setting: Granola (botless, like us) was sued on 2026-07-30 and Otter in 2025 over "surreptitious" recording.
+- **It only listens while it's visible on the screen,** enforced in code. The desktop app stops when its window is hidden, minimized, off-screen, or the screen locks. The web recorder runs only while its floating window is open. The window is never hidden from screen shares.
+- **Consent:**
+  - The first time, the owner acknowledges a short note about all-party-consent states.
+  - The pop-up offers a one-tap heads-up to paste in the call chat.
+  - Each meeting records who said yes, when, where, and whether the heads-up was copied.
+- **What we keep:**
+  - Audio is transcribed in memory and never stored.
+  - Transcripts are kept 90 days by default (30 days, 90 days or forever in the Meetings tab), and can be deleted while keeping the notes.
+  - Notes stay until deleted.
+  - Meetings are in the account export and go with account deletion.
+- **New hard limit,** shown everywhere the others are: "It only listens to a meeting after you say yes, and it stays on your screen the whole time it's listening."
+
 ## Gotchas found while building
 
 - Nemotron and other reasoning models: thinking eats `max_tokens`. Included models get 8–16K, and thinking is off on "Quick".
@@ -223,6 +253,9 @@ Diego decided on 2026-10-13 that bots act on the web. Built as a beta:
 - Per-minute Vercel Cron needs a paid plan; otherwise an external pinger calls `/api/cron/tick`.
 - Build output tracing followed `path.join(process.cwd(), ".data")` and put the local dev database and dev encryption key into every server bundle's file list. `next.config.ts` now excludes `.data/**`, and runtime-only paths carry `/* turbopackIgnore: true */`.
 
+- Electron gives no error when macOS system-audio permission is missing: the track arrives already ended. The desktop app checks for that and continues mic-only.
+- Document Picture-in-Picture windows can't be positioned by the page, so "bottom of the screen" is exact only in the desktop app.
+
 ## Open questions (updated 2026-10-14)
 
 1. First users: tinkerers or everyday iPhone users? (unchanged)
@@ -230,3 +263,9 @@ Diego decided on 2026-10-13 that bots act on the web. Built as a beta:
 3. Web actions: confirm Browser Use Cloud (see above), then test with a live key on about 10 real forms before turning it on for everyone.
 4. Buy a brand-free domain for bot inboxes; Twilio A2P registration; Composio plan.
 5. Trademark clearance before brand spend (unchanged).
+6. Meeting notes before launch:
+   - a lawyer's review of the consent flow and retention (California § 632, and the Granola complaint's theory);
+   - Groq's paid tier (the free tier allows 7,200 audio-seconds an hour per organization);
+   - an Apple Developer account (99 USD a year) to sign and notarize the Mac app;
+   - whether to merge the desktop app with the Bridge into one "Build-a-bot app".
+7. Meeting notes, next: transcription on the owner's own key or on-device (sherpa-onnx with Parakeet), and calendar-based meeting titles.

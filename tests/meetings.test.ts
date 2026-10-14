@@ -274,6 +274,82 @@ describe("meeting notes", () => {
   });
 });
 
+describe("consent, in-person meetings and retention", () => {
+  // Its own owner (and device), so the first group's owner stays under the plan's bot limit.
+  let owner2: User;
+  const token2 = "bab_dev_test_token_456";
+  beforeAll(async () => {
+    owner2 = await newOwner("usr_meet2");
+    await db.insert(schema.bridgeDevices).values({ id: "dev_desk2", ownerId: owner2.id, name: "Dana's PC", tokenHash: sha256(token2), platform: "desktop-win32-x64", clis: {} });
+  });
+
+  it("records who said yes and whether they told the others; labels in-person lines as the room", async () => {
+    const owner = owner2;
+    const bot = await makeBot({ who: owner });
+    const started = await startMeeting(db, { bot, owner, source: "browser", inPerson: true, consentNotice: false });
+    if (!started.ok) throw new Error(started.error);
+    expect(started.meeting.meta).toMatchObject({ inPerson: true, consent: { via: "browser", noticeCopied: false } });
+    await addChunk(db, { meeting: started.meeting, owner, track: "mic", chunk: 0, startMs: 0, durationMs: 6000, audio: AUDIO, mime: "audio/webm" });
+    const segs = await getSegments(db, started.meeting.id);
+    expect(segs[0].speaker).toBe("Room");
+    expect(transcriptLines(segs, "Dana")[0]).toMatch(/^\[0:00\] Room: /);
+
+    const { markNoticeCopied, meetingView } = await import("@/lib/meetings");
+    const copied = await markNoticeCopied(db, started.meeting);
+    expect(meetingView(copied).noticeCopied).toBe(true);
+    expect(meetingView(copied).inPerson).toBe(true);
+  });
+
+  it("deletes transcripts after the bot's retention period, keeps the notes, and won't rewrite notes without one", async () => {
+    const owner = owner2;
+    const bot = await makeBot({ who: owner });
+    const m = await record(bot, owner, 3);
+    await finishMeeting(db, m);
+    await writeMeetingNotes(db, m.id);
+    const { expireTranscripts, meetingView } = await import("@/lib/meetings");
+
+    // 89 days old: kept. 91 days old: transcript gone, notes stay.
+    await db.update(schema.meetings).set({ startedAt: new Date(Date.now() - 89 * 86400_000) }).where(eq(schema.meetings.id, m.id));
+    await expireTranscripts(db);
+    expect(await getSegments(db, m.id)).not.toHaveLength(0);
+    await db.update(schema.meetings).set({ startedAt: new Date(Date.now() - 91 * 86400_000) }).where(eq(schema.meetings.id, m.id));
+    await expireTranscripts(db);
+    expect(await getSegments(db, m.id)).toHaveLength(0);
+    const [row] = await db.select().from(schema.meetings).where(eq(schema.meetings.id, m.id));
+    expect(meetingView(row).transcriptDeleted).toBe(true);
+    expect(row.notes).toMatch(/## Action items/);
+
+    // "Forever" keeps them.
+    const keeper = await makeBot({ who: owner });
+    await db.update(schema.bots).set({ limits: { transcriptDays: null } }).where(eq(schema.bots.id, keeper.id));
+    const k = await record(keeper, owner, 2);
+    await finishMeeting(db, k);
+    await writeMeetingNotes(db, k.id);
+    await db.update(schema.meetings).set({ startedAt: new Date(Date.now() - 400 * 86400_000) }).where(eq(schema.meetings.id, k.id));
+    await expireTranscripts(db);
+    expect(await getSegments(db, k.id)).not.toHaveLength(0);
+
+    // Rewriting notes needs a transcript.
+    const res = await meetingRoute.PATCH(
+      new Request("http://localhost/api", { method: "PATCH", headers: { authorization: `Bearer ${token2}`, "content-type": "application/json" }, body: JSON.stringify({ rewrite: true }) }),
+      { params: Promise.resolve({ botId: bot.id, meetingId: m.id }) },
+    );
+    expect(res.status).toBe(409);
+  });
+
+  it("tells the owner how much came out of the meeting, and that the audio is gone", async () => {
+    const owner = owner2;
+    const bot = await makeBot({ who: owner });
+    const m = await record(bot, owner, 6);
+    await finishMeeting(db, m);
+    await writeMeetingNotes(db, m.id);
+    const posted = await db.select().from(schema.messages).where(eq(schema.messages.botId, bot.id));
+    const note = posted.find((p) => (p.meta as { meetingId?: string }).meetingId === m.id);
+    expect(note?.text).toMatch(/— 2 decisions, 5 action items/);
+    expect(note?.text).toMatch(/The audio is already gone; I only keep the text\./);
+  });
+});
+
 describe("notes parsing and transcript cleanup", () => {
   it("parses notes in the requested format, and in looser shapes", () => {
     const n = parseNotes(

@@ -33,6 +33,8 @@ Build-a-bot is one Next.js 16 app (App Router, TypeScript) with Postgres behind 
 | `src/lib/connectors` | The app catalog (data), MCP client + OAuth 2.1, Composio, demo tools |
 | `src/lib/channels` | Inbound/outbound for every channel, setup flows, webhook verification |
 | `src/lib/bridge`, `bridge/` | Subscription brains on the owner's computer (server side + the CLI) |
+| `src/lib/meetings`, `src/lib/transcribe`, `desktop/` | Meeting notes: recording, speech-to-text, notes, and the desktop app that notices calls |
+| `src/app/desktop` | Pages the desktop app shows (the buddy at the bottom of the screen) |
 | `src/lib/mcp-server` | The bot's tools as an MCP server |
 | `src/lib/scheduler` | Reminders and routines (time zones, next-run math, the tick) |
 | `src/lib/billing` | Plans, usage metering, Stripe |
@@ -115,6 +117,33 @@ Vendor rules allow a person's Claude or ChatGPT plan only through their own CLI 
 
 When the computer is asleep, the bot waits (default) or, if the owner opted in, answers with the included model.
 
+## Meeting notes
+
+The bot takes notes in calls, only after the owner says yes, and stays visible the whole time it listens.
+
+```
+desktop app (Electron, desktop/)            browser (Meetings tab)
+  notices a call → the bot peeks up:          Start → share the call's tab + mic
+  "Want me to take notes?"                     the bot sits at the bottom of the page
+  yes → it sits at the bottom of the           (and can pop out in a floating window)
+  screen with a red dot and a timer
+            │  mic track = the owner, system/tab track = everyone else
+            ▼  ~20-second standalone audio chunks (6 s in demo mode)
+POST /api/bots/[botId]/meetings/[id]/audio  →  speech-to-text (any OpenAI-compatible
+            │                                  /audio/transcriptions endpoint; Groq by default,
+            │                                  Together AI as fallback) → transcript lines
+            ▼                                  audio is never stored
+POST …/finish  →  the bot writes notes  →  web chat + the owner's best channel
+```
+
+- **Tables:** `meetings` (title, app, status recording → processing → ready, summary, notes, action items) and `meeting_segments` (time-sortable transcript lines; a chunk with no speech leaves an empty marker so retries are idempotent).
+- **Auth:** the web app uses the session; the desktop app uses a device token from the same pairing as the Bridge (`src/lib/meetings/auth.ts`).
+- **Notes** (`src/lib/meetings/notes.ts`): one model call with no tools, the transcript wrapped as untrusted content, so a hostile line in a call can only skew the notes. Meetings over about an hour are summarized in parts first. Bots on the owner's own Claude/ChatGPT plan write their notes on the owner's computer, as a Bridge job that reads the transcript through the bot's tools.
+- **Tools:** `list_meetings`, `read_meeting`, `search_meetings`. All three taint the run, so a transcript can't get the bot to email a stranger without the owner's tap, even under Full faith (tested).
+- **Limits:** meeting minutes per plan (wall-clock time, counted once across both tracks); 4 hours per meeting; one recording per bot at a time; the scheduler wraps up recordings whose recorder vanished (20 minutes without audio), gives notes that never finished an honest ending, and deletes transcripts past each bot's retention (90 days by default; the notes stay).
+- **Consent:** never before the owner says yes, no auto-record, and only while the bot is visible (the desktop window or the browser's picture-in-picture window). Each meeting records who said yes, when, and whether the heads-up was copied for the call.
+- **The buddy** (`src/components/meetings/Buddy.tsx`): the same component on three surfaces. `/desktop/buddy` is what the desktop app shows in its transparent, always-on-top window; its contract is `src/components/meetings/desktop-api.ts`.
+
 ## The bot as an MCP server
 
 `/api/mcp/[botId]` serves the bot's tools over Streamable HTTP (stateless, JSON responses; legacy `initialize` and modern `server/discover` clients). Owners can mint a token in Settings and use their bot's apps from Claude Desktop, Claude Code or any MCP client, under the same rules.
@@ -133,5 +162,5 @@ Plans live in `src/lib/billing/plans.ts`; limits are enforced in code. Stripe Ch
 
 ## Testing
 
-- `npm test`: the policy engine, scheduler math, the receipts trigger, and the full agent pipeline on in-memory Postgres (greeting, STOP/START, reminders, phishing detection, the injection guard under Full faith, approvals, Look only, strangers can't drive the bot, append-only receipts).
+- `npm test`: the policy engine, scheduler math, the receipts trigger, and the full agent pipeline on in-memory Postgres (greeting, STOP/START, reminders, phishing detection, the injection guard under Full faith, approvals, Look only, strangers can't drive the bot, append-only receipts), and meeting notes end to end (chunks → transcript → notes → tools, device tokens, plan limits, stale recordings, notes on the owner's computer, a transcript that tries to make the bot email a stranger).
 - `npm run test:e2e`: Playwright through the builder to a live chat and an approval.

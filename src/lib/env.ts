@@ -49,6 +49,13 @@ export const config = {
     apiKey: v("TRANSCRIBE_API_KEY"),
     baseUrl: v("TRANSCRIBE_BASE_URL"),
     model: v("TRANSCRIBE_MODEL"),
+    /** Used automatically when the main provider is rate-limited or down. */
+    fallback: {
+      provider: v("TRANSCRIBE_FALLBACK_PROVIDER"),
+      apiKey: v("TRANSCRIBE_FALLBACK_API_KEY"),
+      baseUrl: v("TRANSCRIBE_FALLBACK_BASE_URL"),
+      model: v("TRANSCRIBE_FALLBACK_MODEL"),
+    },
   },
   telegram: {
     /** Our "manager" bot that creates each user's own bot (Managed Bots, Bot API 9.6). */

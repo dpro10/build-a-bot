@@ -53,6 +53,8 @@ export type BotLimits = {
   /** Money is off by default. When on, a hard monthly cap in USD. */
   spendCapUsd?: number;
   quietHours?: { start: string; end: string } | null;
+  /** How long meeting transcripts are kept: days, null = forever, unset = 90 days. Notes are kept until deleted. */
+  transcriptDays?: number | null;
 };
 
 export type ConnectionPermissions = {
