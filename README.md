@@ -177,7 +177,7 @@ The current list is in `docs/DECISIONS.md`.
 1. **First users:** tinkerers or everyday iPhone users? A 3-week hand-built test with 5 non-developers could decide.
 2. **Pricing:** confirm the table. Is Full faith a paid feature?
 3. **Web actions:** confirm Browser Use Cloud, then test with a live key on about 10 real forms before turning it on for everyone.
-4. **Before launch:** a brand-free domain for bot inboxes, Twilio A2P 10DLC registration, a Composio plan.
+4. **Before launch:** a brand-free domain for bot inboxes, Twilio A2P 10DLC registration, a Composio plan, and publishing the Bridge to npm. The app already says `npx build-a-bot-bridge`, and the name is still unclaimed.
 5. **Trademark clearance** before spending on the brand.
 6. **Meeting notes before launch:**
    - a lawyer's look at the consent flow and retention;

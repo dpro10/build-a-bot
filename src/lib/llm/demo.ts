@@ -397,7 +397,13 @@ function planFromUser(text: string, tools: Set<string>, p: Persona, system: stri
   // Memory. Questions ("what do you remember about me?") recall; statements save.
   if (/what do you (know|remember) about me|\bdo you remember\b/.test(t) && tools.has("recall")) return { calls: [call("recall", {})] };
   const rememberMatch = /\bremember (?:that )?(.+)/i.exec(text);
-  if (rememberMatch && !/\?\s*$/.test(text) && tools.has("remember")) return { calls: [call("remember", { fact: rememberMatch[1].replace(/[.!]+$/, "") })] };
+  if (rememberMatch && !/\?\s*$/.test(text) && tools.has("remember")) {
+    // Saved the way a model would write it: about the owner, not in their first person.
+    const who = /^(there|your owner)$/i.test(p.owner) ? null : p.owner;
+    const said = rememberMatch[1].replace(/[.!]+$/, "");
+    const fact = who ? said.replace(/^(?:i'm|i am)\b/i, `${who} is`).replace(/^my\b/i, `${who}'s`) : said;
+    return { calls: [call("remember", { fact })] };
+  }
 
   // Starter ideas (src/lib/jobs.ts): lists it can save, and requests that need a few words, not a tool.
   if (!/\b(remind|nudge) me (to|at|in)\b/.test(t)) {

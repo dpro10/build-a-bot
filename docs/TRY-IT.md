@@ -55,7 +55,7 @@ No account needed. A live preview builds the bot as you go.
 3. **Brain:** keep **Free open models**. Optional detours:
    - Open **Your own API key** and paste a made-up key: it's checked live with the provider and refused (when your computer is online).
    - Open **Your Claude or ChatGPT plan** to see how the Bridge works.
-4. **Apps:** under "What should it help with?" tap **Inbox**, **Calendar** and **Meetings**. Then search for and add **Gmail** and **Google Calendar**.
+4. **Apps:** under "What should … help with?" tap **Inbox**, **Calendar**, **Meetings** and **Errands** (each brings its built-in tools, like notes and web search). Then search for and add **Gmail** and **Google Calendar**.
 5. **Trust:** keep **Ask me first** for now, and read the hard limits. (Full faith is a Plus feature; demo mode lets you try it without paying, in step 6.)
 6. **Talk:** pick any channels. Web chat is always on.
 7. **Go:** tick "I'm 18 or older", then **Bring … to life**.
@@ -66,7 +66,7 @@ No account needed. A live preview builds the bot as you go.
 
 ## 3. Talk to it (10 min)
 
-The chips under the chat are good starting points. They change with the jobs you picked. Or type these:
+The chips under the chat are good starting points; they change with the jobs you picked. Or type these (they assume the bot from step 2):
 
 | Type this | Expect |
 |---|---|
@@ -179,7 +179,9 @@ npm run dev
 - Nothing is deployed, so build-a-bot.site isn't live yet.
 - **Real channels** need accounts: a Telegram manager bot, a Twilio number (plus A2P registration for texts), a brand-free email domain, and Slack and Discord apps.
 - **The demo brain** only knows everyday requests. Anything else gets an honest "I'm on the demo brain" answer. With a Token Factory key, the real models answer.
-- **Subscriptions (the Bridge):** `node bridge/bab-bridge.mjs` runs on a computer that has the `claude` or `codex` CLI installed and signed in. Pair it from **Bridge (your computer)**.
+- **Subscriptions (the Bridge):** it runs on a computer that has the `claude` or `codex` CLI installed and signed in.
+  - Pair it from **Bridge (your computer)**.
+  - The app shows `npx build-a-bot-bridge …`, which works once the Bridge is published to npm. Until then, run the same command from this folder as `node bridge/bab-bridge.mjs …` (for example `node bridge/bab-bridge.mjs pair ABCD-1234 --server http://localhost:3000`, then `node bridge/bab-bridge.mjs`).
 
 **Meeting notes:**
 - The Mac app isn't signed or notarized yet. That needs a Developer ID certificate and notarization credentials in CI secrets, built on a Mac.
