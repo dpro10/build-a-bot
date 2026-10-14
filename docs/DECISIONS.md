@@ -285,6 +285,18 @@ Diego: "I want build-a-bot up and running soon. Not just simulated. We need to m
 - **Deploys:** Claude merges and deploys tested fixes without asking, until launch.
 - **Domain:** build-a-bot.site for the site and the sign-in emails (Resend).
 
+## Build choice (Claude; Diego to confirm): what bounds the bill when anyone can sign up (2026-10-14)
+
+Accounts are free and a browser cookie makes one, so per-account limits alone don't bound the cost of the included brain and web search.
+
+- **Before an email is confirmed:** 30 included-brain messages. Then the bot asks the person to sign in by email (free) to keep going.
+- **Monthly searches per plan** (50 on Free) are now enforced. Before, they were counted but never checked.
+- **Daily ceilings for the whole site**, per UTC day:
+  - 3,000 included-brain turns (`INCLUDED_DAILY_LIMIT`);
+  - 300 paid web lookups (`SEARCH_DAILY_LIMIT`), counting searches, news and page reading.
+  - At the ceiling, owners are told the free brain or search is resting until midnight UTC and can switch to their own key; strangers messaging a bot get "try again later". Each hit is logged.
+- At roughly $0.0004–0.001 per turn and $0.008 per search, the ceilings cap a bad day at about $5–6.
+
 ## Live: https://build-a-bot-blue.vercel.app (2026-10-14)
 
 - **Vercel:** project `build-a-bot` in Diego's Pro team, built from `main`. Functions run in iad1.
@@ -362,7 +374,7 @@ A code review of the server and the desktop app. Each fix has a test that fails 
 1. First users: tinkerers or everyday iPhone users? (unchanged)
 2. Pricing: confirm or change the table above. Is Full faith a paid feature?
 3. Web actions: confirm Browser Use Cloud (see above), then test with a live key on about 10 real forms before turning it on for everyone.
-4. Buy a brand-free domain for bot inboxes; Twilio A2P registration; Composio plan; publish the Bridge to npm. The app already shows `npx build-a-bot-bridge`, and on 2026-10-14 that name was unclaimed, so anyone could register it.
+4. Buy a brand-free domain for bot inboxes; Twilio A2P registration; Composio plan. (The Bridge no longer needs npm: since 2026-10-14 the site serves its own copy and the app shows `npx -y {APP_URL}/downloads/build-a-bot-bridge-<version>.tgz`. The bare npm name stays unclaimed, and nothing points at it.)
 5. Trademark clearance before brand spend (unchanged).
 6. Meeting notes before launch:
    - a lawyer's review of the consent flow and retention (California § 632, and the Granola complaint's theory);

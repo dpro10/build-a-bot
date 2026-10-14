@@ -85,9 +85,14 @@ export async function getUsage(db: Db, userId: string, when = new Date()) {
 
 export type LimitKind = "includedMessages" | "byoMessages" | "searches" | "voiceMinutes" | "smsSegments" | "meetingMinutes";
 
-export type LimitCheck = { ok: true; plan: Plan } | { ok: false; plan: Plan; kind: LimitKind; used: number; limit: number; message: string };
+export type LimitCheck =
+  | { ok: true; plan: Plan }
+  | { ok: false; plan: Plan; kind: LimitKind; used: number; limit: number; message: string; /** Over the allowance for accounts without a confirmed email. */ signIn?: boolean };
 
-export async function checkLimit(db: Db, owner: Pick<User, "id" | "plan">, kind: LimitKind): Promise<LimitCheck> {
+/** Included-brain messages an account gets before it confirms an email (accounts are free to make). */
+export const ANONYMOUS_INCLUDED_MESSAGES = 30;
+
+export async function checkLimit(db: Db, owner: Pick<User, "id" | "plan" | "emailVerifiedAt">, kind: LimitKind): Promise<LimitCheck> {
   const plan = getPlan(owner.plan);
   const u = await getUsage(db, owner.id);
   const used =
@@ -102,8 +107,12 @@ export async function checkLimit(db: Db, owner: Pick<User, "id" | "plan">, kind:
             : kind === "meetingMinutes"
               ? Math.floor(u.meetingSeconds / 60)
               : u.smsSegments;
-  const limit = plan.limits[kind];
+  const signIn = kind === "includedMessages" && !owner.emailVerifiedAt;
+  const limit = signIn ? Math.min(plan.limits[kind], ANONYMOUS_INCLUDED_MESSAGES) : plan.limits[kind];
   if (used < limit) return { ok: true, plan };
+  if (signIn && limit < plan.limits[kind]) {
+    return { ok: false, plan, kind, used, limit, signIn, message: `You've used the ${limit} free messages you get before signing in. Sign in with your email (it's free) to keep going.` };
+  }
   const labels: Record<LimitKind, string> = {
     includedMessages: "messages on included brains",
     byoMessages: "messages",
