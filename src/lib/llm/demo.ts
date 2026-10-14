@@ -334,6 +334,14 @@ function summarizeResults(results: { name: string; content: string; isError?: bo
       case "search_email":
       case "read_inbox": {
         const emails = [...content.matchAll(/From: (.+?) \| Subject: (.+?)\n/g)];
+        if (!emails.length) {
+          out.push(
+            base === "read_inbox"
+              ? `Nothing in my own inbox yet. ${content.replace(/^No emails yet\.\s*/, "")} To let me read *your* inbox, connect Gmail or Outlook in Apps & trust.`
+              : "Nothing in your inbox matched that.",
+          );
+          break;
+        }
         const suspicious = emails.find((m) => /acc0unt|verify|urgent action/i.test(`${m[1]} ${m[2]}`));
         const normal = emails.filter((m) => m !== suspicious).slice(0, 4);
         out.push(
@@ -400,7 +408,11 @@ export function createDemoProvider(): LlmProvider {
           results.unshift({ name: m.name, content: m.content, isError: m.isError });
         }
         const userText = lastUserText(req.messages);
-        const injected = results.map((r) => /forward[^\n]*?to ([^\s,]+@[^\s,.]+\.[a-z]+)/i.exec(r.content)?.[1]).find(Boolean);
+        // Only an actual injection counts, not hints like "the owner can forward things to <its own address>".
+        const injected = results
+          .filter((r) => /ignore (?:your |all )?(?:previous|prior) instructions|instructions for the ai/i.test(r.content))
+          .map((r) => /forward[^\n]*?to ([^\s,]+@[^\s,.]+\.[a-z]+)/i.exec(r.content)?.[1])
+          .find(Boolean);
         const sendTool = findTool(tools, "send_email");
         const alreadySent = req.messages.some((m) => m.role === "assistant" && m.toolCalls?.some((c) => c.name.endsWith("send_email")));
         const filledSession = results.find((r) => r.name === "web_form_fill" && !r.isError)?.content.match(/\bsession_id: (wss_[a-z0-9]+)/)?.[1];
