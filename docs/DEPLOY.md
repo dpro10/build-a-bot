@@ -4,7 +4,10 @@ The app is one Next.js project plus a Postgres database. Recommended: **Vercel +
 
 ## 1. Database
 
-1. Create a Postgres database (Supabase project, Neon, RDS…). Use the **direct or session-pooler connection string** (migrations take an advisory lock; transaction poolers like Supabase's port 6543 don't keep it). Set `DATABASE_URL`.
+1. Create a Postgres database (Supabase project, Neon, RDS…) and set `DATABASE_URL`.
+   - **On Supabase, paste either pooler URL.** The app always uses the transaction pooler (port 6543), which lends a connection per query.
+   - Avoid the session pooler on serverless. It allows only as many clients as its pool (15 on the free plan), and every function instance holds its own connections, so it runs out after a few page loads.
+   - Migrations run in one transaction under a transaction-level lock, so any pooler works for them.
 2. Run migrations once from your machine: `DATABASE_URL=… npm run db:migrate` (the app also migrates on first boot; set `AUTO_MIGRATE=0` to turn that off).
 3. Row-level security is enabled on every table with no policies, so Supabase's anon/authenticated API roles can read nothing. Don't add policies unless you mean to expose data.
 

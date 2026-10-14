@@ -1,11 +1,12 @@
 /**
  * The server on real Postgres through postgres.js, the way it runs on Supabase. The other tests
- * use PGlite, which is more forgiving (it takes a Date anywhere), so a query can pass there and
- * still fail in production. Point TEST_DATABASE_URL at an empty local database to run these:
+ * use PGlite, which is more forgiving (it takes a Date anywhere, and it has no connection pool),
+ * so a query can pass there and still fail in production. Point TEST_DATABASE_URL at an empty
+ * local database, ideally behind pgbouncer in transaction mode like Supabase's pooler:
  *
  *   TEST_DATABASE_URL=postgres://postgres@127.0.0.1:6543/bab_test npx vitest run tests/postgres.test.ts
  *
- * Port 6543 makes the client skip prepared statements, as it does behind Supabase's pooler.
+ * Port 6543 makes the client skip prepared statements, as it does on Supabase.
  */
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
@@ -26,17 +27,21 @@ vi.mock("@/lib/auth/session", async (importOriginal) => ({
   getUser: async () => null,
 }));
 
-const { getDb, resetDbForTests, schema } = await import("@/lib/db");
+const { getDb, migratePostgres, poolerUrl, resetDbForTests, schema } = await import("@/lib/db");
 
 const ask = async (body: Record<string, unknown>) => {
   const magic = await import("@/app/api/auth/magic/route");
   return magic.POST(new Request("http://localhost/api/auth/magic", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }));
 };
 
+const connect = async () => {
+  const { default: postgres } = await import("postgres");
+  return postgres(url!, { max: 2, prepare: false, onnotice: () => {} });
+};
+
 beforeAll(async () => {
   if (!url) return;
-  const { default: postgres } = await import("postgres");
-  const admin = postgres(url, { max: 1, onnotice: () => {} });
+  const admin = await connect();
   await admin.unsafe("drop schema if exists drizzle cascade; drop schema if exists public cascade; create schema public;");
   await admin.end();
   await resetDbForTests();
@@ -46,7 +51,35 @@ afterAll(async () => {
   await resetDbForTests();
 });
 
+describe("Supabase's pooler", () => {
+  it("is used in transaction mode, whichever of its URLs is pasted", () => {
+    const session = "postgresql://postgres.abcd:pw@aws-0-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require";
+    expect(poolerUrl(session)).toBe("postgresql://postgres.abcd:pw@aws-0-us-east-1.pooler.supabase.com:6543/postgres?sslmode=require");
+    expect(poolerUrl(poolerUrl(session))).toBe(poolerUrl(session));
+    for (const other of ["postgresql://postgres:pw@db.abcd.supabase.co:5432/postgres", "postgres://u:p@localhost:5432/app"]) {
+      expect(poolerUrl(other)).toBe(other);
+    }
+  });
+});
+
 describe.skipIf(!url)("on real Postgres, as on Supabase", () => {
+  it("lets cold starts race to set up a new database", async () => {
+    const { readMigrationFiles } = await import("drizzle-orm/migrator");
+    const [a, b] = [await connect(), await connect()];
+    await Promise.all([migratePostgres(a), migratePostgres(b), migratePostgres(a)]);
+    const [{ n }] = await a`select count(*)::int as n from drizzle.__drizzle_migrations`;
+    expect(n).toBe(readMigrationFiles({ migrationsFolder: "drizzle" }).length);
+    await Promise.all([a.end(), b.end()]);
+  });
+
+  it("starts over after a failed start instead of staying broken", async () => {
+    await resetDbForTests();
+    process.env.DATABASE_URL = "postgres://postgres@127.0.0.1:1/nowhere";
+    await expect(getDb()).rejects.toThrow();
+    process.env.DATABASE_URL = url;
+    await expect(getDb()).resolves.toBeTruthy();
+  });
+
   it("counts sign-in attempts per window", async () => {
     const { rateLimit } = await import("@/lib/safety/ratelimit");
     const db = await getDb();

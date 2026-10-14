@@ -45,15 +45,58 @@ async function createPglite(): Promise<DbState> {
   return { db, ready, kind: "pglite", close: () => client.close() };
 }
 
-async function createPostgres(url: string): Promise<DbState> {
+/**
+ * Supabase's pooler answers in session mode on port 5432 and in transaction mode on 6543, with the
+ * same host and login. Session mode allows only as many clients as its pool (15 on the free plan),
+ * and every serverless instance keeps its own connections open, frozen ones included, so a few page
+ * loads used them all up. Transaction mode lends a connection per query, so the app always uses it.
+ */
+export function poolerUrl(url: string): string {
+  return url.replace(/(@[^/?#@]+\.pooler\.supabase\.com):5432(?=[/?#]|$)/, "$1:6543");
+}
+
+/**
+ * Applies ./drizzle the way drizzle's migrator does (same bookkeeping table), but in one transaction
+ * under a transaction-level lock. Cold starts can race, and a session lock doesn't survive a
+ * transaction pooler (the lock and the unlock can land on different server connections).
+ */
+export async function migratePostgres(client: import("postgres").Sql) {
+  const { readMigrationFiles } = await import("drizzle-orm/migrator");
+  const migrations = readMigrationFiles({ migrationsFolder: migrationsFolder() });
+  const latest = migrations.at(-1)?.folderMillis ?? 0;
+  const lastApplied = async (q: import("postgres").Sql | import("postgres").TransactionSql) => {
+    const [table] = await q`select to_regclass('drizzle.__drizzle_migrations') is not null as present`;
+    if (!table?.present) return -1;
+    const [row] = await q`select coalesce(max(created_at), -1)::text as at from drizzle.__drizzle_migrations`;
+    return Number(row?.at ?? -1);
+  };
+  if ((await lastApplied(client)) >= latest) return; // the usual cold start
+  await client.begin(async (tx) => {
+    await tx`select pg_advisory_xact_lock(727274)`;
+    await tx`create schema if not exists drizzle`;
+    await tx`create table if not exists drizzle.__drizzle_migrations (id serial primary key, hash text not null, created_at bigint)`;
+    const done = await lastApplied(tx);
+    for (const migration of migrations) {
+      if (migration.folderMillis <= done) continue;
+      for (const statement of migration.sql) if (statement.trim()) await tx.unsafe(statement);
+      await tx`insert into drizzle.__drizzle_migrations (hash, created_at) values (${migration.hash}, ${migration.folderMillis})`;
+    }
+  });
+}
+
+async function createPostgres(rawUrl: string): Promise<DbState> {
   const { default: postgres } = await import("postgres");
   const { drizzle } = await import("drizzle-orm/postgres-js");
-  const { migrate } = await import("drizzle-orm/postgres-js/migrator");
 
+  const url = poolerUrl(rawUrl);
   const client = postgres(url, {
     max: Number(process.env.DATABASE_POOL_MAX ?? 5),
     prepare: !/pooler|pgbouncer|:6543/.test(url), // transaction poolers don't support prepared statements
     idle_timeout: 20,
+    // NOTICEs ("already exists, skipping") are noise in the logs; warnings still show.
+    onnotice: (notice) => {
+      if (notice.severity !== "NOTICE") console.warn("[postgres]", notice.severity, notice.message);
+    },
   });
   const db = drizzle(client, { schema }) as unknown as Db;
   // drizzle makes postgres.js pass date values through untouched (its columns hand over strings),
@@ -64,16 +107,7 @@ async function createPostgres(url: string): Promise<DbState> {
     const passThrough = serializers[type];
     serializers[type] = (x) => (x instanceof Date ? x.toISOString() : passThrough ? passThrough(x) : x);
   }
-  const ready = (async () => {
-    if (process.env.AUTO_MIGRATE === "0") return;
-    // One migrator at a time across cold starts.
-    await client`select pg_advisory_lock(727274)`;
-    try {
-      await migrate(db as never, { migrationsFolder: migrationsFolder() });
-    } finally {
-      await client`select pg_advisory_unlock(727274)`;
-    }
-  })();
+  const ready = process.env.AUTO_MIGRATE === "0" ? Promise.resolve() : migratePostgres(client);
   return { db, ready, kind: "postgres", close: () => client.end() };
 }
 
@@ -86,19 +120,24 @@ let initPromise: Promise<DbState> | null = null;
 
 /** Returns the ready database. Safe to call from any server code path. */
 export async function getDb(): Promise<Db> {
-  if (g.__babDb) {
-    await g.__babDb.ready;
-    return g.__babDb.db;
-  }
   if (!initPromise) {
-    initPromise = init().then((state) => {
+    const pending: Promise<DbState> = (g.__babDb ? Promise.resolve(g.__babDb) : init()).then(async (state) => {
       g.__babDb = state;
+      try {
+        await state.ready;
+      } catch (err) {
+        // A failed start (the database briefly unreachable, say) mustn't break this server
+        // for good: forget it, so the next request starts over.
+        if (g.__babDb === state) g.__babDb = undefined;
+        if (initPromise === pending) initPromise = null;
+        await state.close().catch(() => {});
+        throw err;
+      }
       return state;
     });
+    initPromise = pending;
   }
-  const state = await initPromise;
-  await state.ready;
-  return state.db;
+  return (await initPromise).db;
 }
 
 export function dbKind(): "pglite" | "postgres" {
