@@ -25,6 +25,8 @@ Anyone makes their own AI agent in about a minute: pick a face, give it a name, 
   - Chat with inline approvals.
   - Activity (receipts), Apps & trust, Channels, Routines (morning briefs, reminders), Memory, Settings (look, personality, brain, recipes, MCP access).
   - Approvals inbox, Plan & usage, Bridge, Account (export, delete).
+- **It reaches out:** an optional morning brief (on by default), routines and reminders on any channel. Its face follows it: Telegram profile photo, HTML emails.
+- **Operator dashboard** (`/admin`, locked to `ADMIN_EMAILS`): revenue, growth, usage and costs as aggregates only.
 - **Extras:**
   - Shareable recipes (`/r/[slug]`).
   - Each bot is also an MCP server, usable from Claude Desktop/Code.

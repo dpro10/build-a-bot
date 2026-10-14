@@ -164,6 +164,32 @@ Cost basis: Nemotron 3.5 Lightning ≈ $0.0004 a turn; Tavily $0.008 a search af
 - **Routines:** morning briefs, inbox sweeps and reminders in the owner's time zone, on any channel.
 - **Demo mode:** every flow works with zero keys, so the product can be shown before any vendor is signed up.
 
+## Build choice (Claude; Diego to confirm): the bot reaches out first, every day
+
+- The builder offers a **morning brief**, on by default with a one-tap off. It is a real routine in the owner's time zone.
+- Its content follows the jobs they picked: calendar, emails to answer, reminders, weather.
+- Recipes that bring their own routines start with it off.
+- Reason: the README's point that the reach-out "is what keeps people coming back".
+
+## Build choice: the bot's face goes everywhere
+
+- Telegram bots get the avatar as their profile photo, and follow name and face changes made in Settings.
+- Bot emails have an HTML part with the face and an "AI assistant" footer.
+- 40 pre-rendered pictures live in `public/avatars/` (re-render with `npm run avatars`).
+
+## Build choice: an operator dashboard
+
+- `/admin` shows aggregates only: revenue estimate, people, bots, messages, brains, trust levels, channels, top apps, approvals, included-model spend and waitlists.
+- It is locked to `ADMIN_EMAILS`. In demo mode without that variable, any signed-in user can see it.
+
+## Build choice: abuse limits
+
+- Fixed-window rate limits in Postgres on:
+  - bot creation (which also creates anonymous accounts);
+  - API-key checks, so the endpoint can't be used as a stolen-key oracle;
+  - the waitlist, chat, sign-in links and verification codes.
+- IP-based limits are skipped when there is no proxy IP, and are 10× looser in demo mode.
+
 ## Gotchas found while building
 
 - Nemotron and other reasoning models: thinking eats `max_tokens`. Included models get 8–16K, and thinking is off on "Quick".
