@@ -2,7 +2,8 @@ import Link from "next/link";
 import { ArrowRight, CircleDashed } from "lucide-react";
 import { getDb } from "@/lib/db";
 import { getUser, isAnonymous } from "@/lib/auth/session";
-import { getBotSetup, getOwnedBot, listBridgeDevices } from "@/lib/data";
+import { getBotSetup, getOwnedBot } from "@/lib/data";
+import { bridgePaired } from "@/lib/bridge/jobs";
 import { CHANNEL_BY_KIND, type ChannelKind } from "@/lib/channels/catalog";
 import { connectionName } from "@/lib/connectors";
 
@@ -16,9 +17,8 @@ export async function SetupChecklist({ botId }: { botId: string }) {
   const { channels, connections } = await getBotSetup(db, botId);
   const todo: { label: string; href: string }[] = [];
 
-  if (bot.brain.kind === "subscription") {
-    const devices = await listBridgeDevices(db, user.id);
-    if (!devices.some((d) => !d.revokedAt)) todo.push({ label: "Pair your computer (Bridge)", href: "/app/bridge" });
+  if (bot.brain.kind === "subscription" && !(await bridgePaired(db, user.id))) {
+    todo.push({ label: "Pair your computer (Bridge)", href: "/app/bridge" });
   }
   for (const c of channels) {
     if (c.kind === "web" || c.status === "active" || c.status === "disabled" || c.status === "waitlist") continue;

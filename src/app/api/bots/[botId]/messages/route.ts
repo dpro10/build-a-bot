@@ -3,6 +3,7 @@ import { schema } from "@/lib/db";
 import { authedBot, json, type RouteCtx } from "@/lib/api";
 import { ensureConversation } from "@/lib/channels/outbound";
 import { listMessages } from "@/lib/data";
+import { computerFor } from "@/lib/bridge/jobs";
 
 /** Poll for new web messages (bridge replies, approval follow-ups, reminders). */
 export async function GET(req: Request, ctx: RouteCtx<{ botId: string }>) {
@@ -30,5 +31,7 @@ export async function GET(req: Request, ctx: RouteCtx<{ botId: string }>) {
     // Running: the owner's computer is thinking. Queued: waiting for that computer to pick it up.
     thinkingOnBridge: pendingJobs.some((j) => j.status === "running"),
     waitingOnBridge: pendingJobs.some((j) => j.status === "queued"),
+    // A bot on the owner's plan that waits for their computer: online, asleep or never paired (else null).
+    computer: await computerFor(a.db, a.bot),
   });
 }

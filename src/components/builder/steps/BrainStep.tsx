@@ -8,7 +8,7 @@ import { FieldHint, Input, Label } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
 import { PLANS, type PlanId } from "@/lib/billing/plans";
-import { INCLUDED_MODELS, PROVIDERS, PROVIDER_BY_ID, SUBSCRIPTIONS, type ModelDef, type ProviderId } from "@/lib/models/catalog";
+import { INCLUDED_MODELS, PROVIDERS, PROVIDER_BY_ID, SUBSCRIPTIONS, contextLabel, type ModelDef, type ProviderId } from "@/lib/models/catalog";
 import { cn } from "@/lib/utils";
 import { DEFAULT_MODEL, type BrainChoice } from "../state";
 import { onRadioGroupKeyDown, radioTabIndex } from "../radio-group";
@@ -19,11 +19,6 @@ const TIERS: { id: ModelDef["tier"]; label: string; blurb: string }[] = [
   { id: "balanced", label: "Balanced", blurb: "Smarter research and planning" },
   { id: "smart", label: "Smart", blurb: "The strongest open models" },
 ];
-
-function formatContext(n?: number) {
-  if (!n) return null;
-  return n >= 1_000_000 ? `${Math.round(n / 100_000) / 10}M` : `${Math.round(n / 1000)}K`;
-}
 
 export type KeyStatus = "idle" | "checking" | "ok" | "error";
 
@@ -37,6 +32,7 @@ export function BrainStep({
   onValidate,
   plan,
   demo,
+  paidPlans,
   botName,
 }: {
   brain: BrainChoice;
@@ -48,6 +44,8 @@ export function BrainStep({
   onValidate: () => void;
   plan: PlanId;
   demo: boolean;
+  /** Plus and Pro can be bought here (or are simulated in demo mode). */
+  paidPlans: boolean;
   botName: string;
 }) {
   const kinds: { id: BrainChoice["kind"]; title: string; blurb: string; icon: React.ReactNode; badge?: string }[] = [
@@ -94,7 +92,7 @@ export function BrainStep({
       </div>
 
       <div key={brain.kind} className="animate-fade-up">
-        {brain.kind === "included" ? <IncludedPanel brain={brain} onBrain={onBrain} plan={plan} demo={demo} /> : null}
+        {brain.kind === "included" ? <IncludedPanel brain={brain} onBrain={onBrain} plan={plan} demo={demo} paidPlans={paidPlans} /> : null}
         {brain.kind === "subscription" ? <SubscriptionPanel brain={brain} onBrain={onBrain} onUseGeminiKey={() => onBrain({ kind: "byok", provider: "google", model: PROVIDER_BY_ID.google.models[0]?.id ?? "", baseUrl: "" })} /> : null}
         {brain.kind === "byok" ? (
           <ByokPanel brain={brain} onBrain={onBrain} apiKey={apiKey} onApiKey={onApiKey} keyStatus={keyStatus} keyMessage={keyMessage} onValidate={onValidate} />
@@ -104,26 +102,47 @@ export function BrainStep({
   );
 }
 
-function IncludedPanel({ brain, onBrain, plan, demo }: { brain: Extract<BrainChoice, { kind: "included" }>; onBrain: (b: BrainChoice) => void; plan: PlanId; demo: boolean }) {
+function IncludedPanel({
+  brain,
+  onBrain,
+  plan,
+  demo,
+  paidPlans,
+}: {
+  brain: Extract<BrainChoice, { kind: "included" }>;
+  onBrain: (b: BrainChoice) => void;
+  plan: PlanId;
+  demo: boolean;
+  paidPlans: boolean;
+}) {
   const current = INCLUDED_MODELS.find((m) => m.id === brain.model);
   const thinks = current?.thinking && current.thinking.style !== "none";
+  // Tiers the plan doesn't include are shown but can't be picked (the server would swap them for the default).
+  const isLocked = (tier: ModelDef["tier"]) => !demo && !PLANS[plan].includedModels.includes(tier);
   return (
     <div className="flex flex-col gap-5 rounded-3xl border border-border bg-background-2/60 p-4 sm:p-5">
       <p className="text-sm text-muted-foreground">
         Served from Nebius Token Factory. Your chats aren&apos;t used to train models. Free includes the fast models; Plus and Pro unlock bigger brains.
+        {!paidPlans && TIERS.some((t) => isLocked(t.id)) ? " Paid plans are coming soon." : null}
       </p>
       {TIERS.map((tier) => {
         const models = INCLUDED_MODELS.filter((m) => m.tier === tier.id);
-        const locked = !demo && !PLANS[plan].includedModels.includes(tier.id);
+        const locked = isLocked(tier.id);
         const needs = tier.id === "smart" ? "Pro" : "Plus";
         return (
           <div key={tier.id} className="flex flex-col gap-2">
             <div className="flex items-center gap-2">
               <span className="font-display text-base font-semibold">{tier.label}</span>
               <span className="text-sm text-muted-foreground">· {tier.blurb}</span>
-              {locked ? <Badge tone="accent">{needs}</Badge> : tier.id === "fast" ? <Badge tone="success">Free</Badge> : null}
+              {locked ? (
+                <Badge tone="accent">
+                  <Lock /> {needs}
+                </Badge>
+              ) : tier.id === "fast" ? (
+                <Badge tone="success">Free</Badge>
+              ) : null}
             </div>
-            <div role="radiogroup" aria-label={`${tier.label} models`} onKeyDown={onRadioGroupKeyDown} className="grid gap-2 sm:grid-cols-2">
+            <div role="radiogroup" aria-label={`${tier.label} models${locked ? `, part of ${needs}` : ""}`} onKeyDown={onRadioGroupKeyDown} className="grid gap-2 sm:grid-cols-2">
               {models.map((m, i) => {
                 const active = m.id === brain.model;
                 return (
@@ -132,11 +151,13 @@ function IncludedPanel({ brain, onBrain, plan, demo }: { brain: Extract<BrainCho
                     type="button"
                     role="radio"
                     aria-checked={active}
+                    disabled={locked}
                     tabIndex={radioTabIndex(active, i, !models.some((x) => x.id === brain.model))}
                     onClick={() => onBrain({ ...brain, model: m.id })}
                     className={cn(
                       "flex items-start gap-3 rounded-2xl border bg-card p-3 text-left transition",
-                      active ? "border-primary ring-2 ring-primary/20" : "border-border hover:border-foreground/25",
+                      active ? "border-primary ring-2 ring-primary/20" : "border-border",
+                      locked ? "cursor-not-allowed opacity-60" : !active && "hover:border-foreground/25",
                     )}
                   >
                     <span className={cn("mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border-2", active ? "border-primary bg-primary text-primary-foreground" : "border-input")}>
@@ -150,7 +171,7 @@ function IncludedPanel({ brain, onBrain, plan, demo }: { brain: Extract<BrainCho
                       <span className="block text-[13px] leading-snug text-muted-foreground">{m.blurb}</span>
                       <span className="mt-1 flex flex-wrap gap-x-2.5 text-[11px] font-medium text-muted-foreground">
                         {m.maker ? <span>{m.maker}</span> : null}
-                        {formatContext(m.context) ? <span>{formatContext(m.context)} memory</span> : null}
+                        {contextLabel(m.context) ? <span>{contextLabel(m.context)} context</span> : null}
                         {m.reasoning ? <span>Can think step by step</span> : null}
                       </span>
                     </span>
