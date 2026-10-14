@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { apiError, authedBot, json, parseJson, sameOrigin, type RouteCtx } from "@/lib/api";
+import { apiError, authedBot, clientIp, json, parseJson, sameOrigin, type RouteCtx } from "@/lib/api";
 import { CHANNEL_KINDS } from "@/lib/channels/catalog";
 import { channelAction } from "@/lib/channels/setup";
 import { getBotSetup } from "@/lib/data";
@@ -9,7 +9,18 @@ export async function GET(_req: Request, ctx: RouteCtx<{ botId: string }>) {
   const a = await authedBot(botId);
   if (!a.ok) return a.res;
   const { channels } = await getBotSetup(a.db, botId);
-  return json({ channels: channels.map((c) => ({ ...c, credentialId: c.credentialId ? "set" : null, config: { simulated: (c.config as { simulated?: boolean }).simulated ?? false } })) });
+  return json({ channels: channels.map((c) => ({ ...c, credentialId: c.credentialId ? "set" : null, config: publicChannelConfig(c.config) })) });
+}
+
+/** The non-secret bits of a channel's config the app shows (never tokens or webhook secrets). */
+function publicChannelConfig(config: unknown) {
+  const c = (config ?? {}) as { simulated?: boolean; locked?: boolean; pendingOwnerAddress?: string | null; username?: string };
+  return {
+    simulated: c.simulated ?? false,
+    locked: c.locked ?? false,
+    pendingOwnerAddress: typeof c.pendingOwnerAddress === "string" ? c.pendingOwnerAddress : null,
+    username: typeof c.username === "string" ? c.username : null,
+  };
 }
 
 export async function POST(req: Request, ctx: RouteCtx<{ botId: string }>) {
@@ -19,7 +30,7 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string }>) {
   if (!a.ok) return a.res;
   const parsed = await parseJson(req, z.object({ kind: z.enum(CHANNEL_KINDS), action: z.string().min(2).max(30), payload: z.record(z.string(), z.unknown()).optional() }));
   if (!parsed.ok) return parsed.res;
-  const result = await channelAction(a.db, a.user, a.bot, parsed.data.kind, parsed.data.action, parsed.data.payload ?? {});
+  const result = await channelAction(a.db, a.user, a.bot, parsed.data.kind, parsed.data.action, parsed.data.payload ?? {}, { ip: clientIp(req) ?? undefined });
   if (!result.ok) return apiError(result.status ?? 400, result.error);
   return json({ ok: true, ...(result.data ?? {}) });
 }

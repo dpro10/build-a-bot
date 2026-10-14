@@ -6,6 +6,7 @@ import { appUrl } from "@/lib/env";
 import { connectWithToken, startMcpOAuth } from "@/lib/connectors/mcp/oauth";
 import { refreshMcpTools } from "@/lib/connectors/mcp/tools";
 import { startComposioConnection } from "@/lib/connectors/composio";
+import { getConnector } from "@/lib/connectors";
 
 export const maxDuration = 60;
 
@@ -30,14 +31,22 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string; connecti
       return json({ connected: true, tools: tools?.length ?? null });
     }
     if (parsed.data.method === "composio") {
-      const url = await startComposioConnection(a.db, connection, `${appUrl()}/api/connectors/composio/callback?c=${connectionId}`);
+      // A demo connection has no toolkit yet: take it from the catalog ("Connect for real").
+      let target = connection;
+      if (!(connection.config as { toolkit?: string }).toolkit) {
+        const via = getConnector(connection.connectorId)?.via.find((v) => v.kind === "composio");
+        if (!via || via.kind !== "composio") return apiError(409, "This app can't be connected that way.");
+        target = { ...connection, config: { ...connection.config, toolkit: via.toolkit } };
+      }
+      const url = await startComposioConnection(a.db, target, `${appUrl()}/api/connectors/composio/callback?c=${connectionId}`);
       return json({ redirect: url });
     }
     const started = await startMcpOAuth(a.db, { ownerId: a.user.id, botId, connection, redirectTo: back });
     if (started.kind === "redirect") return json({ redirect: started.url });
     if (started.kind === "no_auth") {
-      await a.db.update(schema.connections).set({ status: "connected", error: null }).where(eq(schema.connections.id, connectionId));
-      const tools = await refreshMcpTools({ ...connection, status: "connected" }, { db: a.db }).catch(() => null);
+      // mode "mcp": a demo connection connected for real must stop serving sample data.
+      await a.db.update(schema.connections).set({ status: "connected", mode: "mcp", error: null, updatedAt: new Date() }).where(eq(schema.connections.id, connectionId));
+      const tools = await refreshMcpTools({ ...connection, status: "connected", mode: "mcp" }, { db: a.db }).catch(() => null);
       return json({ connected: true, tools: tools?.length ?? null });
     }
     return apiError(409, started.message);

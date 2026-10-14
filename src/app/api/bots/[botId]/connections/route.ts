@@ -61,7 +61,12 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string }>) {
   const [existing] = await a.db.select().from(schema.connections).where(and(eq(schema.connections.botId, botId), eq(schema.connections.connectorId, connectorId))).limit(1);
   if (existing) {
     if (existing.status === "disabled") {
-      await a.db.update(schema.connections).set({ status: existing.credentialId ? "connected" : status }).where(eq(schema.connections.id, existing.id));
+      const [revived] = await a.db
+        .update(schema.connections)
+        .set({ status: existing.credentialId ? "connected" : status, updatedAt: new Date() })
+        .where(eq(schema.connections.id, existing.id))
+        .returning();
+      return json({ connection: revived ?? existing });
     }
     return json({ connection: existing });
   }
