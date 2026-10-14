@@ -64,7 +64,9 @@ export default async function BillingPage({
     },
     {
       q: "How do phone calls and texts work?",
-      a: `Calls and texts start on Plus (${PLANS.plus.limits.voiceMinutes} call minutes and ${PLANS.plus.limits.smsSegments} texts a month; Pro gets ${PLANS.pro.limits.voiceMinutes} and ${PLANS.pro.limits.smsSegments.toLocaleString("en-US")}). Call minutes add up across all your calls. Texts count in segments of about 160 characters (70 with emoji), so a long text can count as two or three.`,
+      a: !(live.twilio || demoMode)
+        ? "They're coming soon, on Plus and Pro. Until then, talk to your bot on the web, Telegram, Discord or Slack."
+        : `Calls and texts start on Plus (${PLANS.plus.limits.voiceMinutes} call minutes and ${PLANS.plus.limits.smsSegments} texts a month; Pro gets ${PLANS.pro.limits.voiceMinutes} and ${PLANS.pro.limits.smsSegments.toLocaleString("en-US")}). Call minutes add up across all your calls. Texts count in segments of about 160 characters (70 with emoji), so a long text can count as two or three.`,
     },
     {
       q: "What happens if I run out?",
@@ -132,7 +134,7 @@ export default async function BillingPage({
               {labels.month} · resets {labels.reset}
             </p>
           </div>
-          <UsageMeters plan={plan} used={used} resetLabel={labels.reset} paidPlans={mode !== "off"} />
+          <UsageMeters plan={plan} used={used} resetLabel={labels.reset} paidPlans={mode !== "off"} callsAndTexts={live.twilio || demoMode} />
         </div>
       </section>
 

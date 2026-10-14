@@ -12,7 +12,9 @@ import { contactLink, pageMetadata } from "@/lib/site";
 
 export const metadata = pageMetadata({
   title: "Pricing",
-  description: `Start free. Plus is $${PLANS.plus.priceMonthly}/month and Pro is $${PLANS.pro.priceMonthly}/month, with calls, texts, Full faith mode and smarter included models. Your own key or subscription never uses your included messages.`,
+  description: paidPlansOpen
+    ? `Start free. Plus is $${PLANS.plus.priceMonthly}/month and Pro is $${PLANS.pro.priceMonthly}/month, with calls, texts, Full faith mode and smarter included models. Your own key or subscription never uses your included messages.`
+    : "Start free: one bot, open models, web search and your apps. Plus and Pro are coming soon. Your own key or subscription never uses your included messages.",
   path: "/pricing",
 });
 

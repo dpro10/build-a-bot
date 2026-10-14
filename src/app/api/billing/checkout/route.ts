@@ -10,7 +10,7 @@ export async function POST(req: Request) {
   if (!a.ok) return a.res;
   const parsed = await parseJson(req, z.object({ plan: z.enum(["plus", "pro"]), interval: z.enum(["monthly", "yearly"]).default("monthly") }));
   if (!parsed.ok) return parsed.res;
-  if (!live.stripe) return apiError(503, "Payments aren't set up on this server.", { demo: true });
+  if (!live.stripe) return apiError(503, "Paid plans are coming soon.", { demo: true });
   if (isAnonymous(a.user)) return apiError(409, "Save your account with your email first.", { needsEmail: true });
   try {
     const url = await createCheckout(a.db, a.user, parsed.data.plan, parsed.data.interval);

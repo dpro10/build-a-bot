@@ -88,6 +88,7 @@ export function UsageMeters({
   used,
   resetLabel,
   paidPlans,
+  callsAndTexts,
   className,
 }: {
   plan: Plan;
@@ -95,11 +96,14 @@ export function UsageMeters({
   resetLabel: string;
   /** Paid plans can be bought here (otherwise they're coming soon). */
   paidPlans: boolean;
+  /** Calls and texts work on this server (Twilio, or demo mode); otherwise their meters are left out. */
+  callsAndTexts: boolean;
   className?: string;
 }) {
+  const meters = callsAndTexts ? METERS : METERS.filter((m) => m.key !== "voiceMinutes" && m.key !== "smsSegments");
   return (
     <div className={cn("grid gap-3 sm:grid-cols-2 lg:grid-cols-3", className)}>
-      {METERS.map((m) => {
+      {meters.map((m) => {
         const limit = limitFor(plan, m.key);
         const value = used[m.key];
         // A full set of bots isn't "running out" — keep that one calm.
