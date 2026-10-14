@@ -94,6 +94,8 @@ describe("agent pipeline (demo brain)", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].kind).toBe("reminder");
     expect(rows[0].nextRunAt!.getTime()).toBeGreaterThan(Date.now() + 15 * 60_000);
+    // In 20 minutes on the owner's clock, whatever the server's time zone.
+    expect(rows[0].nextRunAt!.getTime()).toBeLessThan(Date.now() + 25 * 60_000);
   });
 
   it("reads the inbox and flags the phishing email", async () => {
@@ -111,6 +113,9 @@ describe("agent pipeline (demo brain)", () => {
     const approval = res.approvals[0];
     expect(approval.reasons).toContain("tainted_send_new_recipient");
     expect(approval.args).toMatchObject({ to: ["backup@acc0unt-verify.example"] });
+    // It tells the owner why it stopped, rather than offering to send.
+    expect(res.text).toMatch(/prompt-injection guard/);
+    expect(res.text).toMatch(/Deny/);
     // Nothing was sent.
     const sends = await db.select().from(schema.receipts).where(and(eq(schema.receipts.botId, bot.id), eq(schema.receipts.kind, "message")));
     expect(sends).toHaveLength(0);
@@ -130,6 +135,68 @@ describe("agent pipeline (demo brain)", () => {
     expect(res.approvals).toHaveLength(0);
     expect(res.text).toMatch(/Nothing in my own inbox yet/);
     expect(res.text).toMatch(/connect Gmail or Outlook/);
+  });
+
+  it("demo brain: plain answers about memory, apps, reminders and the first meeting", async () => {
+    const [other] = await db
+      .insert(schema.users)
+      .values({ id: "usr_demo_words", email: "words@example.com", emailVerifiedAt: new Date(), timezone: "America/Chicago", plan: "pro" })
+      .returning();
+    const bot = await makeBot("ask", ["gmail", "google_calendar", "notion", "memory", "reminders", "meetings"], other);
+
+    // A question recalls; it doesn't save "about me?" as a memory.
+    const before = await say(bot, "What do you remember about me?", other);
+    expect(before.text).toMatch(/don't know much about you yet/);
+    expect(await db.select().from(schema.memories).where(eq(schema.memories.botId, bot.id))).toHaveLength(0);
+
+    // Calendar: a readable list, not the tool's raw output.
+    const cal = await say(bot, "What's on my calendar?", other);
+    expect(cal.text).toMatch(/Here's what's coming up/);
+    expect(cal.text).not.toMatch(/untrusted_content/);
+
+    // An app without sample data, named by the owner, is the one it checks.
+    const notion = await say(bot, "What's in my Notion?", other);
+    expect(notion.text).toMatch(/Notion is connected in demo mode/);
+
+    // Before the first meeting.
+    const meeting = await say(bot, "What did we decide in my last meeting?", other);
+    expect(meeting.text).toMatch(/haven't taken notes in any meetings yet/);
+
+    // Reminders, without internal ids.
+    await say(bot, "remind me to stretch in 20 minutes", other);
+    const list = await say(bot, "what are my reminders?", other);
+    expect(list.text).toMatch(/\*\*Stretch\*\*/);
+    expect(list.text).not.toMatch(/sch_/);
+  });
+
+  it("demo brain: the starter ideas do something real", async () => {
+    const [other] = await db
+      .insert(schema.users)
+      .values({ id: "usr_demo_starters", email: "starters@example.com", emailVerifiedAt: new Date(), timezone: "America/Chicago", plan: "pro" })
+      .returning();
+    const bot = await makeBot("ask", ["gmail", "google_calendar", "notes", "news", "reminders"], other);
+
+    // A list it saves as a note.
+    const list = await say(bot, "Make a grocery list for tacos for 6", other);
+    expect(list.text).toMatch(/Taco night/);
+    const notes = await db.select().from(schema.notes).where(eq(schema.notes.botId, bot.id));
+    expect(notes.map((n) => n.title)).toContain("Taco night");
+
+    // The news, not the calendar, even though it says "today".
+    const news = await say(bot, "What changed in the news today?", other);
+    expect(news.text).not.toMatch(/coming up|you've got:/);
+
+    // Find an hour, then "block it": the calendar change waits for the owner's tap.
+    const free = await say(bot, "Find an hour for deep work this week", other);
+    expect(free.text).toMatch(/You're free on \*\*/);
+    const held = await say(bot, "block it", other);
+    expect(held.approvals).toHaveLength(1);
+    expect(held.approvals[0].title).toMatch(/Deep work/);
+
+    // Who needs an answer: people, not notifications.
+    const replies = await say(bot, "What needs a reply from me?", other);
+    expect(replies.text).toMatch(/Sam Rivera/);
+    expect(replies.text).not.toMatch(/Canvas|GitHub/);
   });
 
   it("ask-me-first: drafts the send, runs it only after approval, then remembers the contact", async () => {
