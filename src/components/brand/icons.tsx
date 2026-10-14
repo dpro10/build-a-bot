@@ -128,7 +128,7 @@ export function BrandTile({
   ) : Lucide ? (
     <Lucide width={glyphSize} height={glyphSize} strokeWidth={2.2} aria-hidden="true" />
   ) : (
-    <span className="font-display font-bold leading-none" style={{ fontSize: Math.round(size * (icon.letter && icon.letter.length > 1 ? 0.34 : 0.44)) }}>
+    <span className="font-display font-bold leading-none" aria-hidden="true" style={{ fontSize: Math.round(size * (icon.letter && icon.letter.length > 1 ? 0.34 : 0.44)) }}>
       {icon.letter ?? "?"}
     </span>
   );

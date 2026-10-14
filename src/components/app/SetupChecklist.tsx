@@ -4,7 +4,7 @@ import { getDb } from "@/lib/db";
 import { getUser, isAnonymous } from "@/lib/auth/session";
 import { getBotSetup, getOwnedBot, listBridgeDevices } from "@/lib/data";
 import { CHANNEL_BY_KIND, type ChannelKind } from "@/lib/channels/catalog";
-import { getConnector } from "@/lib/connectors";
+import { connectionName } from "@/lib/connectors";
 
 /** What's left to finish for this bot — one quiet line above the chat. */
 export async function SetupChecklist({ botId }: { botId: string }) {
@@ -27,8 +27,7 @@ export async function SetupChecklist({ botId }: { botId: string }) {
   }
   for (const c of connections) {
     if (c.status !== "needs_auth" && c.status !== "error") continue;
-    const def = getConnector(c.connectorId);
-    todo.push({ label: `Sign in to ${def?.name ?? c.connectorId}`, href: `/app/bots/${botId}/tools#${c.connectorId}` });
+    todo.push({ label: `Sign in to ${connectionName(c)}`, href: `/app/bots/${botId}/tools#${c.connectorId}` });
   }
   if (isAnonymous(user)) todo.push({ label: "Save your account", href: `/login?next=/app/bots/${botId}` });
   if (!todo.length) return null;

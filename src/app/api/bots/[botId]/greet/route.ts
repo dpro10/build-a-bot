@@ -4,7 +4,7 @@ import { apiError, authedBot, sameOrigin, type RouteCtx } from "@/lib/api";
 import { runTurn } from "@/lib/agent/run";
 import { greetingDirective } from "@/lib/agent/prompt";
 import { ensureConversation } from "@/lib/channels/outbound";
-import { getConnector } from "@/lib/connectors";
+import { connectionName, getConnector } from "@/lib/connectors";
 import { JOB_BY_ID } from "@/lib/jobs";
 import { sseResponse } from "@/lib/sse";
 
@@ -22,9 +22,11 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string }>) {
 
   const connections = await a.db.select().from(schema.connections).where(eq(schema.connections.botId, botId));
   const appNames = connections
-    .map((c) => getConnector(c.connectorId))
-    .filter((d): d is NonNullable<typeof d> => Boolean(d && !d.via.some((v) => v.kind === "builtin")))
-    .map((d) => d.name);
+    .filter((c) => {
+      const d = getConnector(c.connectorId);
+      return Boolean(d && !d.via.some((v) => v.kind === "builtin"));
+    })
+    .map(connectionName);
   const starters = (a.bot.jobs ?? []).flatMap((j) => JOB_BY_ID[j as keyof typeof JOB_BY_ID]?.starters ?? []);
 
   return sseResponse(async (send, signal) => {

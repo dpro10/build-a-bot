@@ -199,6 +199,36 @@ describe("agent pipeline (demo brain)", () => {
     expect(replies.text).not.toMatch(/Canvas|GitHub/);
   });
 
+  it("a built-in the owner took out in the builder stays out", async () => {
+    const [other] = await db
+      .insert(schema.users)
+      .values({ id: "usr_exact", email: "exact@example.com", emailVerifiedAt: new Date(), timezone: "UTC", plan: "pro" })
+      .returning();
+    const base = {
+      avatar: "otto" as const,
+      color: "grape" as const,
+      jobs: ["research"],
+      brain: { kind: "included" as const, model: "nvidia/Nemotron-3_5-Lightning" },
+      trust: "ask" as const,
+      channels: [],
+      contact: {},
+      ageConfirmed: true as const,
+      customMcp: [],
+    };
+    const connectorsOf = async (botId: string) =>
+      (await db.select().from(schema.connections).where(eq(schema.connections.botId, botId))).map((c) => c.connectorId).sort();
+
+    // The builder's exact list: Research without web search.
+    const exact = await createBot(db, other, { ...base, name: "Exact", connectors: ["wikipedia", "news"], exactConnectors: true });
+    if (!exact.ok) throw new Error(exact.error);
+    expect(await connectorsOf(exact.bot.id)).toEqual(["news", "wikipedia"]);
+
+    // Other callers still get the job's built-ins.
+    const loose = await createBot(db, other, { ...base, name: "Loose", connectors: [] });
+    if (!loose.ok) throw new Error(loose.error);
+    expect(await connectorsOf(loose.bot.id)).toEqual(expect.arrayContaining(["web_search", "web_reader", "wikipedia", "news"]));
+  });
+
   it("ask-me-first: drafts the send, runs it only after approval, then remembers the contact", async () => {
     const bot = await makeBot("ask");
     const res = await say(bot, "reply to sam saying yes, 12:30 works");

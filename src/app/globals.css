@@ -52,7 +52,7 @@
   --input: #383446;
   --ring: #9b85ff;
   --primary: #6a4af5;
-  --primary-hover: #7a5cff;
+  --primary-hover: #7656fb; /* white text stays above 4.5:1 */
   --primary-ink: #ab9bff;
   --primary-foreground: #ffffff;
   --primary-soft: #251f43;

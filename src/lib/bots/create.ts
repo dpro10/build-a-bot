@@ -54,6 +54,11 @@ export const createBotSchema = z.object({
   instructions: z.string().max(4000).optional(),
   brain: brainSchema,
   connectors: z.array(z.string().max(60)).max(200).default([]),
+  /**
+   * The builder sends the full list, the jobs' built-ins included, so one the owner took
+   * out stays out. Other callers get each job's built-ins added for them.
+   */
+  exactConnectors: z.boolean().optional(),
   /** Any MCP servers the owner pasted (https only); they sign in after the bot is born. */
   customMcp: z
     .array(z.object({ url: z.string().url().max(500).refine((u) => u.startsWith("https://"), "Use an https:// URL"), name: z.string().trim().max(60).optional() }))
@@ -179,9 +184,9 @@ export async function createBot(db: Db, owner: User, input: CreateBotInput): Pro
     })
     .returning();
 
-  // Connections (built-ins from jobs are added too).
+  // Connections (built-ins from jobs are added too, unless the list is already exact).
   const connectorIds = new Set(input.connectors);
-  for (const j of jobs) for (const b of JOB_BY_ID[j as keyof typeof JOB_BY_ID]?.builtins ?? []) connectorIds.add(b);
+  if (!input.exactConnectors) for (const j of jobs) for (const b of JOB_BY_ID[j as keyof typeof JOB_BY_ID]?.builtins ?? []) connectorIds.add(b);
   const thirdPartyLimit = plan.limits.connectors;
   let thirdParty = 0;
   for (const connectorId of connectorIds) {
