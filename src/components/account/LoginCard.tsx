@@ -6,7 +6,7 @@ import { Avatar } from "@/components/avatar";
 import { Button } from "@/components/ui/button";
 import { FieldHint, Input, Label } from "@/components/ui/input";
 import { toast } from "@/components/ui/toaster";
-import { api } from "@/lib/client/api";
+import { api, ApiError } from "@/lib/client/api";
 import { cn, isEmail } from "@/lib/utils";
 import type { AvatarId, AvatarMood, ColorwayId } from "@/lib/avatars";
 import { clock } from "./time";
@@ -75,6 +75,10 @@ export function LoginCard({
   const [linkError, setLinkError] = React.useState<string | null>(error);
   const [sentTo, setSentTo] = React.useState("");
   const [demoLink, setDemoLink] = React.useState<string | null>(null);
+  // Demo servers ask the operator's own (admin) emails for the admin code too.
+  const [needsAdminCode, setNeedsAdminCode] = React.useState(false);
+  const [adminCode, setAdminCode] = React.useState("");
+  const adminCodeRef = React.useRef<HTMLInputElement>(null);
   const [cooldownUntil, setCooldownUntil] = React.useState(0);
   const [now, setNow] = React.useState(0);
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -119,7 +123,9 @@ export function LoginCard({
     setSending(true);
     setFieldError(null);
     try {
-      const res = await api<{ sent: boolean; demoLink: string | null }>("/api/auth/magic", { body: { email: value, next } });
+      const res = await api<{ sent: boolean; demoLink: string | null }>("/api/auth/magic", {
+        body: { email: value, next, ...(needsAdminCode && adminCode.trim() ? { adminCode: adminCode.trim() } : {}) },
+      });
       // Keep the link on whatever host this page is on (the server builds it from APP_URL).
       let link = res.demoLink;
       if (link) {
@@ -138,7 +144,11 @@ export function LoginCard({
       if (opts.resend) toast.success(res.sent ? "Sent a fresh link. Check your inbox." : "Here's a fresh link.");
     } catch (err) {
       const message = (err as Error).message || "Couldn't send the link. Try again.";
-      if (opts.resend) toast.error(message);
+      if (err instanceof ApiError && err.data.needsAdminCode) {
+        setNeedsAdminCode(true);
+        setFieldError(message);
+        requestAnimationFrame(() => adminCodeRef.current?.focus());
+      } else if (opts.resend) toast.error(message);
       else setFieldError(message);
     } finally {
       setSending(false);
@@ -224,6 +234,7 @@ export function LoginCard({
                 onChange={(e) => {
                   setEmail(e.target.value);
                   if (fieldError) setFieldError(null);
+                  if (needsAdminCode) setNeedsAdminCode(false);
                 }}
                 aria-invalid={fieldError ? true : undefined}
                 aria-describedby={fieldError ? "login-email-error" : saving ? "login-email-hint" : undefined}
@@ -239,6 +250,20 @@ export function LoginCard({
                 </FieldHint>
               ) : null}
             </div>
+
+            {needsAdminCode ? (
+              <div className="mt-4 flex flex-col gap-2">
+                <Label htmlFor="login-admin-code">Admin code</Label>
+                <Input
+                  ref={adminCodeRef}
+                  id="login-admin-code"
+                  type="password"
+                  autoComplete="current-password"
+                  value={adminCode}
+                  onChange={(e) => setAdminCode(e.target.value)}
+                />
+              </div>
+            ) : null}
 
             <Button type="submit" size="lg" className="mt-5 w-full" loading={sending}>
               {sending ? "Sending…" : (

@@ -257,6 +257,25 @@ Built (research: `docs/research/meetings-2026-10-14.md`):
   - When a Mac can't get the call's audio, the app says it's a permission problem and keeps going with the mic only.
   - "Unpair" revokes the computer's token on the server, not just on the computer.
 
+## Decision: host on Vercel + Supabase; public demo for the walkthrough (Diego, 2026-10-14)
+
+Diego asked: "Is vercel the right software to use for this? or AWS or google or something else?" and, about the database, "is supabase google aws cloudfare which one is the best? look into cloudfare especially." Research: `docs/research/hosting-2026-10-14.md`.
+
+- **Host: Vercel.** Diego's team is already on Pro, which allows commercial use and the every-minute reminder cron.
+  - Vercel and Supabase run the app with no code changes.
+  - Cloudflare Workers would need about a week of changes (`after()` stops 30 s after the response, among others) to save $15–30 a month.
+  - AWS Amplify doesn't support Next 16, App Runner is closed to new customers, and Cloud Run costs about $45–50 a month always on.
+- **Database: Supabase Postgres.** Cloudflare D1 is SQLite, so it would mean a data-layer rewrite (1–2 weeks) to save about $10 a month. Cloudflare has no Postgres of its own.
+- **Free first.** Diego: "cant we use the free version at first to test this out and the move it to paid after if its working?"
+  - Start in a free Supabase organization; Diego's main org is on Pro, where each project is billed.
+  - Move the project to the Pro org (Transfer project) once it's working.
+- **Cloudflare later, all free:** Turnstile on bot creation; Email Routing for bots' inboxes; Workers AI Whisper as the transcription fallback.
+- **Public demo.** Diego: "anyone can open it, only i have the admin account."
+  - The walkthrough runs in demo mode on a public URL; the admin is Diego's Gmail.
+  - Demo mode shows sign-in links on screen, so admin emails also need `ADMIN_SIGNIN_CODE`, a code Diego sets on the server.
+  - Other demo accounts can still be claimed by anyone, so testers shouldn't paste real API keys or connect real accounts until real email sign-in (Resend + a verified domain) is set up.
+- **Brain:** Diego adds his own Token Factory and Tavily keys in Vercel; keys never go through chat or the repo.
+
 ## Security review before Diego's walkthrough (2026-10-14)
 
 A code review of the server and the desktop app. Each fix has a test that fails on the old code.
