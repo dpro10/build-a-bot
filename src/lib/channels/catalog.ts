@@ -1,0 +1,207 @@
+/**
+ * Ways to talk to a bot. Multiple can be on at once; web chat is always on.
+ * Availability reflects platform rules checked 2026-10-13 (docs/research-2026-10-13.md).
+ */
+import type { live } from "@/lib/env";
+
+export const CHANNEL_KINDS = [
+  "web",
+  "voice",
+  "sms",
+  "email",
+  "telegram",
+  "discord",
+  "slack",
+  "whatsapp",
+  "imessage",
+  "teams",
+  "google_chat",
+  "signal",
+] as const;
+export type ChannelKind = (typeof CHANNEL_KINDS)[number];
+
+export type ChannelDef = {
+  kind: ChannelKind;
+  name: string;
+  tagline: string;
+  description: string;
+  /** lucide icon name, or simple-icons slug when `brand` is true. */
+  icon: string;
+  brand?: boolean;
+  color: string;
+  minPlan: "free" | "plus" | "pro";
+  availability: "available" | "beta" | "waitlist" | "soon";
+  /** What we need from the owner in the builder. */
+  needs: "none" | "phone" | "email";
+  /** Integration that must be configured (or demo mode) for this to work. */
+  requires?: keyof typeof live;
+  /** How it's formatted when the bot writes on this channel. */
+  style: "rich" | "plain" | "voice" | "email";
+  note?: string;
+};
+
+export const CHANNELS: ChannelDef[] = [
+  {
+    kind: "web",
+    name: "Web & app",
+    tagline: "Always on",
+    description: "Chat in your browser or add it to your home screen.",
+    icon: "MessageCircle",
+    color: "#7C5CFF",
+    minPlan: "free",
+    availability: "available",
+    needs: "none",
+    style: "rich",
+  },
+  {
+    kind: "voice",
+    name: "Phone calls",
+    tagline: "Call it, or let it call you",
+    description: "Talk out loud. It can also call you with your morning brief.",
+    icon: "Phone",
+    color: "#19B57A",
+    minPlan: "plus",
+    availability: "available",
+    needs: "phone",
+    requires: "twilio",
+    style: "voice",
+    note: "US & Canada numbers to start.",
+  },
+  {
+    kind: "sms",
+    name: "Text messages",
+    tagline: "Plain old SMS",
+    description: "Text it like a friend. Works on any phone.",
+    icon: "MessageSquareText",
+    color: "#0EA5E9",
+    minPlan: "plus",
+    availability: "available",
+    needs: "phone",
+    requires: "twilio",
+    style: "plain",
+    note: "US & Canada numbers to start.",
+  },
+  {
+    kind: "email",
+    name: "Email",
+    tagline: "Its own email address",
+    description: "Email it or forward things to it. It replies from its own address.",
+    icon: "Mail",
+    color: "#F59E0B",
+    minPlan: "free",
+    availability: "available",
+    needs: "email",
+    requires: "email",
+    style: "email",
+  },
+  {
+    kind: "telegram",
+    name: "Telegram",
+    tagline: "Your own named bot, one tap",
+    description: "Get a Telegram bot with your bot's name. Free and instant.",
+    icon: "telegram",
+    brand: true,
+    color: "#26A5E4",
+    minPlan: "free",
+    availability: "available",
+    needs: "none",
+    style: "rich",
+  },
+  {
+    kind: "discord",
+    name: "Discord",
+    tagline: "DMs and servers",
+    description: "Add it to Discord and chat with /ask anywhere.",
+    icon: "discord",
+    brand: true,
+    color: "#5865F2",
+    minPlan: "free",
+    availability: "available",
+    needs: "none",
+    requires: "discord",
+    style: "rich",
+  },
+  {
+    kind: "slack",
+    name: "Slack",
+    tagline: "DM it at work",
+    description: "Add it to your Slack workspace and DM it like a teammate.",
+    icon: "slack",
+    brand: true,
+    color: "#4A154B",
+    minPlan: "free",
+    availability: "available",
+    needs: "none",
+    style: "rich",
+  },
+  {
+    kind: "whatsapp",
+    name: "WhatsApp",
+    tagline: "EU only for now",
+    description: "Meta's rules block general AI assistants on WhatsApp in the US.",
+    icon: "whatsapp",
+    brand: true,
+    color: "#25D366",
+    minPlan: "plus",
+    availability: "waitlist",
+    needs: "phone",
+    style: "plain",
+  },
+  {
+    kind: "imessage",
+    name: "iMessage",
+    tagline: "Blue bubbles",
+    description: "Text it from your iPhone's Messages app.",
+    icon: "imessage",
+    brand: true,
+    color: "#34C759",
+    minPlan: "plus",
+    availability: "waitlist",
+    needs: "phone",
+    style: "plain",
+  },
+  {
+    kind: "teams",
+    name: "Microsoft Teams",
+    tagline: "For work chats",
+    description: "Chat with it inside Teams.",
+    icon: "Users",
+    color: "#6264A7",
+    minPlan: "pro",
+    availability: "soon",
+    needs: "none",
+    style: "rich",
+  },
+  {
+    kind: "google_chat",
+    name: "Google Chat",
+    tagline: "For Google Workspace",
+    description: "Chat with it inside Google Chat.",
+    icon: "googlechat",
+    brand: true,
+    color: "#00AC47",
+    minPlan: "pro",
+    availability: "soon",
+    needs: "none",
+    style: "rich",
+  },
+  {
+    kind: "signal",
+    name: "Signal",
+    tagline: "Private messaging",
+    description: "Chat with it on Signal.",
+    icon: "signal",
+    brand: true,
+    color: "#3A76F0",
+    minPlan: "plus",
+    availability: "soon",
+    needs: "phone",
+    style: "plain",
+  },
+];
+
+export const CHANNEL_BY_KIND = Object.fromEntries(CHANNELS.map((c) => [c.kind, c])) as Record<ChannelKind, ChannelDef>;
+
+export function isChannelKind(value: unknown): value is ChannelKind {
+  return typeof value === "string" && (CHANNEL_KINDS as readonly string[]).includes(value);
+}
