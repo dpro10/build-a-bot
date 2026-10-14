@@ -24,7 +24,10 @@ export function sseResponse(run: (send: (event: unknown) => void, signal: AbortS
       try {
         await run(send, signal);
       } catch (err) {
-        send({ type: "error", message: (err as Error)?.message?.slice(0, 300) ?? "Something went wrong" });
+        // Brain and tool failures are answered inside the turn; whatever lands here is ours.
+        // The details go to the server log, and the chat gets a plain sentence (never SQL).
+        console.error("[stream] the turn failed:", err);
+        send({ type: "error", message: "Something went wrong on our side. Try again in a moment." });
       } finally {
         clearInterval(keepAlive);
         closed = true;
