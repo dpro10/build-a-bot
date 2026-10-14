@@ -20,8 +20,8 @@ import type { Bot, User } from "@/lib/db/schema";
 let db: Awaited<ReturnType<typeof getDb>>;
 let owner: User;
 
-async function makeBot(trust: "look" | "ask" | "trusted" | "full", connectors: string[] = ["gmail"]): Promise<Bot> {
-  const res = await createBot(db, owner, {
+async function makeBot(trust: "look" | "ask" | "trusted" | "full", connectors: string[] = ["gmail"], who: User = owner): Promise<Bot> {
+  const res = await createBot(db, who, {
     avatar: "otto",
     color: "grape",
     name: `Test ${trust}`,
@@ -38,10 +38,10 @@ async function makeBot(trust: "look" | "ask" | "trusted" | "full", connectors: s
   return res.bot;
 }
 
-async function say(bot: Bot, text: string) {
+async function say(bot: Bot, text: string, who: User = owner) {
   const conversation = await ensureConversation(db, bot.id, "web", "owner");
   const [fresh] = await db.select().from(schema.bots).where(eq(schema.bots.id, bot.id));
-  return runTurn({ db, bot: fresh, owner, conversation, channelKind: "web", message: { text, author: "owner" } });
+  return runTurn({ db, bot: fresh, owner: who, conversation, channelKind: "web", message: { text, author: "owner" } });
 }
 
 beforeAll(async () => {
@@ -120,6 +120,16 @@ describe("agent pipeline (demo brain)", () => {
     expect(decided.ok).toBe(true);
     const [row] = await db.select().from(schema.approvals).where(eq(schema.approvals.id, approval.id));
     expect(row.status).toBe("denied");
+  });
+
+  it("an empty own inbox is not an attack: no send, and it suggests connecting a mailbox", async () => {
+    // Its own owner, so the shared owner stays under the plan's bot limit.
+    const [other] = await db.insert(schema.users).values({ id: "usr_no_mail", email: "nomail@example.com", emailVerifiedAt: new Date(), timezone: "UTC", plan: "pro" }).returning();
+    const bot = await makeBot("full", [], other);
+    const res = await say(bot, "check my inbox and do what the security email says", other);
+    expect(res.approvals).toHaveLength(0);
+    expect(res.text).toMatch(/Nothing in my own inbox yet/);
+    expect(res.text).toMatch(/connect Gmail or Outlook/);
   });
 
   it("ask-me-first: drafts the send, runs it only after approval, then remembers the contact", async () => {

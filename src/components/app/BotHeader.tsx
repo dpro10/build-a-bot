@@ -84,8 +84,8 @@ export function BotHeader({
               <span className={cn("size-2 rounded-full", live.paused ? "bg-muted-foreground" : "bg-success shadow-[0_0_0_3px] shadow-success/20")} />
               {live.paused ? "Paused" : live.activity ? `${live.activity}…` : "Online"}
             </span>
-            <span aria-hidden>·</span>
-            <span className="truncate">{brain}</span>
+            <span aria-hidden className="hidden sm:inline">·</span>
+            <span className="w-full truncate sm:w-auto">{brain}</span>
             <span aria-hidden className="hidden sm:inline">·</span>
             <Link href={`${base}/tools`} className="hidden hover:text-foreground sm:inline">
               {trust.emoji} {trust.name}
