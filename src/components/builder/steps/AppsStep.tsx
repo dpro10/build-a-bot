@@ -98,7 +98,7 @@ export function AppsStep({
           </h2>
           {!demo ? (
             <span className={cn("text-sm", overLimit ? "font-semibold text-warning" : "text-muted-foreground")}>
-              {thirdParty} of {limit >= 50 ? "unlimited" : limit} on {PLANS[plan].name}
+              {thirdParty} of {limit} apps on {PLANS[plan].name}
             </span>
           ) : null}
         </div>
@@ -106,7 +106,7 @@ export function AppsStep({
           <div className="flex items-start gap-2 rounded-2xl bg-warning-soft px-3.5 py-2.5 text-sm text-warning">
             <Info className="mt-0.5 size-4 shrink-0" />
             <span>
-              {PLANS[plan].name} connects {limit} apps per bot. The first {limit} will be added now; upgrade to Plus anytime to add the rest.
+              {PLANS[plan].name} connects {limit} apps per bot. The first {limit} will be added now; upgrade to {plan === "free" ? "Plus" : "Pro"} anytime to add the rest.
             </span>
           </div>
         ) : null}

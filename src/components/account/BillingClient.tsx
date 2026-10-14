@@ -139,7 +139,7 @@ export function PlanPicker({
           } else if (mode === "demo") {
             button = (
               <Button variant={up ? "primary" : "outline"} className="w-full" loading={busy === id} disabled={busy !== null} onClick={() => demoSwitch(id)}>
-                {busy !== id ? <Zap /> : null} Demo: switch instantly
+                {busy !== id ? <Zap /> : null} Switch to {plan.name}
               </Button>
             );
           } else if (mode === "stripe" && (hasSubscription || id === "free")) {

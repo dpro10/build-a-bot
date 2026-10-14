@@ -462,3 +462,24 @@ describe("meeting settings changed during a recording", () => {
     expect((m.meta as { pausedAt?: string }).pausedAt).toBeUndefined();
   });
 });
+
+describe("a recording replaced by a new one", () => {
+  it("is handed back so its notes get written now, not at the next rescue", async () => {
+    const owner = await newOwner("usr_replaced");
+    const bot = await makeBot(owner);
+    const first = await startMeeting(db, { bot, owner, source: "browser", app: "zoom" });
+    if (!first.ok) throw new Error(first.error);
+    expect(first.replaced).toEqual([]);
+    const r = await addChunk(db, { meeting: first.meeting, owner, track: "mic", chunk: 0, startMs: 0, durationMs: 6000, audio: AUDIO, mime: "audio/webm" });
+    if (!r.ok) throw new Error(r.error);
+
+    // The same browser starts again (the tab was closed mid-call).
+    const second = await startMeeting(db, { bot, owner, source: "browser", app: "zoom" });
+    if (!second.ok) throw new Error(second.error);
+    expect(second.replaced).toEqual([first.meeting.id]);
+    expect((await row(first.meeting.id)).status).toBe("processing");
+
+    await writeMeetingNotes(db, first.meeting.id);
+    expect((await row(first.meeting.id)).status).toBe("ready");
+  });
+});

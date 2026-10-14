@@ -38,7 +38,7 @@ export function RecipeCard({ recipe, className, compact }: { recipe: FeaturedRec
           size={120}
           mood="idle"
           className="-mb-3 h-auto w-[112px] transition duration-300 group-hover:-translate-y-1 group-hover:scale-[1.03]"
-          title={`${recipe.name}, the ${title.toLowerCase()} bot`}
+          title={`${recipe.name}, the ${title.replace(/\b[A-Z][a-z]+\b/g, (w) => w.toLowerCase())} bot`}
         />
         <span className="absolute top-4 right-4 rounded-full bg-card/85 px-2.5 py-1 text-xs font-semibold shadow-soft backdrop-blur">
           <span aria-hidden="true">{trust.emoji}</span> {trust.name}

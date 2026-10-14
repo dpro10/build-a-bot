@@ -147,11 +147,7 @@ export default function SafetyPage() {
         <DocSection id="hard-limits" title="Hard limits at every level" icon={<Lock />}>
           <p>These apply on every plan and every trust level, Full faith included. No setting turns them off.</p>
           <ul className="flex flex-col gap-2">
-            {[
-              ...HARD_LIMITS,
-              `Deleting more than ${BULK_DELETE_THRESHOLD} things at once asks you first.`,
-              "Changes in money, health and identity apps ask you first.",
-            ].map((l) => (
+            {[...HARD_LIMITS, `Deleting more than ${BULK_DELETE_THRESHOLD} things at once asks you first.`].map((l) => (
               <li key={l} className="flex gap-3 rounded-2xl bg-background-2 p-3 text-[15px] leading-snug">
                 <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-foreground text-background" aria-hidden="true">
                   <Lock className="size-3" />

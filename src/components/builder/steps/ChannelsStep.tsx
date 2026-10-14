@@ -159,7 +159,7 @@ export function ChannelsStep({
                 <BrandTile icon={channelIcon(def)} size={24} />
                 {def.name}
                 {waitlist ? (
-                  <span className="text-xs opacity-80">{active ? "· On the waitlist" : "· Join waitlist"}</span>
+                  <span className="text-xs">{active ? "· On the waitlist" : "· Join waitlist"}</span>
                 ) : (
                   <span className="inline-flex items-center gap-1 text-xs">
                     <Lock className="size-3" /> Soon

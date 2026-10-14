@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { Bot, Brain, Check, Clock, MessageCircle, Puzzle, ShieldCheck, Sparkles, Sun, UserRound } from "lucide-react";
+import { Bot, Brain, CalendarClock, Check, Clock, MessageCircle, Puzzle, ShieldCheck, Sparkles, Sun, UserRound } from "lucide-react";
 import { Avatar } from "@/components/avatar";
 import { BrandTile } from "@/components/brand/icons";
 import { channelIcon } from "@/components/catalog/channel-icon";
@@ -16,8 +16,10 @@ import { CHANNEL_BY_KIND } from "@/lib/channels/catalog";
 import { getConnector, type ConnectorDef } from "@/lib/connectors";
 import { INCLUDED_MODELS } from "@/lib/models/catalog";
 import { TRUST } from "@/lib/trust";
+import type { RecipeData } from "@/lib/recipes";
 import { cn } from "@/lib/utils";
-import { brainSummary } from "../BotPreview";
+import { formatDays, formatTime as formatRoutineTime } from "@/components/marketing/recipes/format";
+import { brainSummary, colorwayTint } from "../BotPreview";
 import type { BuilderState, StepId } from "../state";
 import { StepHeading } from "./StepHeading";
 
@@ -52,6 +54,19 @@ function formatTime(t: string) {
   return `${((h + 11) % 12) + 1}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
 }
 
+/** What the morning brief covers, from the jobs picked. Mirrors briefPrompt() in src/lib/bots/create.ts. */
+export function briefTopics(jobs: string[]): string {
+  const parts: string[] = [];
+  if (jobs.includes("calendar")) parts.push("your calendar");
+  if (jobs.includes("inbox")) parts.push("emails that need a reply");
+  if (jobs.includes("reminders") || !parts.length) parts.push("your reminders");
+  if (jobs.includes("research")) parts.push("a headline worth knowing");
+  if (jobs.includes("money")) parts.push("bills coming due");
+  if (jobs.includes("health")) parts.push("a nudge on your habits");
+  parts.push("the weather");
+  return `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;
+}
+
 export function ReviewStep({
   state: s,
   onInstructions,
@@ -62,6 +77,7 @@ export function ReviewStep({
   demo,
   timezone,
   atBotLimit,
+  routines = [],
 }: {
   state: BuilderState;
   onInstructions: (v: string) => void;
@@ -72,6 +88,8 @@ export function ReviewStep({
   demo: boolean;
   timezone: string;
   atBotLimit: boolean;
+  /** Routines the recipe brings along (made with the bot). */
+  routines?: NonNullable<RecipeData["routines"]>;
 }) {
   const name = s.name.trim() || "Your bot";
   const a = AVATARS[s.avatar];
@@ -86,7 +104,7 @@ export function ReviewStep({
       <StepHeading title={`Ready to meet ${name}?`} subtitle="Check everything over. You can change any of it later from the dashboard." />
 
       <div className="overflow-hidden rounded-3xl border border-border bg-card">
-        <div className="flex items-center gap-4 p-4 sm:p-5" style={{ background: `linear-gradient(90deg, ${COLORWAYS[s.color].tint}, transparent)` }}>
+        <div className="flex items-center gap-4 p-4 sm:p-5" style={{ background: `linear-gradient(90deg, ${colorwayTint(s.color)}, transparent)` }}>
           <Avatar avatar={s.avatar} color={s.color} size={84} mood="happy" />
           <div className="min-w-0">
             <div className="font-display text-2xl font-bold">{name}</div>
@@ -95,7 +113,7 @@ export function ReviewStep({
               {s.ownerName.trim() ? ` · calls you ${s.ownerName.trim()}` : ""}
             </div>
           </div>
-          <button type="button" onClick={() => goTo("face")} className="ml-auto self-start text-sm font-semibold text-primary hover:underline">
+          <button type="button" onClick={() => goTo("face")} className="ml-auto self-start text-sm font-semibold text-primary hover:underline" aria-label="Change face">
             Change
           </button>
         </div>
@@ -154,7 +172,8 @@ export function ReviewStep({
               Morning brief
             </label>
             <p className="text-sm text-muted-foreground">
-              {name} reaches out every morning with what matters today — your calendar, emails that need a reply, reminders and the weather. Turn it off anytime.
+              {name} reaches out {s.brief?.on && s.brief.weekdays ? "every weekday morning" : "every morning"} with what matters today: {briefTopics(s.jobs)}. Turn
+              it off anytime.
             </p>
           </div>
           <Switch id="brief-on" checked={Boolean(s.brief?.on)} onCheckedChange={(on) => onBrief({ ...s.brief, on })} aria-label="Morning brief" />
@@ -181,6 +200,31 @@ export function ReviewStep({
           </div>
         ) : null}
       </div>
+
+      {routines.length ? (
+        <div className="rounded-3xl border border-border bg-card p-4 sm:p-5">
+          <div className="flex items-start gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-primary-soft text-primary">
+              <CalendarClock className="size-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h2 className="font-display text-lg font-semibold">Routines from the recipe</h2>
+              <p className="text-sm text-muted-foreground">{name} starts with these. Change or pause them anytime in Routines.</p>
+              <ul className="mt-3 flex flex-col gap-2">
+                {routines.map((r) => (
+                  <li key={r.title} className="rounded-2xl bg-background-2/70 px-3.5 py-2.5 text-sm">
+                    <span className="font-semibold">{r.title}</span>
+                    <span className="text-muted-foreground">
+                      {" "}
+                      · {formatDays(r.days)} at {formatRoutineTime(r.time)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="flex flex-col gap-2">
         <label htmlFor="instructions" className="font-display text-lg font-semibold">
@@ -236,11 +280,11 @@ export function ReviewStep({
           </span>
           <span className="text-sm">
             <span className="font-semibold">I&apos;m 18 or older</span> and I agree to the{" "}
-            <Link href="/legal/terms" target="_blank" className="text-primary underline-offset-2 hover:underline">
+            <Link href="/legal/terms" target="_blank" className="text-primary underline underline-offset-2">
               Terms
             </Link>{" "}
             and{" "}
-            <Link href="/legal/privacy" target="_blank" className="text-primary underline-offset-2 hover:underline">
+            <Link href="/legal/privacy" target="_blank" className="text-primary underline underline-offset-2">
               Privacy Policy
             </Link>
             .
@@ -268,12 +312,14 @@ function Row({ icon, label, children, onEdit }: { icon: React.ReactNode; label: 
         {icon}
         {label}
       </dt>
-      <dd className="min-w-0 flex-1 text-sm">{children}</dd>
-      {onEdit ? (
-        <button type="button" onClick={onEdit} className="text-sm font-semibold text-primary hover:underline">
-          Change
-        </button>
-      ) : null}
+      <dd className="flex min-w-0 flex-1 items-start gap-3 text-sm">
+        <span className="min-w-0 flex-1">{children}</span>
+        {onEdit ? (
+          <button type="button" onClick={onEdit} className="shrink-0 text-sm font-semibold text-primary hover:underline" aria-label={`Change ${label === "Talk" ? "channels" : label.toLowerCase()}`}>
+            Change
+          </button>
+        ) : null}
+      </dd>
     </div>
   );
 }

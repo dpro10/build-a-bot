@@ -1,9 +1,13 @@
 import { z } from "zod";
+import { after } from "next/server";
 import { apiError, json, limitOr429, parseJson, type RouteCtx } from "@/lib/api";
 import { CHUNK_MS, listMeetings, meetingsEnabled, meetingView, startMeeting } from "@/lib/meetings";
 import { MEETING_APP_IDS } from "@/lib/meetings/apps";
 import { meetingAuth } from "@/lib/meetings/auth";
 import { transcriptionAvailable } from "@/lib/transcribe";
+import { writeMeetingNotes } from "@/lib/meetings/notes";
+
+export const maxDuration = 300;
 
 export async function GET(req: Request, ctx: RouteCtx<{ botId: string }>) {
   const { botId } = await ctx.params;
@@ -40,5 +44,13 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string }>) {
     consentNotice: parsed.data.consentNotice,
   });
   if (!res.ok) return apiError(res.status, res.error, { code: res.code, upgrade: res.upgrade, meetingId: res.meetingId });
+  // A recording this one replaced (a closed tab, a crash) gets its notes now, not at the next rescue.
+  if (res.replaced.length) {
+    after(async () => {
+      const { getDb } = await import("@/lib/db");
+      const db = await getDb();
+      for (const id of res.replaced) await writeMeetingNotes(db, id);
+    });
+  }
   return json({ meeting: meetingView(res.meeting), chunkMs: CHUNK_MS }, { status: 201 });
 }

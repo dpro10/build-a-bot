@@ -11,7 +11,7 @@ import { ArrowLeft, ArrowRight, Check, Sparkles, X } from "lucide-react";
 import { Avatar } from "@/components/avatar";
 import { Logo } from "@/components/brand/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { Button } from "@/components/ui/button";
+import { Button, Spinner } from "@/components/ui/button";
 import { toast } from "@/components/ui/toaster";
 import { api, ApiError } from "@/lib/client/api";
 import { AVATARS } from "@/lib/avatars";
@@ -37,6 +37,24 @@ export type BuilderProps = {
   signedIn: boolean;
 };
 
+/**
+ * Each step is its own browser history entry (?step=brain), so Back in the browser, or a phone's back
+ * gesture, goes to the previous step instead of leaving the builder. Next.js keeps this custom state.
+ */
+type StepEntry = { babStep: number; babPrev: number | null };
+
+function stepUrl(i: number): string {
+  const url = new URL(window.location.href);
+  if (i === 0) url.searchParams.delete("step");
+  else url.searchParams.set("step", STEPS[i].id);
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
+function currentEntry(): StepEntry | null {
+  const s = window.history.state as Partial<StepEntry> | null;
+  return typeof s?.babStep === "number" ? { babStep: s.babStep, babPrev: s.babPrev ?? null } : null;
+}
+
 export function Builder({ plan, demo, live, recipe, botCount, signedIn }: BuilderProps) {
   const router = useRouter();
   const [state, setState] = React.useState<BuilderState>(() => initialState(recipe));
@@ -61,52 +79,104 @@ export function Builder({ plan, demo, live, recipe, botCount, signedIn }: Builde
     setShowError(false);
   }, []);
 
-  // Restore a saved draft (unless a recipe link brought them here) and detect the time zone.
+  // Restore a saved draft (a recipe link only restores a draft of that same recipe) and detect the time zone.
   const restoredOnce = React.useRef(false);
   React.useEffect(() => {
     setTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
     if (restoredOnce.current) return;
     restoredOnce.current = true;
-    if (!recipe) {
-      const draft = loadDraft();
-      if (draft && (draft.state.name || draft.step > 0)) {
-        setState((s) => ({ ...s, ...draft.state, brief: draft.state.brief ?? s.brief, ageConfirmed: false }));
-        setStepIndex(draft.step);
-        setMaxReached(draft.step);
-        toast("Picked up where you left off", {
-          action: {
-            label: "Start over",
-            onClick: () => {
-              clearDraft();
-              setState(initialState(null));
-              setStepIndex(0);
-              setMaxReached(0);
-            },
+    let start = 0;
+    const draft = loadDraft();
+    // From a recipe link, only a draft of that same recipe that got past the first step comes back.
+    const usable = draft && (draft.state.name || draft.step > 0) && (!recipe || (draft.state.recipeSlug === recipe.slug && draft.step > 0));
+    if (draft && usable) {
+      start = draft.step;
+      setState((s) => ({ ...s, ...draft.state, brief: draft.state.brief ?? s.brief, ageConfirmed: false }));
+      setStepIndex(start);
+      setMaxReached((m) => Math.max(m, start));
+      toast("Picked up where you left off", {
+        action: {
+          label: "Start over",
+          onClick: () => {
+            clearDraft();
+            setState(initialState(recipe));
+            setStepIndex(0);
+            setMaxReached(recipe ? STEPS.length - 1 : 0);
+            window.history.replaceState({ babStep: 0, babPrev: null } satisfies StepEntry, "", stepUrl(0));
           },
-        });
-      }
+        },
+      });
     }
+    // Stamp this history entry with its step (a reload keeps what was there, so Back still works).
+    const entry = currentEntry();
+    window.history.replaceState(entry?.babStep === start ? entry : ({ babStep: start, babPrev: null } satisfies StepEntry), "", stepUrl(start));
     setHydrated(true);
   }, [recipe]);
+
+  // The browser's Back and Forward move between steps.
+  const maxReachedRef = React.useRef(maxReached);
+  const creatingRef = React.useRef(creating);
+  React.useEffect(() => {
+    maxReachedRef.current = maxReached;
+    creatingRef.current = creating;
+  }, [maxReached, creating]);
+  React.useEffect(() => {
+    const onPop = (e: PopStateEvent) => {
+      const target = (e.state as Partial<StepEntry> | null)?.babStep;
+      if (typeof target !== "number" || creatingRef.current) return;
+      const i = Math.max(0, Math.min(target, maxReachedRef.current, STEPS.length - 1));
+      setStepIndex(i);
+      setShowError(false);
+      if (i !== target) window.history.replaceState({ babStep: i, babPrev: null } satisfies StepEntry, "", stepUrl(i));
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
 
   React.useEffect(() => {
     if (hydrated && !creating) saveDraft(state, stepIndex);
   }, [state, stepIndex, hydrated, creating]);
 
+  // Keep whatever has keyboard focus clear of the sticky header and the fixed footer bar.
+  React.useEffect(() => {
+    const html = document.documentElement;
+    const before = { top: html.style.scrollPaddingTop, bottom: html.style.scrollPaddingBottom };
+    html.style.scrollPaddingTop = "88px";
+    html.style.scrollPaddingBottom = "calc(96px + env(safe-area-inset-bottom))";
+    return () => {
+      html.style.scrollPaddingTop = before.top;
+      html.style.scrollPaddingBottom = before.bottom;
+    };
+  }, []);
+
+  // The key as typed right now. A check that finishes after the key changed must not mark the new key as checked.
+  const apiKeyRef = React.useRef("");
   const setApiKey = (k: string) => {
+    apiKeyRef.current = k;
     setApiKeyState(k);
     setKeyStatus("idle");
     setKeyMessage(null);
   };
 
-  const validateKey = React.useCallback(async (): Promise<boolean> => {
-    if (state.brain.kind !== "byok" || apiKey.trim().length < 8) return false;
+  // The check in flight, so Continue can wait for it instead of starting another.
+  const checkRef = React.useRef<Promise<boolean> | null>(null);
+  const validateKey = React.useCallback((): Promise<boolean> => {
+    const key = apiKey.trim();
+    if (state.brain.kind !== "byok" || key.length < 8) return Promise.resolve(false);
+    const check = runKeyCheck(state.brain, key);
+    checkRef.current = check;
+    return check;
+  }, [apiKey, state.brain]);
+
+  async function runKeyCheck(brain: Extract<BuilderState["brain"], { kind: "byok" }>, key: string): Promise<boolean> {
+    const stale = () => apiKeyRef.current.trim() !== key;
     setKeyStatus("checking");
     setKeyMessage(null);
     try {
       const res = await api<{ ok: boolean; message?: string; unverified?: boolean }>("/api/brain/validate", {
-        body: { provider: state.brain.provider, apiKey: apiKey.trim(), ...(state.brain.provider === "custom" && state.brain.baseUrl ? { baseUrl: state.brain.baseUrl } : {}) },
+        body: { provider: brain.provider, apiKey: key, ...(brain.provider === "custom" && brain.baseUrl ? { baseUrl: brain.baseUrl } : {}) },
       });
+      if (stale()) return false;
       if (res.ok) {
         setKeyStatus("ok");
         setKeyMessage(res.unverified ? (res.message ?? "Saved without a live check.") : "Key works. It's encrypted the moment you finish.");
@@ -116,13 +186,24 @@ export function Builder({ plan, demo, live, recipe, botCount, signedIn }: Builde
       setKeyMessage(res.message ?? "That key didn't work.");
       return false;
     } catch (err) {
+      if (stale()) return false;
       setKeyStatus("error");
       setKeyMessage((err as Error).message);
       return false;
     }
-  }, [apiKey, state.brain]);
+  }
+  // Callers that fire later (the check after a paste) use the latest version, with the pasted key.
+  const validateRef = React.useRef(validateKey);
+  React.useEffect(() => {
+    validateRef.current = validateKey;
+  }, [validateKey]);
 
-  const goTo = (i: number) => {
+  const goTo = (i: number, history: "push" | "replace" = "push") => {
+    if (i !== stepIndex) {
+      const entry: StepEntry = { babStep: i, babPrev: history === "push" ? stepIndex : (currentEntry()?.babPrev ?? null) };
+      if (history === "push") window.history.pushState(entry, "", stepUrl(i));
+      else window.history.replaceState(entry, "", stepUrl(i));
+    }
     setStepIndex(i);
     setMaxReached((m) => Math.max(m, i));
     setShowError(false);
@@ -133,8 +214,9 @@ export function Builder({ plan, demo, live, recipe, botCount, signedIn }: Builde
   };
 
   const next = async () => {
-    if (step === "brain" && state.brain.kind === "byok" && keyStatus === "idle" && apiKey.trim().length >= 8) {
-      const ok = await validateKey();
+    if (step === "brain" && state.brain.kind === "byok" && (keyStatus === "idle" || keyStatus === "checking") && apiKey.trim().length >= 8) {
+      // Typing a key and clicking Continue starts a check on blur; wait for that one rather than dropping the click.
+      const ok = keyStatus === "checking" && checkRef.current ? await checkRef.current : await validateKey();
       if (!ok) {
         setShowError(true);
         return;
@@ -146,7 +228,12 @@ export function Builder({ plan, demo, live, recipe, botCount, signedIn }: Builde
     if (stepIndex < STEPS.length - 1) goTo(stepIndex + 1);
   };
 
-  const back = () => stepIndex > 0 && goTo(stepIndex - 1);
+  const back = () => {
+    if (stepIndex === 0) return;
+    // Same as the browser's Back when the entry below is the previous step; otherwise step back in place.
+    if (currentEntry()?.babPrev === stepIndex - 1) window.history.back();
+    else goTo(stepIndex - 1, "replace");
+  };
 
   const create = async () => {
     const err = stepError("review", state, { apiKey, keyStatus });
@@ -160,6 +247,16 @@ export function Builder({ plan, demo, live, recipe, botCount, signedIn }: Builde
       goTo(STEPS.findIndex((s) => s.id === "brain"));
       return;
     }
+    // Steps can be skipped (a recipe opens with every step reachable): check them all before creating.
+    const blocked = STEPS.findIndex((s) => s.id !== "review" && stepError(s.id, state, { apiKey, keyStatus }));
+    if (blocked >= 0) {
+      const message = stepError(STEPS[blocked].id, state, { apiKey, keyStatus });
+      goTo(blocked);
+      setShowError(true);
+      if (message) toast.error(message);
+      return;
+    }
+    toast.dismiss();
     setCreating("working");
     const started = Date.now();
     try {
@@ -180,6 +277,7 @@ export function Builder({ plan, demo, live, recipe, botCount, signedIn }: Builde
           ...(state.instructions.trim() ? { instructions: state.instructions.trim() } : {}),
           brain,
           connectors: state.connectors,
+          exactConnectors: true,
           customMcp: state.customMcp,
           trust: state.trust,
           channels: state.channels,
@@ -292,7 +390,8 @@ export function Builder({ plan, demo, live, recipe, botCount, signedIn }: Builde
             <Avatar avatar={recipe.avatar} color={recipe.color} size={36} animated={false} />
             <span className="min-w-0 flex-1">
               Making your own <span className="font-semibold">{recipe.name}</span>
-              {recipe.tagline ? <span className="text-muted-foreground"> — {recipe.tagline}</span> : null}. Everything&apos;s filled in; change anything you like.
+              {recipe.tagline ? <span className="text-muted-foreground"> — {recipe.tagline.trim().replace(/[.!]+$/, "")}</span> : null}. Everything&apos;s filled in;
+              change anything you like.
             </span>
             {step === "face" || step === "name" ? (
               <Button size="sm" variant="soft" onClick={() => goTo(STEPS.findIndex((s) => s.id === "brain"))}>
@@ -313,7 +412,8 @@ export function Builder({ plan, demo, live, recipe, botCount, signedIn }: Builde
       </div>
 
       <main className="relative mx-auto grid max-w-6xl gap-8 px-4 pt-6 pb-40 sm:px-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-10 lg:pt-10">
-        <div className="lg:hidden">
+        {/* min-w-0: the strip's one-line speech bubble truncates instead of widening the page on phones. */}
+        <div className="min-w-0 lg:hidden">
           <BotPreviewStrip state={state} step={step} typing={typing} />
         </div>
         <section key={step} className="min-w-0 animate-fade-up" aria-live="polite">
@@ -342,7 +442,7 @@ export function Builder({ plan, demo, live, recipe, botCount, signedIn }: Builde
               onApiKey={setApiKey}
               keyStatus={keyStatus}
               keyMessage={keyMessage}
-              onValidate={() => void validateKey()}
+              onValidate={() => void validateRef.current()}
               plan={plan}
               demo={demo}
               botName={name}
@@ -387,6 +487,7 @@ export function Builder({ plan, demo, live, recipe, botCount, signedIn }: Builde
               demo={demo}
               timezone={timezone}
               atBotLimit={atBotLimit}
+              routines={recipe && state.recipeSlug === recipe.slug ? (recipe.routines ?? []) : []}
             />
           ) : null}
           {!signedIn && step === "review" ? (
@@ -400,7 +501,8 @@ export function Builder({ plan, demo, live, recipe, botCount, signedIn }: Builde
         </section>
         <aside className="hidden lg:block" aria-label="Your bot so far">
           <div className="sticky top-24">
-            <BotPreview state={state} step={step} stepIndex={stepIndex} typing={typing} />
+            {/* Shows everything chosen so far, including steps a recipe filled in or ones you went back from. */}
+            <BotPreview state={state} step={step} stepIndex={maxReached} typing={typing} />
             {demo ? <p className="mt-3 px-2 text-center text-xs text-muted-foreground">Demo mode: apps and channels are simulated, so you can try everything.</p> : null}
           </div>
         </aside>
@@ -422,7 +524,9 @@ export function Builder({ plan, demo, live, recipe, botCount, signedIn }: Builde
             )}
           </div>
           {step !== "review" ? (
-            <Button size="lg" onClick={() => void next()} loading={keyStatus === "checking" && step === "brain"} className="min-w-36">
+            // Not disabled while a key is being checked: a click then waits for the check instead of getting lost.
+            <Button size="lg" onClick={() => void next()} aria-busy={(keyStatus === "checking" && step === "brain") || undefined} className="min-w-36">
+              {keyStatus === "checking" && step === "brain" ? <Spinner /> : null}
               Continue <ArrowRight />
             </Button>
           ) : (

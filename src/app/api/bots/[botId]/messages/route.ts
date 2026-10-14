@@ -1,4 +1,4 @@
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, inArray } from "drizzle-orm";
 import { schema } from "@/lib/db";
 import { authedBot, json, type RouteCtx } from "@/lib/api";
 import { ensureConversation } from "@/lib/channels/outbound";
@@ -22,6 +22,13 @@ export async function GET(req: Request, ctx: RouteCtx<{ botId: string }>) {
   const pendingJobs = await a.db
     .select({ id: schema.bridgeJobs.id, status: schema.bridgeJobs.status })
     .from(schema.bridgeJobs)
-    .where(and(eq(schema.bridgeJobs.botId, botId), eq(schema.bridgeJobs.status, "running")));
-  return json({ messages, approvals, botStatus: freshBot?.status ?? a.bot.status, thinkingOnBridge: pendingJobs.length > 0 });
+    .where(and(eq(schema.bridgeJobs.botId, botId), inArray(schema.bridgeJobs.status, ["queued", "running"])));
+  return json({
+    messages,
+    approvals,
+    botStatus: freshBot?.status ?? a.bot.status,
+    // Running: the owner's computer is thinking. Queued: waiting for that computer to pick it up.
+    thinkingOnBridge: pendingJobs.some((j) => j.status === "running"),
+    waitingOnBridge: pendingJobs.some((j) => j.status === "queued"),
+  });
 }

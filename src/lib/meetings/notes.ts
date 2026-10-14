@@ -10,7 +10,7 @@
  * Bots whose brain is the owner's own Claude/ChatGPT plan write the notes on the
  * owner's computer (a Bridge job that reads the transcript through the bot's tools).
  */
-import { and, asc, eq, lt, or, sql } from "drizzle-orm";
+import { and, asc, count, eq, lt, ne, or, sql } from "drizzle-orm";
 import { schema, type Db } from "@/lib/db";
 import type { Bot, Meeting, MeetingActionItem, User } from "@/lib/db/schema";
 import { appUrl } from "@/lib/env";
@@ -325,7 +325,13 @@ export async function deliverNotes(db: Db, bot: Bot, owner: User, m: Meeting) {
   const url = meetingUrl(m);
   const head = `📝 Notes from “${m.title}” (${formatDuration(m.durationSec)})`;
   if (!m.notes) {
-    await postToWebInbox(db, bot, `${head}\n\n${m.error ?? "No notes this time."}\n\n[Open the transcript](${url})`, cardMeta(m));
+    // No notes (nothing heard, or the brain failed): say so, and only offer a transcript that exists.
+    const [{ n }] = await db
+      .select({ n: count() })
+      .from(schema.meetingSegments)
+      .where(and(eq(schema.meetingSegments.meetingId, m.id), ne(schema.meetingSegments.text, "")));
+    const link = n ? `[Open the transcript](${url})` : `[Open the meeting](${url})`;
+    await postToWebInbox(db, bot, `No notes from “${m.title}” (${formatDuration(m.durationSec)})\n\n${m.error ?? "No notes this time."}\n\n${link}`, cardMeta(m));
     return;
   }
   const items = (m.actionItems ?? []).slice(0, 6).map((a) => `- [ ] ${a.owner ? `${a.owner} — ` : ""}${a.text}${a.due ? ` (by ${a.due})` : ""}`);

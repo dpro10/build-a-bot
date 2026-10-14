@@ -179,7 +179,7 @@ export async function startMeeting(
     /** The owner copied the heads-up for the call before starting. */
     consentNotice?: boolean;
   },
-): Promise<{ ok: true; meeting: Meeting } | MeetingFailure> {
+): Promise<{ ok: true; meeting: Meeting; replaced: string[] } | MeetingFailure> {
   const { bot, owner } = input;
   if (bot.status === "paused") return { ok: false, status: 409, code: "paused", error: `${bot.name} is paused. Resume it to take notes.` };
   if (!transcriptionAvailable()) return { ok: false, status: 503, code: "unavailable", error: "Meeting notes aren't set up on this server yet." };
@@ -194,11 +194,15 @@ export async function startMeeting(
     .select()
     .from(schema.meetings)
     .where(and(eq(schema.meetings.botId, bot.id), eq(schema.meetings.status, "recording")));
+  /** Leftovers wrapped up here: the caller writes their notes (as the finish route does). */
+  const replaced: string[] = [];
   for (const m of active) {
     const stale = Date.now() - m.updatedAt.getTime() > STALE_RECORDING_MS;
     const sameRecorder = m.source === input.source && (m.deviceId ?? null) === (input.deviceId ?? null);
-    if (stale || sameRecorder) await finishMeeting(db, m, { reason: "replaced" });
-    else return { ok: false, status: 409, code: "already_recording", meetingId: m.id, error: `${bot.name} is already taking notes in another meeting.` };
+    if (stale || sameRecorder) {
+      const done = await finishMeeting(db, m, { reason: "replaced" });
+      if (done.status === "processing") replaced.push(done.id);
+    } else return { ok: false, status: 409, code: "already_recording", meetingId: m.id, error: `${bot.name} is already taking notes in another meeting.` };
   }
 
   const app: MeetingAppId = isMeetingApp(input.app) ? input.app : input.source === "browser" ? "browser" : "other";
@@ -228,7 +232,7 @@ export async function startMeeting(
     source: input.source,
     deviceId: input.deviceId ?? null,
   });
-  return { ok: true, meeting };
+  return { ok: true, meeting, replaced };
 }
 
 export type ChunkInput = {

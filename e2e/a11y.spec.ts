@@ -7,6 +7,13 @@ import { expect, test, type Page } from "@playwright/test";
 
 async function scan(page: Page, path: string) {
   await page.goto(path, { waitUntil: "networkidle" });
+  await scanHere(page, path);
+}
+
+/** Scan the page as it is now (after letting entrance animations finish). */
+async function scanHere(page: Page, path: string) {
+  // Resting state: no button left hovered by the last click.
+  await page.mouse.move(0, 0);
   await page.waitForTimeout(600);
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
@@ -97,4 +104,49 @@ test("dark mode", async ({ page }) => {
   for (const path of ["/", "/pricing", "/safety", "/build", `/app/bots/${id}`, `/app/bots/${id}/meetings`, `/app/bots/${id}/tools`, `/app/bots/${id}/channels`, `/app/bots/${id}/settings`, "/app/billing", "/app/bridge"]) {
     await scan(page, path);
   }
+});
+
+/** Walks the whole builder, opening the parts that only show after a choice, and scans every step. */
+async function scanBuilder(page: Page, theme: string) {
+  const next = () => page.getByRole("contentinfo").getByRole("button", { name: /Continue/ }).click();
+  await page.goto("/build", { waitUntil: "networkidle" });
+  await page.getByRole("radio", { name: /Otto/ }).click();
+  await scanHere(page, `${theme} build: face`);
+  await next();
+  await page.getByLabel("Bot name").fill("Inky");
+  await scanHere(page, `${theme} build: name`);
+  await next();
+  await scanHere(page, `${theme} build: brain (included)`);
+  await page.getByRole("radio", { name: /Your Claude or ChatGPT plan/ }).click();
+  await scanHere(page, `${theme} build: brain (plan)`);
+  await page.getByRole("radio", { name: /Your own API key/ }).click();
+  await scanHere(page, `${theme} build: brain (own key)`);
+  await page.getByRole("radio", { name: /Free open models/ }).click();
+  await next();
+  await page.getByRole("button", { name: /Meetings/ }).first().click();
+  await scanHere(page, `${theme} build: apps`);
+  await next();
+  await page.getByRole("radio", { name: /Full faith/ }).click();
+  await scanHere(page, `${theme} build: trust`);
+  await next();
+  await page.getByRole("button", { name: /Text messages/ }).click();
+  await page.getByRole("button", { name: /^Email/ }).click();
+  await page.getByRole("button", { name: /WhatsApp/ }).click();
+  await page.getByLabel("Your mobile number").fill("+1 512 555 0123");
+  await page.getByLabel("Your email").fill("owner@example.com");
+  await scanHere(page, `${theme} build: channels`);
+  await next();
+  await page.getByText("I'm 18 or older").click();
+  await scanHere(page, `${theme} build: review`);
+  // No sideways scrolling on any step (checked here on the last one; phones run this too).
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+}
+
+test("every builder step, light", async ({ page }) => {
+  await scanBuilder(page, "light");
+});
+
+test("every builder step, dark", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("bab-theme", "dark"));
+  await scanBuilder(page, "dark");
 });

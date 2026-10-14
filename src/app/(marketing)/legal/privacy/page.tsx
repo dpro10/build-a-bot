@@ -35,6 +35,7 @@ const SUBPROCESSORS: { name: string; purpose: string; data: string }[] = [
   { name: "Nebius Token Factory", purpose: "The included open models", data: "Messages and context, when your bot uses an included model" },
   { name: "Your chosen AI provider", purpose: "Your own API key, if you add one", data: "Messages and context, sent to that provider only" },
   { name: "Tavily", purpose: "Web search", data: "Search queries" },
+  { name: "Groq, with Together AI as a backup", purpose: "Turning meeting audio into text", data: "Meeting audio, only while it's turned into text" },
   { name: "Composio", purpose: "Sign-in and actions for many apps", data: "App tokens and the actions your bot takes in those apps" },
   { name: "Twilio", purpose: "Phone calls and texts", data: "Phone numbers, texts, call speech and transcripts" },
   { name: "AgentMail and Resend", purpose: "Your bot's email address and sign-in emails", data: "Email addresses and email content" },
@@ -48,7 +49,7 @@ function subprocessors() {
   const webActions = getConnector("browser");
   if (!webActions || webActions.status === "soon") return SUBPROCESSORS;
   const row = { name: "Browser Use", purpose: "Web actions in a cloud browser", data: "The pages your bot visits and what it types into them" };
-  return [...SUBPROCESSORS.slice(0, 5), row, ...SUBPROCESSORS.slice(5)];
+  return [...SUBPROCESSORS.slice(0, 6), row, ...SUBPROCESSORS.slice(6)];
 }
 
 export default function PrivacyPage() {
@@ -70,6 +71,7 @@ export default function PrivacyPage() {
             </li>
             <li>API keys and app logins are encrypted at rest and never shown again.</li>
             <li>Your Claude or ChatGPT login never leaves your computer.</li>
+            <li>Meeting notes only listen after you say yes. The audio becomes text and isn&apos;t kept.</li>
             <li>
               You can export everything or delete your account from your <Link href="/app/account">Account page</Link>.
             </li>
@@ -94,6 +96,13 @@ export default function PrivacyPage() {
           </p>
           <h3>Receipts</h3>
           <p>A record of every action your bot took or tried to take, why, and what it cost.</p>
+          <h3>Meetings</h3>
+          <p>
+            If you use meeting notes: the transcript of each meeting you said yes to, the notes your bot writes from it, and a record of when you
+            said yes and whether you shared the heads-up. Lines are labeled by microphone (&ldquo;You&rdquo;, &ldquo;Others&rdquo; or &ldquo;Room&rdquo;),
+            never by recognizing voices. The audio is turned into text as it arrives and isn&apos;t stored on our servers. If an upload fails, the desktop
+            app keeps that bit of audio on your own computer until it&apos;s sent, then deletes it.
+          </p>
           <h3>Connection tokens and keys</h3>
           <p>
             Tokens that let your bot use the apps you connect, your channel tokens and any API keys you add. These are encrypted as soon as they
@@ -197,8 +206,12 @@ export default function PrivacyPage() {
         <DocSection id="retention" title={title("retention")}>
           <ul>
             <li>We keep your data while your account is open, so your bots remember what they should.</li>
-            <li>Delete a bot and its messages, memories, notes and receipts go with it. Delete your account and everything goes.</li>
+            <li>Delete a bot and its messages, memories, notes, meetings and receipts go with it. Delete your account and everything goes.</li>
             <li>You can delete individual memories and notes in the app at any time.</li>
+            <li>
+              Meeting transcripts are deleted after 90 days, unless you choose 30 days or to keep them. The notes from a meeting stay until you
+              delete them, and you can delete a meeting, or just its transcript, at any time.
+            </li>
             <li>Sign-in sessions expire after 180 days. Sign-in links work once and expire after 20 minutes.</li>
             <li>Deleted data can stay in encrypted backups for a short time before it&apos;s overwritten.</li>
           </ul>

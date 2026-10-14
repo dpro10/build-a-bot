@@ -207,7 +207,7 @@ export function ConnectionRow({
             <span className={cn("font-semibold", off && "text-muted-foreground")}>{name}</span>
             {def.sensitive ? (
               <Tooltip content="Money, health or identity data: changes always ask you first.">
-                <span className="inline-flex text-warning" aria-label="Sensitive app">
+                <span className="inline-flex text-warning" role="img" aria-label="Sensitive app">
                   <Lock className="size-3.5" />
                 </span>
               </Tooltip>
@@ -259,7 +259,7 @@ export function ConnectionRow({
                 .filter(Boolean)
                 .join(" · ")}
             </span>
-            {summary.custom ? <span className="size-1.5 shrink-0 rounded-full bg-primary" aria-label="Has your rules" /> : null}
+            {summary.custom ? <span className="size-1.5 shrink-0 rounded-full bg-primary" role="img" aria-label="Has your rules" /> : null}
             <ChevronDown className={cn("size-4 shrink-0 transition-transform", expanded && "rotate-180")} />
           </button>
         </div>

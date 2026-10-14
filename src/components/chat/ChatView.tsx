@@ -1,5 +1,6 @@
 "use client";
 import * as React from "react";
+import Link from "next/link";
 import { ArrowUp, Mic, MicOff, Sparkles, Square } from "lucide-react";
 import { Avatar } from "@/components/avatar";
 import { useBotLive } from "@/components/app/live-state";
@@ -72,6 +73,7 @@ export function ChatView({
   needsGreeting,
   brainLabel,
   initialInput,
+  viaBridge = false,
 }: {
   botId: string;
   botName: string;
@@ -84,6 +86,8 @@ export function ChatView({
   brainLabel: string;
   /** Prefilled message (e.g. "Ask Inky about this meeting" links), not sent until the owner says so. */
   initialInput?: string;
+  /** Thinks with the owner's own subscription, on their computer (through the Bridge). */
+  viaBridge?: boolean;
 }) {
   const live = useBotLive();
   const [messages, setMessages] = React.useState<ChatMessage[]>(initialMessages);
@@ -91,11 +95,14 @@ export function ChatView({
   const [input, setInput] = React.useState(initialInput ?? "");
   const [streaming, setStreaming] = React.useState(false);
   const [bridgeThinking, setBridgeThinking] = React.useState(false);
+  const [bridgeWaiting, setBridgeWaiting] = React.useState(false);
   const abortRef = React.useRef<AbortController | null>(null);
   const listRef = React.useRef<HTMLDivElement>(null);
   const stickToBottom = React.useRef(true);
   const greeted = React.useRef(false);
   const inputRef = React.useRef<HTMLTextAreaElement>(null);
+  /** Fetches what arrived outside the stream (set below); `force` runs it even mid-stream. */
+  const syncRef = React.useRef<(force?: boolean) => Promise<void>>(async () => {});
 
   const scrollToBottom = React.useCallback((smooth = true) => {
     const el = listRef.current;
@@ -228,6 +235,8 @@ export function ChatView({
           live.setMood("happy");
           setTimeout(() => live.setMood("idle"), 2400);
         }
+        // STOP / START typed in the chat: show the new state in the header right away.
+        if (finalStatus === "command" || finalStatus === "paused") setTimeout(() => void syncRef.current(true), 0);
       }
     },
     [live, patchLast],
@@ -241,10 +250,12 @@ export function ChatView({
     }
   }, [needsGreeting, botId, runStream]);
 
-  // Pick up messages that arrive without a stream (bridge replies, reminders, approval follow-ups).
+  // Pick up messages that arrive without a stream (bridge replies, reminders, approval follow-ups),
+  // and the bot's paused state (STOP from another channel). The latest tick lives in a ref so the
+  // timer isn't restarted by every message, and a chat command can sync right away.
   React.useEffect(() => {
-    const tick = async () => {
-      if (streaming || document.visibilityState !== "visible") return;
+    syncRef.current = async (force = false) => {
+      if ((streaming && !force) || document.visibilityState !== "visible") return;
       // Cursor: the newest message the server has confirmed (optimistic ones carry browser clocks).
       const confirmed = messages.filter((m) => !m.pending && !m.clientClock && !m.id.startsWith("local-") && !m.id.startsWith("pending-"));
       const after = confirmed.reduce((max, m) => (m.createdAt > max ? m.createdAt : max), new Date(0).toISOString());
@@ -256,8 +267,10 @@ export function ChatView({
           approvals: (ApprovalView & { status: string })[];
           botStatus: string;
           thinkingOnBridge: boolean;
+          waitingOnBridge?: boolean;
         };
         setBridgeThinking(data.thinkingOnBridge);
+        setBridgeWaiting(Boolean(data.waitingOnBridge));
         live.setPaused(data.botStatus === "paused");
         setApprovals((prev) => {
           const next = { ...prev };
@@ -278,9 +291,28 @@ export function ChatView({
         /* offline */
       }
     };
-    const interval = setInterval(tick, bridgeThinking ? 2500 : 6000);
-    return () => clearInterval(interval);
-  }, [botId, messages, streaming, bridgeThinking, live]);
+  }, [botId, messages, streaming, live]);
+  // Once on open: replies may already be waiting on the owner's computer.
+  React.useEffect(() => {
+    const t = setTimeout(() => void syncRef.current(), 400);
+    return () => clearTimeout(t);
+  }, []);
+  // A bot on the owner's own Claude or ChatGPT answers from their computer. Its job is only
+  // "thinking" once the Bridge there picks it up; until then the owner's message just waits.
+  const lastIsOwner = messages.length > 0 && messages[messages.length - 1].role === "user";
+  const waitingOnComputer = viaBridge && !streaming && !bridgeThinking && (lastIsOwner || bridgeWaiting) && !live.paused;
+  const quickPoll = bridgeThinking || waitingOnComputer;
+  React.useEffect(() => {
+    const interval = setInterval(() => void syncRef.current(), quickPoll ? 2500 : 6000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void syncRef.current();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [quickPoll]);
 
   const send = async (text: string) => {
     const t = text.trim();
@@ -311,7 +343,15 @@ export function ChatView({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div ref={listRef} onScroll={onScroll} className="scrollbar-thin flex-1 overflow-y-auto">
+      {/* Focusable so keyboard users can scroll the conversation even when it has no links. */}
+      <div
+        ref={listRef}
+        onScroll={onScroll}
+        tabIndex={0}
+        role="region"
+        aria-label={`Conversation with ${botName}`}
+        className="scrollbar-thin flex-1 overflow-y-auto outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset"
+      >
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 pt-6 pb-8 sm:px-6">
           {messages.length === 0 && !streaming ? (
             <div className="flex flex-col items-center gap-3 py-16 text-center">
@@ -334,9 +374,22 @@ export function ChatView({
             />
           ))}
           {bridgeThinking ? (
-            <div className="flex items-center gap-3 text-sm text-muted-foreground">
+            <div className="flex items-center gap-3 text-sm text-muted-foreground" role="status">
               <Avatar avatar={avatar} color={color} size={32} mood="thinking" />
               <span className="shimmer-text font-medium">Thinking on your computer…</span>
+            </div>
+          ) : waitingOnComputer ? (
+            <div className="flex items-start gap-3 text-sm text-muted-foreground" role="status">
+              <Avatar avatar={avatar} color={color} size={32} mood="sleeping" />
+              <div className="min-w-0 pt-1">
+                <div className="font-medium text-foreground">Waiting for your computer</div>
+                <p className="text-xs">
+                  {botName} thinks on your computer and answers as soon as the Bridge is running there.{" "}
+                  <Link href="/app/bridge" className="font-semibold text-primary hover:underline">
+                    Check the Bridge
+                  </Link>
+                </p>
+              </div>
             </div>
           ) : null}
         </div>
@@ -345,7 +398,7 @@ export function ChatView({
       <div className="border-t border-border bg-background/80 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl">
         <div className="mx-auto w-full max-w-3xl px-3 pt-3 pb-3 sm:px-6">
           {showStarters ? (
-            <div className="no-scrollbar -mx-1 mb-2.5 flex gap-2 overflow-x-auto px-1">
+            <div className="no-scrollbar -mx-1 mb-2.5 flex gap-2 overflow-x-auto px-1 sm:flex-wrap">
               {starters.slice(0, 5).map((s) => (
                 <button
                   key={s}
@@ -366,7 +419,7 @@ export function ChatView({
             streaming={streaming}
             onStop={() => abortRef.current?.abort()}
             inputRef={inputRef}
-            placeholder={live.paused ? `${botName} is paused — say START to wake it` : `Message ${botName}…`}
+            placeholder={live.paused ? `Paused — say START to wake ${botName}` : `Message ${botName}…`}
           />
           <p className="mt-2 text-center text-[11px] text-muted-foreground">
             {botName} is an AI and can make mistakes. Actions follow your trust settings — every one gets a receipt.
@@ -530,7 +583,7 @@ function Composer({
         }}
         rows={1}
         placeholder={placeholder}
-        className="max-h-[180px] min-h-[40px] flex-1 resize-none bg-transparent py-2.5 text-[15px] outline-none placeholder:text-muted-foreground/70"
+        className="max-h-[180px] min-h-[40px] min-w-0 flex-1 resize-none bg-transparent py-2.5 text-[15px] outline-none placeholder:overflow-hidden placeholder:text-ellipsis placeholder:whitespace-nowrap placeholder:text-muted-foreground/70"
         aria-label="Message"
       />
       {canListen ? (

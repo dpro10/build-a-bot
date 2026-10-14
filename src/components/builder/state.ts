@@ -7,7 +7,9 @@ import { AVATARS, type AvatarId, type ColorwayId } from "@/lib/avatars";
 import type { TrustLevel } from "@/lib/trust";
 import type { ChannelKind } from "@/lib/channels/catalog";
 import { INCLUDED_MODELS, PROVIDER_BY_ID, type ProviderId } from "@/lib/models/catalog";
+import { isJobId, JOB_BY_ID } from "@/lib/jobs";
 import type { RecipeData } from "@/lib/recipes";
+import { ALWAYS_ON } from "@/components/catalog/connector-meta";
 
 export const STEPS = [
   { id: "face", label: "Face", title: "Pick a face" },
@@ -70,14 +72,16 @@ export function initialState(recipe?: (RecipeData & { slug?: string }) | null): 
     brief: { on: true, time: "08:00", weekdays: false },
   };
   if (!recipe) return base;
+  const jobs = recipe.jobs.filter(isJobId);
   return {
     ...base,
     avatar: recipe.avatar,
     color: recipe.color,
     colorPicked: true,
     name: recipe.name,
-    jobs: recipe.jobs,
-    connectors: recipe.connectors,
+    jobs,
+    // Jobs bring their built-in tools (web search for research, and so on), just like picking them by hand.
+    connectors: [...new Set([...recipe.connectors, ...jobs.flatMap((j) => JOB_BY_ID[j].builtins).filter((b) => !ALWAYS_ON.has(b))])],
     trust: recipe.trust,
     channels: recipe.channels.filter((c): c is ChannelKind => c !== "web") as ChannelKind[],
     instructions: recipe.instructions,

@@ -40,13 +40,24 @@ export const MARKETING_NAV = [
   { href: "/safety", label: "Safety" },
 ] as const;
 
-/** Per-page metadata with matching Open Graph fields (the OG image comes from app/opengraph-image). */
+/**
+ * The site-wide share image (app/opengraph-image.tsx). A page that sets its own
+ * `openGraph` replaces the root one wholesale, image included, so pages name it again.
+ */
+const SHARE_IMAGE = {
+  url: "/opengraph-image",
+  width: 1200,
+  height: 630,
+  alt: "Build-a-bot: your own AI agent, in about a minute. Five friendly bot characters.",
+};
+
+/** Per-page metadata with matching Open Graph and X fields, including the share image. */
 export function pageMetadata({ title, description, path }: { title: string; description: string; path: string }): Metadata {
   return {
     title,
     description,
     alternates: { canonical: path },
-    openGraph: { title: `${title} · ${SITE.name}`, description, url: path, siteName: SITE.name, type: "website" },
-    twitter: { card: "summary_large_image", title: `${title} · ${SITE.name}`, description },
+    openGraph: { title: `${title} · ${SITE.name}`, description, url: path, siteName: SITE.name, type: "website", images: [SHARE_IMAGE] },
+    twitter: { card: "summary_large_image", title: `${title} · ${SITE.name}`, description, images: [SHARE_IMAGE] },
   };
 }

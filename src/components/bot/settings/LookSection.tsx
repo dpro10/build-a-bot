@@ -59,6 +59,8 @@ export function LookSection({ botId, initial }: { botId: string; initial: LookVa
   const save = async () => {
     const name = v.name.trim();
     if (!name) return toast.error("Give it a name.");
+    // Same rule as the builder: the bot's name (and the handles made from it) stays brand-free.
+    if (/build[\s-]*a[\s-]*bot/i.test(name)) return toast.error("Pick a name that isn't the product's name.");
     setSaving(true);
     try {
       await api(`/api/bots/${botId}`, {

@@ -29,7 +29,8 @@ export function TrustStep({
     const defs = connectors.filter((id) => !ALWAYS_ON.has(id)).map((id) => getConnector(id)).filter((d): d is ConnectorDef => Boolean(d));
     return [...defs.filter((d) => !d.via.some((v) => v.kind === "builtin")), ...defs.filter((d) => d.via.some((v) => v.kind === "builtin"))];
   }, [connectors]);
-  const fullLocked = !demo && !planAllowsTrust(PLANS[plan], "full");
+  const fullNeedsPlus = !planAllowsTrust(PLANS[plan], "full");
+  const fullLocked = !demo && fullNeedsPlus;
 
   return (
     <div className="flex flex-col gap-6">
@@ -38,11 +39,13 @@ export function TrustStep({
         subtitle="From read-only to full faith. You can change this anytime, and fine-tune it per app."
       />
       <TrustPicker value={trust} onChange={onTrust} apps={apps} botName={name} planBadges={fullLocked ? { full: "Plus" } : {}} />
-      {trust === "full" && fullLocked ? (
+      {trust === "full" && fullNeedsPlus ? (
         <div className="flex items-start gap-2 rounded-2xl bg-accent/25 px-4 py-3 text-sm text-foreground">
           <Info className="mt-0.5 size-4 shrink-0" />
           <span>
-            Full faith is part of Plus. {name} will start as a Trusted helper, and you can switch to Full faith the moment you upgrade.
+            {fullLocked
+              ? `Full faith is part of Plus. ${name} will start as a Trusted helper, and you can switch to Full faith the moment you upgrade.`
+              : `Full faith is part of Plus. This demo lets you try it on any plan.`}
           </span>
         </div>
       ) : null}

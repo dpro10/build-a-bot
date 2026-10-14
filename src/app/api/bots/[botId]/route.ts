@@ -11,6 +11,7 @@ import { readCredential, storeCredential } from "@/lib/channels/secrets";
 import { setTelegramProfilePhoto, telegramCall } from "@/lib/channels/telegram";
 import { INCLUDED_MODELS, PROVIDER_BY_ID, type ProviderId } from "@/lib/models/catalog";
 import { getBotSetup } from "@/lib/data";
+import { botNameSchema } from "@/lib/bots/create";
 import { receipt } from "@/lib/agent/run";
 import type { BrainConfig } from "@/lib/db/schema";
 
@@ -38,7 +39,7 @@ export async function GET(_req: Request, ctx: RouteCtx<{ botId: string }>) {
 }
 
 const patchSchema = z.object({
-  name: z.string().trim().min(1).max(32).optional(),
+  name: botNameSchema.optional(),
   avatar: z.enum(AVATAR_IDS).optional(),
   color: z.enum(COLORWAY_IDS).optional(),
   instructions: z.string().max(4000).optional(),

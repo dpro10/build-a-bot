@@ -9,6 +9,7 @@ import { Avatar } from "@/components/avatar";
 import { BrandTile } from "@/components/brand/icons";
 import { PageContainer, PageHeader } from "@/components/account/PageHeader";
 import { BridgeLive, type PlainBot, type SubscriptionBot } from "@/components/account/BridgeLive";
+import { bridgeCli } from "@/lib/bridge/cli";
 import { isDesktopApp, toDeviceView } from "@/components/account/bridge-shared";
 import { DesktopAppSection } from "@/components/meetings/DesktopAppSection";
 import { Button } from "@/components/ui/button";
@@ -124,6 +125,7 @@ export default async function BridgePage() {
         allBots={allBots}
         serverNow={now}
         prerequisites={<Prerequisites />}
+        startCommand={bridgeCli()}
       />
 
       <div className="mt-12">
