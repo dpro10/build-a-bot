@@ -36,6 +36,7 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string }>) {
       channelKind: "web",
       message: null,
       directive: greetingDirective(a.bot, a.user, "web", starters, appNames),
+      trigger: "greeting",
       noTools: true,
       emit: send,
       signal,

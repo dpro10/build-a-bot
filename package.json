@@ -19,6 +19,8 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "db:studio": "drizzle-kit studio",
     "cron:tick": "tsx scripts/cron-tick.ts",
+    "discord:register": "tsx scripts/discord-register.ts",
+    "icons": "tsx scripts/gen-icons.ts",
     "check": "npm run typecheck && npm run test"
   },
   "dependencies": {

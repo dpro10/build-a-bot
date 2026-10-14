@@ -1,9 +1,46 @@
 # Build-a-bot
 
-Anyone makes their own AI agent in about a minute: pick a face, give it a name, choose a brain (or connect the AI subscription they already pay for), and it lives in their texts.
+Anyone makes their own AI agent in about a minute: pick a face, give it a name, choose a brain (or connect the AI subscription they already pay for), give it their apps, decide how much it can do on its own, and talk to it anywhere — calls, texts, email, Telegram, Discord, Slack.
 
 - **Site:** build-a-bot.site. The domain is owned (registered 2026-10-13 at Name.com, DNS on Vercel); nothing is deployed yet.
-- **Status (2026-10-13):** idea and research. Nothing built. Start building from `BUILD.md`.
+- **Status (2026-10-14):** the full product is built and runs locally in demo mode with zero keys. Not deployed yet: see `docs/DEPLOY.md`.
+
+## What's built
+
+- **The builder** (`/build`, no account needed): five original characters in 8 colorways → a name ("Surprise me") → a brain → apps → trust → channels → review. A live preview assembles the bot as you go, and the bot greets you first. Recipes prefill it (`/build?recipe=inbox-zero`).
+- **Brains:**
+  - Included open models on Nebius Token Factory: Nemotron 3.5 Lightning by default, plus Qwen, gpt-oss, DeepSeek, GLM, MiniMax, Kimi and Hermes by plan.
+  - The owner's own key: Anthropic, OpenAI, Gemini, OpenRouter, Groq, Mistral, xAI, DeepSeek, Together, Fireworks, Cerebras, or any OpenAI-compatible endpoint. Checked live, then encrypted.
+  - Their Claude or ChatGPT subscription through **the Bridge**, their own CLI on their own computer.
+- **Apps:** a searchable catalog of ~190 apps (140+ connectable today):
+  - Gmail, Outlook, Google Calendar/Drive/Docs/Sheets, GitHub, GitLab, Notion, Slack, Linear, Jira, Todoist, Spotify, Stripe and more.
+  - Connected through official MCP servers (OAuth 2.1), Composio, or any MCP URL.
+  - Built-ins need no sign-in: web search, reader, weather, reminders, notes, memory, its own inbox.
+- **Trust:** Look only / Ask me first / Trusted helper / **Full faith**.
+  - Enforced in code by a policy engine, with per-app permissions.
+  - Hard limits apply even under Full faith: prompt-injection guard, no secrets out, money off without a cap, bulk deletes ask, quiet hours.
+  - STOP works from any channel, and every action gets an append-only receipt.
+- **Channels, several at once:** web, phone calls and texts (Twilio), email (its own brand-free address), Telegram (one-tap managed bot), Discord (`/ask`), Slack (per-bot app). WhatsApp and iMessage are on a waitlist.
+- **The dashboard:**
+  - Chat with inline approvals.
+  - Activity (receipts), Apps & trust, Channels, Routines (morning briefs, reminders), Memory, Settings (look, personality, brain, recipes, MCP access).
+  - Approvals inbox, Plan & usage, Bridge, Account (export, delete).
+- **Extras:**
+  - Shareable recipes (`/r/[slug]`).
+  - Each bot is also an MCP server, usable from Claude Desktop/Code.
+  - Plans and billing with Stripe.
+  - A public site: landing, pricing, safety, legal drafts, explore.
+
+## Run it
+
+```bash
+npm install
+npm run dev            # http://localhost:3000 — demo mode: simulated brain, apps and channels
+npm test               # policy engine, scheduler, database, agent pipeline
+npm run test:e2e       # Playwright: builder → chat → approval
+```
+
+Add real keys in `.env.local` (see `.env.example`); anything left out stays simulated in demo mode. More: `docs/ARCHITECTURE.md` (how it works), `docs/DEPLOY.md` (Vercel + Postgres + each integration), `docs/DECISIONS.md` (decisions and open questions, incl. 2026-10-14).
 
 ## Decided (Diego, 2026-10-13)
 
@@ -64,7 +101,7 @@ Then the bot messages them first, within a minute.
 
 **Law:** say it's an AI, publish a crisis protocol, and launch 18+ only.
 
-## Open questions
+## Open questions (as of 2026-10-13; current list in `docs/DECISIONS.md`)
 
 1. First users: tinkerers, or everyday iPhone users? A 3-week hand-built test with 5 people could decide.
 2. Pricing: who pays for the free brain, what the free tier's limits are, and what the paid plan costs.
@@ -74,7 +111,9 @@ Then the bot messages them first, within a minute.
 
 ## Files
 
-- `BUILD.md`: what to build first, and how.
+- `BUILD.md`: the first build brief (rules still apply).
+- `docs/ARCHITECTURE.md`, `docs/DEPLOY.md`: how it works and how to ship it.
+- `docs/research/`: integration, MCP/brains, connectors and web-actions research (2026-10-14).
 - `docs/DECISIONS.md`: the workspace's memory notes (decisions, gotchas, open threads), copied from Cookbook.
 - `docs/research-2026-10-13.md`: market, channels, models and costs, safety, law, name, and sources.
 

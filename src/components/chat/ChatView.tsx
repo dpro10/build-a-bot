@@ -6,21 +6,11 @@ import { useBotLive } from "@/components/app/live-state";
 import { ApprovalCard, type ApprovalView } from "./ApprovalCard";
 import { Markdown } from "./Markdown";
 import { ToolChip, type ToolView } from "./ToolChip";
+import { mergeServerMessages, toChatMessage, type ChatMessage } from "./messages";
 import { cn } from "@/lib/utils";
 import type { AvatarId, ColorwayId } from "@/lib/avatars";
 
-export type ChatMessage = {
-  id: string;
-  role: "user" | "assistant";
-  text: string;
-  createdAt: string;
-  tools: ToolView[];
-  approvals: string[];
-  notices: { tone: "info" | "warn" | "danger"; text: string }[];
-  pending?: boolean;
-  proactive?: boolean;
-  via?: string;
-};
+
 
 type ServerEvent =
   | { type: "status"; state: "thinking" | "working" | "waiting" | "done"; label?: string }
@@ -142,9 +132,10 @@ export function ChatView({
       setStreaming(true);
       live.setMood("thinking");
       live.setActivity("Thinking");
+      const pendingId = `pending-${Date.now()}`;
       setMessages((prev) => [
         ...prev,
-        { id: `pending-${Date.now()}`, role: "assistant", text: "", createdAt: new Date().toISOString(), tools: [], approvals: [], notices: [], pending: true },
+        { id: pendingId, key: pendingId, clientClock: true, role: "assistant", text: "", createdAt: new Date().toISOString(), tools: [], approvals: [], notices: [], pending: true },
       ]);
       let finalStatus = "ok";
       try {
@@ -235,8 +226,9 @@ export function ChatView({
   React.useEffect(() => {
     const tick = async () => {
       if (streaming || document.visibilityState !== "visible") return;
-      const last = [...messages].reverse().find((m) => !m.pending && !m.id.startsWith("local-") && !m.id.startsWith("pending-"));
-      const after = last?.createdAt ?? new Date(0).toISOString();
+      // Cursor: the newest message the server has confirmed (optimistic ones carry browser clocks).
+      const confirmed = messages.filter((m) => !m.pending && !m.clientClock && !m.id.startsWith("local-") && !m.id.startsWith("pending-"));
+      const after = confirmed.reduce((max, m) => (m.createdAt > max ? m.createdAt : max), new Date(0).toISOString());
       try {
         const res = await fetch(`/api/bots/${botId}/messages?after=${encodeURIComponent(after)}`);
         if (!res.ok) return;
@@ -254,16 +246,14 @@ export function ChatView({
           return next;
         });
         live.setPendingApprovals(data.approvals.filter((a) => a.status === "pending").length);
-        const fresh = data.messages.filter((m) => (m.role === "user" || m.role === "assistant") && !messages.some((x) => x.id === m.id));
-        if (fresh.length) {
-          setMessages((prev) => {
-            const withoutLocal = prev.filter((p) => !(p.id.startsWith("local-") && fresh.some((f) => f.role === "user" && f.text === p.text)));
-            return [...withoutLocal, ...fresh.map(toChatMessage)];
-          });
-          if (fresh.some((m) => m.role === "assistant")) {
-            live.setMood("happy");
-            setTimeout(() => live.setMood("idle"), 2400);
-          }
+        const incoming = data.messages.filter((m) => m.role === "user" || m.role === "assistant").map(toChatMessage);
+        const fresh = incoming.filter((m) => !messages.some((x) => x.id === m.id));
+        if (fresh.length || incoming.length) {
+          setMessages((prev) => mergeServerMessages(prev, incoming));
+        }
+        if (fresh.some((m) => m.role === "assistant" && !messages.some((x) => x.id.startsWith("local-") && x.text.trim() === m.text.trim()))) {
+          live.setMood("happy");
+          setTimeout(() => live.setMood("idle"), 2400);
         }
       } catch {
         /* offline */
@@ -280,7 +270,7 @@ export function ChatView({
     stickToBottom.current = true;
     setMessages((prev) => [
       ...prev,
-      { id: `local-${Date.now()}`, role: "user", text: t, createdAt: new Date().toISOString(), tools: [], approvals: [], notices: [] },
+      { id: `local-${Date.now()}`, key: `local-${Date.now()}`, role: "user", text: t, createdAt: new Date().toISOString(), tools: [], approvals: [], notices: [] },
     ]);
     await runStream(`/api/bots/${botId}/chat`, { text: t });
     inputRef.current?.focus();
@@ -292,7 +282,7 @@ export function ChatView({
     if (followUp) {
       setMessages((prev) => [
         ...prev,
-        { id: `local-followup-${Date.now()}`, role: "assistant", text: followUp, createdAt: new Date().toISOString(), tools: [], approvals: [], notices: [] },
+        { id: `local-followup-${Date.now()}`, key: `local-followup-${Date.now()}`, role: "assistant", text: followUp, createdAt: new Date().toISOString(), tools: [], approvals: [], notices: [] },
       ]);
     }
     live.setMood(a.status === "denied" ? "idle" : "happy");
@@ -313,7 +303,7 @@ export function ChatView({
           ) : null}
           {messages.map((m) => (
             <MessageRow
-              key={m.id}
+              key={m.key ?? m.id}
               message={m}
               avatar={avatar}
               color={color}
@@ -562,46 +552,3 @@ type SpeechRec = {
   start: () => void;
   stop: () => void;
 };
-
-/** Convert a stored message (server) into the chat's view model. */
-export function toChatMessage(m: {
-  id: string;
-  role: string;
-  text: string;
-  createdAt: string | Date;
-  parts: unknown[];
-  meta?: Record<string, unknown>;
-}): ChatMessage {
-  const parts = (m.parts ?? []) as (
-    | { type: "tool_call"; id: string; name: string; title?: string; summary?: string }
-    | { type: "tool_result"; id: string; name: string; status: ToolView["state"]; summary?: string; approvalId?: string }
-    | { type: "approval"; approvalId: string }
-    | { type: "notice"; tone: "info" | "warn" | "danger"; text: string }
-  )[];
-  const tools: ToolView[] = [];
-  const approvals: string[] = [];
-  const notices: ChatMessage["notices"] = [];
-  for (const p of parts) {
-    if (p.type === "tool_call") tools.push({ id: p.id, name: p.name, title: p.title ?? p.name, summary: p.summary ?? p.title ?? p.name, state: "ok" });
-    if (p.type === "tool_result") {
-      const t = tools.find((x) => x.id === p.id);
-      if (t) {
-        t.state = p.status;
-        if (p.status !== "ok") t.detail = p.summary;
-      }
-    }
-    if (p.type === "approval") approvals.push(p.approvalId);
-    if (p.type === "notice") notices.push({ tone: p.tone, text: p.text });
-  }
-  return {
-    id: m.id,
-    role: m.role === "user" ? "user" : "assistant",
-    text: m.text,
-    createdAt: new Date(m.createdAt).toISOString(),
-    tools,
-    approvals,
-    notices,
-    proactive: Boolean(m.meta?.proactive) && m.role === "assistant",
-    via: typeof m.meta?.via === "string" ? (m.meta.via as string) : undefined,
-  };
-}

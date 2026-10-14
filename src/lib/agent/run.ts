@@ -78,6 +78,8 @@ export type RunInput = {
   } | null;
   /** Platform instruction for proactive runs (greeting, routine, approval follow-up). */
   directive?: string;
+  /** Why a proactive run happened ("greeting" | "routine" | "approval"), stored on the reply. */
+  trigger?: string;
   emit?: (event: AgentEvent) => void;
   signal?: AbortSignal;
   startTainted?: boolean;
@@ -675,6 +677,7 @@ async function finish(
       ...(extra.usage ? { usage: extra.usage } : {}),
       ...(extra.costMicros ? { costMicros: extra.costMicros } : {}),
       ...(input.directive ? { proactive: true } : {}),
+      ...(input.trigger ? { trigger: input.trigger } : {}),
     },
   });
   await db.update(schema.conversations).set({ updatedAt: new Date() }).where(eq(schema.conversations.id, conversation.id));
