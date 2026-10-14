@@ -24,3 +24,5 @@ bridge/dist/
 desktop/node_modules/
 desktop/dist/
 desktop/test-results/
+# the Bridge, packed before each build (scripts/pack-bridge.mjs)
+public/downloads/

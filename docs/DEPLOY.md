@@ -42,11 +42,11 @@ Own-key (BYOK) and subscription brains need nothing from you.
 
 | Channel | Setup |
 |---|---|
-| **Telegram** | Create a manager bot with @BotFather and turn on Bot Management (Bot Settings). Set `TELEGRAM_MANAGER_BOT_TOKEN`, `TELEGRAM_MANAGER_BOT_USERNAME` and `TELEGRAM_MANAGER_WEBHOOK_SECRET` (required: without it the webhook refuses every update), then point its webhook at us: `curl "https://api.telegram.org/bot$TOKEN/setWebhook?url=$APP_URL/api/webhooks/telegram/manager&secret_token=$SECRET"`. Each owner's own bot gets its webhook automatically. Without a manager bot, owners can still paste a BotFather token. |
+| **Telegram** | Create a manager bot with @BotFather and turn on Bot Management (Bot Settings). Set `TELEGRAM_MANAGER_BOT_TOKEN`, `TELEGRAM_MANAGER_BOT_USERNAME` and `TELEGRAM_MANAGER_WEBHOOK_SECRET` (required: without it the webhook refuses every update), The server points the manager bot's webhook at itself as soon as those keys are live, and checks it every 30 minutes, so a new domain or secret is picked up. Each owner's own bot gets its webhook automatically. Without a manager bot, owners can still paste a BotFather token. |
 | **SMS & calls** | Twilio account + a US/Canada number. `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER`. On the number: *A message comes in* → `POST {APP_URL}/api/webhooks/twilio/sms`; *A call comes in* → `POST {APP_URL}/api/webhooks/twilio/voice`. **US texting needs A2P 10DLC (or toll-free) registration before launch.** |
 | **Email** | Buy a brand-free domain for bot inboxes (never containing "build-a-bot") and set `BOT_EMAIL_DOMAIN`. Either AgentMail (`AGENTMAIL_API_KEY`, webhook `message.received` → `{APP_URL}/api/webhooks/email/agentmail`, `AGENTMAIL_WEBHOOK_SECRET`) or Resend (`RESEND_API_KEY`, inbound on the domain, webhook `email.received` → `{APP_URL}/api/webhooks/email/resend`, `RESEND_WEBHOOK_SECRET`). `EMAIL_FROM` sends sign-in links. |
 | **Slack** | Nothing global: each owner creates their bot's Slack app from a manifest link in the app (events and interactivity URLs are filled in). |
-| **Discord** | Create an application. `DISCORD_APPLICATION_ID`, `DISCORD_PUBLIC_KEY`, `DISCORD_BOT_TOKEN`. Interactions Endpoint URL → `{APP_URL}/api/webhooks/discord`. Then `npm run discord:register` to add `/ask` and `/link`. |
+| **Discord** | Create an application. `DISCORD_APPLICATION_ID`, `DISCORD_PUBLIC_KEY`, `DISCORD_BOT_TOKEN`. Once those are live, set the Interactions Endpoint URL to `{APP_URL}/api/webhooks/discord` (Discord checks it right away). The server registers `/ask` and `/link` by itself, and again every 6 hours; `npm run discord:register` does it on demand. |
 
 ## 6. Billing (Stripe)
 
@@ -61,7 +61,7 @@ Own-key (BYOK) and subscription brains need nothing from you.
 - [ ] Twilio A2P/toll-free registration done; email domain verified (SPF/DKIM/DMARC).
 - [ ] Google: Gmail/Drive through Composio's verified app, or your own app with Google's verification (restricted Gmail scopes need a yearly CASA assessment).
 - [ ] Support email set (`NEXT_PUBLIC_SUPPORT_EMAIL`); crisis protocol page live (`/safety`).
-- [ ] Publish the Bridge so `npx build-a-bot-bridge` works: `cd bridge && npm publish` (until then: `node bridge/bab-bridge.mjs pair CODE --server $APP_URL`).
+- [ ] The Bridge needs nothing published. Before each build, `scripts/pack-bridge.mjs` packs `bridge/` into `public/downloads/`, and the app tells owners to run `npx -y {APP_URL}/downloads/build-a-bot-bridge-<version>.tgz`. Don't set `BRIDGE_CLI` in production unless you mean to override that.
 - [ ] Re-render avatar pictures if characters change: `npm run avatars`.
 - [ ] Meeting notes:
   - a lawyer reviews the consent flow and transcript retention;
