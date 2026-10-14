@@ -45,7 +45,7 @@ export const JOBS: JobDef[] = [
     blurb: "Takes notes in your calls",
     prompt:
       "Take notes in the owner's meetings when they ask you to: you get the transcript and write the summary, decisions and action items. Offer follow-ups (a recap email, reminders for action items). Answer questions about past meetings with list_meetings, read_meeting and search_meetings, and say which meeting and when.",
-    starters: ["What did we decide in my last meeting?", "What are my action items from this week?", "Draft a recap of my last meeting for the team"],
+    starters: ["Take notes in my next call", "What did we decide in my last meeting?", "What are my action items from this week?"],
     builtins: ["meetings", "reminders"],
   },
   {
