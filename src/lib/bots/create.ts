@@ -7,17 +7,18 @@ import { schema, type Db } from "@/lib/db";
 import type { Bot, BrainConfig, User } from "@/lib/db/schema";
 import { AVATAR_IDS, COLORWAY_IDS } from "@/lib/avatars";
 import { TRUST_LEVELS, type TrustLevel } from "@/lib/trust";
-import { CHANNEL_BY_KIND, CHANNEL_KINDS, type ChannelKind } from "@/lib/channels/catalog";
-import { getConnector, isBuiltinConnector } from "@/lib/connectors";
+import { CHANNEL_BY_KIND, CHANNEL_KINDS, channelUsable, comingSoonNote, type ChannelKind } from "@/lib/channels/catalog";
+import { appKinds, getConnector, isBuiltinConnector } from "@/lib/connectors";
+import type { AppKind } from "@/lib/connectors/types";
 import { INCLUDED_MODELS, PROVIDER_BY_ID, type ProviderId } from "@/lib/models/catalog";
-import { JOB_BY_ID } from "@/lib/jobs";
+import { briefParts, JOB_BY_ID, type BriefPart } from "@/lib/jobs";
 import { getPlan, planAllowsChannel, planAllowsTrust } from "@/lib/billing/plans";
 import { available, demoMode, live } from "@/lib/env";
 import { storeCredential } from "@/lib/channels/secrets";
 import { computeNextRun, isValidTimeZone } from "@/lib/scheduler/time";
 import { canonicalResource } from "@/lib/connectors/mcp/oauth";
 import { findFeatured, recipeSchema, type RecipeData } from "@/lib/recipes";
-import { isEmail, newId, normalizePhone, shortCode, slugify, sortableId } from "@/lib/utils";
+import { isEmail, joinList, newId, normalizePhone, shortCode, slugify, sortableId } from "@/lib/utils";
 
 const brainSchema = z.discriminatedUnion("kind", [
   z.object({
@@ -192,11 +193,14 @@ export async function createBot(db: Db, owner: User, input: CreateBotInput): Pro
   if (!input.exactConnectors) for (const j of jobs) for (const b of JOB_BY_ID[j as keyof typeof JOB_BY_ID]?.builtins ?? []) connectorIds.add(b);
   const thirdPartyLimit = plan.limits.connectors;
   let thirdParty = 0;
+  const added: string[] = [];
   for (const connectorId of connectorIds) {
     const def = getConnector(connectorId);
-    if (!def || def.status === "soon") continue;
+    // Coming soon, or a built-in whose service isn't set up here (its own inbox without a mail domain).
+    if (!def || def.status === "soon" || (def.requires && !available(def.requires))) continue;
     if (isBuiltinConnector(def)) {
       await db.insert(schema.connections).values({ id: newId("con"), botId: id, connectorId, mode: "builtin", status: "connected" }).onConflictDoNothing();
+      added.push(connectorId);
       continue;
     }
     if (thirdParty >= thirdPartyLimit && !demoMode) {
@@ -224,6 +228,7 @@ export async function createBot(db: Db, owner: User, input: CreateBotInput): Pro
         config: via?.kind === "mcp" ? { url: via.url, auth: via.auth, ...(via.headers ? { headers: via.headers } : {}) } : via?.kind === "composio" ? { toolkit: via.toolkit } : {},
       })
       .onConflictDoNothing();
+    added.push(connectorId);
   }
 
   // Custom MCP servers: added now, signed in to from Apps & trust.
@@ -284,7 +289,7 @@ export async function createBot(db: Db, owner: User, input: CreateBotInput): Pro
         botId: id,
         kind: "routine",
         title: "Morning brief",
-        prompt: briefPrompt(jobs),
+        prompt: briefPrompt(jobs, appKinds(added)),
         schedule: sched,
         timezone: tz,
         nextRunAt,
@@ -315,9 +320,14 @@ export async function createBot(db: Db, owner: User, input: CreateBotInput): Pro
       await db.insert(schema.channels).values({ id: newId("chn"), botId: id, kind, status: "waitlist" }).onConflictDoNothing();
       continue;
     }
+    // Its service isn't set up on this server (demo mode simulates it): nothing to turn on yet.
+    if (!channelUsable(def, demoMode, live)) {
+      notes.push(comingSoonNote(def));
+      continue;
+    }
     if (!planAllowsChannel(plan, kind) && !demoMode) {
       upgrade = upgrade ?? (def.minPlan === "pro" ? "pro" : "plus");
-      notes.push(`${def.name} is part of ${def.minPlan === "pro" ? "Pro" : "Plus"}. Upgrade to turn it on.`);
+      notes.push(`${def.name} ${def.plural ? "are" : "is"} part of ${def.minPlan === "pro" ? "Pro" : "Plus"}. ${live.stripe ? "Upgrade to turn it on." : "Paid plans are coming soon."}`);
       await db.insert(schema.channels).values({ id: newId("chn"), botId: id, kind, status: "needs_setup", config: { locked: true } }).onConflictDoNothing();
       continue;
     }
@@ -361,16 +371,18 @@ async function loadRecipe(db: Db, slug: string): Promise<RecipeData | null> {
   return parsed.success ? parsed.data : null;
 }
 
-/** What the morning brief covers, from the jobs the owner picked. */
-export function briefPrompt(jobs: string[]): string {
-  const parts: string[] = [];
-  if (jobs.includes("calendar")) parts.push("what's on my calendar today");
-  if (jobs.includes("inbox")) parts.push("emails that need a reply");
-  if (jobs.includes("reminders") || !parts.length) parts.push("reminders due today");
-  if (jobs.includes("research")) parts.push("one headline worth knowing about");
-  if (jobs.includes("money")) parts.push("anything due on bills or subscriptions");
-  if (jobs.includes("health")) parts.push("a gentle nudge on my habits");
-  parts.push("the weather");
-  const list = parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}` : parts[0];
+const BRIEF_ASKS: Record<BriefPart, string> = {
+  calendar: "what's on my calendar today",
+  email: "emails that need a reply",
+  reminders: "reminders due today",
+  headline: "one headline worth knowing about",
+  bills: "anything due on bills or subscriptions",
+  habits: "a gentle nudge on my habits",
+  weather: "the weather",
+};
+
+/** The morning brief's routine, from the jobs the owner picked and what the bot's apps can see. */
+export function briefPrompt(jobs: string[], apps: ReadonlySet<AppKind>): string {
+  const list = joinList(briefParts(jobs, apps).map((part) => BRIEF_ASKS[part]));
   return `Give me a short, friendly morning brief: ${list}. Keep it skimmable, and lead with anything urgent.`;
 }

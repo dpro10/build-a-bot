@@ -12,7 +12,7 @@ import { schema, type Db } from "@/lib/db";
 import type { Bot, Channel, User } from "@/lib/db/schema";
 import { appUrl, config } from "@/lib/env";
 import { numericCode, randomToken } from "@/lib/crypto";
-import { shortCode, slugify } from "@/lib/utils";
+import { shortCode, slugify, UnreachableError } from "@/lib/utils";
 import { storeCredential } from "./secrets";
 import { setTelegramProfilePhoto, telegramCall } from "./telegram";
 
@@ -92,7 +92,10 @@ export async function activateTelegramBot(
 
 /** Paste-a-token flow: returns the deep link the owner opens to prove it's them. */
 export async function connectTelegramToken(db: Db, bot: Bot, owner: User, channel: Channel, token: string) {
-  const me = await telegramCall<{ id: number; username: string; is_bot: boolean }>(token.trim(), "getMe", {});
+  const me = await telegramCall<{ id: number; username: string; is_bot: boolean }>(token.trim(), "getMe", {}).catch((err) => {
+    // Telegram said no (a typo or a revoked token). Not reaching Telegram at all keeps its own message.
+    throw err instanceof UnreachableError ? err : new Error("Telegram didn't accept that token. Copy it again from BotFather.");
+  });
   if (!me.is_bot) throw new Error("That token isn't a bot token.");
   await activateTelegramBot(db, { bot, owner, channel, token: token.trim(), telegramBot: { id: me.id, username: me.username } });
   const code = numericCode(6);

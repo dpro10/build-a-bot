@@ -104,3 +104,16 @@ export function errorMessage(err: unknown): string {
     return String(err);
   }
 }
+
+/** ["a", "b", "c"] → "a, b and c" (or "a, b or c"). */
+export function joinList(items: string[], last: "and" | "or" = "and"): string {
+  return items.length > 1 ? `${items.slice(0, -1).join(", ")} ${last} ${items.at(-1)}` : (items[0] ?? "");
+}
+
+/** A service never answered (DNS, timeout, a dropped connection), which isn't the same as it saying no. */
+export class UnreachableError extends Error {
+  constructor(service: string, options?: ErrorOptions) {
+    super(`Couldn't reach ${service}. Try again in a moment.`, options);
+    this.name = "UnreachableError";
+  }
+}

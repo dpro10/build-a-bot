@@ -14,6 +14,7 @@ import { WAITLIST_WHY, WaitlistJoin } from "./WaitlistJoin";
 export function AddChannelGrid({
   kinds,
   planGates,
+  plansOnSale,
   availability,
   joined,
   ownerEmail,
@@ -23,6 +24,8 @@ export function AddChannelGrid({
   kinds: ChannelKind[];
   /** Plan a channel needs when the owner's plan lacks it. */
   planGates: Partial<Record<ChannelKind, string>>;
+  /** Paid plans can be bought here; otherwise a plan gate has nowhere to send people. */
+  plansOnSale: boolean;
   availability: Partial<Record<ChannelKind, boolean>>;
   joined: Set<ChannelKind>;
   ownerEmail: string | null;
@@ -58,6 +61,8 @@ export function AddChannelGrid({
                 <WaitlistJoin name={def.name} joined={joined.has(kind)} ownerEmail={ownerEmail} onJoin={(email) => onJoin(kind, email)} compact />
               ) : soon ? (
                 <span className="text-sm font-medium text-muted-foreground">Coming soon</span>
+              ) : gate && !plansOnSale ? (
+                <span className="text-sm font-medium text-muted-foreground">Part of {gate}. Paid plans are coming soon.</span>
               ) : gate ? (
                 <Button asChild variant="outline" size="sm">
                   <Link href="/app/billing">See {gate}</Link>

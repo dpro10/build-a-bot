@@ -1,6 +1,7 @@
+import type { live } from "@/lib/env";
 import { BUILTIN_CONNECTORS } from "./builtin";
 import { CONNECTORS } from "./catalog";
-import type { ConnectorDef } from "./types";
+import type { AppKind, ConnectorDef } from "./types";
 
 /**
  * Connectors that share one toolkit/server only see their own slice of its tools
@@ -53,6 +54,29 @@ export function getConnector(id: string): ConnectorDef | undefined {
 
 export function isBuiltinConnector(def: ConnectorDef): boolean {
   return def.via.some((v) => v.kind === "builtin");
+}
+
+/**
+ * Built-ins whose service isn't set up on this server: they show as coming soon and are
+ * never added to a bot. Demo mode simulates them all.
+ */
+export function unavailableConnectors(demo: boolean, flags: Partial<Record<keyof typeof live, boolean>>): string[] {
+  return demo ? [] : ALL_CONNECTORS.filter((c) => c.requires && !flags[c.requires]).map((c) => c.id);
+}
+
+/** What these apps let a bot see: an inbox, a calendar, code, a smart home. */
+export function appKinds(connectorIds: Iterable<string>): Set<AppKind> {
+  const kinds = new Set<AppKind>();
+  for (const id of connectorIds) {
+    const def = getConnector(id);
+    if (!def || def.status === "soon") continue;
+    const caps = def.capabilities.map((c) => c.id);
+    if (caps.includes("read_email") || caps.includes("read_inbox")) kinds.add("email");
+    if (def.category === "calendar") kinds.add("calendar");
+    if (caps.includes("read_repos")) kinds.add("code");
+    if (def.category === "smart_home") kinds.add("smart_home");
+  }
+  return kinds;
 }
 
 export { BUILTIN_CONNECTORS, CONNECTORS };

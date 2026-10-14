@@ -10,7 +10,7 @@ export const maxDuration = 300;
 /** Resend inbound: `email.received` (metadata) → fetch body → route to the bot. */
 export async function POST(req: Request) {
   const body = await req.text();
-  if (!verifySvix(process.env.RESEND_WEBHOOK_SECRET, req.headers, body)) return new Response("bad signature", { status: 401 });
+  if (!verifySvix(config.email.resendWebhookSecret, req.headers, body)) return new Response("bad signature", { status: 401 });
   const event = JSON.parse(body) as { type: string; data?: { email_id?: string; to?: string[]; from?: string; subject?: string } };
   if (event.type !== "email.received" || !event.data?.email_id) return new Response("ignored");
   const db = await getDb();
