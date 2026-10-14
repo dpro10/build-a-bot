@@ -103,6 +103,98 @@ function parseWhen(text: string, now = new Date()): string | null {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+// ---------------------------------------------------------------------------
+// Meeting notes (demo): a careful-but-simple reading of the transcript, in the same
+// format the real notes prompt asks for (src/lib/meetings/notes.ts).
+
+const NOT_NAMES = new Set(
+  "I Okay Ok Yes Yeah No Great Thanks Thank Let Let's Lets So Agreed Works Happy Quick Sounds Can Could Plus Pro Free Telegram Slack Zoom Google Teams Monday Tuesday Wednesday Thursday Friday Saturday Sunday January February March April May June July August September October November December The We It That This And But Also Hi Hello Sure Right Okay".split(" "),
+);
+const DAYS = "monday|tuesday|wednesday|thursday|friday|saturday|sunday|tomorrow|today|tonight|next week|end of (?:the )?(?:day|week|month)";
+
+function namesIn(text: string): string[] {
+  const out: string[] = [];
+  // Mid-sentence capitalized words ("send it to Priya"), plus a name someone is addressed by ("Sam, can you…").
+  for (const m of text.matchAll(/[^.!?\s]\s+([A-Z][a-z]{2,})\b/g)) if (!NOT_NAMES.has(m[1])) out.push(m[1]);
+  const lead = /^([A-Z][a-z]{2,}),\s/.exec(text)?.[1];
+  if (lead && !NOT_NAMES.has(lead)) out.unshift(lead);
+  return out;
+}
+
+function cap(s: string) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+export function demoMeetingNotes(transcript: string): string {
+  const rows = [...transcript.matchAll(/^\[[\d:]+\] ([^:\n]+): (.+)$/gm)].map((m) => ({ who: m[1].trim(), text: m[2].trim() }));
+  if (!rows.length) return "Title: Meeting notes\n## Summary\nNothing was said that I could make out.\n## Decisions\n- None recorded.\n## Action items\n- None.";
+  const owner = rows.find((r) => r.who !== "Others")?.who ?? "You";
+  let lastName: string | null = null;
+  const items: string[] = [];
+  const decisions: string[] = [];
+  let topic = "";
+  let update = "";
+  let decided = "";
+  for (const r of rows) {
+    const isOwner = r.who !== "Others";
+    const speaker = isOwner ? owner : lastName ?? "Someone on the call";
+    for (const sentence of r.text.split(/(?<=[.!?])\s+/)) {
+      const st = sentence.trim();
+      if (!st) continue;
+      if (isOwner && !topic) {
+        const t = /\b(?:go through|going through|talk about|discuss|review|plan)\s+(?:the\s+)?(.+?)[.!?]?$/i.exec(st)?.[1];
+        if (t) topic = t;
+      }
+      if (!isOwner && !update && /\b(update|status)\b/i.test(st)) update = st.replace(/^quick update first:\s*/i, "");
+      const ask = /^([A-Z][a-z]{2,}),\s*can you\s+(.+?)\??$/.exec(st);
+      if (ask && !NOT_NAMES.has(ask[1])) {
+        items.push(task(ask[1], ask[2]));
+        continue;
+      }
+      const will = /\bI(?:'ll| will)\s+(.+?)[.!]?$/.exec(st);
+      if (will) {
+        items.push(task(speaker, will[1]));
+        continue;
+      }
+      if (/\b(decided|we keep|stays as|we launch|agreed to|let's go with)\b/i.test(st) && st.length > 24) {
+        const d = cap(st.replace(/^(?:so\s+)?(?:we're|we are)\s+decided:?\s*/i, "").replace(/^i think\s+/i, ""));
+        decisions.push(d);
+        if (/\bdecided\b/i.test(st)) decided = d;
+      }
+    }
+    const mentioned = namesIn(r.text);
+    if (isOwner && mentioned.length) lastName = mentioned[mentioned.length - 1];
+  }
+  function task(who: string, what: string) {
+    let body = what.replace(/[.!?]+$/, "");
+    let due = "";
+    const d = new RegExp(`\\s+(?:by|before|on)\\s+((?:next\\s+)?(?:${DAYS}|the \\d{1,2}(?:st|nd|rd|th)))$`, "i").exec(body);
+    if (d) {
+      due = d[1];
+      body = body.slice(0, d.index);
+    }
+    body = body.replace(/^have\s+/i, "get ");
+    return `- [ ] ${who} — ${body}${due ? ` (by ${due})` : ""}`;
+  }
+  const title = topic ? cap(topic.split(/\s+/).slice(0, 8).join(" ")) : "Meeting notes";
+  const summary = [
+    topic ? `Went through the ${topic}.` : `A ${rows.length > 8 ? "longer" : "short"} conversation between ${owner} and the others on the call.`,
+    update ? cap(update) : "",
+    decisions.length ? `Decided: ${(decided || decisions[0]).charAt(0).toLowerCase()}${(decided || decisions[0]).slice(1)}` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return [
+    `Title: ${title}`,
+    "## Summary",
+    summary,
+    "## Decisions",
+    ...(decisions.length ? [...new Set(decisions)].map((d) => `- ${d}`) : ["- None recorded."]),
+    "## Action items",
+    ...(items.length ? items : ["- None."]),
+  ].join("\n");
+}
+
 type Plan = { calls: LlmToolCall[] } | { text: string };
 
 function planFromUser(text: string, tools: Set<string>, p: Persona, system: string): Plan {
@@ -225,6 +317,16 @@ function planFromUser(text: string, tools: Set<string>, p: Persona, system: stri
   if (/\b(inbox|emails?|mail)\b/.test(t) && searchEmail) return { calls: [call(searchEmail, { query: "" })] };
   if (/\b(inbox|emails?)\b/.test(t) && tools.has("read_inbox")) return { calls: [call("read_inbox", {})] };
 
+  // Meetings the bot took notes in.
+  if (tools.has("read_meeting")) {
+    const about = /\b(?:what did (?:\w+ )?(?:say|said) about|search (?:my )?meetings? for|when did we (?:talk|discuss) about|when did we (?:talk|discuss))\s+(.+?)\??$/i.exec(text)?.[1];
+    if (about && tools.has("search_meetings")) return { calls: [call("search_meetings", { query: about.replace(/^the\s+/i, "") })] };
+    if (/\b(last|latest|recent|previous|that)\s+(meeting|call)\b|\bmeeting notes\b|\baction items?\b|\bwhat did (?:we|they|i) (?:decide|agree)|\brecap\b/.test(t)) {
+      return { calls: [call("read_meeting", { meeting_id: "latest" })] };
+    }
+    if (/\b(my|all|list|recent)\s+meetings\b|\bmeetings (?:this|last) week\b/.test(t) && tools.has("list_meetings")) return { calls: [call("list_meetings", {})] };
+  }
+
   // Calendar, GitHub, files.
   const listEvents = findTool(tools, "list_events");
   if (/\b(calendar|schedule|meetings?|today|tomorrow|plate)\b/.test(t) && listEvents) return { calls: [call(listEvents, { days: 3 })] };
@@ -331,6 +433,41 @@ function summarizeResults(results: { name: string; content: string; isError?: bo
       case "get_weather":
         out.push(content.split("\n").slice(0, 3).join("\n"));
         break;
+      case "list_meetings": {
+        const rows = [...content.matchAll(/^- (mtg_\S+) · “(.+?)” · (.+?) · (.+?) · (.+?)$/gm)];
+        out.push(
+          rows.length
+            ? `Here are your recent meetings:\n${rows.map((m) => `- **${m[2]}** (${m[4]}, ${m[5].replace(/ · .*/, "")})`).join("\n")}\n\nWant the notes from one of them?`
+            : content,
+        );
+        break;
+      }
+      case "read_meeting": {
+        const title = /“(.+?)”/.exec(content)?.[1] ?? "your last meeting";
+        const summaryText = /## Summary\n([\s\S]*?)(?:\n## |$)/.exec(content)?.[1]?.trim();
+        const decisionsText = /## Decisions\n([\s\S]*?)(?:\n## |$)/.exec(content)?.[1]?.trim();
+        const itemsText = /## Action items\n([\s\S]*?)(?:\n## |$)/.exec(content)?.[1]?.trim();
+        const u = userText.toLowerCase();
+        if (!summaryText && !itemsText) {
+          out.push(/still recording/.test(content) ? `“${title}” is still going. Here's the gist so far — ask me again when it ends for the full notes.` : `I have the transcript for “${title}”, but no notes yet.`);
+        } else if (/\baction items?\b|\bto-?dos?\b|\bwhat do i (?:need|have) to do\b/.test(u)) {
+          out.push(`Action items from **${title}**:\n${itemsText ?? "- None recorded."}\n\nWant reminders for any of them?`);
+        } else if (/\b(decide|decided|decision|agree)\b/.test(u)) {
+          out.push(`In **${title}** you decided:\n${decisionsText ?? "- Nothing final."}`);
+        } else if (/\brecap\b|\bemail\b|\bdraft\b/.test(u)) {
+          out.push(
+            `Here's a recap you could send:\n\n> **Recap: ${title}**\n> ${summaryText ?? ""}\n>\n> **Next steps**\n${(itemsText ?? "").split("\n").map((l) => `> ${l.replace("- [ ] ", "- ")}`).join("\n")}\n\nTell me who to send it to and I'll email it (you'll get to approve it first).`,
+          );
+        } else {
+          out.push(`**${title}**\n\n${summaryText ?? ""}${itemsText ? `\n\n**Action items**\n${itemsText}` : ""}`);
+        }
+        break;
+      }
+      case "search_meetings": {
+        const hits = [...content.matchAll(/^- mtg_\S+ · “(.+?)” · (.+?) · \[([\d:]+)\] ([^:]+): (.+)$/gm)].slice(0, 5);
+        out.push(hits.length ? `Here's what was said:\n${hits.map((h) => `- **${h[1]}** (${h[2]}, at ${h[3]}) — ${h[4]}: “${h[5]}”`).join("\n")}` : content);
+        break;
+      }
       case "search_email":
       case "read_inbox": {
         const emails = [...content.matchAll(/From: (.+?) \| Subject: (.+?)\n/g)];
@@ -400,7 +537,17 @@ export function createDemoProvider(): LlmProvider {
       let text = "";
       let calls: LlmToolCall[] = [];
 
-      if (last?.role === "tool") {
+      if (/asked you to take notes in a meeting/.test(req.system)) {
+        // Meeting notes (src/lib/meetings/notes.ts): no tools, just the notes.
+        text = demoMeetingNotes(lastUserText(req.messages));
+      } else if (/taking notes on one part of a long meeting/.test(req.system)) {
+        text = lastUserText(req.messages)
+          .split("\n")
+          .filter((l) => /^\[[\d:]+\]/.test(l))
+          .slice(0, 12)
+          .map((l) => `- ${l}`)
+          .join("\n");
+      } else if (last?.role === "tool") {
         const results: { name: string; content: string; isError?: boolean }[] = [];
         for (let i = req.messages.length - 1; i >= 0; i--) {
           const m = req.messages[i];

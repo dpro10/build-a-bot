@@ -5,6 +5,7 @@
 import * as React from "react";
 import {
   AlarmClock,
+  AudioLines,
   Brain,
   Calculator,
   CloudSun,
@@ -23,6 +24,7 @@ import {
   Users,
   Hash,
   Sparkles,
+  Video,
   type LucideIcon,
 } from "lucide-react";
 import { BRAND_ICONS } from "@/lib/icons.generated";
@@ -30,6 +32,7 @@ import { cn } from "@/lib/utils";
 
 const LUCIDE: Record<string, LucideIcon> = {
   AlarmClock,
+  AudioLines,
   Brain,
   Calculator,
   CloudSun,
@@ -48,6 +51,7 @@ const LUCIDE: Record<string, LucideIcon> = {
   Users,
   Hash,
   Sparkles,
+  Video,
 };
 
 export type IconSpec = { simpleIcon?: string; lucide?: string; letter?: string; color?: string };

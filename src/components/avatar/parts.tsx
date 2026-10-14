@@ -252,8 +252,9 @@ function Eyes({ x, y, gap, s, mood, ink, shine }: { x: number; y: number; gap: n
   const rx = (big ? 9.6 : 8.2) * s;
   const ry = (big ? 12.2 : mood === "working" ? 10 : 10.8) * s;
   // Thinking: the gaze drifts up and to the side. Working: eyes down on the task.
-  const ox = mood === "thinking" ? 2.8 * s : mood === "working" ? -1.2 * s : 0;
-  const oy = mood === "thinking" ? -3.6 * s : mood === "working" ? 2.6 * s : 0;
+  // Listening: eyes turn a little toward the sound.
+  const ox = mood === "thinking" ? 2.8 * s : mood === "working" ? -1.2 * s : mood === "listening" ? 2 * s : 0;
+  const oy = mood === "thinking" ? -3.6 * s : mood === "working" ? 2.6 * s : mood === "listening" ? -0.8 * s : 0;
   const eye = (ex: number) => (
     <g>
       <ellipse cx={f(ex + ox)} cy={f(y + oy)} rx={f(rx)} ry={f(ry)} fill={ink} />
@@ -336,7 +337,15 @@ export function Sparkles({ p, at }: { p: Palette; at: ReadonlyArray<readonly [x:
 /** Status overlays shared by every character, placed at the character's anchor. */
 export function Overlay({ mood, p, x, y, k = 1 }: { mood: AvatarMood; p: Palette; x: number; y: number; k?: number }) {
   const body =
-    mood === "thinking" ? <ThinkingDots x={x} y={y} p={p} /> : mood === "sleeping" ? <Zzz x={x} y={y} p={p} /> : mood === "alert" ? <AlertBadge x={x} y={y} /> : null;
+    mood === "thinking" ? (
+      <ThinkingDots x={x} y={y} p={p} />
+    ) : mood === "sleeping" ? (
+      <Zzz x={x} y={y} p={p} />
+    ) : mood === "alert" ? (
+      <AlertBadge x={x} y={y} />
+    ) : mood === "listening" ? (
+      <Listening x={x} y={y} />
+    ) : null;
   if (!body) return null;
   return k === 1 ? body : <g transform={`translate(${x} ${y}) scale(${k}) translate(${-x} ${-y})`}>{body}</g>;
 }
@@ -375,6 +384,20 @@ function Zzz({ x, y, p }: { x: number; y: number; p: Palette }) {
           <path d={g.d} stroke={ink} strokeWidth={3.6} />
         </g>
       ))}
+    </g>
+  );
+}
+
+/** Recording: a red dot (what everyone recognizes) with sound waves rolling in. */
+function Listening({ x, y }: { x: number; y: number }) {
+  const arc = (dx: number, r: number) => `M${x + dx} ${y - r * 0.75}A${r} ${r} 0 0 1 ${x + dx} ${y + r * 0.75}`;
+  return (
+    <g className="bab-av-listen">
+      <g fill="none" stroke={ALERT} strokeLinecap="round">
+        <path className="bab-av-wave" d={arc(12, 11)} strokeWidth={3.4} />
+        <path className="bab-av-wave" d={arc(18, 18)} strokeWidth={3} style={phase(1.25)} />
+      </g>
+      <circle className="bab-av-rec" cx={x} cy={y} r={8.5} fill={ALERT} stroke="#FFFFFF" strokeWidth={3.2} />
     </g>
   );
 }

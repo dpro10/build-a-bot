@@ -8,6 +8,7 @@ import { listNotes, readNote, writeNote } from "./notes";
 import { readInbox, sendEmail } from "./inbox";
 import { messageOwnerTool } from "./owner";
 import { browserTools } from "./browser";
+import { meetingTools } from "./meetings";
 
 /** Built-in connector id → its tools. */
 export const BUILTIN_TOOLS: Record<string, AnyToolSpec[]> = {
@@ -22,6 +23,7 @@ export const BUILTIN_TOOLS: Record<string, AnyToolSpec[]> = {
   notes: [listNotes, readNote, writeNote],
   bot_inbox: [readInbox, sendEmail],
   browser: browserTools,
+  meetings: meetingTools,
 };
 
 export { botEmailAddress } from "./inbox";

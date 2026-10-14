@@ -6,6 +6,8 @@
  *  - Included brain (Nemotron 3.5 Lightning, $0.06/$0.24 per 1M): ~$0.0004 per turn.
  *  - Web search (Tavily): $0.008 per credit after 1,000 free/month → the real cost driver.
  *  - SMS ~$0.013/segment, voice ~$0.02–0.09/min incl. speech recognition.
+ *  - Meeting notes: speech-to-text per hour of audio (docs/research/meetings-2026-10-14.md)
+ *    plus one notes call (~15K tokens in for an hour-long meeting).
  */
 import type { TrustLevel } from "@/lib/trust";
 
@@ -28,6 +30,8 @@ export type Plan = {
     voiceMinutes: number;
     smsSegments: number;
     routines: number;
+    /** Minutes of meetings the bot can take notes in per month. */
+    meetingMinutes: number;
   };
   trust: TrustLevel[];
   includedModels: ("fast" | "balanced" | "smart")[];
@@ -51,6 +55,7 @@ export const PLANS: Record<PlanId, Plan> = {
       voiceMinutes: 0,
       smsSegments: 0,
       routines: 2,
+      meetingMinutes: 120,
     },
     trust: ["look", "ask", "trusted"],
     includedModels: ["fast"],
@@ -61,6 +66,7 @@ export const PLANS: Record<PlanId, Plan> = {
       "2,000 messages/month on your own key or subscription",
       "Web, email, Telegram, Discord, Slack",
       "3 app connections",
+      "2 hours of meeting notes",
     ],
   },
   plus: {
@@ -78,6 +84,7 @@ export const PLANS: Record<PlanId, Plan> = {
       voiceMinutes: 60,
       smsSegments: 300,
       routines: 25,
+      meetingMinutes: 900,
     },
     trust: ["look", "ask", "trusted", "full"],
     includedModels: ["fast", "balanced"],
@@ -89,6 +96,7 @@ export const PLANS: Record<PlanId, Plan> = {
       "Up to 50 apps per bot",
       "Full faith mode",
       "25 routines (briefs, check-ins, reminders)",
+      "15 hours of meeting notes",
     ],
   },
   pro: {
@@ -106,6 +114,7 @@ export const PLANS: Record<PlanId, Plan> = {
       voiceMinutes: 300,
       smsSegments: 1500,
       routines: 200,
+      meetingMinutes: 3000,
     },
     trust: ["look", "ask", "trusted", "full"],
     includedModels: ["fast", "balanced", "smart"],
@@ -115,6 +124,7 @@ export const PLANS: Record<PlanId, Plan> = {
       "15,000 messages/month incl. our smartest open model",
       "300 call minutes, 1,500 texts",
       "Up to 200 apps per bot",
+      "50 hours of meeting notes",
       "Early access to new features",
     ],
   },

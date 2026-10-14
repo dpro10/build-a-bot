@@ -17,6 +17,7 @@ const SCALE: Record<AvatarMood, readonly [sx: number, sy: number]> = {
   working: [1.02, 1.07],
   sleeping: [1.02, 0.84],
   alert: [0.98, 1.08],
+  listening: [1, 1.03],
 };
 
 function Ember({ p, mood, id, compact }: CharacterProps) {

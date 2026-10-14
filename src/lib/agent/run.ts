@@ -111,6 +111,8 @@ export type RunInput = {
   noTools?: boolean;
   /** Message id to use for the stored user message (dedupe across webhook retries). */
   messageId?: string;
+  /** Stored on a Bridge job so its result lands in the right place (e.g. { meetingId }). */
+  jobMeta?: Record<string, unknown>;
 };
 
 export type RunResult = {

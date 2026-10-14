@@ -40,6 +40,16 @@ export const config = {
     proxyCountry: v("BROWSER_USE_PROXY_COUNTRY"),
   },
   composio: { apiKey: v("COMPOSIO_API_KEY"), baseUrl: v("COMPOSIO_BASE_URL") ?? "https://backend.composio.dev" },
+  /**
+   * Meeting notes: speech-to-text for recorded meetings. Any OpenAI-compatible
+   * POST /audio/transcriptions endpoint works; TRANSCRIBE_PROVIDER picks sensible defaults.
+   */
+  transcribe: {
+    provider: v("TRANSCRIBE_PROVIDER"),
+    apiKey: v("TRANSCRIBE_API_KEY"),
+    baseUrl: v("TRANSCRIBE_BASE_URL"),
+    model: v("TRANSCRIBE_MODEL"),
+  },
   telegram: {
     /** Our "manager" bot that creates each user's own bot (Managed Bots, Bot API 9.6). */
     managerToken: v("TELEGRAM_MANAGER_BOT_TOKEN"),
@@ -88,6 +98,7 @@ export const live = {
   includedBrain: Boolean(config.tokenFactory.apiKey),
   webSearch: Boolean(config.tavily.apiKey),
   browser: Boolean(config.browserUse.apiKey),
+  transcription: Boolean(config.transcribe.apiKey),
   composio: Boolean(config.composio.apiKey),
   telegramManaged: Boolean(config.telegram.managerToken && config.telegram.managerUsername),
   twilio: Boolean(config.twilio.accountSid && config.twilio.authToken && config.twilio.phoneNumber),

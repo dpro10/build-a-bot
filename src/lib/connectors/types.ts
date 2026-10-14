@@ -48,6 +48,7 @@ export type ConnectorCategory =
 export type JobId =
   | "inbox"
   | "calendar"
+  | "meetings"
   | "reminders"
   | "research"
   | "errands"

@@ -97,4 +97,8 @@ export async function housekeeping(db: Db, now = new Date()) {
     .update(schema.bridgeJobs)
     .set({ status: "expired" })
     .where(and(eq(schema.bridgeJobs.status, "queued"), lt(schema.bridgeJobs.expiresAt, now)));
+  // Meetings whose recorder vanished get wrapped up; notes that never finished get an honest ending.
+  const { wrapUpStaleMeetings, rescueStuckNotes } = await import("@/lib/meetings/notes");
+  await wrapUpStaleMeetings(db, now);
+  await rescueStuckNotes(db, now);
 }

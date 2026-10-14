@@ -13,7 +13,7 @@ export type AvatarId = (typeof AVATAR_IDS)[number];
 export const COLORWAY_IDS = ["ocean", "sky", "grape", "rose", "coral", "sunny", "mint", "midnight"] as const;
 export type ColorwayId = (typeof COLORWAY_IDS)[number];
 
-export type AvatarMood = "idle" | "happy" | "thinking" | "working" | "sleeping" | "alert";
+export type AvatarMood = "idle" | "happy" | "thinking" | "working" | "sleeping" | "alert" | "listening";
 
 export type Colorway = {
   id: ColorwayId;
