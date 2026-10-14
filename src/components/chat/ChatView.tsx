@@ -7,6 +7,7 @@ import { ApprovalCard, type ApprovalView } from "./ApprovalCard";
 import { Markdown } from "./Markdown";
 import { ToolChip, type ToolView } from "./ToolChip";
 import { mergeServerMessages, toChatMessage, type ChatMessage } from "./messages";
+import { ChatMeetingNotes } from "@/components/meetings/ChatNotes";
 import { cn } from "@/lib/utils";
 import type { AvatarId, ColorwayId } from "@/lib/avatars";
 
@@ -70,6 +71,7 @@ export function ChatView({
   starters,
   needsGreeting,
   brainLabel,
+  initialInput,
 }: {
   botId: string;
   botName: string;
@@ -80,11 +82,13 @@ export function ChatView({
   starters: string[];
   needsGreeting: boolean;
   brainLabel: string;
+  /** Prefilled message (e.g. "Ask Inky about this meeting" links), not sent until the owner says so. */
+  initialInput?: string;
 }) {
   const live = useBotLive();
   const [messages, setMessages] = React.useState<ChatMessage[]>(initialMessages);
   const [approvals, setApprovals] = React.useState<Record<string, ApprovalView>>(() => Object.fromEntries(initialApprovals.map((a) => [a.id, a])));
-  const [input, setInput] = React.useState("");
+  const [input, setInput] = React.useState(initialInput ?? "");
   const [streaming, setStreaming] = React.useState(false);
   const [bridgeThinking, setBridgeThinking] = React.useState(false);
   const abortRef = React.useRef<AbortController | null>(null);
@@ -101,6 +105,21 @@ export function ChatView({
   React.useEffect(() => {
     scrollToBottom(false);
   }, [scrollToBottom]);
+
+  // A prefilled question: put the cursor at the end, and drop it from the URL so a reload doesn't bring it back.
+  React.useEffect(() => {
+    if (!initialInput) return;
+    const el = inputRef.current;
+    if (el) {
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+    }
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("ask")) {
+      url.searchParams.delete("ask");
+      window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+    }
+  }, [initialInput]);
 
   React.useEffect(() => {
     scrollToBottom();
@@ -304,6 +323,7 @@ export function ChatView({
           {messages.map((m) => (
             <MessageRow
               key={m.key ?? m.id}
+              botId={botId}
               message={m}
               avatar={avatar}
               color={color}
@@ -358,6 +378,7 @@ export function ChatView({
 }
 
 function MessageRow({
+  botId,
   message: m,
   avatar,
   color,
@@ -366,6 +387,7 @@ function MessageRow({
   activity,
   botName,
 }: {
+  botId: string;
   message: ChatMessage;
   avatar: AvatarId;
   color: ColorwayId;
@@ -390,7 +412,7 @@ function MessageRow({
         <Avatar avatar={avatar} color={color} size={34} animated={false} title={botName} />
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-2">
-        {m.proactive ? <div className="text-[11px] font-semibold tracking-wide text-primary uppercase">{botName} reached out</div> : null}
+        {m.proactive && !m.meeting ? <div className="text-[11px] font-semibold tracking-wide text-primary uppercase">{botName} reached out</div> : null}
         {m.tools.length ? (
           <div className="flex flex-col gap-1.5">
             {m.tools.map((t) => (
@@ -407,6 +429,8 @@ function MessageRow({
             </span>
             {activity ? <span className="shimmer-text text-sm font-medium">{activity}…</span> : null}
           </div>
+        ) : m.text && m.meeting ? (
+          <ChatMeetingNotes botId={botId} text={m.text} meeting={m.meeting} />
         ) : m.text ? (
           <div className="max-w-full self-start rounded-3xl rounded-tl-lg border border-border bg-bubble-bot px-4 py-3 text-[15px] shadow-soft">
             <Markdown text={m.text} />

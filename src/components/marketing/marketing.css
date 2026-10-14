@@ -201,7 +201,7 @@
     color: var(--muted-foreground);
   }
   .mk-prose :where(p, li, td) > a {
-    color: var(--primary);
+    color: var(--primary-ink);
     text-decoration: underline;
     text-underline-offset: 3px;
     text-decoration-thickness: 1px;

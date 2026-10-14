@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { ArrowLeftRight, ExternalLink, Laptop, Lock, Power, ShieldCheck, UserRound } from "lucide-react";
+import { ArrowDown, ArrowLeftRight, ExternalLink, Laptop, Lock, Power, ShieldCheck, UserRound } from "lucide-react";
 import { getDb } from "@/lib/db";
 import { requireUser } from "@/lib/auth/session";
 import { listBots, listBridgeDevices } from "@/lib/data";
@@ -9,7 +9,9 @@ import { Avatar } from "@/components/avatar";
 import { BrandTile } from "@/components/brand/icons";
 import { PageContainer, PageHeader } from "@/components/account/PageHeader";
 import { BridgeLive, type PlainBot, type SubscriptionBot } from "@/components/account/BridgeLive";
-import { toDeviceView } from "@/components/account/bridge-shared";
+import { isDesktopApp, toDeviceView } from "@/components/account/bridge-shared";
+import { DesktopAppSection } from "@/components/meetings/DesktopAppSection";
+import { Button } from "@/components/ui/button";
 import type { AvatarId, ColorwayId } from "@/lib/avatars";
 import { cn } from "@/lib/utils";
 
@@ -42,12 +44,22 @@ export default async function BridgePage() {
       };
     });
   const star = subscriptionBots[0] ?? allBots[0];
+  const desktopApps = devices
+    .filter((d) => !d.revokedAt && isDesktopApp(d.platform))
+    .map((d) => ({ id: d.id, name: d.name, online: Boolean(d.lastSeenAt && now - d.lastSeenAt.getTime() < DEVICE_ONLINE_MS) }));
 
   return (
     <PageContainer>
       <PageHeader
         title="Bridge"
         description="Let your bots think with the Claude or ChatGPT plan you already pay for — through your own Claude Code or Codex, on your own computer."
+        actions={
+          <Button asChild variant="soft" size="sm">
+            <a href="#desktop">
+              Meeting notes app <ArrowDown />
+            </a>
+          </Button>
+        }
       />
 
       {/* What it is, in one picture. */}
@@ -113,6 +125,10 @@ export default async function BridgePage() {
         serverNow={now}
         prerequisites={<Prerequisites />}
       />
+
+      <div className="mt-12">
+        <DesktopAppSection devices={desktopApps} bot={star ? { name: star.name, avatar: star.avatar, color: star.color } : undefined} />
+      </div>
     </PageContainer>
   );
 }

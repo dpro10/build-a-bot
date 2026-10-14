@@ -1,0 +1,55 @@
+# Packaging (not run in CI here): `npm run dist` on each OS. See README › Packaging and signing.
+appId: site.build-a-bot.desktop
+productName: Build-a-bot
+copyright: Copyright © 2026 Build-a-bot
+directories:
+  output: dist
+  buildResources: build
+files:
+  - package.json
+  - src/**/*
+  - assets/**/*
+  - "!**/*.map"
+asar: true
+
+mac:
+  category: public.app-category.productivity
+  target: [dmg, zip]
+  icon: build/icon.png
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  # Notarizes with APPLE_API_KEY / APPLE_API_KEY_ID / APPLE_API_ISSUER (or APPLE_ID +
+  # APPLE_APP_SPECIFIC_PASSWORD + APPLE_TEAM_ID) from the environment.
+  notarize: true
+  extendInfo:
+    # A menu-bar app: no Dock icon.
+    LSUIElement: true
+    NSMicrophoneUsageDescription: "Your bot listens to your microphone only after you say yes to taking notes, and only while it's on your screen."
+    NSAudioCaptureUsageDescription: "Your bot hears the call's audio (the other people) only after you say yes to taking notes, so the notes include everyone."
+    NSAppleEventsUsageDescription: "Only if you turn it on: Build-a-bot reads your browser tabs' addresses to recognize Google Meet and Teams calls. It never reads what's on the page."
+  # The Swift helper (bash native/macos/build.sh) for per-app call detection.
+  extraResources:
+    - from: native/macos/build/bab-audio-helper
+      to: bin/bab-audio-helper
+
+win:
+  target: [nsis]
+  icon: build/icon.png
+  # Code signing: set WIN_CSC_LINK / WIN_CSC_KEY_PASSWORD (a certificate), or use
+  # azureSignOptions for Azure Trusted Signing. Unsigned builds trigger SmartScreen.
+
+nsis:
+  oneClick: true
+  perMachine: false
+  allowElevation: false
+
+linux:
+  target: [AppImage, deb]
+  icon: build/icon.png
+  category: Office
+  synopsis: Your bot notices calls and asks before it takes notes
+  maintainer: Build-a-bot <hello@build-a-bot.site>
+deb:
+  depends: [pulseaudio-utils | pipewire-pulse]

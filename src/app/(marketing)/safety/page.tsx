@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {
   ArrowRight,
+  AudioLines,
   Ban,
   BellOff,
   Bot,
@@ -9,6 +10,7 @@ import {
   HandCoins,
   HeartHandshake,
   Lock,
+  Megaphone,
   OctagonX,
   Receipt,
   ShieldAlert,
@@ -44,6 +46,7 @@ const TOC: TocEntry[] = [
   { id: "quiet-hours", title: "Quiet hours" },
   { id: "money", title: "Money" },
   { id: "sensitive", title: "Sensitive apps" },
+  { id: "recording", title: "Meeting notes" },
   { id: "ai-disclosure", title: "Always an AI" },
   { id: "adults", title: "Adults only" },
   { id: "crisis", title: "Crisis protocol" },
@@ -236,6 +239,38 @@ export default function SafetyPage() {
               </span>
             ))}
           </div>
+        </DocSection>
+
+        <DocSection id="recording" title="Meeting notes: only when you say yes" icon={<AudioLines />}>
+          <p>
+            Your bot can take notes in your calls and meetings. It never records on its own: it asks, and it only listens after you say yes. There
+            is no setting that makes it record automatically.
+          </p>
+          <ul>
+            <li>
+              <strong>It&apos;s always on your screen while it listens.</strong> With the desktop app, it sits at the bottom of your screen with a red dot
+              and a timer. In the browser, it floats in its own little window, and closing that window stops the recording. It never records without
+              showing itself.
+            </li>
+            <li>
+              <strong>Audio is thrown away.</strong> The sound is turned into text, and the audio is deleted once your notes are written. Your meetings
+              are never used to train AI, and we don&apos;t make voiceprints: lines are labeled by which microphone they came from, not by recognizing
+              anyone&apos;s voice.
+            </li>
+            <li>
+              <strong>You can delete any meeting,</strong> or just its transcript and keep the notes. Transcripts are deleted after 90 days unless you
+              choose 30 days or keep them. If someone on the call objects, &ldquo;Stop and delete&rdquo; throws away everything from that call.
+            </li>
+            <li>
+              <strong>A meeting can&apos;t give your bot orders.</strong> Transcripts are treated as outside content, like an email from a stranger: a
+              line in a meeting can&apos;t make your bot send, share or do anything without the usual checks.
+            </li>
+          </ul>
+          <Callout icon={<Megaphone />} title="Tell people before you record" tone="warning">
+            Recording laws differ by place, and some places require everyone&apos;s permission. Let people know when your bot is taking notes. Your bot
+            gives you a heads-up to paste in the call&apos;s chat: &ldquo;Heads-up: I&apos;m using my AI assistant to take notes on this call (a
+            transcript and a summary). Let me know if you&apos;d rather I didn&apos;t.&rdquo;
+          </Callout>
         </DocSection>
 
         <DocSection id="ai-disclosure" title="Always an AI, on every channel" icon={<Bot />}>

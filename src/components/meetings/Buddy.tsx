@@ -10,7 +10,7 @@
  *  - "pip":    inside a Document Picture-in-Picture window that floats over other apps
  */
 import * as React from "react";
-import { Check, Copy, ExternalLink, Mic, Pause, Play, Square, Trash2, X } from "lucide-react";
+import { AlertTriangle, Check, Copy, ExternalLink, Mic, Pause, Play, Square, Trash2, X } from "lucide-react";
 import { Avatar } from "@/components/avatar";
 import type { AvatarMood } from "@/lib/avatars";
 import { cn } from "@/lib/utils";
@@ -38,9 +38,9 @@ const MOOD: Record<BuddyPhase, AvatarMood> = {
 
 export const DEFAULT_CONSENT_NOTE = "Heads-up: I'm using my AI assistant to take notes on this call (a transcript and a summary). Let me know if you'd rather I didn't.";
 
-/** The heads-up with the bot's name in it. */
+/** The heads-up with the bot's name in it (always says it's an AI). */
 export function consentNoteFor(botName: string): string {
-  return `Heads-up: I'm using my assistant ${botName} to take notes on this call (a transcript and a summary). Let me know if you'd rather I didn't.`;
+  return `Heads-up: I'm using my AI assistant ${botName} to take notes on this call (a transcript and a summary). Let me know if you'd rather I didn't.`;
 }
 
 export function formatClock(ms: number): string {
@@ -100,6 +100,22 @@ function IconButton({ label, onClick, children, tone = "neutral" }: { label: str
   );
 }
 
+/** A standing note above the bot (persistent, unlike the caption). */
+function NoticeChip({ text, className }: { text: string; className?: string }) {
+  return (
+    <p
+      title={text}
+      className={cn(
+        "pointer-events-none flex max-w-[min(360px,100%)] items-start gap-1.5 rounded-2xl border border-warning/30 bg-card px-3 py-1.5 text-xs leading-snug text-foreground shadow-soft",
+        className,
+      )}
+    >
+      <AlertTriangle className="mt-px size-3.5 shrink-0 text-warning" aria-hidden />
+      <span className="line-clamp-2">{text}</span>
+    </p>
+  );
+}
+
 function CopyNote({ note, onCopy }: { note: string; onCopy?: (text: string) => void }) {
   const [done, setDone] = React.useState(false);
   return (
@@ -121,6 +137,8 @@ function CopyNote({ note, onCopy }: { note: string; onCopy?: (text: string) => v
 
 export function Buddy(props: BuddyProps) {
   const { variant, phase, bot, app, level, caption, message, minutesLeft, onAction, onInteractive, onCopy, className } = props;
+  // A standing note while listening (not a transcript line), e.g. "I can only hear your mic here".
+  const notice = (phase === "listening" || phase === "paused") && props.notice ? props.notice : null;
   const elapsed = useElapsed(props.elapsedMs, phase === "listening" ? props.runningSince : null);
   const [hover, setHover] = React.useState(false);
   // "Stop and delete" takes a second tap, so nothing is thrown away by accident.
@@ -296,7 +314,7 @@ export function Buddy(props: BuddyProps) {
 
   const live = (
     <span role="status" aria-live="polite" className="sr-only">
-      {announce}
+      {notice ? `${announce}. ${notice}` : announce}
     </span>
   );
 
@@ -309,9 +327,15 @@ export function Buddy(props: BuddyProps) {
           <div className="min-w-0 flex-1">
             <p className="truncate font-display text-base font-bold">{bot.name}</p>
             <p className="truncate text-xs text-muted-foreground">
-              {phase === "listening" ? "Taking notes" : phase === "paused" ? "Paused" : phase === "saving" ? "Writing your notes…" : phase === "done" ? "Notes are ready" : phase === "asking" ? "Ready when you are" : "Needs a look"}
+              {phase === "listening" ? "Taking notes" : phase === "paused" ? "Not listening right now" : phase === "saving" ? "Writing your notes…" : phase === "done" ? "Notes are ready" : phase === "asking" ? "Ready when you are" : "Needs a look"}
               {appName ? ` · ${appName}` : ""}
             </p>
+            {notice ? (
+              <p className="mt-0.5 flex items-start gap-1 text-xs leading-snug text-warning" title={notice}>
+                <AlertTriangle className="mt-px size-3 shrink-0" aria-hidden />
+                <span className="line-clamp-2 text-foreground/80">{notice}</span>
+              </p>
+            ) : null}
             <div className="mt-1.5">{pill}</div>
           </div>
         </div>
@@ -320,7 +344,47 @@ export function Buddy(props: BuddyProps) {
     );
   }
 
-  const peek = variant === "screen" ? 16 : 14;
+  if (variant === "page") {
+    // On a web page: the bot, its pill right beside it and the bubble above, centered as one
+    // group so it fits a narrow window too. The bubble's tail points at the bot.
+    return (
+      <div className={cn("pointer-events-none fixed inset-x-0 bottom-0 z-50 flex justify-center px-3", className)}>
+        {live}
+        <div className="flex max-w-full min-w-0 flex-col items-start">
+          {bubble ? (
+            <div
+              key={phase}
+              className={cn(
+                "pointer-events-auto relative mb-1 animate-bubble rounded-3xl border border-border bg-card px-4 py-3 text-foreground shadow-lift",
+                phase === "asking" ? "w-[min(400px,100%)]" : "max-w-[min(360px,100%)]",
+              )}
+            >
+              {bubble}
+              <span
+                aria-hidden
+                className="absolute -bottom-[7px] left-[29px] size-3.5 rotate-45 rounded-[3px] border-r border-b border-border bg-card sm:left-[37px]"
+              />
+            </div>
+          ) : null}
+          {notice ? <NoticeChip text={notice} className="mb-1" /> : null}
+          <div className="flex items-end gap-1">
+            <button
+              type="button"
+              onClick={() => act(phase === "asking" ? "take" : "open")}
+              aria-label={phase === "asking" ? `${bot.name}: take notes` : `Show ${bot.name}'s notes`}
+              className="pointer-events-auto shrink-0 animate-peek rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              style={{ marginBottom: "-14px" }}
+            >
+              <Avatar avatar={bot.avatar} color={bot.color} mood={MOOD[phase]} size={88} className="h-auto w-[72px] sm:w-[88px]" />
+            </button>
+            {pill ? <div className="pointer-events-auto mb-4 sm:mb-6">{pill}</div> : null}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const peek = 16;
   return (
     <div
       className={cn(
@@ -333,6 +397,7 @@ export function Buddy(props: BuddyProps) {
       {bubble ? (
         <div
           key={phase}
+          data-buddy-interactive=""
           onPointerEnter={enter}
           onPointerLeave={leave}
           className={cn(
@@ -341,12 +406,16 @@ export function Buddy(props: BuddyProps) {
           )}
         >
           {bubble}
-          <span aria-hidden className="absolute -bottom-[7px] left-1/2 size-3.5 -translate-x-1/2 rotate-45 rounded-[3px] border-r border-b border-border bg-card" />
+          {notice ? null : (
+            <span aria-hidden className="absolute -bottom-[7px] left-1/2 size-3.5 -translate-x-1/2 rotate-45 rounded-[3px] border-r border-b border-border bg-card" />
+          )}
         </div>
       ) : null}
+      {notice ? <NoticeChip text={notice} className="mb-1.5" /> : null}
       <div className="relative flex items-end">
         <button
           type="button"
+          data-buddy-interactive=""
           onPointerEnter={enter}
           onPointerLeave={leave}
           onClick={() => act(phase === "asking" ? "take" : "open")}
@@ -357,7 +426,7 @@ export function Buddy(props: BuddyProps) {
           <Avatar avatar={bot.avatar} color={bot.color} mood={MOOD[phase]} size={phase === "asking" ? 104 : 88} />
         </button>
         {pill ? (
-          <div className="pointer-events-auto absolute bottom-6 left-full ml-1" onPointerEnter={enter} onPointerLeave={leave}>
+          <div data-buddy-interactive="" className="pointer-events-auto absolute bottom-6 left-full ml-1" onPointerEnter={enter} onPointerLeave={leave}>
             {pill}
           </div>
         ) : null}

@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { schema } from "@/lib/db";
 import { apiError, json } from "@/lib/api";
 import { authDevice } from "@/lib/bridge/auth";
@@ -43,4 +43,15 @@ export async function GET(req: Request) {
     appUrl: appUrl(),
     demo: demoMode,
   });
+}
+
+/** "Unpair" in the desktop app: the device revokes its own token, so it stops working everywhere. */
+export async function DELETE(req: Request) {
+  const auth = await authDevice(req);
+  if (!auth) return apiError(401, "Already unpaired.");
+  await auth.db
+    .update(schema.bridgeDevices)
+    .set({ revokedAt: new Date() })
+    .where(and(eq(schema.bridgeDevices.id, auth.device.id), isNull(schema.bridgeDevices.revokedAt)));
+  return json({ ok: true });
 }

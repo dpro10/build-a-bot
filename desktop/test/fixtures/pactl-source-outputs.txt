@@ -1,0 +1,81 @@
+Source Output #42
+	Driver: protocol-native.c
+	Owner Module: 10
+	Client: 57
+	Source: 1
+	Sample Specification: s16le 1ch 16000Hz
+	Channel Map: mono
+	Format: pcm, format.sample_format = "\"s16le\""  format.rate = "16000"  format.channels = "1"  format.channel_map = "\"mono\""
+	Corked: no
+	Mute: no
+	Volume: mono: 65536 / 100% / 0.00 dB
+	        balance 0.00
+	Buffer Latency: 0 usec
+	Source Latency: 1972 usec
+	Resample method: speex-float-1
+	Properties:
+		media.name = "RecordStream"
+		application.name = "ZOOM VoiceEngine"
+		native-protocol.peer = "UNIX socket client"
+		native-protocol.version = "35"
+		application.process.id = "48211"
+		application.process.user = "dana"
+		application.process.host = "dana-thinkpad"
+		application.process.binary = "zoom"
+		application.language = "en_US.UTF-8"
+		window.x11.display = ":0"
+		application.process.machine_id = "8a1c6f2e4b7d4f0c9e3a2b1d5c6e7f80"
+		application.process.session_id = "2"
+		module-stream-restore.id = "source-output-by-application-name:ZOOM VoiceEngine"
+
+Source Output #43
+	Driver: protocol-native.c
+	Owner Module: 10
+	Client: 61
+	Source: 1
+	Sample Specification: float32le 1ch 25Hz
+	Channel Map: mono
+	Format: pcm, format.sample_format = "\"float32le\""  format.rate = "25"  format.channels = "1"  format.channel_map = "\"mono\""
+	Corked: no
+	Mute: no
+	Volume: mono: 65536 / 100% / 0.00 dB
+	        balance 0.00
+	Buffer Latency: 0 usec
+	Source Latency: 0 usec
+	Resample method: peaks
+	Properties:
+		media.name = "Peak detect"
+		application.name = "PulseAudio Volume Control"
+		application.id = "org.PulseAudio.pavucontrol"
+		application.process.id = "50110"
+		application.process.binary = "pavucontrol"
+
+Source Output #47
+	Driver: protocol-native.c
+	Owner Module: 10
+	Client: 66
+	Source: 1
+	Sample Specification: s16le 1ch 48000Hz
+	Channel Map: mono
+	Corked: no
+	Mute: no
+	Properties:
+		application.name = "Chromium"
+		application.process.id = "51022"
+		application.process.binary = "electron"
+		media.name = "RecordStream"
+
+Source Output #51
+	Driver: protocol-native.c
+	Owner Module: 10
+	Client: 70
+	Source: 1
+	Sample Specification: float32le 1ch 48000Hz
+	Channel Map: mono
+	Corked: yes
+	Mute: no
+	Properties:
+		application.name = "Firefox"
+		application.process.id = "52200"
+		application.process.binary = "firefox"
+		media.name = "AudioStream"

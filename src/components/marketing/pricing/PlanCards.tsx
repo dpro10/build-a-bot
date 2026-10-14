@@ -13,6 +13,12 @@ export type Interval = "monthly" | "yearly";
 
 const n = (x: number) => x.toLocaleString("en-US");
 
+/** 120 → "2 hours", 90 → "90 minutes" */
+export function meetingHours(minutes: number): string {
+  if (minutes % 60 === 0) return `${n(minutes / 60)} hour${minutes === 60 ? "" : "s"}`;
+  return `${n(minutes)} minutes`;
+}
+
 /** Card bullets, built from the plan's real limits so they never drift from what's enforced. */
 export function planBullets(p: Plan): string[] {
   const L = p.limits;
@@ -24,6 +30,7 @@ export function planBullets(p: Plan): string[] {
   out.push(`${n(L.connectors)} apps per bot`);
   out.push(`${n(L.byoMessages)} messages a month on your own key or plan`);
   out.push(`${n(L.routines)} routines, like a morning brief`);
+  if (L.meetingMinutes) out.push(`${meetingHours(L.meetingMinutes)} of meeting notes a month`);
   out.push(`${n(L.searches)} web searches a month`);
   return out;
 }

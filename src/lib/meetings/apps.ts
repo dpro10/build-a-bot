@@ -13,7 +13,7 @@ export const MEETING_APPS: Record<MeetingAppId, MeetingAppDef> = {
   zoom: { id: "zoom", name: "Zoom", icon: { simpleIcon: "zoom", color: "0B5CFF" } },
   meet: { id: "meet", name: "Google Meet", icon: { simpleIcon: "googlemeet", color: "00897B" } },
   teams: { id: "teams", name: "Microsoft Teams", icon: { letter: "T", color: "6264A7" } },
-  webex: { id: "webex", name: "Webex", icon: { simpleIcon: "webex", color: "000000" } },
+  webex: { id: "webex", name: "Webex", icon: { simpleIcon: "webex", letter: "W", color: "000000" } },
   slack: { id: "slack", name: "Slack huddle", icon: { letter: "S", color: "4A154B" } },
   discord: { id: "discord", name: "Discord call", icon: { simpleIcon: "discord", color: "5865F2" } },
   facetime: { id: "facetime", name: "FaceTime", icon: { lucide: "Video", color: "34C759" } },

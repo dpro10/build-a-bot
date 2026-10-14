@@ -14,6 +14,7 @@ import type { AvatarId, ColorwayId } from "@/lib/avatars";
 
 const TABS = [
   { href: "", label: "Chat" },
+  { href: "/meetings", label: "Meetings" },
   { href: "/activity", label: "Activity" },
   { href: "/tools", label: "Apps & trust" },
   { href: "/channels", label: "Channels" },

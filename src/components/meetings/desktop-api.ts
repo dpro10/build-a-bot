@@ -6,7 +6,11 @@
  *
  * Window sizes the desktop app uses per phase (the page is anchored bottom-center,
  * transparent, and only catches the mouse over the bot and its bubble):
- *   asking 440×330 · listening/paused 420×200 · saving/done/error 420×230
+ *   asking 440×330 · listening/paused 720×200 (the pill grows to the right of the
+ *   centered bot when hovered) · saving/done/error 420×230
+ *
+ * Clickable parts carry `data-buddy-interactive`, so a desktop app that can't get
+ * hover events from the OS (Linux) can hit-test them itself.
  */
 import type { AvatarId, ColorwayId } from "@/lib/avatars";
 import type { MeetingAppId } from "@/lib/meetings/apps";
@@ -48,6 +52,8 @@ export type BuddyState = {
   minutesLeft?: number | null;
   /** Owner can copy a heads-up for the call chat. */
   consentNote?: string;
+  /** A standing note while listening, e.g. "I can only hear your mic here…" (not a transcript line). */
+  notice?: string | null;
 };
 
 export interface BabDesktopApi {
