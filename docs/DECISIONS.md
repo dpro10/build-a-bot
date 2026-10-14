@@ -276,6 +276,19 @@ Diego asked: "Is vercel the right software to use for this? or AWS or google or 
   - Other demo accounts can still be claimed by anyone, so testers shouldn't paste real API keys or connect real accounts until real email sign-in (Resend + a verified domain) is set up.
 - **Brain:** Diego adds his own Token Factory and Tavily keys in Vercel; keys never go through chat or the repo.
 
+## Live: https://build-a-bot-blue.vercel.app (2026-10-14)
+
+- **Vercel:** project `build-a-bot` in Diego's Pro team, built from `main`. Functions run in iad1.
+- **Database:** a Supabase project in Diego's free organization, East US (North Virginia), through the Session pooler (port 5432) with `?sslmode=require`. The first cron tick ran the migrations.
+- **Settings:** Diego set every variable for Production and Preview ("everything should be set to production and preview right?"):
+  - `DEMO_MODE`, `ADMIN_EMAILS`, `BRIDGE_CLI`;
+  - `ENCRYPTION_KEY` and `CRON_SECRET`, generated on Diego's Mac and never in chat;
+  - `DATABASE_URL`, `ADMIN_SIGNIN_CODE`, `TOKEN_FACTORY_API_KEY`, `TAVILY_API_KEY`.
+- **Previews share the live database and key.** A branch with a new migration applies it to the live database the first time its preview runs. Give Preview its own database before any migration that isn't purely additive.
+- **Deployment Protection:** Vercel's default (Vercel Authentication, `all_except_custom_domains`).
+- **The Vercel connector** can read projects, deployments and logs. It can't create projects or list environment variables (403), so Diego does those in the dashboard.
+- **Log noise:** each cold start logs Postgres NOTICEs from the migrator ("already exists, skipping"). They're harmless.
+
 ## Security review before Diego's walkthrough (2026-10-14)
 
 A code review of the server and the desktop app. Each fix has a test that fails on the old code.
