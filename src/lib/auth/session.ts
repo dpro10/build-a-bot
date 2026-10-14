@@ -13,6 +13,7 @@ import type { User } from "@/lib/db/schema";
 import { randomToken, sha256 } from "@/lib/crypto";
 import { isProduction } from "@/lib/env";
 import { newId } from "@/lib/utils";
+import { isValidTimeZone } from "@/lib/scheduler/time";
 
 export const SESSION_COOKIE = "bab_session";
 const SESSION_DAYS = 180;
@@ -72,7 +73,7 @@ export async function getOrCreateUser(opts: { timezone?: string } = {}): Promise
   const db = await getDb();
   const [user] = await db
     .insert(schema.users)
-    .values({ id: newId("usr"), timezone: opts.timezone || "UTC" })
+    .values({ id: newId("usr"), timezone: opts.timezone && isValidTimeZone(opts.timezone) ? opts.timezone : "UTC" })
     .returning();
   await createSession(db, user.id);
   return user;

@@ -143,7 +143,7 @@ export async function createBot(db: Db, owner: User, input: CreateBotInput): Pro
       model: input.brain.model ?? "default",
       whenOffline: input.brain.whenOffline ?? "wait",
     };
-    notes.push("Install the Bridge on your computer to connect your subscription (Settings → Brain shows how).");
+    notes.push("One more step for your subscription: pair your computer on the Bridge page (it takes a minute).");
   }
 
   // User profile bits from the builder.

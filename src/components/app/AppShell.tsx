@@ -73,7 +73,7 @@ export function AppShell({
             Demo mode: integrations without keys are simulated — nothing real is sent or charged.
           </div>
         ) : null}
-        <div id="app-scroll" className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        <div id="app-scroll" className="relative flex min-h-0 flex-1 flex-col overflow-y-auto">
           {children}
         </div>
       </main>

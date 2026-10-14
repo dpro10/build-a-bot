@@ -19,6 +19,7 @@ export type ApprovalView = {
 
 const REASON_LABEL: Record<string, string> = {
   needs_approval: "You asked to approve actions",
+  always_ask: "Website forms always wait for your OK",
   high_risk: "High-stakes action",
   new_recipient: "First message to this person",
   tainted_send_new_recipient: "Read outside content first — guarding against prompt injection",
