@@ -3,7 +3,7 @@
  * each channel (codes, links), and wiring credentials. In demo mode, codes are shown
  * on screen and deliveries are simulated so the full flow can be tried.
  */
-import { and, eq, gt, isNull } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import { schema, type Db } from "@/lib/db";
 import type { Bot, Channel, User } from "@/lib/db/schema";
 import { appUrl, config, demoMode, live } from "@/lib/env";
@@ -18,6 +18,7 @@ import { slackCall } from "./slack";
 import { sendSms } from "./twilio";
 import { sendEmailRaw } from "./email";
 import { connectTelegramToken, startManagedTelegram } from "./telegram-setup";
+import { rateLimit } from "@/lib/safety/ratelimit";
 
 export type SetupResult = { ok: true; data?: Record<string, unknown> } | { ok: false; error: string; status?: number };
 
@@ -42,13 +43,60 @@ async function saveCode(db: Db, owner: User, bot: Bot, channel: Channel, purpose
   return code;
 }
 
-async function useCode(db: Db, channel: Channel, prefix: string, code: string) {
+/** Wrong guesses allowed per code before it stops working (6 digits, so brute force is hopeless). */
+const MAX_CODE_ATTEMPTS = 5;
+
+type UseCodeResult = { ok: true; row: typeof schema.pairingCodes.$inferSelect } | { ok: false; error: string };
+
+/**
+ * Check a verification code for this channel. Every wrong guess counts against all of the
+ * channel's live codes; after MAX_CODE_ATTEMPTS a code is dead and the owner sends a new one.
+ */
+async function useCode(db: Db, channel: Channel, purpose: string, prefix: string, code: string): Promise<UseCodeResult> {
+  const now = new Date();
+  const live = await db
+    .select()
+    .from(schema.pairingCodes)
+    .where(and(eq(schema.pairingCodes.channelId, channel.id), eq(schema.pairingCodes.purpose, purpose), isNull(schema.pairingCodes.usedAt), gt(schema.pairingCodes.expiresAt, now)));
+  const usable = live.filter((r) => r.attempts < MAX_CODE_ATTEMPTS);
+  if (!usable.length) {
+    return { ok: false, error: live.length ? "Too many wrong tries. Send yourself a new code." : "That code expired or was already used. Send yourself a new code." };
+  }
+  const wanted = `${prefix}_${channel.id}_${code.trim()}`;
+  const hit = usable.find((r) => r.code === wanted);
+  if (!hit) {
+    await db
+      .update(schema.pairingCodes)
+      .set({ attempts: sql`${schema.pairingCodes.attempts} + 1` })
+      .where(inArray(schema.pairingCodes.code, usable.map((r) => r.code)));
+    const stillUsable = usable.some((r) => r.attempts + 1 < MAX_CODE_ATTEMPTS);
+    return { ok: false, error: stillUsable ? "That code isn't right. Check it and try again." : "Too many wrong tries. Send yourself a new code." };
+  }
   const [row] = await db
     .update(schema.pairingCodes)
-    .set({ usedAt: new Date() })
-    .where(and(eq(schema.pairingCodes.code, `${prefix}_${channel.id}_${code.trim()}`), isNull(schema.pairingCodes.usedAt), gt(schema.pairingCodes.expiresAt, new Date())))
+    .set({ usedAt: now })
+    .where(and(eq(schema.pairingCodes.code, hit.code), isNull(schema.pairingCodes.usedAt)))
     .returning();
-  return row ?? null;
+  if (!row) return { ok: false, error: "That code was already used. Send yourself a new code." };
+  // Verified: any other codes still out there for this channel stop working.
+  await db
+    .update(schema.pairingCodes)
+    .set({ usedAt: now })
+    .where(and(eq(schema.pairingCodes.channelId, channel.id), eq(schema.pairingCodes.purpose, purpose), isNull(schema.pairingCodes.usedAt)));
+  return { ok: true, row };
+}
+
+/**
+ * Verification codes cost money when they're really sent (SMS pumping is a known fraud),
+ * so they're rate-limited per caller IP, per owner and per destination. Simulated codes
+ * (demo mode, shown on screen) only get a loose per-owner limit.
+ */
+async function codeLimit(db: Db, owner: User, destination: string, reallySent: boolean, ip: string | undefined): Promise<SetupResult | null> {
+  const tooMany = (error = "Too many codes. Try again in a bit."): SetupResult => ({ ok: false, error, status: 429 });
+  if (reallySent && ip && !(await rateLimit(db, `code:ip:${ip}`, 10, 3600)).ok) return tooMany();
+  if (!(await rateLimit(db, `code:owner:${owner.id}`, reallySent ? 5 : 20, 3600)).ok) return tooMany();
+  if (reallySent && !(await rateLimit(db, `code:dest:${destination}`, 3, 3600)).ok) return tooMany("Too many codes to that address. Try again in a bit.");
+  return null;
 }
 
 export async function channelAction(
@@ -58,15 +106,21 @@ export async function channelAction(
   kind: ChannelKind,
   action: string,
   payload: Record<string, unknown>,
+  /** Caller details for abuse limits (the request's IP). */
+  meta: { ip?: string } = {},
 ): Promise<SetupResult> {
   const def = CHANNEL_BY_KIND[kind];
   if (!def) return { ok: false, error: "Unknown channel" };
   const plan = getPlan(owner.plan);
 
   if (action === "waitlist") {
-    const email = String(payload.email ?? owner.email ?? "");
+    const email = String(payload.email ?? owner.email ?? "").trim().toLowerCase();
     if (!isEmail(email)) return { ok: false, error: "Add an email so we can tell you when it's ready." };
-    await db.insert(schema.waitlist).values({ id: newId("wl"), email, feature: `channel:${kind}`, userId: owner.id }).onConflictDoNothing();
+    // Same email again (say, from a new anonymous account): it's the same person, so the row follows them.
+    await db
+      .insert(schema.waitlist)
+      .values({ id: newId("wl"), email, feature: `channel:${kind}`, userId: owner.id })
+      .onConflictDoUpdate({ target: [schema.waitlist.email, schema.waitlist.feature], set: { userId: owner.id } });
     return { ok: true, data: { message: `You're on the list for ${def.name}.` } };
   }
   if (def.availability === "waitlist" || def.availability === "soon") return { ok: false, error: `${def.name} isn't available yet.` };
@@ -79,6 +133,29 @@ export async function channelAction(
     return { ok: true };
   }
   if (action === "enable") {
+    // One verified phone covers both texting and calls: adding the other reuses it.
+    if (!channel.ownerVerifiedAt && (kind === "sms" || kind === "voice")) {
+      const [sibling] = await db
+        .select()
+        .from(schema.channels)
+        .where(and(eq(schema.channels.botId, bot.id), eq(schema.channels.kind, kind === "sms" ? "voice" : "sms")))
+        .limit(1);
+      if (sibling?.ownerVerifiedAt && sibling.ownerAddress) {
+        const simulated = Boolean((sibling.config as { simulated?: boolean }).simulated);
+        await db
+          .update(schema.channels)
+          .set({
+            status: "active",
+            ownerAddress: sibling.ownerAddress,
+            ownerVerifiedAt: sibling.ownerVerifiedAt,
+            address: sibling.address ?? channel.address,
+            config: { ...channel.config, simulated },
+            updatedAt: new Date(),
+          })
+          .where(eq(schema.channels.id, channel.id));
+        return { ok: true, data: { status: "active", reusedPhone: true } };
+      }
+    }
     const status = channel.ownerVerifiedAt ? "active" : "needs_setup";
     await db.update(schema.channels).set({ status, updatedAt: new Date() }).where(eq(schema.channels.id, channel.id));
     return { ok: true, data: { status } };
@@ -107,6 +184,21 @@ export async function channelAction(
           return { ok: false, error: (err as Error).message };
         }
       }
+      if (action === "start_link") {
+        // Pasted-token bot still waiting for its owner's /start: issue a fresh link (the old one isn't stored).
+        const username = String((channel.config as { username?: string }).username ?? channel.address?.replace(/^@/, "") ?? "");
+        if (!channel.credentialId || channel.ownerAddress || !username) return { ok: false, error: "There's nothing to link yet." };
+        const code = numericCode(6);
+        await db.insert(schema.pairingCodes).values({
+          code: `tgo_${channel.id}_${code}`,
+          purpose: "telegram_owner",
+          ownerId: owner.id,
+          botId: bot.id,
+          channelId: channel.id,
+          expiresAt: new Date(Date.now() + 24 * 3600_000),
+        });
+        return { ok: true, data: { username, startLink: `https://t.me/${username}?start=own_${code}` } };
+      }
       if (action === "demo_connect" && demoMode) {
         const handle = `@${bot.handle.replace(/-/g, "_")}_bot`;
         await db
@@ -122,6 +214,10 @@ export async function channelAction(
       if (action === "send_code") {
         const phone = normalizePhone(String(payload.phone ?? ""));
         if (!phone) return { ok: false, error: "Enter a valid phone number." };
+        // US & Canada only for now (also what keeps premium-rate SMS pumping out).
+        if (!/^\+1\d{10}$/.test(phone)) return { ok: false, error: "Texts and calls work with US and Canada numbers for now." };
+        const limited = await codeLimit(db, owner, phone, live.twilio, meta.ip);
+        if (limited) return limited;
         const code = await saveCode(db, owner, bot, channel, "phone", "ph", { phone });
         if (live.twilio) {
           await sendSms(config.twilio.phoneNumber!, phone, `Your ${bot.name} verification code is ${code}. Reply STOP to opt out.`);
@@ -131,16 +227,18 @@ export async function channelAction(
         return { ok: false, error: "Texting isn't set up on this server yet." };
       }
       if (action === "verify") {
-        const row = await useCode(db, channel, "ph", String(payload.code ?? ""));
-        if (!row) return { ok: false, error: "That code is wrong or expired." };
-        const phone = String((row.data as { phone?: string }).phone);
+        const used = await useCode(db, channel, "phone", "ph", String(payload.code ?? ""));
+        if (!used.ok) return { ok: false, error: used.error };
+        const phone = String((used.row.data as { phone?: string }).phone);
         // Verifying a phone covers both texting and calls.
         for (const k of ["sms", "voice"] as const) {
           const ch = k === kind ? channel : (await db.select().from(schema.channels).where(and(eq(schema.channels.botId, bot.id), eq(schema.channels.kind, k))).limit(1))[0];
           if (!ch) continue;
+          // The other one gets the verified number too, but stays off if the owner turned it off.
+          const status = k !== kind && (ch.status === "disabled" || ch.status === "waitlist") ? ch.status : "active";
           await db
             .update(schema.channels)
-            .set({ ownerAddress: phone, ownerVerifiedAt: new Date(), status: "active", address: config.twilio.phoneNumber ?? ch.address, config: { ...ch.config, simulated: !live.twilio } })
+            .set({ ownerAddress: phone, ownerVerifiedAt: new Date(), status, address: config.twilio.phoneNumber ?? ch.address, config: { ...ch.config, simulated: !live.twilio } })
             .where(eq(schema.channels.id, ch.id));
         }
         return { ok: true, data: { phone, number: config.twilio.phoneNumber ?? null } };
@@ -156,6 +254,8 @@ export async function channelAction(
       if (action === "send_code") {
         const email = String(payload.email ?? owner.email ?? "").trim().toLowerCase();
         if (!isEmail(email)) return { ok: false, error: "Enter a valid email." };
+        const limited = await codeLimit(db, owner, email, live.email, meta.ip);
+        if (limited) return limited;
         const code = await saveCode(db, owner, bot, channel, "email", "em", { email });
         if (live.email) {
           await sendEmailRaw({
@@ -171,9 +271,9 @@ export async function channelAction(
         return { ok: false, error: "Email isn't set up on this server yet." };
       }
       if (action === "verify") {
-        const row = await useCode(db, channel, "em", String(payload.code ?? ""));
-        if (!row) return { ok: false, error: "That code is wrong or expired." };
-        const email = String((row.data as { email?: string }).email);
+        const used = await useCode(db, channel, "email", "em", String(payload.code ?? ""));
+        if (!used.ok) return { ok: false, error: used.error };
+        const email = String((used.row.data as { email?: string }).email);
         await db
           .update(schema.channels)
           .set({ ownerAddress: email, ownerVerifiedAt: new Date(), status: "active", address: botEmailAddress(bot), config: { ...channel.config, simulated: !live.email } })
@@ -216,6 +316,12 @@ export async function channelAction(
         }
         const credentialId = await storeCredential(db, { ownerId: owner.id, kind: "bot_token", provider: "slack", secret: JSON.stringify({ botToken, signingSecret }), label: team });
         await db.update(schema.channels).set({ credentialId, address: team, status: "pending", updatedAt: new Date() }).where(eq(schema.channels.id, channel.id));
+        const code = await saveCode(db, owner, bot, channel, "slack_owner", "slk");
+        return { ok: true, data: { code, instructions: `In Slack, open a DM with ${bot.name} and send: link ${code}` } };
+      }
+      if (action === "new_code") {
+        // Tokens are in, but the owner hasn't sent "link CODE" yet: a fresh code (the old one isn't stored).
+        if (!channel.credentialId || channel.ownerAddress) return { ok: false, error: "Paste your Slack app's keys first." };
         const code = await saveCode(db, owner, bot, channel, "slack_owner", "slk");
         return { ok: true, data: { code, instructions: `In Slack, open a DM with ${bot.name} and send: link ${code}` } };
       }
