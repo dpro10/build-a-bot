@@ -28,6 +28,13 @@ const CONFIG = path.join(HOME, "bridge.json");
 const WORK = path.join(HOME, "work");
 const MAX_TURNS = 12;
 const TURN_TIMEOUT_MS = 8 * 60 * 1000;
+/** How to run this again, as the person did: from npm, or this file from a checkout. */
+const SELF = (() => {
+  const script = process.argv[1] ?? "";
+  if (!/bab-bridge\.mjs$/.test(script) || /[\\/](_npx|node_modules)[\\/]/.test(script)) return "npx build-a-bot-bridge";
+  const rel = path.relative(process.cwd(), script);
+  return `node ${rel.startsWith("..") || path.isAbsolute(rel) ? script : rel}`;
+})();
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -278,7 +285,7 @@ async function runCodex(job, dir) {
 async function pair() {
   const code = process.argv[3];
   if (!code) {
-    console.error("Usage: build-a-bot-bridge pair ABCD-1234 [--server URL] [--name NAME]");
+    console.error(`Usage: ${SELF} pair ABCD-1234 [--server URL] [--name NAME]`);
     process.exit(1);
   }
   const server = (arg("server", process.env.BAB_SERVER || "https://build-a-bot.site") || "").replace(/\/$/, "");
@@ -291,13 +298,13 @@ async function pair() {
   const data = await api({ server }, "POST", "/api/bridge/pair", { code: code.toUpperCase(), name, platform: `${os.platform()}-${os.arch()}`, clis });
   writeConfig({ server, deviceId: data.deviceId, token: data.token, name });
   log(`Paired as "${name}". Found: ${[clis.claude && `Claude Code ${clis.claude}`, clis.codex && `Codex ${clis.codex}`].filter(Boolean).join(", ")}`);
-  log("Now run: build-a-bot-bridge   (leave it running while you want your bot to think on this computer)");
+  log(`Now run: ${SELF}   (leave it running while you want your bot to think on this computer)`);
 }
 
 async function start() {
   const cfg = readConfig();
   if (!cfg) {
-    console.error("Not paired yet. In the app, open Bridge (your computer) and get a pairing code, then run `build-a-bot-bridge pair CODE`.");
+    console.error(`Not paired yet. In the app, open Bridge (your computer) and get a pairing code, then run \`${SELF} pair CODE\`.`);
     process.exit(1);
   }
   const clis = detectClis();
