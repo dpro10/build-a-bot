@@ -242,6 +242,10 @@ Built (research: `docs/research/meetings-2026-10-14.md`):
   - Notes stay until deleted.
   - Meetings are in the account export and go with account deletion.
 - **New hard limit,** shown everywhere the others are: "It only listens to a meeting after you say yes, and it stays on your screen the whole time it's listening."
+- **Diego on consent (2026-10-14):** "It's one party consent. So as long as one person hits record, we're good."
+  - That holds under federal law and in most states: the owner is on the call and taps "Take notes".
+  - The caveats are in the research (§5): about 10 all-party states, California applying its rule to calls from other states, and the Otter and Granola suits arguing the vendor is a third party listening in.
+  - What's built stays until Diego decides otherwise: it asks first, stays visible, the heads-up is optional, and the first-time note is shown once. He can shorten or drop that note.
 - **Web recorder choices:**
   - Starting takes up to three clicks: the one-time consent note, sharing the call's tab, then Start. Start opens the floating window and the mic in one click, because browsers need a click for each.
   - Recording runs only while the floating window is open; closing it stops and writes the notes.
@@ -276,6 +280,6 @@ Built (research: `docs/research/meetings-2026-10-14.md`):
 6. Meeting notes before launch:
    - a lawyer's review of the consent flow and retention (California § 632, and the Granola complaint's theory);
    - Groq's paid tier (the free tier allows 7,200 audio-seconds an hour per organization);
-   - an Apple Developer account (99 USD a year) to sign and notarize the Mac app;
+   - sign and notarize the Mac app. Diego already has an Apple Developer account (2026-10-14); what's needed is a Developer ID Application certificate and notarization credentials in CI secrets, and a Mac or macOS runner to build;
    - whether to merge the desktop app with the Bridge into one "Build-a-bot app".
 7. Meeting notes, next: transcription on the owner's own key or on-device (sherpa-onnx with Parakeet), and calendar-based meeting titles.
