@@ -68,20 +68,22 @@ export default async function ActivityPage({
               </p>
             </div>
           </div>
-          <div className="mt-5 mb-2 text-[11px] font-bold tracking-[0.12em] text-muted-foreground uppercase">Last 7 days</div>
-          <dl className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+          <h4 id="activity-week" className="mt-5 mb-2 text-[11px] font-bold tracking-[0.12em] text-muted-foreground uppercase">
+            Last 7 days
+          </h4>
+          <ul aria-labelledby="activity-week" className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
             {tiles.map((t) => (
-              <div key={t.label} className="flex items-center gap-2.5 rounded-2xl border border-border bg-card/80 p-3 sm:gap-3">
-                <span className={`flex size-8 shrink-0 items-center justify-center rounded-xl sm:size-9 ${t.tone}`}>
-                  <t.icon className="size-4" aria-hidden />
+              <li key={t.label} className="flex items-center gap-2.5 rounded-2xl border border-border bg-card p-3 sm:gap-3">
+                <span className={`flex size-8 shrink-0 items-center justify-center rounded-xl sm:size-9 ${t.tone}`} aria-hidden>
+                  <t.icon className="size-4" />
                 </span>
-                <div className="flex min-w-0 flex-col-reverse">
-                  <dt className="mt-1 text-xs leading-tight text-muted-foreground">{t.label}</dt>
-                  <dd className="font-display text-xl leading-none font-bold tabular-nums">{t.value.toLocaleString("en-US")}</dd>
-                </div>
-              </div>
+                <span className="flex min-w-0 flex-col">
+                  <span className="font-display text-xl leading-none font-bold tabular-nums">{t.value.toLocaleString("en-US")}</span>
+                  <span className="mt-1 text-xs leading-tight text-muted-foreground">{t.label}</span>
+                </span>
+              </li>
             ))}
-          </dl>
+          </ul>
         </div>
 
         <Tabs defaultValue={sp.tab === "deliveries" ? "deliveries" : "timeline"} className="flex flex-col gap-4">

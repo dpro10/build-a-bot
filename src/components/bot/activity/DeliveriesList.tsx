@@ -93,12 +93,12 @@ export function DeliveriesList({
       <div className="flex items-start gap-2">
         <div role="radiogroup" aria-label="Channel" className="flex min-w-0 flex-1 flex-wrap gap-1.5">
           <FilterChip active={channel === "all"} index={0} onClick={() => setChannel("all")}>
-            All <span className="opacity-60">{items.length}</span>
+            All <span className="font-normal tabular-nums">{items.length}</span>
           </FilterChip>
           {counts.map(([kind, n], i) => (
             <FilterChip key={kind} active={channel === kind} index={i + 1} onClick={() => setChannel(kind)}>
               <BrandTile icon={channelIcon(kind)} size={16} variant="tile" className="rounded-[5px]" />
-              {channelName(kind)} <span className="opacity-60">{n}</span>
+              {channelName(kind)} <span className="font-normal tabular-nums">{n}</span>
             </FilterChip>
           ))}
         </div>
@@ -172,7 +172,7 @@ function DeliveryCard({ d, toYou, now, timezone }: { d: DeliveryView; toYou: boo
           </Tooltip>
         </div>
         {d.subject ? <div className="mt-2.5 text-sm font-semibold [overflow-wrap:anywhere]">{d.subject}</div> : null}
-        <p className={cn("mt-1.5 text-sm leading-relaxed whitespace-pre-wrap text-foreground/85 [overflow-wrap:anywhere]", !expanded && long && "line-clamp-4")}>{d.body}</p>
+        <p className={cn("mt-1.5 text-sm leading-relaxed whitespace-pre-wrap text-foreground [overflow-wrap:anywhere]", !expanded && long && "line-clamp-4")}>{d.body}</p>
         {long ? (
           <button type="button" onClick={() => setExpanded((e) => !e)} className="mt-1 text-xs font-semibold text-primary hover:underline">
             {expanded ? "Show less" : "Show all"}

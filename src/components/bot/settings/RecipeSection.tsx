@@ -122,7 +122,7 @@ export function RecipeSection({
               <code
                 className={cn(
                   "min-w-0 flex-1 truncate rounded-xl bg-card px-3 py-2.5 font-mono text-sm ring-1 ring-border",
-                  !live && "text-muted-foreground line-through decoration-muted-foreground/50",
+                  !live && "text-muted-foreground line-through",
                 )}
               >
                 {recipe.url}

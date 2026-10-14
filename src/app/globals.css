@@ -17,20 +17,24 @@
   --border: #e8e2d8;
   --input: #ded7cb;
   --ring: #7c5cff;
-  --primary: #6d4dff;
-  --primary-hover: #5b3cf0;
+  --primary: #5b3cf0;
+  --primary-hover: #4b2fd8;
+  /* Text-safe primary (same as --primary in light; lighter in dark). */
+  --primary-ink: #5b3cf0;
   --primary-foreground: #ffffff;
   --primary-soft: #efeaff;
   --accent: #ffcf4a;
   --accent-foreground: #3a2a00;
-  --success: #12a46c;
+  --success: #0b7f53;
+  --success-foreground: #ffffff;
   --success-soft: #e3f8ef;
-  --warning: #e08a00;
+  --warning: #a65800;
   --warning-soft: #fff4dc;
-  --danger: #e5484d;
+  --danger: #c9302c;
   --danger-soft: #ffeceb;
+  --danger-ink: #c9302c;
   --shadow-color: 32 24 12;
-  --bubble-owner: #6d4dff;
+  --bubble-owner: #5b3cf0;
   --bubble-owner-foreground: #ffffff;
   --bubble-bot: #ffffff;
   color-scheme: light;
@@ -47,20 +51,23 @@
   --border: #2b2836;
   --input: #383446;
   --ring: #9b85ff;
-  --primary: #8b72ff;
-  --primary-hover: #9d88ff;
+  --primary: #6a4af5;
+  --primary-hover: #7a5cff;
+  --primary-ink: #ab9bff;
   --primary-foreground: #ffffff;
   --primary-soft: #251f43;
   --accent: #ffd25a;
   --accent-foreground: #2a1f00;
   --success: #2fcb94;
+  --success-foreground: #04261a;
   --success-soft: #0f2a20;
   --warning: #ffb547;
   --warning-soft: #2c2210;
-  --danger: #ff6b6f;
+  --danger: #d13438;
   --danger-soft: #34161a;
+  --danger-ink: #ff7f83;
   --shadow-color: 0 0 0;
-  --bubble-owner: #7a60ff;
+  --bubble-owner: #6a4af5;
   --bubble-owner-foreground: #ffffff;
   --bubble-bot: #1f1d29;
   color-scheme: dark;
@@ -172,6 +179,7 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
   --color-success-soft: var(--success-soft);
   --color-warning: var(--warning);
   --color-warning-soft: var(--warning-soft);
@@ -180,6 +188,15 @@
   --color-bubble-owner: var(--bubble-owner);
   --color-bubble-owner-foreground: var(--bubble-owner-foreground);
   --color-bubble-bot: var(--bubble-bot);
+}
+
+/* Dark mode: a violet/red that carries white button text is too dark to read as
+   text on dark surfaces, so text utilities switch to the lighter "ink" shade. */
+[data-theme="dark"] [class*="text-primary"]:not([class*="text-primary-foreground"]) {
+  --primary: var(--primary-ink);
+}
+[data-theme="dark"] [class*="text-danger"] {
+  --danger: var(--danger-ink);
 }
 
 /* ------------------------------------------------------------------ */
@@ -333,7 +350,7 @@
     margin-top: 0.2em;
   }
   .prose-chat a {
-    color: var(--primary);
+    color: var(--primary-ink);
     text-decoration: underline;
     text-underline-offset: 2px;
   }

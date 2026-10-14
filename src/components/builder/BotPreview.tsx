@@ -104,7 +104,7 @@ export function BotPreview({ state: s, step, stepIndex, typing }: { state: Build
           <Avatar avatar={s.avatar} color={s.color} size={168} mood={moodFor(step, s, typing)} />
         </div>
         <div className="relative z-10 mt-1 text-center">
-          <div className={cn("font-display text-2xl font-bold leading-tight", !s.name.trim() && "text-muted-foreground/60")}>{s.name.trim() || "Your bot"}</div>
+          <div className={cn("font-display text-2xl font-bold leading-tight", !s.name.trim() && "text-muted-foreground/80")}>{s.name.trim() || "Your bot"}</div>
           <div className="mt-1.5 flex flex-wrap justify-center gap-1">
             {a.traits.map((t) => (
               <span key={t} className="rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ background: `${color.base}1f`, color: color.deep }}>
@@ -160,7 +160,13 @@ function PreviewRow({ icon, label, pending, children }: { icon: React.ReactNode;
         {icon}
         {label}
       </dt>
-      <dd className={cn("min-w-0 flex-1 transition", pending && "opacity-35 blur-[0.5px]")}>{children}</dd>
+      <dd className="min-w-0 flex-1">
+        {pending ? (
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-border px-2.5 py-0.5 text-xs text-muted-foreground">Coming up</span>
+        ) : (
+          <span className="block animate-fade-up">{children}</span>
+        )}
+      </dd>
     </div>
   );
 }
@@ -171,7 +177,7 @@ export function BotPreviewStrip({ state: s, step, typing }: { state: BuilderStat
     <div className="flex items-center gap-3 rounded-2xl border border-border bg-card px-3 py-2 shadow-soft">
       <Avatar avatar={s.avatar} color={s.color} size={52} mood={moodFor(step, s, typing)} />
       <div className="min-w-0 flex-1">
-        <div className={cn("truncate font-display text-lg font-bold leading-tight", !s.name.trim() && "text-muted-foreground/60")}>{s.name.trim() || "Your bot"}</div>
+        <div className={cn("truncate font-display text-lg font-bold leading-tight", !s.name.trim() && "text-muted-foreground/80")}>{s.name.trim() || "Your bot"}</div>
         <div key={speech(step, s)} className="animate-fade-up truncate text-xs text-muted-foreground">
           {speech(step, s)}
         </div>

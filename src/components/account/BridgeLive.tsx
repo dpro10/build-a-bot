@@ -386,7 +386,7 @@ function Step({ n, title, children, done, last, next }: { n: number; title: stri
       <span
         className={cn(
           "relative flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-bold",
-          done ? "bg-success text-white" : next ? "bg-primary text-primary-foreground shadow-glow" : "bg-primary-soft text-primary",
+          done ? "bg-success text-success-foreground" : next ? "bg-primary text-primary-foreground shadow-glow" : "bg-primary-soft text-primary",
         )}
         aria-hidden
       >

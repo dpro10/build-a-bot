@@ -145,7 +145,7 @@ function IncludedPanel({ brain, onBrain, plan, demo }: { brain: Extract<BrainCho
                         {m.default ? <Badge tone="primary" className="px-1.5 py-0 text-[10px]">Default</Badge> : null}
                       </span>
                       <span className="block text-[13px] leading-snug text-muted-foreground">{m.blurb}</span>
-                      <span className="mt-1 flex flex-wrap gap-x-2.5 text-[11px] font-medium text-muted-foreground/90">
+                      <span className="mt-1 flex flex-wrap gap-x-2.5 text-[11px] font-medium text-muted-foreground">
                         {m.maker ? <span>{m.maker}</span> : null}
                         {formatContext(m.context) ? <span>{formatContext(m.context)} memory</span> : null}
                         {m.reasoning ? <span>Can think step by step</span> : null}
