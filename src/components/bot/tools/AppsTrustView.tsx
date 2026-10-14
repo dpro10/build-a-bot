@@ -299,9 +299,9 @@ export function AppsTrustView({ bot, connections: initial, planBadges, paidPlans
         botName={bot.name}
         trust={trust}
         spendCapUsd={spendCapUsd}
-        plan={connectPlan(conn, def, composioLive)}
+        plan={soon.has(conn.connectorId) ? null : connectPlan(conn, def, composioLive)}
         builtin={builtin}
-        comingSoon={builtin && soon.has(conn.connectorId)}
+        comingSoon={soon.has(conn.connectorId)}
         highlighted={target === conn.connectorId}
         expanded={expanded.has(conn.id)}
         onExpandedChange={(open) => toggleExpanded(conn.id, open)}

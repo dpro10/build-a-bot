@@ -47,7 +47,7 @@ Recipes prefill it (`/build?recipe=inbox-zero`, or any shared `/r/[slug]`). The 
 
 ### Apps
 
-- A searchable catalog of ~190 apps (140+ connectable today): Gmail, Outlook, Google Calendar/Drive/Docs/Sheets, GitHub, GitLab, Notion, Slack, Linear, Jira, Todoist, Spotify, Stripe and more.
+- A searchable catalog of ~190 apps (110+ connectable today): Gmail, Outlook, Google Calendar/Drive/Docs/Sheets, GitHub, GitLab, Notion, Slack, Linear, Jira, Todoist, Spotify, Stripe and more.
 - Connected through official MCP servers (OAuth 2.1), Composio, or any MCP URL.
 - Built-ins need no sign-in: web search, reader, weather, reminders, notes, memory, its own inbox, meeting notes.
 
