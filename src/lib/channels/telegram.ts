@@ -6,6 +6,7 @@
 import type { Channel } from "@/lib/db/schema";
 import type { ChannelAdapter, OutboundButton } from "./outbound";
 import { channelSecret } from "./secrets";
+import { appUrl } from "@/lib/env";
 
 const API = "https://api.telegram.org";
 
@@ -82,3 +83,24 @@ export const telegramAdapter: ChannelAdapter = {
     return { status: "sent", providerId: sent ? String(sent.message_id) : undefined };
   },
 };
+
+/** The public URL of a bot's avatar picture (rendered by scripts/render-avatars.tsx). */
+export function avatarImageUrl(bot: { avatar: string; color: string }): string {
+  return `${appUrl()}/avatars/${bot.avatar}-${bot.color}.jpg`;
+}
+
+/** Give a Telegram bot its avatar as a profile photo (best effort; photos are uploaded fresh each time). */
+export async function setTelegramProfilePhoto(token: string, bot: { avatar: string; color: string }): Promise<boolean> {
+  try {
+    const img = await fetch(avatarImageUrl(bot));
+    if (!img.ok) return false;
+    const form = new FormData();
+    form.append("photo", JSON.stringify({ type: "static", photo: "attach://avatar" }));
+    form.append("avatar", new Blob([await img.arrayBuffer()], { type: "image/jpeg" }), "avatar.jpg");
+    const res = await fetch(`${API}/bot${token}/setMyProfilePhoto`, { method: "POST", body: form });
+    const data = (await res.json().catch(() => ({}))) as { ok?: boolean };
+    return Boolean(data.ok);
+  } catch {
+    return false;
+  }
+}

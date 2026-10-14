@@ -58,3 +58,28 @@ export function sameOrigin(req: Request): boolean {
 }
 
 export type RouteCtx<P extends Record<string, string>> = { params: Promise<P> };
+
+/** Best-effort client IP (Vercel and most proxies set x-forwarded-for); null when unknown. */
+export function clientIp(req: Request): string | null {
+  const fwd = req.headers.get("x-forwarded-for");
+  if (fwd) return fwd.split(",")[0].trim().slice(0, 64) || null;
+  return req.headers.get("x-real-ip")?.slice(0, 64) ?? null;
+}
+
+/**
+ * 429 with a friendly message when a fixed-window limit is exceeded; null when allowed.
+ * A null key (e.g. no client IP behind a bare dev server) skips the check; demo mode is 10× looser.
+ */
+export async function limitOr429(db: Db, key: string | null, limit: number, windowSeconds: number, message = "Slow down a little — try again in a minute."): Promise<Response | null> {
+  if (!key) return null;
+  const { rateLimit } = await import("@/lib/safety/ratelimit");
+  const { demoMode } = await import("@/lib/env");
+  const r = await rateLimit(db, key, demoMode ? limit * 10 : limit, windowSeconds);
+  return r.ok ? null : apiError(429, message);
+}
+
+/** Rate-limit key for this client's IP, or null when the IP is unknown. */
+export function ipKey(prefix: string, req: Request): string | null {
+  const ip = clientIp(req);
+  return ip ? `${prefix}:${ip}` : null;
+}

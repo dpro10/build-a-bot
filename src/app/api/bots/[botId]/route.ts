@@ -1,12 +1,14 @@
 import { z } from "zod";
-import { eq, sql } from "drizzle-orm";
+import { after } from "next/server";
+import { and, eq, sql } from "drizzle-orm";
 import { schema } from "@/lib/db";
 import { apiError, authedBot, json, parseJson, sameOrigin, type RouteCtx } from "@/lib/api";
 import { AVATAR_IDS, COLORWAY_IDS } from "@/lib/avatars";
 import { TRUST_LEVELS } from "@/lib/trust";
 import { getPlan, planAllowsTrust } from "@/lib/billing/plans";
 import { demoMode } from "@/lib/env";
-import { storeCredential } from "@/lib/channels/secrets";
+import { readCredential, storeCredential } from "@/lib/channels/secrets";
+import { setTelegramProfilePhoto, telegramCall } from "@/lib/channels/telegram";
 import { INCLUDED_MODELS, PROVIDER_BY_ID, type ProviderId } from "@/lib/models/catalog";
 import { getBotSetup } from "@/lib/data";
 import { receipt } from "@/lib/agent/run";
@@ -105,6 +107,20 @@ export async function PATCH(req: Request, ctx: RouteCtx<{ botId: string }>) {
     updates.brain = brain;
   }
   const [bot] = await a.db.update(schema.bots).set(updates).where(eq(schema.bots.id, botId)).returning();
+  // Keep its Telegram bot's name and face in sync (after the response; best effort).
+  if (p.name || p.avatar || p.color) {
+    after(async () => {
+      const [tg] = await a.db
+        .select()
+        .from(schema.channels)
+        .where(and(eq(schema.channels.botId, botId), eq(schema.channels.kind, "telegram"), eq(schema.channels.status, "active")))
+        .limit(1);
+      const token = tg?.credentialId ? await readCredential(a.db, tg.credentialId) : null;
+      if (!token) return;
+      if (p.name) await telegramCall(token, "setMyName", { name: bot.name.slice(0, 64) }).catch(() => {});
+      if (p.avatar || p.color) await setTelegramProfilePhoto(token, bot);
+    });
+  }
   const changed = Object.keys(p);
   await receipt(a.db, bot, "system", "ok", `Settings changed: ${changed.join(", ")}`, {
     changed,
