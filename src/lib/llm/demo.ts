@@ -318,6 +318,11 @@ function planFromUser(text: string, tools: Set<string>, p: Persona, system: stri
   if (/\b(inbox|emails?)\b/.test(t) && tools.has("read_inbox")) return { calls: [call("read_inbox", {})] };
 
   // Meetings the bot took notes in.
+  if (tools.has("read_meeting") && /\b(take notes|record|transcribe)\b.*\b(call|meeting|zoom|meet|teams)\b|\bnote-?taker\b/.test(t)) {
+    return {
+      text: `Happy to! Open the **Meetings** tab and press **Start** (in Chrome or Edge), or get the desktop app: it notices when a call starts and asks first. Either way I stay on your screen the whole time I listen, and I send you the notes when it ends.`,
+    };
+  }
   if (tools.has("read_meeting")) {
     const about = /\b(?:what did (?:\w+ )?(?:say|said) about|search (?:my )?meetings? for|when did we (?:talk|discuss) about|when did we (?:talk|discuss))\s+(.+?)\??$/i.exec(text)?.[1];
     if (about && tools.has("search_meetings")) return { calls: [call("search_meetings", { query: about.replace(/^the\s+/i, "") })] };
@@ -448,7 +453,9 @@ function summarizeResults(results: { name: string; content: string; isError?: bo
         const decisionsText = /## Decisions\n([\s\S]*?)(?:\n## |$)/.exec(content)?.[1]?.trim();
         const itemsText = /## Action items\n([\s\S]*?)(?:\n## |$)/.exec(content)?.[1]?.trim();
         const u = userText.toLowerCase();
-        if (!summaryText && !itemsText) {
+        if (/^No meetings yet/.test(content)) {
+          out.push("I haven't taken notes in any meetings yet. Start one from the **Meetings** tab, or with the desktop app (it offers when a call starts), and I'll have notes for you after.");
+        } else if (!summaryText && !itemsText) {
           out.push(/still recording/.test(content) ? `“${title}” is still going. Here's the gist so far — ask me again when it ends for the full notes.` : `I have the transcript for “${title}”, but no notes yet.`);
         } else if (/\baction items?\b|\bto-?dos?\b|\bwhat do i (?:need|have) to do\b/.test(u)) {
           out.push(`Action items from **${title}**:\n${itemsText ?? "- None recorded."}\n\nWant reminders for any of them?`);

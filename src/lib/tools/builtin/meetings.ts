@@ -80,7 +80,14 @@ export const readMeeting = defineTool({
             .from(schema.meetings)
             .where(and(eq(schema.meetings.botId, ctx.bot.id), eq(schema.meetings.id, args.meeting_id)))
             .limit(1);
-    if (!m) return { ok: false, error: args.meeting_id === "latest" ? "No meetings yet." : `No meeting with id ${args.meeting_id}. Use list_meetings.` };
+    if (!m && args.meeting_id === "latest") {
+      return {
+        ok: true,
+        content: "No meetings yet. The owner can start one from the Meetings tab in the app, or with the desktop app, which offers to take notes when a call starts.",
+        summary: "None yet",
+      };
+    }
+    if (!m) return { ok: false, error: `No meeting with id ${args.meeting_id}. Use list_meetings.` };
 
     const lines = transcriptLines(await getSegments(ctx.db, m.id), ownerName(ctx.owner));
     const parts: string[] = [];
