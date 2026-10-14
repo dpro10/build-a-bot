@@ -4,7 +4,7 @@
 import * as React from "react";
 import { AudioLines, Bot, KeyRound, MessageCircle, MessageSquareText, Phone, Search } from "lucide-react";
 import { Progress } from "@/components/ui/misc";
-import type { Plan } from "@/lib/billing/plans";
+import { PAID_PLANS_SOON, type Plan } from "@/lib/billing/plans";
 import { cn } from "@/lib/utils";
 
 export type UsageNumbers = {
@@ -83,7 +83,20 @@ export function meterTone(used: number, limit: number): "primary" | "warning" | 
   return pct >= 100 ? "danger" : pct >= 80 ? "warning" : "primary";
 }
 
-export function UsageMeters({ plan, used, resetLabel, className }: { plan: Plan; used: UsageNumbers; resetLabel: string; className?: string }) {
+export function UsageMeters({
+  plan,
+  used,
+  resetLabel,
+  paidPlans,
+  className,
+}: {
+  plan: Plan;
+  used: UsageNumbers;
+  resetLabel: string;
+  /** Paid plans can be bought here (otherwise they're coming soon). */
+  paidPlans: boolean;
+  className?: string;
+}) {
   return (
     <div className={cn("grid gap-3 sm:grid-cols-2 lg:grid-cols-3", className)}>
       {METERS.map((m) => {
@@ -97,7 +110,7 @@ export function UsageMeters({ plan, used, resetLabel, className }: { plan: Plan;
             ? m.locked
             : m.key === "bots"
               ? value >= limit
-                ? `${plan.name} includes ${fmt(limit)} bot${limit === 1 ? "" : "s"}. Upgrade to make more.`
+                ? `${plan.name} includes ${fmt(limit)} bot${limit === 1 ? "" : "s"}. ${paidPlans ? "Upgrade to make more." : PAID_PLANS_SOON}`
                 : `Room for ${fmt(left)} more on ${plan.name}.`
               : tone === "danger"
                 ? `You've used them all. Resets ${resetLabel}.`

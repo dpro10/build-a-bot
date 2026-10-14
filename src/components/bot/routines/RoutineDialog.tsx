@@ -10,6 +10,7 @@ import { Select } from "@/components/ui/select";
 import { toast } from "@/components/ui/toaster";
 import { api, ApiError } from "@/lib/client/api";
 import { cn } from "@/lib/utils";
+import { PAID_PLANS_SOON } from "@/lib/billing/plans";
 import type { Schedule } from "@/lib/db/schema";
 import { zonedParts, zonedToUtc, whenLabel } from "@/components/bot/activity/time";
 import { radioKeyDown, radioTabIndex } from "@/components/bot/activity/radio-keys";
@@ -154,6 +155,7 @@ export function RoutineDialog({
   initial,
   editing,
   planName,
+  paidPlans,
   onSaved,
 }: {
   open: boolean;
@@ -168,6 +170,8 @@ export function RoutineDialog({
   /** The schedule being edited; omit to create. */
   editing?: ScheduleView | null;
   planName: string;
+  /** Paid plans can be bought here; otherwise the routine limit says they're coming soon, with no link. */
+  paidPlans: boolean;
   onSaved: (row: ScheduleView, created: boolean) => void;
 }) {
   const [f, setF] = React.useState<RoutineForm>(initial);
@@ -469,12 +473,16 @@ export function RoutineDialog({
                     <div className="flex min-w-0 flex-1 items-start gap-2">
                       <Sparkles className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
                       <span>
-                        {error} Upgrade to {upgrade === "pro" ? "Pro" : "Plus"} for more, or turn one of your {planName} routines off.
+                        {paidPlans
+                          ? `${error} Upgrade to ${upgrade === "pro" ? "Pro" : "Plus"} for more, or turn one of your ${planName} routines off.`
+                          : `${error} Turn one of your ${planName} routines off to make room. ${PAID_PLANS_SOON}`}
                       </span>
                     </div>
-                    <Button asChild size="sm">
-                      <Link href="/app/billing">See plans</Link>
-                    </Button>
+                    {paidPlans ? (
+                      <Button asChild size="sm">
+                        <Link href="/app/billing">See plans</Link>
+                      </Button>
+                    ) : null}
                   </div>
                 ) : (
                   error

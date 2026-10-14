@@ -200,10 +200,11 @@ export function LimitsCard({
           help={
             draft.quietOn && timesValid ? (
               <>
-                From {formatTime(draft.start)} to {formatTime(draft.end)}, messages to other people wait for your OK, so nothing goes out overnight. It can still message you. Times are in {timezone.replace(/_/g, " ")}.
+                From {formatTime(draft.start)} to {formatTime(draft.end)}, messages to other people wait for your OK, so nothing goes out overnight without it. It can still message you. Times are in {timezone.replace(/_/g, " ")}.
               </>
             ) : (
-              <>Messages to other people wait until morning. It can still message you.</>
+              // Same rule as the policy engine (quiet_hours): during them, sends to other people ask first.
+              <>During quiet hours, messages to other people wait for your OK. It can still message you.</>
             )
           }
         >

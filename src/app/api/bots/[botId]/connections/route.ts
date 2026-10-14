@@ -3,8 +3,8 @@ import { and, count, eq } from "drizzle-orm";
 import { schema } from "@/lib/db";
 import { apiError, authedBot, json, parseJson, sameOrigin, type RouteCtx } from "@/lib/api";
 import { getConnector, isBuiltinConnector } from "@/lib/connectors";
-import { getPlan } from "@/lib/billing/plans";
-import { demoMode, live } from "@/lib/env";
+import { PAID_PLANS_SOON, getPlan } from "@/lib/billing/plans";
+import { demoMode, live, paidPlansOpen } from "@/lib/env";
 import { canonicalResource } from "@/lib/connectors/mcp/oauth";
 import { newId } from "@/lib/utils";
 import { receipt } from "@/lib/agent/run";
@@ -32,7 +32,9 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string }>) {
   const plan = getPlan(a.user.plan);
   if (def && !isBuiltinConnector(def) && !demoMode) {
     const [{ n }] = await a.db.select({ n: count() }).from(schema.connections).where(eq(schema.connections.botId, botId));
-    if (n >= plan.limits.connectors + 12) return apiError(402, `The ${plan.name} plan connects ${plan.limits.connectors} apps. Upgrade to add more.`, { upgrade: "plus" });
+    if (n >= plan.limits.connectors + 12) {
+      return apiError(402, `The ${plan.name} plan connects ${plan.limits.connectors} apps. ${paidPlansOpen ? "Upgrade to add more." : PAID_PLANS_SOON}`, { upgrade: "plus" });
+    }
   }
 
   let mode = "builtin";

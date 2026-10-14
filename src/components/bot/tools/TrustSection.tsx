@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, Hand, Rocket, ShieldCheck } from "lucide-react";
 import type { ConnectorDef } from "@/lib/connectors";
+import { PAID_PLANS_SOON } from "@/lib/billing/plans";
 import { TRUST, type TrustLevel } from "@/lib/trust";
 import { TrustPicker, trustPreview } from "@/components/catalog/TrustPicker";
 import { isBuiltin } from "@/components/catalog/connector-meta";
@@ -43,6 +44,7 @@ export function TrustSection({
   onTrustChange,
   apps,
   planBadges,
+  paidPlans,
 }: {
   botId: string;
   botName: string;
@@ -50,6 +52,8 @@ export function TrustSection({
   onTrustChange: (level: TrustLevel) => void;
   apps: ConnectorDef[];
   planBadges: Partial<Record<TrustLevel, string>>;
+  /** Paid plans can be bought here; otherwise the prompt says they're coming soon, with no link. */
+  paidPlans: boolean;
 }) {
   const router = useRouter();
   const [saving, setSaving] = React.useState(false);
@@ -138,16 +142,20 @@ export function TrustSection({
             <div className="min-w-0 flex-1">
               <div className="font-semibold">{TRUST[upgradeFor].name} is part of {planBadges[upgradeFor] ?? "Plus"}</div>
               <p className="text-sm text-muted-foreground">
-                Let {botName} send, post and update across your apps without waiting for a tap. Every action still gets a receipt, and hard limits always apply.
+                {paidPlans
+                  ? `Let ${botName} send, post and update across your apps without waiting for a tap. Every action still gets a receipt, and hard limits always apply.`
+                  : `${PAID_PLANS_SOON} Until then, ${TRUST.trusted.name} handles routine stuff on its own and asks before anything big.`}
               </p>
             </div>
             <div className="flex shrink-0 gap-2">
               <Button variant="ghost" size="sm" onClick={() => setUpgradeFor(null)}>
-                Not now
+                {paidPlans ? "Not now" : "Got it"}
               </Button>
-              <Button asChild size="sm">
-                <Link href="/app/billing">See {planBadges[upgradeFor] ?? "Plus"}</Link>
-              </Button>
+              {paidPlans ? (
+                <Button asChild size="sm">
+                  <Link href="/app/billing">See {planBadges[upgradeFor] ?? "Plus"}</Link>
+                </Button>
+              ) : null}
             </div>
           </div>
         ) : null}

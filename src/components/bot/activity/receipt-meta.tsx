@@ -293,6 +293,11 @@ const CHANGED_TEXT: Record<string, string> = {
   vibe: "Personality",
   limits: "Limits",
   brain: "Brain",
+  // Single limits (src/lib/bots/labels.ts names them in the receipt's title too).
+  dailyActions: "Actions per day",
+  spendCapUsd: "Spending cap",
+  quietHours: "Quiet hours",
+  transcriptDays: "Keep transcripts",
 };
 
 const PAID_BY: Record<string, string> = {

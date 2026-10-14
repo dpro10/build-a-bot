@@ -8,15 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/segmented";
 import { toast } from "@/components/ui/toaster";
 import { api, type ApiError } from "@/lib/client/api";
-import { PLANS, PLAN_ORDER, type PlanId } from "@/lib/billing/plans";
+import { MAX_YEARLY_SAVING, PLANS, PLAN_ORDER, type PlanId } from "@/lib/billing/plans";
 import { cn } from "@/lib/utils";
+import { PlanWaitlist } from "@/components/marketing/pricing/PlanWaitlist";
 
-/** stripe = real checkout; demo = instant switch (no Stripe, demo mode); off = neither. */
+/** stripe = real checkout; demo = instant switch (no Stripe, demo mode); off = neither (paid plans are coming soon). */
 export type BillingMode = "stripe" | "demo" | "off";
-
-const YEARLY_SAVING = Math.max(
-  ...PLAN_ORDER.filter((id) => PLANS[id].priceMonthly > 0).map((id) => Math.round((1 - PLANS[id].priceYearly / PLANS[id].priceMonthly) * 100)),
-);
 
 async function openPortal() {
   const { url } = await api<{ url: string }>("/api/billing/portal", { method: "POST" });
@@ -50,11 +47,14 @@ export function PlanPicker({
   mode,
   anonymous,
   hasSubscription,
+  email,
 }: {
   current: PlanId;
   mode: BillingMode;
   anonymous: boolean;
   hasSubscription: boolean;
+  /** Their confirmed email, so joining a waitlist ("off" mode) takes one tap. */
+  email: string | null;
 }) {
   const router = useRouter();
   const [period, setPeriod] = React.useState<"monthly" | "yearly">("monthly");
@@ -107,7 +107,7 @@ export function PlanPicker({
               value: "yearly",
               label: (
                 <span className="inline-flex items-center gap-1.5">
-                  Yearly <span className="rounded-full bg-success-soft px-1.5 py-px text-[11px] font-bold text-success">Save up to {YEARLY_SAVING}%</span>
+                  Yearly <span className="rounded-full bg-success-soft px-1.5 py-px text-[11px] font-bold text-success">Save up to {MAX_YEARLY_SAVING}%</span>
                 </span>
               ),
             },
@@ -128,6 +128,8 @@ export function PlanPicker({
           const up = PLAN_ORDER.indexOf(id) > PLAN_ORDER.indexOf(current);
           const price = yearly ? plan.priceYearly : plan.priceMonthly;
           const paid = plan.priceMonthly > 0;
+          // No Stripe outside demo mode: paid plans can't be bought yet.
+          const soon = mode === "off" && paid && !isCurrent;
 
           let button: React.ReactNode;
           if (isCurrent) {
@@ -160,12 +162,11 @@ export function PlanPicker({
                 Upgrade to {plan.name}
               </Button>
             );
+          } else if (soon && id !== "free") {
+            button = <PlanWaitlist plan={id} email={email} size="md" />;
           } else {
-            button = (
-              <Button variant="outline" className="w-full" disabled>
-                Upgrades coming soon
-              </Button>
-            );
+            // Nothing to switch to without payments (a paid plan given by hand stays until we change it).
+            button = null;
           }
 
           return (
@@ -177,7 +178,7 @@ export function PlanPicker({
                 isCurrent && !popular && "border-success/50",
               )}
             >
-              {popular ? (
+              {popular && !soon ? (
                 <span className="absolute -top-3 left-6 rounded-full bg-primary px-3 py-1 text-xs font-bold text-primary-foreground shadow-glow">Most popular</span>
               ) : null}
               <div className="flex items-center justify-between gap-2">
@@ -186,6 +187,8 @@ export function PlanPicker({
                   <Badge tone="success">
                     <Check /> Your plan
                   </Badge>
+                ) : soon ? (
+                  <Badge tone="neutral">Coming soon</Badge>
                 ) : null}
               </div>
               <p className="mt-1 min-h-10 text-sm text-muted-foreground">{plan.tagline}</p>
@@ -205,7 +208,7 @@ export function PlanPicker({
                   </li>
                 ))}
               </ul>
-              <div className="mt-6">{button}</div>
+              {button ? <div className="mt-6">{button}</div> : null}
             </div>
           );
         })}

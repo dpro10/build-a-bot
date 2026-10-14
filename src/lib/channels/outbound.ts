@@ -149,14 +149,23 @@ export async function ownerChannels(db: Db, botId: string): Promise<Channel[]> {
 
 /**
  * Send something to the bot's owner: on the requested channel if it's verified,
- * otherwise their best channel, and always into the web inbox so nothing is lost.
+ * otherwise their best channel, and always into the web inbox so nothing is lost
+ * (unless it's already there: `inWebAlready`).
  */
 export async function messageOwner(
   db: Db,
   bot: Bot,
   owner: User,
   text: string,
-  opts: { channel?: ChannelKind | "auto"; subject?: string; buttons?: OutboundButton[]; alsoWeb?: boolean } = {},
+  opts: {
+    channel?: ChannelKind | "auto";
+    subject?: string;
+    buttons?: OutboundButton[];
+    /** false: no copy in the web inbox, unless no other channel reaches the owner. */
+    alsoWeb?: boolean;
+    /** The text is already in the owner's web chat (a routine's own reply): never post it there again. */
+    inWebAlready?: boolean;
+  } = {},
 ): Promise<{ channel: ChannelKind; result: DeliveryResult }> {
   const verified = await ownerChannels(db, bot.id);
   let target: Channel | undefined;
@@ -166,7 +175,7 @@ export async function messageOwner(
   // "auto": the owner's best messaging channel; the web inbox always gets a copy below.
   if (!target && (!opts.channel || opts.channel === "auto")) target = verified.find((c) => OWNER_PRIORITY.includes(c.kind as ChannelKind));
 
-  if (opts.alsoWeb !== false || !target) await postToWebInbox(db, bot, text);
+  if (!opts.inWebAlready && (opts.alsoWeb !== false || !target)) await postToWebInbox(db, bot, text);
 
   if (!target) return { channel: "web", result: { status: "sent" } };
   const result = await deliver(

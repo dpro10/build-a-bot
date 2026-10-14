@@ -90,6 +90,8 @@ export function BrowserRecorder({
   minutesLeft,
   block,
   desktopCard,
+  desktopApp,
+  paidPlans,
   onStarted,
   onDiscarded,
   onBlocked,
@@ -102,6 +104,10 @@ export function BrowserRecorder({
   /** Why notes can't start right now (shown on the card instead of the button). */
   block: RecorderBlock;
   desktopCard: React.ReactNode;
+  /** The desktop app can be had (downloads, or the repo in demo mode); otherwise it's coming soon and not suggested. */
+  desktopApp: boolean;
+  /** Paid plans can be bought here; otherwise running out of minutes has no "see plans" link. */
+  paidPlans: boolean;
   onStarted: (m: MeetingView) => void;
   onDiscarded: (id: string) => void;
   /** The server refused to start: meeting notes are off, or the bot is busy in another meeting. */
@@ -338,7 +344,8 @@ export function BrowserRecorder({
         void releaseMic();
         closePip();
         setPhase("idle");
-        setStartError({ text, upgrade });
+        // "See plans" only where plans can be bought.
+        setStartError({ text, upgrade: paidPlans ? upgrade : undefined });
       };
       try {
         handle = await pipPromise;
@@ -346,7 +353,7 @@ export function BrowserRecorder({
         fail(
           (err as { name?: string })?.name === "NotAllowedError"
             ? "Press Start again: your browser needs a fresh click to show me on top of your other windows."
-            : "I couldn't open my floating window, and I only listen while I'm on your screen. Use Chrome or Edge, or the desktop app.",
+            : `I couldn't open my floating window, and I only listen while I'm on your screen. Use Chrome or Edge${desktopApp ? ", or the desktop app" : ""}.`,
         );
         return;
       }
@@ -494,7 +501,7 @@ export function BrowserRecorder({
             ? (problem?.message ?? "I stopped.")
             : `${bot.name} is writing your notes.`;
     if (unsent) toast.warning(`${message} A little audio didn't make it, so the end may be missing.`);
-    else if (why === "limit") toast.warning(message, problem?.upgrade ? { action: { label: "See plans", onClick: () => router.push("/app/billing") } } : undefined);
+    else if (why === "limit") toast.warning(message, paidPlans && problem?.upgrade ? { action: { label: "See plans", onClick: () => router.push("/app/billing") } } : undefined);
     else toast.success(message);
     if (!done) toast.error("Couldn't reach the server to finish up. Open the meeting and press Stop again.");
     if (why === "leave") {
@@ -922,10 +929,15 @@ export function BrowserRecorder({
             ) : null}
             {minutesNow <= 10 && recording ? (
               <p className="text-sm text-warning">
-                {minutesNow > 0 ? `About ${minutesNow} min of meeting notes left this month.` : "You're at this month's meeting minutes."}{" "}
-                <Link href="/app/billing" className="font-semibold underline underline-offset-2">
-                  Get more
-                </Link>
+                {minutesNow > 0 ? `About ${minutesNow} min of meeting notes left this month.` : "You're at this month's meeting minutes."}
+                {paidPlans ? (
+                  <>
+                    {" "}
+                    <Link href="/app/billing" className="font-semibold underline underline-offset-2">
+                      Get more
+                    </Link>
+                  </>
+                ) : null}
               </p>
             ) : null}
             <p className="text-xs text-muted-foreground">
@@ -973,7 +985,7 @@ export function BrowserRecorder({
               </div>
             </div>
             {startBlocked ? (
-              <BlockNote block={startBlocked} botName={bot.name} />
+              <BlockNote block={startBlocked} botName={bot.name} desktopApp={desktopApp} paidPlans={paidPlans} />
             ) : (
               <p className="text-xs text-muted-foreground">Works in Chrome and Edge on a computer. {bot.name} floats over your call while it listens.</p>
             )}
@@ -1092,14 +1104,24 @@ export function BrowserRecorder({
   );
 }
 
-function BlockNote({ block, botName }: { block: NonNullable<RecorderBlock> | { kind: "unsupported"; text: string }; botName: string }) {
+function BlockNote({
+  block,
+  botName,
+  desktopApp,
+  paidPlans,
+}: {
+  block: NonNullable<RecorderBlock> | { kind: "unsupported"; text: string };
+  botName: string;
+  desktopApp: boolean;
+  paidPlans: boolean;
+}) {
   if (block.kind === "unsupported") {
     return (
       <p className="flex gap-2 rounded-2xl bg-warning-soft px-3.5 py-2.5 text-sm text-foreground">
         <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
         <span>
-          This browser can&apos;t keep {botName} on your screen while it listens, so it can&apos;t take notes here. Use Chrome or Edge on a computer, or
-          the desktop app.
+          This browser can&apos;t keep {botName} on your screen while it listens, so it can&apos;t take notes here.{" "}
+          {`Use Chrome or Edge on a computer${desktopApp ? ", or the desktop app" : ""}.`}
         </span>
       </p>
     );
@@ -1109,7 +1131,7 @@ function BlockNote({ block, botName }: { block: NonNullable<RecorderBlock> | { k
       <AlertTriangle className={cn("mt-0.5 size-4 shrink-0", block.kind === "minutes" ? "text-warning" : "text-muted-foreground")} aria-hidden />
       <span>
         {block.text}
-        {block.kind === "minutes" ? (
+        {block.kind === "minutes" && paidPlans ? (
           <>
             {" "}
             <Link href="/app/billing" className="font-semibold text-primary underline-offset-2 hover:underline">

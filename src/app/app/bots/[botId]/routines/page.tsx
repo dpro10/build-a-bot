@@ -6,6 +6,7 @@ import { getOwnedBot, listSchedules } from "@/lib/data";
 import { ownerChannels } from "@/lib/channels/outbound";
 import { CHANNEL_BY_KIND, type ChannelKind } from "@/lib/channels/catalog";
 import { getPlan } from "@/lib/billing/plans";
+import { paidPlansOpen } from "@/lib/env";
 import { RoutinesView } from "@/components/bot/routines/RoutinesView";
 import type { ScheduleView } from "@/components/bot/routines/schedule";
 import { safeTimeZone, timeZoneLongName } from "@/components/bot/activity/time";
@@ -76,6 +77,7 @@ export default async function RoutinesPage({ params }: { params: Promise<{ botId
           serverNow={new Date().toISOString()}
           initial={schedules}
           plan={{ id: plan.id, name: plan.name, limit: plan.limits.routines }}
+          paidPlans={paidPlansOpen}
           deliverOptions={deliverOptions}
           autoHint={autoHint}
         />

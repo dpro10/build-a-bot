@@ -11,8 +11,8 @@ import { CHANNEL_BY_KIND, CHANNEL_KINDS, type ChannelKind } from "@/lib/channels
 import { getConnector, isBuiltinConnector } from "@/lib/connectors";
 import { INCLUDED_MODELS, PROVIDER_BY_ID, type ProviderId } from "@/lib/models/catalog";
 import { JOB_BY_ID } from "@/lib/jobs";
-import { getPlan, planAllowsChannel, planAllowsTrust } from "@/lib/billing/plans";
-import { available, demoMode, live } from "@/lib/env";
+import { PAID_PLANS_SOON, getPlan, planAllowsChannel, planAllowsTrust } from "@/lib/billing/plans";
+import { available, demoMode, live, paidPlansOpen } from "@/lib/env";
 import { storeCredential } from "@/lib/channels/secrets";
 import { computeNextRun, isValidTimeZone } from "@/lib/scheduler/time";
 import { canonicalResource } from "@/lib/connectors/mcp/oauth";
@@ -99,7 +99,8 @@ export async function createBot(db: Db, owner: User, input: CreateBotInput): Pro
   const plan = getPlan(owner.plan);
   const [{ n }] = await db.select({ n: count() }).from(schema.bots).where(eq(schema.bots.ownerId, owner.id));
   if (n >= plan.limits.bots) {
-    return { ok: false, status: 402, error: `The ${plan.name} plan includes ${plan.limits.bots} bot${plan.limits.bots === 1 ? "" : "s"}. Upgrade to make more.` };
+    const next = paidPlansOpen ? "Upgrade to make more." : `To make another, delete ${plan.limits.bots === 1 ? "it" : "one"} first. ${PAID_PLANS_SOON}`;
+    return { ok: false, status: 402, error: `The ${plan.name} plan includes ${plan.limits.bots} bot${plan.limits.bots === 1 ? "" : "s"}. ${next}` };
   }
 
   const notes: string[] = [];
@@ -110,7 +111,11 @@ export async function createBot(db: Db, owner: User, input: CreateBotInput): Pro
   if (!planAllowsTrust(plan, trust) && !demoMode) {
     trust = "trusted";
     upgrade = "plus";
-    notes.push("Full faith is part of Plus. Your bot starts as a Trusted helper; upgrade anytime to switch.");
+    notes.push(
+      paidPlansOpen
+        ? "Full faith is part of Plus. Your bot starts as a Trusted helper; upgrade anytime to switch."
+        : `Full faith is part of Plus. ${PAID_PLANS_SOON} Your bot starts as a Trusted helper.`,
+    );
   }
 
   // Brain.
@@ -201,7 +206,7 @@ export async function createBot(db: Db, owner: User, input: CreateBotInput): Pro
     }
     if (thirdParty >= thirdPartyLimit && !demoMode) {
       upgrade = upgrade ?? "plus";
-      notes.push(`The ${plan.name} plan connects ${thirdPartyLimit} apps. ${def.name} was skipped — upgrade to add more.`);
+      notes.push(`The ${plan.name} plan connects ${thirdPartyLimit} apps. ${def.name} was skipped — ${paidPlansOpen ? "upgrade to add more." : PAID_PLANS_SOON.toLowerCase()}`);
       continue;
     }
     thirdParty++;
@@ -230,7 +235,9 @@ export async function createBot(db: Db, owner: User, input: CreateBotInput): Pro
   for (const server of input.customMcp ?? []) {
     if (thirdParty >= thirdPartyLimit && !demoMode) {
       upgrade = upgrade ?? "plus";
-      notes.push(`The ${plan.name} plan connects ${thirdPartyLimit} apps. ${server.name || new URL(server.url).host} was skipped — upgrade to add more.`);
+      notes.push(
+        `The ${plan.name} plan connects ${thirdPartyLimit} apps. ${server.name || new URL(server.url).host} was skipped — ${paidPlansOpen ? "upgrade to add more." : PAID_PLANS_SOON.toLowerCase()}`,
+      );
       continue;
     }
     thirdParty++;

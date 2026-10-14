@@ -14,6 +14,13 @@ const PROACTIVE_TURNS_PER_DAY = 24;
 /** Subscription brains: keep proactive use "ordinary, individual" (vendor terms). */
 const PROACTIVE_TURNS_PER_DAY_SUBSCRIPTION = 10;
 
+/**
+ * How one run went, so "Run now" can say so: ok, failed (the brain or the delivery had a
+ * problem), queued (thinking on the owner's computer), skipped (today's proactive limit),
+ * or paused (STOP).
+ */
+export type ScheduleOutcome = "ok" | "failed" | "queued" | "skipped" | "paused";
+
 export async function runDueSchedules(db: Db, now = new Date(), limit = 25, only?: { scheduleId: string }) {
   const due = await db
     .select()
@@ -23,6 +30,7 @@ export async function runDueSchedules(db: Db, now = new Date(), limit = 25, only
     .limit(limit);
 
   let ran = 0;
+  const runs: { scheduleId: string; outcome: ScheduleOutcome }[] = [];
   for (const s of due) {
     const next = computeNextRun(s.schedule, s.timezone, now);
     // Claim it: only one tick moves this schedule forward.
@@ -34,7 +42,11 @@ export async function runDueSchedules(db: Db, now = new Date(), limit = 25, only
     if (!claimed.length) continue;
 
     const [bot] = await db.select().from(schema.bots).where(eq(schema.bots.id, s.botId)).limit(1);
-    if (!bot || bot.status === "paused") continue;
+    if (!bot) continue;
+    if (bot.status === "paused") {
+      runs.push({ scheduleId: s.id, outcome: "paused" });
+      continue;
+    }
     const [owner] = await db.select().from(schema.users).where(eq(schema.users.id, bot.ownerId)).limit(1);
     if (!owner) continue;
     const channel = (s.deliverOn || "auto") as ChannelKind | "auto";
@@ -47,6 +59,7 @@ export async function runDueSchedules(db: Db, now = new Date(), limit = 25, only
           channel: used,
           status: result.status,
         });
+        runs.push({ scheduleId: s.id, outcome: result.status === "failed" ? "failed" : "ok" });
       } else {
         // Routines are real agent turns; cap proactive turns per day.
         const since = new Date(now.getTime() - 24 * 3600_000);
@@ -57,6 +70,7 @@ export async function runDueSchedules(db: Db, now = new Date(), limit = 25, only
         const cap = bot.brain.kind === "subscription" ? PROACTIVE_TURNS_PER_DAY_SUBSCRIPTION : PROACTIVE_TURNS_PER_DAY;
         if (n >= cap) {
           await receipt(db, bot, "routine", "blocked", `Skipped “${s.title}”: daily proactive limit reached`, { scheduleId: s.id, cap });
+          runs.push({ scheduleId: s.id, outcome: "skipped" });
           continue;
         }
         const conversation = await ensureConversation(db, bot.id, "web", "owner");
@@ -70,17 +84,30 @@ export async function runDueSchedules(db: Db, now = new Date(), limit = 25, only
           directive: `Run your scheduled routine “${s.title}” now: ${s.prompt}\nWrite the result as a message to the owner (it will be delivered${channel !== "auto" && channel !== "web" ? ` by ${channel}` : ""}). Keep it short and useful.`,
           trigger: s.kind === "reminder" ? "reminder" : "routine",
         });
-        await receipt(db, bot, "routine", "ok", `Ran routine “${s.title}”`, { scheduleId: s.id });
+        // No answer (the brain failed, isn't set up, or hit today's ceiling): the chat already says why.
+        const failed = result.status !== "ok" && result.status !== "queued";
+        await receipt(
+          db,
+          bot,
+          "routine",
+          failed ? "error" : "ok",
+          failed ? `Routine “${s.title}” didn't finish` : `Ran routine “${s.title}”`,
+          failed ? { scheduleId: s.id, error: truncate(result.text, 300) } : { scheduleId: s.id },
+        );
         if (result.text && channel !== "web") {
-          await messageOwner(db, bot, owner, result.text, { channel, alsoWeb: false, subject: s.title });
+          // The turn already put its reply in the web chat (a reply still waiting on the owner's computer
+          // didn't): deliver it elsewhere, never a second copy in the chat.
+          await messageOwner(db, bot, owner, result.text, { channel, alsoWeb: false, inWebAlready: Boolean(result.messageId), subject: s.title });
         }
+        runs.push({ scheduleId: s.id, outcome: failed ? "failed" : result.status === "queued" ? "queued" : "ok" });
       }
       ran++;
     } catch (err) {
       await receipt(db, bot, "system", "error", `Schedule “${s.title}” failed`, { scheduleId: s.id, error: String(err).slice(0, 300) });
+      runs.push({ scheduleId: s.id, outcome: "failed" });
     }
   }
-  return { ran, due: due.length };
+  return { ran, due: due.length, runs };
 }
 
 export async function housekeeping(db: Db, now = new Date()) {
