@@ -3,7 +3,7 @@ import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /** Native <select>, styled like Input. Native keeps it accessible and mobile-friendly. */
-export const Select = React.forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HTMLSelectElement> & { size?: "md" | "sm" }>(
+export const Select = React.forwardRef<HTMLSelectElement, Omit<React.SelectHTMLAttributes<HTMLSelectElement>, "size"> & { size?: "md" | "sm" }>(
   ({ className, children, size = "md", ...props }, ref) => (
     <span className={cn("relative inline-flex w-full", className)}>
       <select

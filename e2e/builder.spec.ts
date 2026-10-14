@@ -44,8 +44,9 @@ async function buildBot(page: Page, name: string) {
   await page.getByRole("button", { name: /Telegram/ }).first().click();
   await footer(page).getByRole("button", { name: /Continue/ }).click();
 
-  // Review: can't create before confirming age
+  // Review: the morning brief is on by default; can't create before confirming age
   await expect(page.getByRole("heading", { name: `Ready to meet ${name}?` })).toBeVisible();
+  await expect(page.getByRole("switch", { name: "Morning brief" })).toBeChecked();
   await page.getByText("I'm 18 or older").click();
   await footer(page).getByRole("button", { name: new RegExp(`Bring ${name} to life`) }).click();
   await page.waitForURL(/\/app\/bots\/bot_/, { timeout: 30_000 });
@@ -57,6 +58,11 @@ test("build a bot, chat, approve an action, then STOP", async ({ page }) => {
 
   // The bot greets first.
   await expect(page.getByText(new RegExp(`I'm ${name}, your new AI assistant`))).toBeVisible({ timeout: 30_000 });
+
+  // The morning brief became a real routine.
+  const botId = page.url().match(/bots\/(bot_[a-z0-9]+)/)![1];
+  const schedules = await (await page.request.get(`/api/bots/${botId}/schedules`)).json();
+  expect(schedules.schedules.map((x: { title: string }) => x.title)).toContain("Morning brief");
 
   // A send needs the owner's tap under "Ask me first".
   const box = page.getByLabel("Message");

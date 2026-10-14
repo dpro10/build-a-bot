@@ -72,6 +72,11 @@ export const createBotSchema = z.object({
   timezone: z.string().max(80).optional(),
   ageConfirmed: z.literal(true),
   recipeId: z.string().max(60).optional(),
+  /** A daily brief the bot sends on its own (the habit that keeps people coming back). */
+  morningBrief: z
+    .object({ time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), days: z.array(z.number().int().min(0).max(6)).max(7).optional() })
+    .nullable()
+    .optional(),
 });
 
 type ParsedInput = z.infer<typeof createBotSchema>;
@@ -261,6 +266,24 @@ export async function createBot(db: Db, owner: User, input: CreateBotInput): Pro
       made++;
     }
   }
+  if (input.morningBrief) {
+    const tz = input.timezone && isValidTimeZone(input.timezone) ? input.timezone : owner.timezone || "UTC";
+    const sched = { type: "daily" as const, time: input.morningBrief.time, ...(input.morningBrief.days?.length ? { days: input.morningBrief.days } : {}) };
+    const nextRunAt = computeNextRun(sched, tz, new Date());
+    if (nextRunAt) {
+      await db.insert(schema.schedules).values({
+        id: newId("sch"),
+        botId: id,
+        kind: "routine",
+        title: "Morning brief",
+        prompt: briefPrompt(jobs),
+        schedule: sched,
+        timezone: tz,
+        nextRunAt,
+      });
+    }
+  }
+
   if (input.recipeId && !findFeatured(input.recipeId)) {
     await db.update(schema.recipes).set({ clones: sql`${schema.recipes.clones} + 1` }).where(eq(schema.recipes.slug, input.recipeId));
   }
@@ -328,4 +351,18 @@ async function loadRecipe(db: Db, slug: string): Promise<RecipeData | null> {
   if (!row || !row.public) return null;
   const parsed = recipeSchema.safeParse(row.data);
   return parsed.success ? parsed.data : null;
+}
+
+/** What the morning brief covers, from the jobs the owner picked. */
+export function briefPrompt(jobs: string[]): string {
+  const parts: string[] = [];
+  if (jobs.includes("calendar")) parts.push("what's on my calendar today");
+  if (jobs.includes("inbox")) parts.push("emails that need a reply");
+  if (jobs.includes("reminders") || !parts.length) parts.push("reminders due today");
+  if (jobs.includes("research")) parts.push("one headline worth knowing about");
+  if (jobs.includes("money")) parts.push("anything due on bills or subscriptions");
+  if (jobs.includes("health")) parts.push("a gentle nudge on my habits");
+  parts.push("the weather");
+  const list = parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}` : parts[0];
+  return `Give me a short, friendly morning brief: ${list}. Keep it skimmable, and lead with anything urgent.`;
 }

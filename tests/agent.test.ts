@@ -162,6 +162,29 @@ describe("agent pipeline (demo brain)", () => {
     expect(res.text).toMatch(/AI assistant, not a person/);
   });
 
+  it("the morning brief becomes a daily routine in the owner's time zone", async () => {
+    const res = await createBot(db, owner, {
+      avatar: "sprout",
+      color: "mint",
+      name: "Briefy",
+      jobs: ["calendar", "inbox"],
+      brain: { kind: "included", model: "nvidia/Nemotron-3_5-Lightning" },
+      connectors: [],
+      trust: "ask",
+      channels: [],
+      contact: {},
+      ageConfirmed: true,
+      timezone: "America/Chicago",
+      morningBrief: { time: "07:30", days: [1, 2, 3, 4, 5] },
+    });
+    if (!res.ok) throw new Error(res.error);
+    const rows = await db.select().from(schema.schedules).where(eq(schema.schedules.botId, res.bot.id));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ kind: "routine", title: "Morning brief", timezone: "America/Chicago", schedule: { type: "daily", time: "07:30", days: [1, 2, 3, 4, 5] } });
+    expect(rows[0].prompt).toMatch(/calendar/);
+    expect(rows[0].nextRunAt!.getTime()).toBeGreaterThan(Date.now());
+  });
+
   it("receipts are append-only", async () => {
     const bot = await makeBot("ask");
     await say(bot, "what's the weather in Austin?");

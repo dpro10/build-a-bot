@@ -43,6 +43,8 @@ export type BuilderState = {
   instructions: string;
   ageConfirmed: boolean;
   recipeSlug: string | null;
+  /** Daily brief the bot sends on its own. */
+  brief: { on: boolean; time: string; weekdays: boolean };
 };
 
 export const DEFAULT_MODEL = INCLUDED_MODELS.find((m) => m.default)!.id;
@@ -65,6 +67,7 @@ export function initialState(recipe?: (RecipeData & { slug?: string }) | null): 
     instructions: "",
     ageConfirmed: false,
     recipeSlug: null,
+    brief: { on: true, time: "08:00", weekdays: false },
   };
   if (!recipe) return base;
   return {
@@ -79,6 +82,8 @@ export function initialState(recipe?: (RecipeData & { slug?: string }) | null): 
     channels: recipe.channels.filter((c): c is ChannelKind => c !== "web") as ChannelKind[],
     instructions: recipe.instructions,
     recipeSlug: recipe.slug ?? null,
+    // The recipe brings its own routines.
+    brief: { ...base.brief, on: !recipe.routines?.length },
   };
 }
 
