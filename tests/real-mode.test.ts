@@ -29,7 +29,7 @@ const { checkLimit, recordUsage } = await import("@/lib/billing/usage");
 const { PLANS } = await import("@/lib/billing/plans");
 const { buildToolset } = await import("@/lib/tools/registry");
 const { webSearch } = await import("@/lib/tools/builtin/web");
-const { comingSoonBuiltins } = await import("@/lib/connectors/availability");
+const { comingSoonConnectors } = await import("@/lib/connectors/availability");
 const connectionsRoute = await import("@/app/api/bots/[botId]/connections/route");
 const connectRoute = await import("@/app/api/bots/[botId]/connections/[connectionId]/connect/route");
 import type { AgentEvent } from "@/lib/agent/run";
@@ -137,7 +137,7 @@ afterAll(async () => {
 
 describe("built-ins whose service isn't set up are coming soon", () => {
   it("lists them, and not the ones that need no key", () => {
-    const soon = comingSoonBuiltins();
+    const soon = comingSoonConnectors();
     expect(soon).toEqual(expect.arrayContaining(["browser", "web_search", "news", "meetings"]));
     for (const id of ["memory", "reminders", "weather", "currency", "notes", "web_reader", "wikipedia"]) expect(soon).not.toContain(id);
   });

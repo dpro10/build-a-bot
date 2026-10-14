@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRight, Plug } from "lucide-react";
 import { BrandTile } from "@/components/brand/icons";
 import { ALL_CONNECTORS } from "@/lib/connectors";
+import { canSignIn } from "@/components/catalog/connector-meta";
 import { CATEGORY_LABELS, type ConnectorCategory } from "@/lib/connectors/types";
 import { Container, Section, SectionHeader } from "../ui";
 
@@ -9,7 +10,7 @@ const ROWS = 4;
 
 /** Apps a bot can really connect today (the catalog lists "soon" ones too; those are left out). */
 export function availableApps() {
-  return ALL_CONNECTORS.filter((c) => c.status !== "soon" && c.category !== "custom");
+  return ALL_CONNECTORS.filter((c) => c.status !== "soon" && c.category !== "custom" && canSignIn(c));
 }
 
 /** "143" → "140+": a floor that stays true as the catalog grows. */

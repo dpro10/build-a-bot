@@ -3,7 +3,7 @@ import { asc, count, eq } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { getUser, isAnonymous } from "@/lib/auth/session";
 import { getPlan } from "@/lib/billing/plans";
-import { comingSoonBuiltins } from "@/lib/connectors/availability";
+import { comingSoonConnectors } from "@/lib/connectors/availability";
 import { demoMode, live, paidPlansOpen } from "@/lib/env";
 import { findFeatured, recipeSchema } from "@/lib/recipes";
 import { Builder, type BuilderProps } from "@/components/builder/Builder";
@@ -59,7 +59,7 @@ export default async function BuildPage({ searchParams }: { searchParams: Promis
       demo={demoMode}
       paidPlans={paidPlansOpen}
       live={{ twilio: live.twilio, email: live.email, discord: live.discord, telegramManaged: live.telegramManaged, slackOAuth: live.slackOAuth }}
-      comingSoon={comingSoonBuiltins()}
+      comingSoon={comingSoonConnectors()}
       recipe={recipe}
       botCount={botCount}
       signedIn={Boolean(user?.email)}

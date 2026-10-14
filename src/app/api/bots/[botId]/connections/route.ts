@@ -3,9 +3,9 @@ import { and, count, eq } from "drizzle-orm";
 import { schema } from "@/lib/db";
 import { apiError, authedBot, json, parseJson, sameOrigin, type RouteCtx } from "@/lib/api";
 import { getConnector, isBuiltinConnector } from "@/lib/connectors";
-import { connectorUsable } from "@/lib/connectors/availability";
+import { connectVia, connectorUsable } from "@/lib/connectors/availability";
 import { PAID_PLANS_SOON, getPlan } from "@/lib/billing/plans";
-import { demoMode, live, paidPlansOpen } from "@/lib/env";
+import { demoMode, paidPlansOpen } from "@/lib/env";
 import { canonicalResource } from "@/lib/connectors/mcp/oauth";
 import { newId } from "@/lib/utils";
 import { receipt } from "@/lib/agent/run";
@@ -42,7 +42,7 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string }>) {
   let mode = "builtin";
   let status = "connected";
   if (def && !isBuiltinConnector(def)) {
-    const via = def.via.find((v) => v.kind === "mcp" || (v.kind === "composio" && live.composio) || v.kind === "custom_mcp");
+    const via = connectVia(def);
     if (connectorId.startsWith("custom_mcp:")) {
       mode = "mcp";
       status = "needs_auth";

@@ -4,6 +4,7 @@
  */
 import { ALL_CONNECTORS, type ConnectorDef } from "@/lib/connectors";
 import { DEFAULT_BUILTINS } from "@/lib/connectors/builtin";
+import { COMPOSIO_UNMANAGED } from "@/lib/connectors/composio-auth";
 import { CATEGORY_LABELS, type ConnectorCategory, type Effect } from "@/lib/connectors/types";
 
 export const ALWAYS_ON = new Set<string>(DEFAULT_BUILTINS);
@@ -22,8 +23,13 @@ export function countsTowardLimit(def: ConnectorDef): boolean {
   return !isBuiltin(def) && isAvailable(def);
 }
 
-/** Apps you can actually pick today (built-ins included), rounded down for copy like "140+". */
-export const AVAILABLE_APP_COUNT = ALL_CONNECTORS.filter((c) => isAvailable(c) && !ALWAYS_ON.has(c.id)).length;
+/** Has a way to sign in once its service is set up (an app only on Composio needs Composio's own OAuth app for it). */
+export function canSignIn(def: ConnectorDef): boolean {
+  return def.via.some((v) => v.kind !== "composio" || !(v.toolkit in COMPOSIO_UNMANAGED));
+}
+
+/** Apps you can actually pick today (built-ins included), rounded down for copy like "110+". */
+export const AVAILABLE_APP_COUNT = ALL_CONNECTORS.filter((c) => isAvailable(c) && canSignIn(c) && !ALWAYS_ON.has(c.id)).length;
 export const AVAILABLE_APP_COUNT_ROUNDED = Math.floor(AVAILABLE_APP_COUNT / 10) * 10;
 
 export const EFFECT_LABEL: Record<Effect, string> = {

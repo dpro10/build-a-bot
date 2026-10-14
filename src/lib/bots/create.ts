@@ -9,7 +9,7 @@ import { AVATAR_IDS, COLORWAY_IDS } from "@/lib/avatars";
 import { TRUST_LEVELS, type TrustLevel } from "@/lib/trust";
 import { CHANNEL_BY_KIND, CHANNEL_KINDS, type ChannelKind } from "@/lib/channels/catalog";
 import { getConnector, isBuiltinConnector } from "@/lib/connectors";
-import { connectorUsable } from "@/lib/connectors/availability";
+import { connectVia, connectorUsable } from "@/lib/connectors/availability";
 import { INCLUDED_MODELS, PROVIDER_BY_ID, type ProviderId } from "@/lib/models/catalog";
 import { JOB_BY_ID } from "@/lib/jobs";
 import { PAID_PLANS_SOON, getPlan, planAllowsChannel, planAllowsTrust } from "@/lib/billing/plans";
@@ -212,8 +212,8 @@ export async function createBot(db: Db, owner: User, input: CreateBotInput): Pro
       continue;
     }
     thirdParty++;
-    // Best usable way to connect, in the catalog's order of preference.
-    const via = def.via.find((v) => v.kind === "mcp" || (v.kind === "composio" && live.composio) || v.kind === "custom_mcp");
+    // Best usable way to connect (see connectors/availability.ts).
+    const via = connectVia(def);
     // Demo mode starts every app as a simulated connection (works instantly); "Connect for real" upgrades it.
     const mode = demoMode && !(via?.kind === "composio") ? "demo" : via?.kind === "composio" ? "composio" : "mcp";
     if (!demoMode && !via) {
