@@ -6,6 +6,8 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   // AGENTS.md is the Cookbook workspace's file; don't let `next dev` append to it.
   agentRules: false,
+  // Local data (the dev database and the dev encryption key) must never ship in a server bundle.
+  outputFileTracingExcludes: { "*": [".data/**", "e2e/**", "tests/**", "docs/**", "bridge/**"] },
   async headers() {
     return [
       {

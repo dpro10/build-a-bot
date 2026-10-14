@@ -34,7 +34,7 @@ function loadKey(): Buffer {
   if (process.env.NODE_ENV === "production" && !process.env.DEMO_MODE && !process.env.VERCEL_ENV?.startsWith("preview")) {
     throw new Error("ENCRYPTION_KEY is required in production");
   }
-  const dir = process.env.VERCEL ? "/tmp" : path.join(process.cwd(), ".data");
+  const dir = process.env.VERCEL ? "/tmp" : path.join(/* turbopackIgnore: true */ process.cwd(), ".data");
   const file = path.join(dir, "dev-encryption-key");
   try {
     const existing = fs.readFileSync(file, "utf8").trim();

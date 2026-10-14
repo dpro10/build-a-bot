@@ -221,6 +221,7 @@ Diego decided on 2026-10-13 that bots act on the web. Built as a beta:
 - `ENCRYPTION_KEY` must be shared by every server instance. Production refuses to start with `DATABASE_URL` but no key.
 - `next dev` appends Next.js agent rules to AGENTS.md unless `agentRules: false` (set in `next.config.ts`).
 - Per-minute Vercel Cron needs a paid plan; otherwise an external pinger calls `/api/cron/tick`.
+- Build output tracing followed `path.join(process.cwd(), ".data")` and put the local dev database and dev encryption key into every server bundle's file list. `next.config.ts` now excludes `.data/**`, and runtime-only paths carry `/* turbopackIgnore: true */`.
 
 ## Open questions (updated 2026-10-14)
 

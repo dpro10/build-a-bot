@@ -21,6 +21,7 @@ Anyone makes their own AI agent in about a minute: pick a face, give it a name, 
   - Hard limits apply even under Full faith: prompt-injection guard, no secrets out, money off without a cap, bulk deletes ask, quiet hours.
   - STOP works from any channel, and every action gets an append-only receipt.
 - **Channels, several at once:** web, phone calls and texts (Twilio), email (its own brand-free address), Telegram (one-tap managed bot), Discord (`/ask`), Slack (per-bot app). WhatsApp and iMessage are on a waitlist.
+- **Web actions (beta):** it browses sites and fills in forms in a cloud browser (Browser Use Cloud). Before anything is sent, the owner sees every field it filled and a picture of the form, and taps to send. Payment pages, card details, passwords and logins are refused in code.
 - **The dashboard:**
   - Chat with inline approvals.
   - Activity (receipts), Apps & trust, Channels, Routines (morning briefs, reminders), Memory, Settings (look, personality, brain, recipes, MCP access).
@@ -32,14 +33,16 @@ Anyone makes their own AI agent in about a minute: pick a face, give it a name, 
   - Each bot is also an MCP server, usable from Claude Desktop/Code.
   - Plans and billing with Stripe.
   - A public site: landing, pricing, safety, legal drafts, explore.
+- **Checked:** unit tests for the policy engine, scheduler, database and agent pipeline; Playwright runs the whole journey on a phone and a desktop; axe finds no serious WCAG 2.2 AA problems on the main public and dashboard pages, in light or dark mode.
 
 ## Run it
 
 ```bash
 npm install
 npm run dev            # http://localhost:3000 — demo mode: simulated brain, apps and channels
-npm test               # policy engine, scheduler, database, agent pipeline
-npm run test:e2e       # Playwright: builder → chat → approval
+npm test               # policy engine, scheduler, database, agent pipeline, web actions
+npm run test:e2e       # Playwright, phone + desktop: builder → chat → approval → STOP,
+                       # every page loads, and axe accessibility scans (light and dark)
 ```
 
 Add real keys in `.env.local` (see `.env.example`); anything left out stays simulated in demo mode. More: `docs/ARCHITECTURE.md` (how it works), `docs/DEPLOY.md` (Vercel + Postgres + each integration), `docs/DECISIONS.md` (decisions and open questions, incl. 2026-10-14).
@@ -53,7 +56,9 @@ Add real keys in `.env.local` (see `.env.example`); anything left out stays simu
 - **Keep the name** Build-a-bot.
 - **The user picks the model.** Don't apply for Sign in with ChatGPT yet. Subscriptions should run the way Cookbook's Bridge does: the user's own CLI, signed in by them. See `docs/DECISIONS.md`.
 
-## Proposed (Claude; not decided yet)
+## Proposed (Claude, 2026-10-13; not decided yet)
+
+Partly overtaken by the 2026-10-14 build: the builder follows Diego's own flow (face → name → brain → apps → trust → channels), the whole product was built now rather than after the hackathon, and web actions run on Browser Use Cloud, with Stagehand kept as the fallback. "Cookbook on the inside" is still open.
 
 **Separate on the outside, Cookbook on the inside.**
 - Every bot is a Cookbook agent under the hood: its own identity in a private workspace, with its memory and activity log in Cookbook.

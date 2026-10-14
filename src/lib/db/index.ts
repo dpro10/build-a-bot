@@ -28,12 +28,13 @@ async function createPglite(): Promise<DbState> {
   const { drizzle } = await import("drizzle-orm/pglite");
   const { migrate } = await import("drizzle-orm/pglite/migrator");
 
-  let dataDir = process.env.DATA_DIR ?? path.join(process.cwd(), ".data", "pglite");
+  let dataDir = process.env.DATA_DIR ?? path.join(/* turbopackIgnore: true */ process.cwd(), ".data", "pglite");
   if (process.env.VERCEL && !process.env.DATA_DIR) dataDir = "/tmp/pglite"; // demo previews only
   const inMemory = dataDir === "memory";
   if (!inMemory) {
-    dataDir = path.resolve(dataDir);
-    fs.mkdirSync(dataDir, { recursive: true });
+    // The ignore comments keep the build from tracing the whole project for this runtime-only path.
+    dataDir = path.resolve(/* turbopackIgnore: true */ dataDir);
+    fs.mkdirSync(/* turbopackIgnore: true */ dataDir, { recursive: true });
   }
   const client = inMemory ? new PGlite() : new PGlite(dataDir);
   const db = drizzle(client, { schema }) as unknown as Db;
