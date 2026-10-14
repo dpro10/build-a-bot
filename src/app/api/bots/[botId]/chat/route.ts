@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { apiError, authedBot, parseJson, sameOrigin, type RouteCtx } from "@/lib/api";
+import { apiError, authedBot, limitOr429, parseJson, sameOrigin, type RouteCtx } from "@/lib/api";
 import { runTurn } from "@/lib/agent/run";
 import { ensureConversation } from "@/lib/channels/outbound";
 import { sseResponse } from "@/lib/sse";
@@ -15,6 +15,9 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string }>) {
   if (!a.ok) return a.res;
   const parsed = await parseJson(req, bodySchema);
   if (!parsed.ok) return parsed.res;
+  // Plans meter messages; this only stops runaway scripts.
+  const limited = await limitOr429(a.db, `chat:${a.user.id}`, 30, 60, "That's a lot of messages at once — give it a moment.");
+  if (limited) return limited;
   const conversation = await ensureConversation(a.db, botId, "web", "owner");
   return sseResponse(async (send, signal) => {
     await runTurn({

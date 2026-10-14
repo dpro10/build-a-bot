@@ -21,6 +21,7 @@
     "cron:tick": "tsx scripts/cron-tick.ts",
     "discord:register": "tsx scripts/discord-register.ts",
     "icons": "tsx scripts/gen-icons.ts",
+    "avatars": "tsx scripts/render-avatars.tsx",
     "check": "npm run typecheck && npm run test"
   },
   "dependencies": {

@@ -14,7 +14,7 @@ import { appUrl, config } from "@/lib/env";
 import { numericCode, randomToken } from "@/lib/crypto";
 import { shortCode, slugify } from "@/lib/utils";
 import { storeCredential } from "./secrets";
-import { telegramCall } from "./telegram";
+import { setTelegramProfilePhoto, telegramCall } from "./telegram";
 
 export function suggestUsername(botName: string): string {
   const base = slugify(botName, 14).replace(/-/g, "_") || "helper";
@@ -72,6 +72,8 @@ export async function activateTelegramBot(
   await telegramCall(input.token, "setMyDescription", {
     description: `I'm ${input.bot.name}, a personal AI assistant. I only take instructions from my owner. Say STOP anytime to pause me.`.slice(0, 512),
   }).catch(() => {});
+  // Its face, so the chat list shows the same character as the app.
+  await setTelegramProfilePhoto(input.token, input.bot);
 
   await db
     .update(schema.channels)
