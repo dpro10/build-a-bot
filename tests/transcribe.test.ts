@@ -60,6 +60,14 @@ describe("speech-to-text", () => {
     expect((calls[0].form.get("file") as File).name).toBe("chunk.webm");
   });
 
+  it("reports how long the audio really was (what speech-to-text bills), whatever the recorder said", async () => {
+    fakeFetch([() => Response.json({ duration: 1500.25, segments: [{ start: 0, end: 2, text: "Long one." }] })]);
+    const out = await transcribe({ ...input, durationMs: 1000 });
+    expect(out.audioMs).toBe(1_500_250);
+    fakeFetch([() => Response.json({ text: "No duration here." })]);
+    expect((await transcribe(input)).audioMs).toBeUndefined();
+  });
+
   it("falls back to plain text for models without timestamps", async () => {
     const calls = fakeFetch([
       () => new Response(JSON.stringify({ error: { message: "response_format 'verbose_json' is not compatible with this model" } }), { status: 400 }),

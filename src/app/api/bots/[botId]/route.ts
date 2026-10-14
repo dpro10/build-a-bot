@@ -18,8 +18,23 @@ export async function GET(_req: Request, ctx: RouteCtx<{ botId: string }>) {
   const { botId } = await ctx.params;
   const a = await authedBot(botId);
   if (!a.ok) return a.res;
-  const setup = await getBotSetup(a.db, botId);
-  return json({ bot: a.bot, ...setup });
+  const { channels, connections } = await getBotSetup(a.db, botId);
+  const { mcpTokenHash: _h, ...bot } = a.bot;
+  // Never secrets to the browser: a channel's config holds e.g. its Telegram webhook secret.
+  const safeChannels = channels.map(({ config, credentialId, ...c }) => {
+    const cfg = (config ?? {}) as { simulated?: boolean; locked?: boolean; pendingOwnerAddress?: unknown; username?: unknown };
+    return {
+      ...c,
+      credentialId: credentialId ? "set" : null,
+      config: {
+        simulated: cfg.simulated ?? false,
+        locked: cfg.locked ?? false,
+        pendingOwnerAddress: typeof cfg.pendingOwnerAddress === "string" ? cfg.pendingOwnerAddress : null,
+        username: typeof cfg.username === "string" ? cfg.username : null,
+      },
+    };
+  });
+  return json({ bot, channels: safeChannels, connections });
 }
 
 const patchSchema = z.object({

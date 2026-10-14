@@ -5,15 +5,18 @@ import { appUrl } from "@/lib/env";
 import { finishMcpOAuth } from "@/lib/connectors/mcp/oauth";
 import { refreshMcpTools } from "@/lib/connectors/mcp/tools";
 import { receipt } from "@/lib/agent/run";
+import { getUser } from "@/lib/auth/session";
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const db = await getDb();
+  const user = await getUser();
   const result = await finishMcpOAuth(db, {
     state: url.searchParams.get("state") ?? "",
     code: url.searchParams.get("code"),
     iss: url.searchParams.get("iss"),
     error: url.searchParams.get("error"),
+    userId: user?.id ?? null,
   });
   if (!result.ok) {
     const back = new URL(result.redirectTo ?? "/app", appUrl());

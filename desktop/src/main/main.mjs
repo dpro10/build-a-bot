@@ -169,6 +169,9 @@ async function boot() {
     pairing.send(pairingState());
   });
   account.on("signed-out", (reason) => {
+    // Unsent audio from the old pairing goes too (from memory as well as the spool):
+    // it must not be retried later with another pairing's token.
+    uploads.dropAll();
     spool.clear();
     // Unpaired from the web app: say so where the owner can pair again.
     if (reason) {

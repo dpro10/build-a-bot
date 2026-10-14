@@ -1,19 +1,19 @@
 import { after } from "next/server";
-import { and, eq, gt, isNull, sql } from "drizzle-orm";
-import { getDb, schema } from "@/lib/db";
+import { getDb } from "@/lib/db";
 import { config } from "@/lib/env";
 import { timingSafeEqualStr } from "@/lib/crypto";
-import { onManagedBotCreated } from "@/lib/channels/telegram-setup";
+import { onManagedBotCreated, rememberManagerStart } from "@/lib/channels/telegram-setup";
 import { telegramCall } from "@/lib/channels/telegram";
 import { seenBefore } from "@/lib/channels/inbound";
 
 /** Our manager bot: creates each owner's personal Telegram bot (Managed Bots). */
 export async function POST(req: Request) {
+  if (!config.telegram.managerToken) return new Response("not configured", { status: 503 });
+  // Fail closed: without the secret anyone could post fake "a bot was created" updates.
   const secret = process.env.TELEGRAM_MANAGER_WEBHOOK_SECRET;
-  if (secret && !timingSafeEqualStr(req.headers.get("x-telegram-bot-api-secret-token") ?? "", secret)) {
+  if (!secret || !timingSafeEqualStr(req.headers.get("x-telegram-bot-api-secret-token") ?? "", secret)) {
     return new Response("forbidden", { status: 403 });
   }
-  if (!config.telegram.managerToken) return new Response("not configured", { status: 503 });
   const update = (await req.json().catch(() => null)) as {
     update_id?: number;
     managed_bot?: { user: { id: number }; bot: { id: number; username: string } };
@@ -38,10 +38,7 @@ export async function POST(req: Request) {
     const m = /^\/start\s+link_([A-Za-z0-9_-]+)/.exec(text);
     if (m && update.message?.from) {
       // The owner opened the manager from the app first: remember their Telegram id for matching.
-      await db
-        .update(schema.pairingCodes)
-        .set({ data: sql`${schema.pairingCodes.data} || ${JSON.stringify({ telegramUserId: String(update.message.from.id) })}::jsonb` })
-        .where(and(eq(schema.pairingCodes.purpose, "telegram_managed"), eq(schema.pairingCodes.botId, m[1]), isNull(schema.pairingCodes.usedAt), gt(schema.pairingCodes.expiresAt, new Date())));
+      await rememberManagerStart(db, m[1], String(update.message.from.id));
       await telegramCall(config.telegram.managerToken!, "sendMessage", {
         chat_id: update.message.chat.id,
         text: "Got it! Now go back to the app and tap “Create my Telegram bot”.",

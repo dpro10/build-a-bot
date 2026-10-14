@@ -225,11 +225,15 @@ type TokenSet = { access_token: string; refresh_token?: string; expires_at?: num
 
 export async function finishMcpOAuth(
   db: Db,
-  input: { state: string; code: string | null; iss: string | null; error: string | null },
+  input: { state: string; code: string | null; iss: string | null; error: string | null; userId: string | null },
 ): Promise<{ ok: true; redirectTo: string; connectionId: string } | { ok: false; message: string; redirectTo?: string }> {
   const [row] = await db.select().from(schema.oauthStates).where(eq(schema.oauthStates.id, input.state)).limit(1);
   if (!row || row.kind !== "mcp" || row.expiresAt.getTime() < Date.now()) return { ok: false, message: "That sign-in link expired. Try connecting again." };
   await db.delete(schema.oauthStates).where(eq(schema.oauthStates.id, row.id));
+  // Only the person who started connecting may finish it, in their own browser. Otherwise a
+  // stranger could send someone their own sign-in link and get that person's account (their
+  // Gmail, say) connected to the stranger's bot.
+  if (!input.userId || input.userId !== row.ownerId) return { ok: false, message: "Sign in to Build-a-bot as the person who started connecting this app, then connect it again." };
   const d = row.data as {
     connectionId: string;
     issuer: string;

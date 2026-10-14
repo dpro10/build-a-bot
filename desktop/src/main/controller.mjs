@@ -27,6 +27,12 @@ export const DEFAULT_LIMITS = Object.freeze({
   drainMs: 90_000,
   /** Tuck the bot away if the notes take longer than this (notify when ready). */
   slowNotesMs: 120_000,
+  /** How long Pause waits for the last chunk to upload before telling the server it's paused. */
+  pauseDrainMs: 30_000,
+  /** First wait before retrying a pause/resume the server didn't get. */
+  retryBaseMs: 1000,
+  /** Deletes and finishes that failed (offline) are retried this often, not just at launch. */
+  pendingRetryMs: 60_000,
 });
 
 const STOP_NOTES = {
@@ -125,6 +131,9 @@ export class Controller extends EventEmitter {
     this.buddyPending = false;
     this.lastLevelPush = 0;
     this.ticks = 0;
+    /** When failed deletes/finishes were last retried. */
+    this.pendingRetryAt = Date.now();
+    this.retryingPending = false;
     this.stats = { chunks: 0, uploaded: 0, captions: 0, notices: [], notifications: [], stops: [], chunkLog: [] };
     this.timer = setInterval(() => this.tick(), 1000);
     this.timer.unref?.();
@@ -175,16 +184,23 @@ export class Controller extends EventEmitter {
       }
       case "start":
         return this.startRecording(fx);
-      case "pause":
+      case "pause": {
         await this.capture.pause();
         this.level = 0;
         this.render();
-        if (this.rec) void this.api.setPaused?.(this.rec.botId, this.rec.meetingId, true)?.catch((e) => this.log(`pause: ${e.status ?? e}`));
+        const rec = this.rec;
+        if (!rec) return;
+        // The audio from just before the pause goes up first. Arriving after the "paused" mark,
+        // it reads as recording again, and since nothing is sent while paused, the server would
+        // wrap a pause longer than 20 minutes up as an abandoned meeting.
+        await this.uploads.drain(rec.meetingId, this.limits.pauseDrainMs);
+        if (this.rec === rec && this.state.phase === "paused") await this.markPaused(rec, true);
         return;
+      }
       case "resume": {
         const r = await this.capture.resume();
         if (!r.ok) this.dispatch({ type: "stop", reason: "mic_lost" });
-        else if (this.rec) void this.api.setPaused?.(this.rec.botId, this.rec.meetingId, false)?.catch((e) => this.log(`resume: ${e.status ?? e}`));
+        else if (this.rec) await this.markPaused(this.rec, false);
         return;
       }
       case "stop":
@@ -202,6 +218,23 @@ export class Controller extends EventEmitter {
       }
       default:
         return;
+    }
+  }
+
+  /** Tell the server the recording is paused (or not), retrying a network blip or two. */
+  async markPaused(rec, paused) {
+    if (!this.api.setPaused) return;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await this.api.setPaused(rec.botId, rec.meetingId, paused);
+        return;
+      } catch (err) {
+        const status = /** @type {any} */ (err)?.status ?? 0;
+        this.log(`${paused ? "pause" : "resume"}: ${status || err}`);
+        if (status && status < 500 && status !== 429) return; // the meeting ended or moved: nothing to retry
+        await new Promise((r) => setTimeout(r, this.limits.retryBaseMs * 2 ** attempt));
+        if (this.rec !== rec || this.state.phase !== (paused ? "paused" : "listening")) return;
+      }
     }
   }
 
@@ -305,7 +338,11 @@ export class Controller extends EventEmitter {
     const cap = await this.capture.start({ chunkMs, system: this.systemAudioMode() });
     if (!cap.ok) {
       this.log(`start: capture failed (${cap.error ?? "?"})`);
-      await this.api.deleteMeeting(bot.id, meetingId).catch(() => {});
+      // Nothing was captured: the empty meeting goes (retried if offline, so it isn't later
+      // wrapped up on the server as an abandoned meeting with "notes" to send).
+      await this.api.deleteMeeting(bot.id, meetingId).catch((err) => {
+        if (/** @type {any} */ (err)?.status !== 404) this.addPending({ kind: "delete", botId: bot.id, meetingId, server });
+      });
       this.rec = null;
       this.dispatch({ type: "start_failed", message: "I can't hear your microphone. Let Build-a-bot use it in your system settings, then try again.", openTarget: "permissions" });
       return;
@@ -375,6 +412,13 @@ export class Controller extends EventEmitter {
     for (;;) {
       try {
         const { meeting } = await this.api.getMeeting(rec.botId, meetingId, rec.server);
+        if (meeting.status === "ready" && !meeting.notes && meeting.error) {
+          // Finished without notes (nothing heard, the bot was paused, the brain failed): say so
+          // instead of "your notes are ready".
+          this.removePending(meetingId);
+          this.dispatch({ type: "notes_failed", meetingId, message: String(meeting.error).slice(0, 200) });
+          return;
+        }
         if (meeting.status === "ready") {
           this.removePending(meetingId);
           this.dispatch({ type: "notes_ready", meetingId, title: meeting.title });
@@ -609,6 +653,10 @@ export class Controller extends EventEmitter {
     const now = Date.now();
     const phase = this.state.phase;
     this.ticks++;
+    if (now - this.pendingRetryAt >= this.limits.pendingRetryMs && this.settings.get().pending.length) {
+      this.pendingRetryAt = now;
+      void this.retryPending().catch((err) => this.log(`pending: ${err}`));
+    }
     if (phase === "asking" && !this.hovering && this.askDeadline && now >= this.askDeadline) {
       this.dispatch({ type: "ask_timeout" });
       return;
@@ -686,15 +734,32 @@ export class Controller extends EventEmitter {
         if (r.ok) await this.api.finish(botId, meetingId, server).catch(() => {});
       });
     }
-    for (const p of this.settings.get().pending) {
-      if (p.server !== server) continue;
-      try {
-        if (p.kind === "delete") await this.api.deleteMeeting(p.botId, p.meetingId);
-        else await this.api.finish(p.botId, p.meetingId, p.server);
-        this.removePending(p.meetingId);
-      } catch (err) {
-        if ([404, 409].includes(/** @type {any} */ (err)?.status)) this.removePending(p.meetingId);
+    await this.retryPending();
+  }
+
+  /**
+   * Deletes and finishes the server didn't get (offline). Retried every minute while the app
+   * runs, not only at the next launch: a "Stop and delete" that didn't reach the server would
+   * otherwise be wrapped up there as an abandoned meeting, and its notes sent to the owner.
+   */
+  async retryPending() {
+    if (this.retryingPending) return;
+    const server = this.account.server();
+    const pending = this.settings.get().pending.filter((p) => p.server === server);
+    if (!server || !pending.length) return;
+    this.retryingPending = true;
+    try {
+      for (const p of pending) {
+        try {
+          if (p.kind === "delete") await this.api.deleteMeeting(p.botId, p.meetingId);
+          else await this.api.finish(p.botId, p.meetingId, p.server);
+          this.removePending(p.meetingId);
+        } catch (err) {
+          if ([404, 409].includes(/** @type {any} */ (err)?.status)) this.removePending(p.meetingId);
+        }
       }
+    } finally {
+      this.retryingPending = false;
     }
   }
 

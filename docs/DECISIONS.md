@@ -257,6 +257,42 @@ Built (research: `docs/research/meetings-2026-10-14.md`):
   - When a Mac can't get the call's audio, the app says it's a permission problem and keeps going with the mic only.
   - "Unpair" revokes the computer's token on the server, not just on the computer.
 
+## Security review before Diego's walkthrough (2026-10-14)
+
+A code review of the server and the desktop app. Each fix has a test that fails on the old code.
+
+**Fixed:**
+- **Critical, Discord `/link`:** the typed code went into a LIKE pattern, so `/link code:%` made any Discord user the owner of a bot with a pending link. Codes are now 8 letters and digits (`K7XQ-29MD`), matched exactly, claimed once, 10 tries per 10 minutes per Discord user.
+- **High, app sign-in:** the sign-in callback now finishes only for the signed-in person who started it. Before, a stranger's link could connect someone else's Gmail to the stranger's bot.
+- **High, notes on the owner's computer:** that Bridge job now only gets the read-only meeting tools, so a line said in a call can't make it send, save or schedule anything.
+- **High, notes in the chat:** meeting notes in the recent history count as outside content, so "email the recap to everyone" asks before writing to someone new.
+- **Medium:**
+  - meeting minutes also count the audio really transcribed, so a recorder can't hide minutes;
+  - notes are sent once, and never for a deleted meeting;
+  - retention can't be starved by meetings kept forever;
+  - meeting settings are merged in SQL, never rewritten from a stale copy;
+  - desktop: a long pause no longer ends the meeting, offline "Stop and delete" retries every minute, and the token only goes to the paired server.
+- **Low:**
+  - the Telegram manager webhook refuses updates without `TELEGRAM_MANAGER_WEBHOOK_SECRET`;
+  - audio uploads stop reading at 8 MB;
+  - the bot API no longer returns the Telegram webhook secret;
+  - logout checks the origin;
+  - switching a routine back on counts against the plan.
+
+**Build choice (Claude; Diego to confirm): a paused bot doesn't write meeting notes.** STOP means no model runs and nothing is sent. The transcript is kept, and **Try again** on the meeting page writes the notes after resuming. STOP also cancels turns still waiting for the owner's computer.
+
+**For Diego to decide:**
+1. **Taint across turns.**
+   - The bot's own summary of an email or web page doesn't carry the "outside content" mark into the next turn.
+   - Under Full faith, writes and deletes after reading outside content aren't held. Sends to someone new are.
+2. **Owner by email address or caller ID.** Both can be forged.
+   - Email from the owner already counts as outside content, so a forged one can't write to strangers. It can still make writes in the owner's own apps under Trusted helper or Full faith, and send STOP or START.
+   - Fix: require the email provider's DKIM/SPF pass, and STIR/SHAKEN attestation for calls.
+3. **Bot-sent texts aren't metered.** Only incoming ones count toward the plan.
+4. **The monthly spending cap is still a placeholder** (`spentThisMonthUsd` is 0). This is harmless today: no tool reports amounts, so all spending is refused.
+5. **One recording per bot isn't enforced by the database.** A double start can make two meetings. It needs a partial unique index (a migration).
+6. **Long meetings:** notes for a meeting near 4 hours may exceed Vercel's 300-second function limit. Housekeeping writes notes inside the cron tick.
+
 ## Gotchas found while building
 
 - Nemotron and other reasoning models: thinking eats `max_tokens`. Included models get 8–16K, and thinking is off on "Quick".

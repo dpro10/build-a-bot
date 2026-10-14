@@ -9,7 +9,7 @@
  * Audio is transcribed in memory and thrown away; only the text is kept, and the
  * owner can delete any meeting.
  */
-import { and, asc, desc, eq, gt, ilike, inArray, lt, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, ilike, inArray, lt, ne, or, sql } from "drizzle-orm";
 import { schema, type Db } from "@/lib/db";
 import type { Bot, Meeting, MeetingSegment, User } from "@/lib/db/schema";
 import { checkLimit, recordUsage } from "@/lib/billing/usage";
@@ -265,6 +265,8 @@ export async function addChunk(db: Db, input: ChunkInput): Promise<{ ok: true; s
   let segments: { startMs: number; endMs: number; text: string }[] = [];
   let warning: string | undefined;
   let provider: string | undefined;
+  /** Audio that went through speech-to-text (what it costs us), for the plan's minutes. */
+  let heardMs = 0;
   if (!input.silent && input.audio.byteLength >= 800) {
     const recent = await db
       .select({ text: schema.meetingSegments.text })
@@ -283,6 +285,8 @@ export async function addChunk(db: Db, input: ChunkInput): Promise<{ ok: true; s
       });
       segments = result.segments;
       provider = `${result.provider}/${result.model}`;
+      // The provider's own measure wins when the recorder said much less (it can't shrink what's billed).
+      heardMs = result.audioMs && result.audioMs > input.durationMs + 1000 ? result.audioMs : input.durationMs;
     } catch (err) {
       if (err instanceof TranscriptionError && err.retryable) return { ok: false, status: 503, code: "retry", error: "Speech-to-text is busy. The recorder will retry this chunk." };
       // Unreadable audio won't get better on retry: mark it so the recorder moves on.
@@ -305,15 +309,21 @@ export async function addChunk(db: Db, input: ChunkInput): Promise<{ ok: true; s
       }))
     : [{ id: sortableId("seg"), meetingId: meeting.id, track, chunk, idx: -1, startMs: input.startMs, endMs: input.startMs + input.durationMs, speaker, text: "" }];
   const inserted = await db.insert(schema.meetingSegments).values(rows).onConflictDoNothing().returning();
+  // A concurrent retry of the same chunk already counted it.
+  if (!inserted.length) heardMs = 0;
 
   // Meeting length (and the plan's meeting minutes) follows wall-clock time, whichever track gets there first.
+  // The timeline comes from the recorder, so it's also held to the audio each track really had
+  // transcribed (a track never overlaps itself): restarting the timeline can't hide minutes.
   const reach = Math.ceil((input.startMs + input.durationMs) / 1000);
+  const heardSoFar = sql`coalesce((meetings.meta->'heardMs'->>${track}::text)::bigint, 0) + ${heardMs}::bigint`;
   let meta = provider ? sql`meetings.meta || jsonb_build_object('transcribedBy', ${provider}::text)` : sql`meetings.meta`;
   // Real audio means it's recording again; a tiny silent "still here" ping from a paused recorder doesn't.
   if (!(input.silent && input.durationMs < 1000)) meta = sql`(${meta}) - 'pausedAt'`;
+  if (heardMs) meta = sql`jsonb_set(${meta}, '{heardMs}', coalesce(meetings.meta->'heardMs', '{}'::jsonb) || jsonb_build_object(${track}::text, ${heardSoFar}))`;
   const bumped = await db.execute(sql`
     with prev as (select duration_sec from meetings where id = ${meeting.id} for update)
-    update meetings set duration_sec = greatest(meetings.duration_sec, ${reach}), updated_at = now(), meta = ${meta}
+    update meetings set duration_sec = greatest(meetings.duration_sec, ${reach}::int, ceil((${heardSoFar}) / 1000.0)::int), updated_at = now(), meta = ${meta}
     from prev where meetings.id = ${meeting.id}
     returning prev.duration_sec as before, meetings.duration_sec as after`);
   const row = (bumped as unknown as { rows?: { before: number; after: number }[] }).rows?.[0] ?? (bumped as unknown as { before: number; after: number }[])[0];
@@ -322,12 +332,16 @@ export async function addChunk(db: Db, input: ChunkInput): Promise<{ ok: true; s
   return { ok: true, segments: inserted.filter((s) => s.text), warning };
 }
 
+// Meeting meta is changed with SQL merges, never from a copy read earlier: uploads update it
+// concurrently (pause state, what was transcribed), and a stale copy would undo that.
+const metaMerge = (patch: Record<string, unknown>) => sql`${schema.meetings.meta} || ${JSON.stringify(patch)}::jsonb`;
+
 /** Stop listening. The caller writes the notes (after the response, or in the scheduler). */
 export async function finishMeeting(db: Db, meeting: Meeting, opts: { reason?: "stopped" | "replaced" | "stale" | "limit" } = {}): Promise<Meeting> {
   if (meeting.status !== "recording") return meeting;
   const [updated] = await db
     .update(schema.meetings)
-    .set({ status: "processing", endedAt: new Date(), updatedAt: new Date(), meta: { ...(meeting.meta ?? {}), endedBy: opts.reason ?? "stopped" } })
+    .set({ status: "processing", endedAt: new Date(), updatedAt: new Date(), meta: metaMerge({ endedBy: opts.reason ?? "stopped" }) })
     .where(and(eq(schema.meetings.id, meeting.id), eq(schema.meetings.status, "recording")))
     .returning();
   return updated ?? meeting;
@@ -336,7 +350,7 @@ export async function finishMeeting(db: Db, meeting: Meeting, opts: { reason?: "
 export async function renameMeeting(db: Db, meeting: Meeting, title: string): Promise<Meeting> {
   const [updated] = await db
     .update(schema.meetings)
-    .set({ title: title.trim().slice(0, 120), meta: { ...(meeting.meta ?? {}), renamed: true }, updatedAt: new Date() })
+    .set({ title: title.trim().slice(0, 120), meta: metaMerge({ renamed: true }), updatedAt: new Date() })
     .where(eq(schema.meetings.id, meeting.id))
     .returning();
   return updated;
@@ -351,9 +365,13 @@ export async function setActionItemDone(db: Db, meeting: Meeting, index: number,
 }
 
 export async function markNoticeCopied(db: Db, meeting: Meeting): Promise<Meeting> {
-  const meta = (meeting.meta ?? {}) as Record<string, unknown>;
-  const consent = { ...((meta.consent as Record<string, unknown>) ?? {}), noticeCopied: true, noticeCopiedAt: new Date().toISOString() };
-  const [updated] = await db.update(schema.meetings).set({ meta: { ...meta, consent }, updatedAt: new Date() }).where(eq(schema.meetings.id, meeting.id)).returning();
+  const notice = JSON.stringify({ noticeCopied: true, noticeCopiedAt: new Date().toISOString() });
+  const meta = schema.meetings.meta;
+  const [updated] = await db
+    .update(schema.meetings)
+    .set({ meta: sql`jsonb_set(${meta}, '{consent}', coalesce(${meta}->'consent', '{}'::jsonb) || ${notice}::jsonb)`, updatedAt: new Date() })
+    .where(eq(schema.meetings.id, meeting.id))
+    .returning();
   return updated ?? meeting;
 }
 
@@ -362,7 +380,7 @@ export async function deleteTranscript(db: Db, bot: Bot, meeting: Meeting, by: "
   await db.delete(schema.meetingSegments).where(eq(schema.meetingSegments.meetingId, meeting.id));
   const [updated] = await db
     .update(schema.meetings)
-    .set({ meta: { ...(meeting.meta ?? {}), transcriptDeletedAt: new Date().toISOString(), transcriptDeletedBy: by }, updatedAt: new Date() })
+    .set({ meta: metaMerge({ transcriptDeletedAt: new Date().toISOString(), transcriptDeletedBy: by }), updatedAt: new Date() })
     .where(eq(schema.meetings.id, meeting.id))
     .returning();
   if (by === "owner") await receipt(db, bot, "meeting", "ok", `Deleted the transcript of “${truncate(meeting.title, 80)}” (kept the notes)`, { meetingId: meeting.id });
@@ -371,6 +389,9 @@ export async function deleteTranscript(db: Db, bot: Bot, meeting: Meeting, by: "
 
 /** Retention: transcripts older than each bot's setting (90 days unless changed) are deleted; notes stay. */
 export async function expireTranscripts(db: Db, now = new Date()) {
+  // Each bot's own cutoff is applied in SQL, so meetings kept forever (or longer) can't
+  // fill the batch and stop shorter-lived transcripts from ever being deleted.
+  const days = sql`${schema.bots.limits}->'transcriptDays'`;
   const rows = await db
     .select({ meeting: schema.meetings, limits: schema.bots.limits })
     .from(schema.meetings)
@@ -380,6 +401,9 @@ export async function expireTranscripts(db: Db, now = new Date()) {
         inArray(schema.meetings.status, ["ready", "failed"]),
         lt(schema.meetings.startedAt, new Date(now.getTime() - 86400_000)),
         sql`(${schema.meetings.meta}->>'transcriptDeletedAt') is null`,
+        // null = keep forever; unset (or not a number) = the default.
+        sql`coalesce(jsonb_typeof(${days}), '') <> 'null'`,
+        sql`${schema.meetings.startedAt} < ${now.toISOString()}::timestamptz - (coalesce(case when jsonb_typeof(${days}) = 'number' then (${days})::text::float8 end, ${DEFAULT_TRANSCRIPT_DAYS}) * interval '1 day')`,
       ),
     )
     .orderBy(asc(schema.meetings.startedAt))
@@ -391,7 +415,7 @@ export async function expireTranscripts(db: Db, now = new Date()) {
     await db.delete(schema.meetingSegments).where(eq(schema.meetingSegments.meetingId, meeting.id));
     await db
       .update(schema.meetings)
-      .set({ meta: { ...(meeting.meta ?? {}), transcriptDeletedAt: now.toISOString(), transcriptDeletedBy: "retention" } })
+      .set({ meta: metaMerge({ transcriptDeletedAt: now.toISOString(), transcriptDeletedBy: "retention" }) })
       .where(eq(schema.meetings.id, meeting.id));
     expired++;
   }
@@ -432,25 +456,34 @@ export async function searchSegments(db: Db, botId: string, query: string, limit
 
 /** Recordings whose recorder disappeared: stop them so the notes still get written. A paused one is left alone (up to the 4-hour cap). */
 export async function staleRecordings(db: Db, now = new Date()): Promise<Meeting[]> {
+  // Paused ones are filtered in SQL (not after the LIMIT), so many paused recordings can't
+  // hide an abandoned one. pausedAt is written by toISOString, so it compares as text.
+  const pausedCutoff = new Date(now.getTime() - MAX_MEETING_MS).toISOString();
   const rows = await db
     .select()
     .from(schema.meetings)
-    .where(and(eq(schema.meetings.status, "recording"), lt(schema.meetings.updatedAt, new Date(now.getTime() - STALE_RECORDING_MS))))
-    .limit(40);
-  return rows
-    .filter((m) => {
-      const pausedAt = (m.meta as { pausedAt?: string } | null)?.pausedAt;
-      return !pausedAt || now.getTime() - Date.parse(pausedAt) > MAX_MEETING_MS;
-    })
-    .slice(0, 20);
+    .where(
+      and(
+        eq(schema.meetings.status, "recording"),
+        lt(schema.meetings.updatedAt, new Date(now.getTime() - STALE_RECORDING_MS)),
+        or(sql`${schema.meetings.meta}->>'pausedAt' is null`, sql`${schema.meetings.meta}->>'pausedAt' < ${pausedCutoff}`),
+      ),
+    )
+    .orderBy(asc(schema.meetings.updatedAt))
+    .limit(20);
+  return rows.filter((m) => {
+    const pausedAt = (m.meta as { pausedAt?: string } | null)?.pausedAt;
+    return !pausedAt || now.getTime() - Date.parse(pausedAt) > MAX_MEETING_MS;
+  });
 }
 
 /** The owner paused (or resumed) the recording; a paused meeting isn't wrapped up as abandoned. */
 export async function setPaused(db: Db, meeting: Meeting, paused: boolean): Promise<Meeting> {
   if (meeting.status !== "recording") return meeting;
-  const meta = { ...((meeting.meta ?? {}) as Record<string, unknown>) };
-  if (paused) meta.pausedAt = new Date().toISOString();
-  else delete meta.pausedAt;
-  const [updated] = await db.update(schema.meetings).set({ meta, updatedAt: new Date() }).where(eq(schema.meetings.id, meeting.id)).returning();
+  const [updated] = await db
+    .update(schema.meetings)
+    .set({ meta: paused ? metaMerge({ pausedAt: new Date().toISOString() }) : sql`${schema.meetings.meta} - 'pausedAt'`, updatedAt: new Date() })
+    .where(and(eq(schema.meetings.id, meeting.id), eq(schema.meetings.status, "recording")))
+    .returning();
   return updated ?? meeting;
 }

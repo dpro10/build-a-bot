@@ -12,7 +12,7 @@ import { getDb, schema, type Db } from "@/lib/db";
 import type { Bot, BridgeJob, User } from "@/lib/db/schema";
 import { appUrl, demoMode } from "@/lib/env";
 import { sha256 } from "@/lib/crypto";
-import { buildToolset } from "@/lib/tools/registry";
+import { buildToolset, type Toolset } from "@/lib/tools/registry";
 import { toolJsonSchema, type ToolContext } from "@/lib/tools/types";
 import { executeToolCall, newRunState } from "@/lib/agent/run";
 import { readMcpToken, recordTaint } from "@/lib/bridge/jobs";
@@ -122,7 +122,7 @@ export async function handleMcpRequest(req: Request, botId: string): Promise<Res
       return rpcResult(body.id, {});
     case "tools/list": {
       const ctx = toolContext(db, auth);
-      const toolset = await buildToolset(ctx);
+      const toolset = await callerToolset(ctx, auth);
       const tools = toolset.tools.map((t) => ({
         name: t.name,
         title: t.title,
@@ -142,7 +142,7 @@ export async function handleMcpRequest(req: Request, botId: string): Promise<Res
       const name = String(body.params?.name ?? "");
       const args = (body.params?.arguments ?? {}) as Record<string, unknown>;
       const ctx = toolContext(db, auth);
-      const toolset = await buildToolset(ctx);
+      const toolset = await callerToolset(ctx, auth);
       if (!toolset.byName.has(name)) return rpcError(body.id, -32602, `Unknown tool: ${name}`, modern ? 404 : 200);
       const tainted = Boolean((auth.job?.output as { tainted?: boolean } | null)?.tainted) || !auth.job;
       const state = newRunState(tainted);
@@ -167,6 +167,20 @@ export async function handleMcpRequest(req: Request, botId: string): Promise<Res
     default:
       return rpcError(body.id, -32601, `Method not found: ${body.method}`, modern ? 404 : 200);
   }
+}
+
+/**
+ * The tools a caller may use. A Bridge job that writes meeting notes reads the transcript
+ * (other people's words) with the bot's own tools, so it only gets the read-only meeting
+ * tools: a line said in a call can skew the notes but can't send, schedule, remember or
+ * change anything (the same promise as notes written in the cloud, which use no tools).
+ */
+async function callerToolset(ctx: ToolContext, auth: Auth): Promise<Toolset> {
+  const toolset = await buildToolset(ctx);
+  const meetingId = (auth.job?.input as { meta?: { meetingId?: string } | null } | null)?.meta?.meetingId;
+  if (!meetingId) return toolset;
+  const tools = toolset.tools.filter((t) => t.connectorId === "meetings" && t.effect === "read");
+  return { ...toolset, tools, byName: new Map(tools.map((t) => [t.name, t])) };
 }
 
 function toolContext(db: Db, auth: Auth): ToolContext {

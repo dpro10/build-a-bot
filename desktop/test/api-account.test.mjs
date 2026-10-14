@@ -87,3 +87,19 @@ test("unpair revokes the token on the server, then forgets it here (offline: for
   assert.deepEqual(await offline.account.unpair(), { revoked: false });
   assert.equal(offline.tokens(), null);
 });
+
+test("api: the device token never goes to a server this computer isn't paired with (anymore)", async () => {
+  const f = fakeFetch([]);
+  // Re-paired with a new server while chunks, a finish or a notes poll were still addressed to the old one.
+  const api = createApi({ fetch: f.fn, server: () => "https://new.example", token: () => "bab_dev_new" });
+  const r = await api.uploadChunk({ server: "http://localhost:3000", botId: "bot_1", meetingId: "mtg_1", track: "mic", chunk: 0, startMs: 0, durationMs: 6000, silent: false, mime: "audio/webm", bytes: new Uint8Array([1]) });
+  assert.equal(r.status, 404, "the old server's meeting is gone for us: drop just its chunks");
+  await assert.rejects(api.finish("bot_1", "mtg_1", "http://localhost:3000"), (e) => e.status === 401);
+  await assert.rejects(api.getMeeting("bot_1", "mtg_1", "http://localhost:3000"), (e) => e.status === 401);
+  assert.equal(f.seen.length, 0, "nothing was sent to the old server");
+  // The paired server still gets it.
+  const f2 = fakeFetch([{ status: 200, body: { meeting: { status: "ready" } } }]);
+  const api2 = createApi({ fetch: f2.fn, server: () => "https://new.example", token: () => "bab_dev_new" });
+  await api2.getMeeting("bot_1", "mtg_1", "https://new.example");
+  assert.equal(f2.seen[0].init.headers.authorization, "Bearer bab_dev_new");
+});

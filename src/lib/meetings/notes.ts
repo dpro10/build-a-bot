@@ -10,7 +10,7 @@
  * Bots whose brain is the owner's own Claude/ChatGPT plan write the notes on the
  * owner's computer (a Bridge job that reads the transcript through the bot's tools).
  */
-import { and, eq, lt, sql } from "drizzle-orm";
+import { and, asc, eq, lt, or, sql } from "drizzle-orm";
 import { schema, type Db } from "@/lib/db";
 import type { Bot, Meeting, MeetingActionItem, User } from "@/lib/db/schema";
 import { appUrl } from "@/lib/env";
@@ -30,6 +30,8 @@ import { meetingAppName } from "./apps";
 const SINGLE_PASS_CHARS = 60_000;
 const PART_CHARS = 40_000;
 const NOTES_STALE_MS = 15 * 60_000;
+/** How long notes may wait for the owner's computer (a Bridge job lives 12 hours). */
+const BRIDGE_NOTES_WAIT_MS = 12 * 3600_000;
 
 export const NOTES_FORMAT = `Reply in exactly this format, with nothing before or after it:
 Title: <a short, specific title for the meeting, at most 8 words>
@@ -160,6 +162,15 @@ export async function writeMeetingNotes(db: Db, meetingId: string): Promise<void
   const [owner] = await db.select().from(schema.users).where(eq(schema.users.id, meeting.ownerId)).limit(1);
   if (!bot || !owner) return;
 
+  if (bot.status === "paused") {
+    // STOP means stop: no model runs (here or on the owner's computer) and nothing is sent
+    // while the bot is paused. The transcript is kept; the notes can be written from the
+    // meeting page once it's resumed.
+    if (!(await claim(db, meeting.id, "llm"))) return;
+    await finishNotes(db, bot, owner, meeting, null, `${bot.name} was paused, so the notes weren't written. The transcript is saved: resume ${bot.name}, then press Try again here.`);
+    return;
+  }
+
   const segments = await getSegments(db, meeting.id);
   const who = ownerName(owner);
   const lines = transcriptLines(segments, who);
@@ -258,33 +269,38 @@ async function finishNotes(
   problem: string | null,
   costMicros = 0,
 ) {
-  const renamed = Boolean((meeting.meta as { renamed?: boolean } | null)?.renamed);
-  const title = !renamed && notes?.title ? notes.title : meeting.title;
-  const [updated] = await db
+  // One ending per meeting: only the writer that moves it out of "processing" reports it.
+  // Two ticks, a late model call after a rescue, a repeated Bridge result, or a meeting the
+  // owner deleted meanwhile all end here without a second (or ghost) message.
+  // Merged in SQL, so a rename (or anything else) the owner did while the notes were
+  // being written isn't overwritten by the copy of the meeting read before.
+  const meetingMeta = schema.meetings.meta;
+  const [m] = await db
     .update(schema.meetings)
     .set({
       status: "ready",
-      title,
+      ...(notes?.title ? { title: sql`case when ${meetingMeta}->>'renamed' = 'true' then ${schema.meetings.title} else ${notes.title} end` } : {}),
       summary: notes?.summary || null,
       notes: notes?.notes || null,
       actionItems: notes?.actionItems ?? [],
       error: problem,
-      meta: { ...(meeting.meta ?? {}), notesBy: notes?.notesBy ?? null, notesDoneAt: new Date().toISOString() },
+      meta: sql`${meetingMeta} || ${JSON.stringify({ notesBy: notes?.notesBy ?? null, notesDoneAt: new Date().toISOString() })}::jsonb`,
       updatedAt: new Date(),
     })
-    .where(eq(schema.meetings.id, meeting.id))
+    .where(and(eq(schema.meetings.id, meeting.id), eq(schema.meetings.status, "processing")))
     .returning();
-  const m = updated ?? meeting;
+  if (!m) return;
   await receipt(
     db,
     bot,
     "meeting",
     notes ? "ok" : "error",
-    notes ? `Wrote notes for “${truncate(title, 80)}” (${formatDuration(m.durationSec)})` : `Notes for “${truncate(title, 80)}”: ${truncate(problem ?? "not written", 120)}`,
+    notes ? `Wrote notes for “${truncate(m.title, 80)}” (${formatDuration(m.durationSec)})` : `Notes for “${truncate(m.title, 80)}”: ${truncate(problem ?? "not written", 120)}`,
     { meetingId: m.id, durationSec: m.durationSec, actionItems: notes?.actionItems.length ?? 0 },
     costMicros,
   );
-  await deliverNotes(db, bot, owner, m);
+  // STOP means nothing is sent while the bot is paused; the meeting page still shows it.
+  if (bot.status !== "paused") await deliverNotes(db, bot, owner, m);
 }
 
 export function meetingUrl(m: Pick<Meeting, "botId" | "id">): string {
@@ -339,10 +355,28 @@ export async function deliverNotes(db: Db, bot: Bot, owner: User, m: Meeting) {
  * still end with a saved transcript and an honest message.
  */
 export async function rescueStuckNotes(db: Db, now = new Date()) {
+  const meta = schema.meetings.meta;
+  const bridgeCutoff = new Date(now.getTime() - BRIDGE_NOTES_WAIT_MS).toISOString();
   const stuck = await db
     .select()
     .from(schema.meetings)
-    .where(and(eq(schema.meetings.status, "processing"), lt(schema.meetings.updatedAt, new Date(now.getTime() - NOTES_STALE_MS))))
+    .where(
+      and(
+        eq(schema.meetings.status, "processing"),
+        lt(schema.meetings.updatedAt, new Date(now.getTime() - NOTES_STALE_MS)),
+        // Notes waiting for the owner's computer get the Bridge job's whole lifetime, while that
+        // job is still alive (STOP or a failure can end it sooner). Filtered here, not after the
+        // LIMIT, so many waiting meetings can't hide a stuck one.
+        // (ISO timestamps written by toISOString compare correctly as text.)
+        or(
+          sql`${meta}->>'notesStartedAt' is null`,
+          sql`coalesce(${meta}->>'notesVia', '') <> 'bridge'`,
+          sql`${meta}->>'notesStartedAt' < ${bridgeCutoff}`,
+          sql`not exists (select 1 from ${schema.bridgeJobs} where ${schema.bridgeJobs.botId} = ${schema.meetings.botId} and ${schema.bridgeJobs.status} in ('queued', 'running') and ${schema.bridgeJobs.input}->'meta'->>'meetingId' = ${schema.meetings.id})`,
+        ),
+      ),
+    )
+    .orderBy(asc(schema.meetings.updatedAt))
     .limit(20);
   for (const m of stuck) {
     const meta = (m.meta ?? {}) as { notesStartedAt?: string; notesVia?: string };
@@ -350,7 +384,6 @@ export async function rescueStuckNotes(db: Db, now = new Date()) {
       await writeMeetingNotes(db, m.id); // finished but never picked up
       continue;
     }
-    if (meta.notesVia === "bridge" && now.getTime() - new Date(meta.notesStartedAt).getTime() < 12 * 3600_000) continue;
     const [bot] = await db.select().from(schema.bots).where(eq(schema.bots.id, m.botId)).limit(1);
     const [owner] = await db.select().from(schema.users).where(eq(schema.users.id, m.ownerId)).limit(1);
     if (!bot || !owner) continue;

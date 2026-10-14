@@ -5,6 +5,8 @@ import { config } from "@/lib/env";
 import { verifyDiscordSignature, discordComponents } from "@/lib/channels/discord";
 import { handleInbound, loadBotAndOwner } from "@/lib/channels/inbound";
 import { decideApproval, readApprovalButtonToken, resolveShortApprovalKey } from "@/lib/agent/approvals";
+import { rateLimit } from "@/lib/safety/ratelimit";
+import { normalizeLinkCode } from "@/lib/channels/setup";
 
 export const maxDuration = 300;
 
@@ -32,14 +34,25 @@ export async function POST(req: Request) {
   const db = await getDb();
 
   if (i.type === 2 && i.data?.name === "link") {
-    const code = i.data.options?.find((o) => o.name === "code")?.value?.trim() ?? "";
+    const nope = (content = "That code didn't work. Get a fresh one in the app.") => Response.json({ type: 4, data: { content, flags: EPHEMERAL } });
+    // Codes look like "K7XQ-29MD". Anything else (e.g. "%" or "_", which LIKE treats as wildcards) never matches.
+    const code = normalizeLinkCode(String(i.data.options?.find((o) => o.name === "code")?.value ?? ""));
+    // The typed code isn't tied to a channel (it's checked against every pending one), so cap guesses per Discord user.
+    if (!(await rateLimit(db, `discord-link:${userId}`, 10, 600)).ok) return nope("Too many tries. Wait a few minutes and get a fresh code in the app.");
+    if (!/^[A-Z0-9]{8}$/.test(code)) return nope();
     const [row] = await db
       .select()
       .from(schema.pairingCodes)
-      .where(and(like(schema.pairingCodes.code, `dsc_%_${code}`), eq(schema.pairingCodes.purpose, "discord_owner"), isNull(schema.pairingCodes.usedAt), gt(schema.pairingCodes.expiresAt, new Date())))
+      .where(and(like(schema.pairingCodes.code, `dsc\\_%\\_${code}`), eq(schema.pairingCodes.purpose, "discord_owner"), isNull(schema.pairingCodes.usedAt), gt(schema.pairingCodes.expiresAt, new Date())))
       .limit(1);
-    if (!row?.channelId) return Response.json({ type: 4, data: { content: "That code didn't work. Get a fresh one in the app.", flags: EPHEMERAL } });
-    await db.update(schema.pairingCodes).set({ usedAt: new Date() }).where(eq(schema.pairingCodes.code, row.code));
+    if (!row?.channelId || !row.code.endsWith(`_${code}`)) return nope();
+    // Claim it once: two people typing the same code can't both link.
+    const [claimed] = await db
+      .update(schema.pairingCodes)
+      .set({ usedAt: new Date() })
+      .where(and(eq(schema.pairingCodes.code, row.code), isNull(schema.pairingCodes.usedAt)))
+      .returning();
+    if (!claimed) return nope();
     await db.update(schema.channels).set({ ownerAddress: userId, ownerVerifiedAt: new Date(), status: "active" }).where(eq(schema.channels.id, row.channelId));
     return Response.json({ type: 4, data: { content: "Linked! Talk to your bot with /ask.", flags: EPHEMERAL } });
   }

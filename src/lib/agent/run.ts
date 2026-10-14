@@ -181,9 +181,14 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
     emit({ type: "notice", tone: "warn", text: brain.reason });
     return finish(input, `I can't think right now: ${brain.reason}`, "unavailable", emit, { parts: [] });
   }
+  // Meeting notes the platform posted were written from other people's words. While they're
+  // in what the model sees (this chat's history, or "recently elsewhere"), the run counts as
+  // having read outside content, so "email the recap to everyone" can't reach a stranger
+  // named in the call without the owner's tap.
+  const notesInContext = await meetingNotesInContext(db, bot.id, conversation.id);
   if (brain.kind === "bridge") {
     const { runViaBridge } = await import("@/lib/bridge/jobs");
-    return runViaBridge(input, brain);
+    return runViaBridge(notesInContext ? { ...input, startTainted: true } : input, brain);
   }
   const limit = await checkLimit(db, owner, brain.included ? "includedMessages" : "byoMessages");
   if (!limit.ok && input.message?.author === "owner") {
@@ -255,7 +260,7 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
   const llmTools = toolset.tools.map((t) => ({ name: t.name, description: t.description, parameters: toolJsonSchema(t) }));
 
   // 6. The loop.
-  const state: RunState = { tainted: Boolean(input.startTainted) || speakingWith === "contact", parts: [], approvals: [], searches: 0, actions: 0 };
+  const state: RunState = { tainted: Boolean(input.startTainted) || speakingWith === "contact" || notesInContext, parts: [], approvals: [], searches: 0, actions: 0 };
   const usage: LlmUsage = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 };
   let finalText = "";
   let lastStepHadTools = false;
@@ -648,6 +653,11 @@ export async function setPaused(db: Db, bot: Bot, paused: boolean, reason: strin
       .update(schema.approvals)
       .set({ status: "expired", decidedAt: new Date(), decidedVia: "stop" })
       .where(and(eq(schema.approvals.botId, bot.id), eq(schema.approvals.status, "pending")));
+    // So do turns still waiting for the owner's computer: it must not wake up and run them.
+    await db
+      .update(schema.bridgeJobs)
+      .set({ status: "expired", error: "Stopped (STOP)" })
+      .where(and(eq(schema.bridgeJobs.botId, bot.id), eq(schema.bridgeJobs.status, "queued")));
   }
   await receipt(db, bot, "stop", "ok", paused ? "Paused (STOP)" : "Resumed (START)", { reason });
 }
@@ -759,6 +769,33 @@ async function loadHistory(db: Db, conversationId: string): Promise<LlmMessage[]
   // Providers want the first message to be from the user.
   while (out.length && out[0].role !== "user") out.shift();
   return out;
+}
+
+/** Are meeting notes (posted by the platform, written from a transcript) among what this turn's model sees? */
+async function meetingNotesInContext(db: Db, botId: string, conversationId: string): Promise<boolean> {
+  const isNotes = (m: { meta: unknown }) => (m.meta as { kind?: string } | null)?.kind === "meeting_notes";
+  const here = await db
+    .select({ meta: schema.messages.meta })
+    .from(schema.messages)
+    .where(eq(schema.messages.conversationId, conversationId))
+    .orderBy(desc(schema.messages.createdAt))
+    .limit(HISTORY_MESSAGES);
+  if (here.some(isNotes)) return true;
+  // The same rows loadRecentElsewhere puts in the system prompt.
+  const elsewhere = await db
+    .select({ meta: schema.messages.meta })
+    .from(schema.messages)
+    .where(
+      and(
+        eq(schema.messages.botId, botId),
+        ne(schema.messages.conversationId, conversationId),
+        gte(schema.messages.createdAt, new Date(Date.now() - 24 * 60 * 60 * 1000)),
+        ne(schema.messages.author, "contact"),
+      ),
+    )
+    .orderBy(desc(schema.messages.createdAt))
+    .limit(6);
+  return elsewhere.some(isNotes);
 }
 
 async function loadRecentElsewhere(db: Db, botId: string, conversationId: string) {

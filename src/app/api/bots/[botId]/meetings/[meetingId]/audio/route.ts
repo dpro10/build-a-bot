@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { apiError, json, limitOr429, type RouteCtx } from "@/lib/api";
+import { apiError, json, limitOr429, readBodyCapped, type RouteCtx } from "@/lib/api";
 import { addChunk, CHUNK_MAX_BYTES, getMeeting, segmentView } from "@/lib/meetings";
 import { meetingAuth } from "@/lib/meetings/auth";
 import { audioExtension } from "@/lib/transcribe";
@@ -36,8 +36,8 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string; meetingI
   const limited = await limitOr429(a.db, `mtg-chunk:${meeting.id}`, 120, 60);
   if (limited) return limited;
 
-  const audio = await req.arrayBuffer();
-  if (audio.byteLength > CHUNK_MAX_BYTES) return apiError(413, "Audio chunk too large");
+  const audio = await readBodyCapped(req, CHUNK_MAX_BYTES);
+  if (!audio) return apiError(413, "Audio chunk too large");
   const res = await addChunk(a.db, {
     meeting,
     owner: a.owner,
