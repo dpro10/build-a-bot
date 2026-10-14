@@ -44,7 +44,7 @@ export type AppsTrustProps = {
   /** Paid plans can be bought here; otherwise plan prompts say they're coming soon, with no link. */
   paidPlans: boolean;
   composioLive: boolean;
-  /** Built-ins this server can't run yet: "Coming soon", never added or listed as working. */
+  /** Built-ins and apps this server can't offer yet: "Coming soon", never added or listed as working. */
   comingSoon: string[];
   timezone: string;
   /** From the sign-in callbacks: ?connected=1 or ?connect_error=… */

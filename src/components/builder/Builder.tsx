@@ -16,13 +16,14 @@ import { toast } from "@/components/ui/toaster";
 import { api, ApiError } from "@/lib/client/api";
 import { AVATARS } from "@/lib/avatars";
 import { PLANS, type PlanId } from "@/lib/billing/plans";
+import type { LiveFlags } from "@/lib/channels/catalog";
 import type { RecipeData } from "@/lib/recipes";
 import { cn } from "@/lib/utils";
 import { BotPreview, BotPreviewStrip } from "./BotPreview";
-import { clearDraft, fitToServer, initialState, loadDraft, saveDraft, STEPS, stepError, type BuilderState, type StepId } from "./state";
+import { clearDraft, initialState, loadDraft, saveDraft, STEPS, stepError, withDraft, type BuilderContext, type BuilderState, type StepId } from "./state";
 import { AppsStep } from "./steps/AppsStep";
 import { BrainStep, type KeyStatus } from "./steps/BrainStep";
-import { ChannelsStep, type LiveFlags } from "./steps/ChannelsStep";
+import { ChannelsStep } from "./steps/ChannelsStep";
 import { FaceStep } from "./steps/FaceStep";
 import { NameStep } from "./steps/NameStep";
 import { ReviewStep } from "./steps/ReviewStep";
@@ -33,12 +34,15 @@ export type BuilderProps = {
   demo: boolean;
   /** Paid plans can be bought (or switched to in demo mode); otherwise plan notes say they're coming soon. */
   paidPlans: boolean;
+  /** Which integrations this server has keys for (channels and paid plans). */
   live: LiveFlags;
-  /** Built-ins this server can't run yet (shown as "Coming soon"). */
+  /** Built-ins and apps this server can't offer yet (shown as "Coming soon"). */
   comingSoon: string[];
   recipe: (RecipeData & { slug: string; tagline?: string }) | null;
   botCount: number;
   signedIn: boolean;
+  /** The signed-in account's email, so the Email channel doesn't ask for it again. */
+  ownerEmail: string | null;
 };
 
 /**
@@ -59,9 +63,10 @@ function currentEntry(): StepEntry | null {
   return typeof s?.babStep === "number" ? { babStep: s.babStep, babPrev: s.babPrev ?? null } : null;
 }
 
-export function Builder({ plan, demo, paidPlans, live, comingSoon, recipe, botCount, signedIn }: BuilderProps) {
+export function Builder({ plan, demo, paidPlans, live, comingSoon, recipe, botCount, signedIn, ownerEmail }: BuilderProps) {
   const router = useRouter();
-  const [state, setState] = React.useState<BuilderState>(() => initialState(recipe, comingSoon));
+  const ctx = React.useMemo<BuilderContext>(() => ({ demo, live, plan, comingSoon, ownerEmail }), [demo, live, plan, comingSoon, ownerEmail]);
+  const [state, setState] = React.useState<BuilderState>(() => initialState(recipe, ctx));
   const [stepIndex, setStepIndex] = React.useState(0);
   const [maxReached, setMaxReached] = React.useState(recipe ? STEPS.length - 1 : 0);
   const [apiKey, setApiKeyState] = React.useState("");
@@ -97,7 +102,7 @@ export function Builder({ plan, demo, paidPlans, live, comingSoon, recipe, botCo
     const usable = draft && (draft.state.name || draft.step > 0) && (!recipe || (draft.state.recipeSlug === recipe.slug && draft.step > 0));
     if (draft && usable) {
       start = draft.step;
-      setState((s) => fitToServer({ ...s, ...draft.state, brief: draft.state.brief ?? s.brief, ageConfirmed: false }, { plan, demo, comingSoon }));
+      setState((s) => withDraft(s, draft.state, ctx));
       setStepIndex(start);
       setMaxReached((m) => Math.max(m, start));
       toast("Picked up where you left off", {
@@ -105,7 +110,7 @@ export function Builder({ plan, demo, paidPlans, live, comingSoon, recipe, botCo
           label: "Start over",
           onClick: () => {
             clearDraft();
-            setState(initialState(recipe, comingSoon));
+            setState(initialState(recipe, ctx));
             setStepIndex(0);
             setMaxReached(recipe ? STEPS.length - 1 : 0);
             window.history.replaceState({ babStep: 0, babPrev: null } satisfies StepEntry, "", stepUrl(0));
@@ -117,9 +122,7 @@ export function Builder({ plan, demo, paidPlans, live, comingSoon, recipe, botCo
     const entry = currentEntry();
     window.history.replaceState(entry?.babStep === start ? entry : ({ babStep: start, babPrev: null } satisfies StepEntry), "", stepUrl(start));
     setHydrated(true);
-    // The server's answers (plan, demo, what's coming soon) don't change while the builder is open.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recipe]);
+  }, [recipe, ctx]);
 
   // The browser's Back and Forward move between steps.
   const maxReachedRef = React.useRef(maxReached);

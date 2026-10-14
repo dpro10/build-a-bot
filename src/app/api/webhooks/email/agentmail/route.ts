@@ -1,5 +1,6 @@
 import { after } from "next/server";
 import { getDb } from "@/lib/db";
+import { config } from "@/lib/env";
 import { verifySvix } from "@/lib/channels/svix";
 import { routeInboundEmail } from "@/lib/channels/email-inbound";
 import { seenBefore } from "@/lib/channels/inbound";
@@ -9,7 +10,7 @@ export const maxDuration = 300;
 /** AgentMail inbound: `message.received` with the new text already extracted. */
 export async function POST(req: Request) {
   const body = await req.text();
-  if (!verifySvix(process.env.AGENTMAIL_WEBHOOK_SECRET, req.headers, body)) return new Response("bad signature", { status: 401 });
+  if (!verifySvix(config.email.agentmailWebhookSecret, req.headers, body)) return new Response("bad signature", { status: 401 });
   const event = JSON.parse(body) as {
     event_type?: string;
     event_id?: string;

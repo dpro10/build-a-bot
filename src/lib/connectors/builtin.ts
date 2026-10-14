@@ -135,6 +135,7 @@ export const BUILTIN_CONNECTORS: ConnectorDef[] = [
     jobs: ["inbox"],
     keywords: ["email", "forward", "address"],
     note: "Forward newsletters, receipts or threads; it reads them for you.",
+    requires: "botEmail",
   },
   {
     id: "meetings",

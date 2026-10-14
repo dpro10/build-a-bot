@@ -368,6 +368,9 @@ A code review of the server and the desktop app. Each fix has a test that fails 
   - Migrations run in one transaction under `pg_advisory_xact_lock`, since a session lock doesn't survive a transaction pooler.
   - A failed start is retried on the next request instead of breaking that server.
   - Chat errors go to the server log; the chat shows a plain sentence, never SQL.
+- **The Resend key for sign-in links made bots' email look live** (2026-10-14). Any email key turned the Email channel and "Its own inbox" on, so the live site offered them and tried to send codes from `<handle>@botmail.dev`. Resend refused, and the page got a 500.
+  - Bots' email now has its own flag (`live.botEmail`): `BOT_EMAIL_DOMAIN`, plus AgentMail or Resend with its webhook secret. Until then both show as Coming soon, and there's no fallback domain.
+  - Outside demo mode, any channel whose service isn't set up shows as Coming soon, and recipes and saved drafts leave it out.
 
 ## Open questions (updated 2026-10-14)
 

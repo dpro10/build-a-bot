@@ -28,7 +28,8 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string }>) {
   }
   const def = getConnector(connectorId);
   if (!def && !connectorId.startsWith("custom_mcp:")) return apiError(404, "Unknown connector");
-  // Not built yet, or a built-in whose service isn't set up here (web actions without Browser Use).
+  // Not built yet, a built-in whose service isn't set up here (web actions without Browser Use, the
+  // bot's own inbox without a mail domain), or an app nobody can sign in to here yet.
   if (def && !connectorUsable(def)) return apiError(409, `${def.name} is coming soon.`);
 
   const plan = getPlan(a.user.plan);

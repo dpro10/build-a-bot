@@ -13,6 +13,8 @@ type Scene = {
   trust: { emoji: string; label: string };
   text: string;
   activity: string;
+  /** The same moment on a channel that works today, while this one is coming soon. */
+  instead?: Pick<Scene, "channel"> & Partial<Pick<Scene, "text" | "activity">>;
 };
 
 /** One short, honest moment per character: things a bot here can really do. */
@@ -37,6 +39,7 @@ const SCENES: Record<AvatarId, Scene> = {
     trust: { emoji: "🤝", label: "Trusted helper" },
     text: "Day 12 of your reading streak! Want your chapter 4 quiz tonight at 8:30?",
     activity: "Streak saved to your Habits note",
+    instead: { channel: "telegram" },
   },
   ember: {
     name: "Blaze",
@@ -44,6 +47,7 @@ const SCENES: Record<AvatarId, Scene> = {
     trust: { emoji: "🚀", label: "Full faith" },
     text: "Saturday's sorted: pharmacy, groceries, then the post office. I just texted you the fastest route.",
     activity: "Route sent by text · receipt saved",
+    instead: { channel: "telegram", text: "Saturday's sorted: pharmacy, groceries, then the post office. Here's the fastest route.", activity: "Route planned · receipt saved" },
   },
   otto: {
     name: "Inkwell",
@@ -51,6 +55,7 @@ const SCENES: Record<AvatarId, Scene> = {
     trust: { emoji: "👀", label: "Look only" },
     text: "I read nine reviews of those three laptops. Short version: get the one with 16 GB. Sources are in the email.",
     activity: "Cited 9 sources",
+    instead: { channel: "slack", text: "I read nine reviews of those three laptops. Short version: get the one with 16 GB. Sources are in the thread." },
   },
 };
 
@@ -65,7 +70,8 @@ const CHANNEL_LABEL: Record<ChannelKey, string> = {
 const ROTATE_MS = 6500;
 const TYPING_MS = 1100;
 
-export function HeroStage({ channelIcons }: { channelIcons: Record<ChannelKey, React.ReactNode> }) {
+/** Tiles for the channels that work here; a scene on any other channel plays out on its stand-in. */
+export function HeroStage({ channelIcons }: { channelIcons: Partial<Record<ChannelKey, React.ReactNode>> }) {
   const [avatar, setAvatar] = React.useState<AvatarId>("blip");
   const [color, setColor] = React.useState<ColorwayId>(AVATARS.blip.defaultColor);
   const [typing, setTyping] = React.useState(false);
@@ -73,7 +79,8 @@ export function HeroStage({ channelIcons }: { channelIcons: Record<ChannelKey, R
   const [visible, setVisible] = React.useState(true);
   const rootRef = React.useRef<HTMLDivElement>(null);
 
-  const scene = SCENES[avatar];
+  const story = SCENES[avatar];
+  const scene = channelIcons[story.channel] || !story.instead ? story : { ...story, ...story.instead };
   const def = AVATARS[avatar];
   const c = COLORWAYS[color];
 

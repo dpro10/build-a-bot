@@ -6,12 +6,10 @@ import { channelIcon } from "@/components/catalog/channel-icon";
 import { Badge } from "@/components/ui/badge";
 import { FieldHint, Input, Label } from "@/components/ui/input";
 import { PLANS, planAllowsChannel, type PlanId } from "@/lib/billing/plans";
-import { CHANNELS, type ChannelDef, type ChannelKind } from "@/lib/channels/catalog";
+import { CHANNELS, channelAvailability, type ChannelDef, type ChannelKind, type LiveFlags } from "@/lib/channels/catalog";
 import { cn } from "@/lib/utils";
 import { isEmailLike, isPhoneLike } from "../state";
 import { StepHeading } from "./StepHeading";
-
-export type LiveFlags = { twilio: boolean; email: boolean; discord: boolean; telegramManaged: boolean; slackOAuth: boolean };
 
 export function ChannelsStep({
   botName,
@@ -44,11 +42,13 @@ export function ChannelsStep({
 
   const toggle = (kind: ChannelKind) => onChannels(channels.includes(kind) ? channels.filter((c) => c !== kind) : [...channels, kind]);
 
-  const simulated = (def: ChannelDef) => demo && def.requires && !(live as Record<string, boolean>)[def.requires];
+  const simulated = (def: ChannelDef) => demo && def.requires && !live[def.requires];
   const planBadge = (def: ChannelDef) => (!demo && !planAllowsChannel(PLANS[plan], def.kind) && def.availability !== "soon" && def.availability !== "waitlist" ? (def.minPlan === "pro" ? "Pro" : "Plus") : null);
 
-  const available = CHANNELS.filter((c) => c.availability === "available" || c.availability === "beta");
-  const later = CHANNELS.filter((c) => c.availability === "waitlist" || c.availability === "soon");
+  // Outside demo mode, a channel whose service isn't set up here waits with the ones coming later.
+  const availability = (def: ChannelDef) => channelAvailability(def, demo, live);
+  const available = CHANNELS.filter((c) => availability(c) === "available" || availability(c) === "beta");
+  const later = CHANNELS.filter((c) => availability(c) === "waitlist" || availability(c) === "soon");
 
   return (
     <div className="flex flex-col gap-6">
@@ -59,17 +59,20 @@ export function ChannelsStep({
           const always = def.kind === "web";
           const active = always || channels.includes(def.kind);
           const badge = planBadge(def);
+          // Part of a paid plan nobody can buy yet: shown, but not picked.
+          const locked = Boolean(badge) && !live.stripe;
           return (
             <button
               key={def.kind}
               type="button"
               aria-pressed={active}
-              disabled={always}
+              disabled={always || locked}
               onClick={() => toggle(def.kind)}
               className={cn(
                 "relative flex items-start gap-3 rounded-3xl border bg-card p-4 text-left transition",
                 active ? "border-primary ring-2 ring-primary/20" : "border-border hover:border-foreground/25",
-                always && "cursor-default",
+                (always || locked) && "cursor-default",
+                locked && "hover:border-border",
               )}
             >
               <BrandTile icon={channelIcon(def)} size={44} />
@@ -84,6 +87,7 @@ export function ChannelsStep({
                 <span className="block text-sm font-medium text-foreground/80">{def.tagline}</span>
                 <span className="mt-0.5 block text-[13px] leading-snug text-muted-foreground">{def.description}</span>
                 {def.note && active ? <span className="mt-1 block text-xs text-muted-foreground">{def.note}</span> : null}
+                {locked ? <span className="mt-1 block text-xs text-muted-foreground">Part of {badge}. Paid plans are coming soon.</span> : null}
               </span>
               <span className={cn("flex size-6 shrink-0 items-center justify-center rounded-full border-2", active ? "border-primary bg-primary text-primary-foreground" : "border-input")} aria-hidden>
                 {active ? <Check className="size-3.5" strokeWidth={3} /> : null}
@@ -140,7 +144,7 @@ export function ChannelsStep({
         <h2 className="mb-2 text-sm font-semibold text-muted-foreground">Coming later</h2>
         <div className="flex flex-wrap gap-2">
           {later.map((def) => {
-            const waitlist = def.availability === "waitlist";
+            const waitlist = availability(def) === "waitlist";
             const active = channels.includes(def.kind);
             return (
               <button
@@ -162,7 +166,7 @@ export function ChannelsStep({
                   <span className="text-xs">{active ? "· On the waitlist" : "· Join waitlist"}</span>
                 ) : (
                   <span className="inline-flex items-center gap-1 text-xs">
-                    <Lock className="size-3" /> Soon
+                    <Lock className="size-3" /> Coming soon
                   </span>
                 )}
               </button>

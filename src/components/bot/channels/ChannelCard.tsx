@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dropdown, DropdownContent, DropdownItem, DropdownTrigger } from "@/components/ui/dropdown";
 import { toast } from "@/components/ui/toaster";
+import { comingSoonNote } from "@/lib/channels/catalog";
 import { cn } from "@/lib/utils";
 import type { ChannelCtx } from "./context";
 import { DiscordActive, DiscordSetup } from "./DiscordSetup";
@@ -56,7 +57,9 @@ export function ChannelCard({
   const [busy, setBusy] = React.useState<string | null>(null);
   const isWeb = channel.kind === "web";
   const waitlist = channel.status === "waitlist" || def.availability === "waitlist" || def.availability === "soon";
-  const locked = Boolean(planBadge);
+  // Its service isn't set up on this server: that comes before any plan question.
+  const soon = !isWeb && !waitlist && !available;
+  const locked = Boolean(planBadge) && !soon;
   const active = channel.status === "active";
   const off = channel.status === "disabled";
   const status = isWeb ? "active" : channel.status;
@@ -93,6 +96,8 @@ export function ChannelCard({
         )}
       </div>
     );
+  } else if (soon) {
+    body = <p className="text-sm text-muted-foreground">{comingSoonNote(def)} Nothing to set up until then.</p>;
   } else if (locked) {
     body = (
       <div className="flex flex-col gap-3 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary-soft to-card p-4 sm:flex-row sm:items-center">
@@ -100,20 +105,18 @@ export function ChannelCard({
           <Rocket className="size-5" />
         </span>
         <div className="min-w-0 flex-1">
-          <div className="font-semibold">
-            {def.name} is part of {planBadge}
-          </div>
+          <div className="font-semibold">{ctx.plansOnSale ? `${def.name} ${def.plural ? "are" : "is"} part of ${planBadge}` : `Part of ${planBadge}. Paid plans are coming soon.`}</div>
           <p className="text-sm text-muted-foreground">{UPGRADE_PITCH[channel.kind] ?? def.description}</p>
         </div>
-        <Button asChild size="sm" className="w-fit shrink-0">
-          <Link href="/app/billing">See {planBadge}</Link>
-        </Button>
+        {ctx.plansOnSale ? (
+          <Button asChild size="sm" className="w-fit shrink-0">
+            <Link href="/app/billing">See {planBadge}</Link>
+          </Button>
+        ) : null}
       </div>
     );
   } else if (off) {
     body = <p className="text-sm text-muted-foreground">Turned off. {ctx.botName} won&apos;t message you or answer on {def.name} until you turn it back on.</p>;
-  } else if (!available) {
-    body = <p className="text-sm text-muted-foreground">{def.name} isn&apos;t available on this server yet. We&apos;ll turn it on here as soon as it is.</p>;
   } else if (channel.kind === "telegram") {
     body = active ? <TelegramActive channel={channel} ctx={ctx} /> : <TelegramSetup channel={channel} ctx={ctx} />;
   } else if (channel.kind === "sms" || channel.kind === "voice") {
@@ -128,7 +131,7 @@ export function ChannelCard({
     body = <p className="text-sm text-muted-foreground">{def.description}</p>;
   }
 
-  const canToggle = !isWeb && !waitlist && !locked;
+  const canToggle = !isWeb && !waitlist && !soon && !locked;
   const footer =
     canToggle && active ? (
       <>
@@ -161,13 +164,13 @@ export function ChannelCard({
       )}
     >
       <header className="flex items-start gap-3 p-4 sm:px-5">
-        <BrandTile icon={channelIcon(def)} size={44} className={cn((off || waitlist) && "opacity-60 grayscale")} />
+        <BrandTile icon={channelIcon(def)} size={44} className={cn((off || waitlist || soon) && "opacity-60 grayscale")} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <h3 id={`${channel.kind}-name`} className="font-display text-[17px] font-semibold leading-tight">
               {def.name}
             </h3>
-            {locked ? <Badge tone="accent">{planBadge}</Badge> : <ChannelStatusPill status={status} simulated={channel.simulated} />}
+            {soon ? <Badge>Coming soon</Badge> : locked ? <Badge tone="accent">{planBadge}</Badge> : <ChannelStatusPill status={status} simulated={channel.simulated} />}
           </div>
           <p className="mt-0.5 text-[13px] text-muted-foreground">
             {isWeb ? "Always on. Chat here in your browser, or add it to your phone's home screen for an app-like feel." : def.tagline}

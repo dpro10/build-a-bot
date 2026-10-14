@@ -5,8 +5,8 @@
  */
 import { AVATARS, type AvatarId, type ColorwayId } from "@/lib/avatars";
 import type { TrustLevel } from "@/lib/trust";
-import type { ChannelKind } from "@/lib/channels/catalog";
-import { PLANS, type PlanId } from "@/lib/billing/plans";
+import { CHANNEL_BY_KIND, channelAvailability, isChannelKind, type ChannelKind, type LiveFlags } from "@/lib/channels/catalog";
+import { PLANS, planAllowsChannel, type PlanId } from "@/lib/billing/plans";
 import { getConnector } from "@/lib/connectors";
 import { INCLUDED_MODELS, PROVIDER_BY_ID, type ProviderId } from "@/lib/models/catalog";
 import { isJobId, JOB_BY_ID } from "@/lib/jobs";
@@ -61,8 +61,40 @@ export function countedApps(connectors: string[], customMcp: unknown[]): number 
   }).length + customMcp.length;
 }
 
-/** `comingSoon`: built-ins this server can't run yet, left out of a recipe's picks. */
-export function initialState(recipe?: (RecipeData & { slug?: string }) | null, comingSoon: readonly string[] = []): BuilderState {
+/** What this server offers the builder, so a recipe or a saved draft only brings what works here. */
+export type BuilderContext = {
+  demo: boolean;
+  live: LiveFlags;
+  plan: PlanId;
+  /** Built-ins and apps this server can't offer yet (see comingSoonConnectors). */
+  comingSoon: string[];
+  /** The signed-in account's email, for the Email channel. */
+  ownerEmail: string | null;
+};
+
+/**
+ * Channels a recipe or a saved draft may bring. Demo mode keeps them all (it simulates what
+ * isn't set up); otherwise one that's coming soon, or that needs a plan nobody can buy yet, is left out.
+ */
+export function usableChannels(channels: unknown, ctx: BuilderContext): ChannelKind[] {
+  const kinds = Array.isArray(channels) ? channels.filter(isChannelKind) : [];
+  return [...new Set(kinds)].filter((kind) => {
+    if (kind === "web") return false;
+    if (ctx.demo) return true;
+    const availability = channelAvailability(CHANNEL_BY_KIND[kind], ctx.demo, ctx.live);
+    if (availability === "soon") return false;
+    // Anyone can join a waitlist.
+    return availability === "waitlist" || Boolean(ctx.live.stripe) || planAllowsChannel(PLANS[ctx.plan], kind);
+  });
+}
+
+/** Apps a recipe or a saved draft may bring: none that are coming soon here. */
+function usableApps(connectors: unknown, ctx: BuilderContext): string[] {
+  const ids = Array.isArray(connectors) ? connectors.filter((c): c is string => typeof c === "string") : [];
+  return [...new Set(ids)].filter((id) => !ctx.comingSoon.includes(id));
+}
+
+export function initialState(recipe: (RecipeData & { slug?: string }) | null | undefined, ctx: BuilderContext): BuilderState {
   const base: BuilderState = {
     avatar: "blip",
     color: AVATARS.blip.defaultColor,
@@ -76,7 +108,7 @@ export function initialState(recipe?: (RecipeData & { slug?: string }) | null, c
     trust: "ask",
     channels: [],
     phone: "",
-    email: "",
+    email: ctx.ownerEmail ?? "",
     instructions: "",
     ageConfirmed: false,
     recipeSlug: null,
@@ -92,9 +124,9 @@ export function initialState(recipe?: (RecipeData & { slug?: string }) | null, c
     name: recipe.name,
     jobs,
     // Jobs bring their built-in tools (web search for research, and so on), just like picking them by hand.
-    connectors: [...new Set([...recipe.connectors, ...jobs.flatMap((j) => JOB_BY_ID[j].builtins).filter((b) => !ALWAYS_ON.has(b))])].filter((id) => !comingSoon.includes(id)),
+    connectors: usableApps([...recipe.connectors, ...jobs.flatMap((j) => JOB_BY_ID[j].builtins).filter((b) => !ALWAYS_ON.has(b))], ctx),
     trust: recipe.trust,
-    channels: recipe.channels.filter((c): c is ChannelKind => c !== "web") as ChannelKind[],
+    channels: usableChannels(recipe.channels, ctx),
     instructions: recipe.instructions,
     recipeSlug: recipe.slug ?? null,
     // The recipe brings its own routines.
@@ -108,10 +140,20 @@ export function modelLocked(modelId: string, plan: PlanId, demo: boolean): boole
   return !demo && Boolean(m) && !PLANS[plan].includedModels.includes(m!.tier);
 }
 
-/** A saved draft, trimmed to what can be picked here now: no coming-soon built-ins, and a model the plan has. */
-export function fitToServer(s: BuilderState, opts: { plan: PlanId; demo: boolean; comingSoon: readonly string[] }): BuilderState {
-  const brain = s.brain.kind === "included" && modelLocked(s.brain.model, opts.plan, opts.demo) ? { ...s.brain, model: DEFAULT_MODEL } : s.brain;
-  return { ...s, brain, connectors: (s.connectors ?? []).filter((id) => !opts.comingSoon.includes(id)) };
+/** A saved draft on top of a fresh state, keeping only what works here: its channels and apps, and a model the plan has. */
+export function withDraft(base: BuilderState, draft: Partial<BuilderState>, ctx: BuilderContext): BuilderState {
+  const brain = draft.brain ?? base.brain;
+  return {
+    ...base,
+    ...draft,
+    brain: brain.kind === "included" && modelLocked(brain.model, ctx.plan, ctx.demo) ? { ...brain, model: DEFAULT_MODEL } : brain,
+    brief: draft.brief ?? base.brief,
+    ageConfirmed: false,
+    channels: usableChannels(draft.channels ?? base.channels, ctx),
+    connectors: usableApps(draft.connectors ?? base.connectors, ctx),
+    // A draft saved before signing in takes the account's email.
+    email: typeof draft.email === "string" && draft.email.trim() ? draft.email : base.email,
+  };
 }
 
 export const STORAGE_KEY = "bab-builder-v1";

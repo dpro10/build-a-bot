@@ -64,6 +64,9 @@ export type JobId =
   | "travel"
   | "other";
 
+/** What a bot's apps let it see, for ideas that only make sense with one (see appKinds()). */
+export type AppKind = "email" | "calendar" | "code" | "smart_home";
+
 export type ConnectorVia =
   | { kind: "builtin" }
   | {

@@ -71,9 +71,11 @@ export const config = {
   },
   email: {
     agentmailKey: v("AGENTMAIL_API_KEY"),
+    agentmailWebhookSecret: v("AGENTMAIL_WEBHOOK_SECRET"),
     resendKey: v("RESEND_API_KEY"),
-    /** Domain for bots' own inboxes. Brand-free on purpose (rename insurance). */
-    botDomain: v("BOT_EMAIL_DOMAIN") ?? "botmail.dev",
+    resendWebhookSecret: v("RESEND_WEBHOOK_SECRET"),
+    /** Domain for bots' own inboxes. Brand-free on purpose (rename insurance). No domain, no bot inboxes. */
+    botDomain: v("BOT_EMAIL_DOMAIN"),
     from: v("EMAIL_FROM") ?? "Build-a-bot <hello@build-a-bot.site>",
     inboundSecret: v("EMAIL_INBOUND_SECRET"),
   },
@@ -102,6 +104,20 @@ export const config = {
   cronSecret: v("CRON_SECRET"),
 };
 
+/**
+ * Who runs bots' own inboxes: the provider takes in mail sent to BOT_EMAIL_DOMAIN (by
+ * webhook) and sends the bots' mail. It needs the domain plus the provider's key and
+ * webhook secret (docs/DEPLOY.md §5). A Resend key on its own only sends sign-in links.
+ */
+export function botEmailProvider(
+  email: Partial<Pick<typeof config.email, "botDomain" | "agentmailKey" | "agentmailWebhookSecret" | "resendKey" | "resendWebhookSecret">>,
+): "resend" | "agentmail" | null {
+  if (!email.botDomain) return null;
+  if (email.resendKey && email.resendWebhookSecret) return "resend";
+  if (email.agentmailKey && email.agentmailWebhookSecret) return "agentmail";
+  return null;
+}
+
 /** Which integrations are really wired up (keys present). */
 export const live = {
   includedBrain: Boolean(config.tokenFactory.apiKey),
@@ -111,7 +127,10 @@ export const live = {
   composio: Boolean(config.composio.apiKey),
   telegramManaged: Boolean(config.telegram.managerToken && config.telegram.managerUsername),
   twilio: Boolean(config.twilio.accountSid && config.twilio.authToken && config.twilio.phoneNumber),
-  email: Boolean(config.email.agentmailKey || config.email.resendKey),
+  /** Sign-in links by email (Resend). */
+  email: Boolean(config.email.resendKey),
+  /** Bots' own inboxes: the Email channel and the "Its own inbox" built-in. */
+  botEmail: botEmailProvider(config.email) !== null,
   slackOAuth: Boolean(config.slack.clientId && config.slack.clientSecret && config.slack.signingSecret),
   discord: Boolean(config.discord.applicationId && config.discord.publicKey && config.discord.botToken),
   stripe: Boolean(config.stripe.secretKey),
