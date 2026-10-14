@@ -175,7 +175,7 @@ export async function validateApiKey(providerId: ProviderId, apiKey: string, bas
         headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
         timeoutMs: 10000,
       });
-      return res.ok ? { ok: true } : { ok: false, message: res.status === 401 ? "Anthropic didn't accept that key." : `Anthropic answered ${res.status}.` };
+      return res.ok ? { ok: true } : { ok: false, message: res.status === 401 || res.status === 403 ? "Anthropic didn't accept that key." : `Anthropic didn't accept that (error ${res.status}). Check the key and try again.` };
     }
     const root = providerId === "custom" ? baseUrl : def.baseUrl;
     if (!root) return { ok: false, message: "Add your endpoint's base URL." };
@@ -187,7 +187,11 @@ export async function validateApiKey(providerId: ProviderId, apiKey: string, bas
       }
     }
     const res = await fetchWithTimeout(`${root.replace(/\/$/, "")}/models`, { headers: { authorization: `Bearer ${apiKey}`, ...def.headers }, redirect: "error", timeoutMs: 10000 });
-    return res.ok ? { ok: true } : { ok: false, message: res.status === 401 || res.status === 403 ? "That key wasn't accepted." : `The provider answered ${res.status}.` };
+    if (res.ok) return { ok: true };
+    // Some providers (Gemini) reject a bad key with 400 rather than 401: read what they said.
+    const said = res.status === 400 ? (await res.text().catch(() => "")).slice(0, 2000) : "";
+    const badKey = res.status === 401 || res.status === 403 || /api[ _-]?key|unauthori[sz]ed|invalid[^"]{0,40}(key|token|credential)/i.test(said);
+    return { ok: false, message: badKey ? "That key wasn't accepted." : `The provider didn't accept that (error ${res.status}). Check the key and try again.` };
   } catch {
     return { ok: false, message: "Couldn't reach the provider to check the key." };
   }

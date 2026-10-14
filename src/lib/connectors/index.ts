@@ -24,6 +24,13 @@ export const ALL_CONNECTORS: ConnectorDef[] = [...BUILTIN_CONNECTORS, ...CONNECT
 
 export const CONNECTOR_BY_ID: Record<string, ConnectorDef> = Object.fromEntries(ALL_CONNECTORS.map((c) => [c.id, c]));
 
+/** What to call a connection: the name the owner gave a custom MCP server, else the catalog's. */
+export function connectionName(c: { connectorId: string; config?: unknown }): string {
+  const given = (c.config as { name?: unknown } | null)?.name;
+  if (c.connectorId.startsWith("custom_mcp:") && typeof given === "string" && given.trim()) return given.trim();
+  return getConnector(c.connectorId)?.name ?? c.connectorId;
+}
+
 export function getConnector(id: string): ConnectorDef | undefined {
   if (CONNECTOR_BY_ID[id]) return CONNECTOR_BY_ID[id];
   if (id.startsWith("custom_mcp:")) {
