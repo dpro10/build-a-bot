@@ -16,6 +16,7 @@ import {
 import { createAnthropicProvider } from "@/lib/llm/anthropic";
 import { createDemoProvider } from "@/lib/llm/demo";
 import { createOpenAiCompatibleProvider } from "@/lib/llm/openai-compatible";
+import { assertPublicUrl, fetchWithTimeout, UnsafeUrlError } from "@/lib/tools/net";
 import type { Effort, LlmProvider } from "@/lib/llm/types";
 
 export type ResolvedBrain =
@@ -135,6 +136,14 @@ export async function resolveBrain(db: Db, bot: Bot): Promise<ResolvedBrain> {
 
   const baseUrl = providerId === "custom" ? brain.baseUrl ?? "" : def.baseUrl;
   if (!baseUrl) return { kind: "unavailable", reason: "This bot's custom endpoint URL is missing." };
+  // A custom endpoint is owner-supplied: never let it point at our own network.
+  if (providerId === "custom") {
+    try {
+      await assertPublicUrl(baseUrl);
+    } catch (err) {
+      return { kind: "unavailable", reason: err instanceof UnsafeUrlError ? `Custom endpoint refused: ${err.message}` : "Custom endpoint URL is invalid." };
+    }
+  }
   const knobs: Record<string, unknown> =
     providerId === "openai" && effort !== "low" ? { reasoning_effort: effort } : {};
   return {
@@ -162,13 +171,22 @@ export async function validateApiKey(providerId: ProviderId, apiKey: string, bas
   if (!def) return { ok: false, message: "Unknown provider" };
   try {
     if (def.api === "anthropic") {
-      const res = await fetch("https://api.anthropic.com/v1/models?limit=1", {
+      const res = await fetchWithTimeout("https://api.anthropic.com/v1/models?limit=1", {
         headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+        timeoutMs: 10000,
       });
       return res.ok ? { ok: true } : { ok: false, message: res.status === 401 ? "Anthropic didn't accept that key." : `Anthropic answered ${res.status}.` };
     }
-    const url = `${(providerId === "custom" ? baseUrl : def.baseUrl)?.replace(/\/$/, "")}/models`;
-    const res = await fetch(url, { headers: { authorization: `Bearer ${apiKey}`, ...def.headers } });
+    const root = providerId === "custom" ? baseUrl : def.baseUrl;
+    if (!root) return { ok: false, message: "Add your endpoint's base URL." };
+    if (providerId === "custom") {
+      try {
+        await assertPublicUrl(root);
+      } catch (err) {
+        return { ok: false, message: err instanceof UnsafeUrlError ? err.message : "That URL isn't valid." };
+      }
+    }
+    const res = await fetchWithTimeout(`${root.replace(/\/$/, "")}/models`, { headers: { authorization: `Bearer ${apiKey}`, ...def.headers }, redirect: "error", timeoutMs: 10000 });
     return res.ok ? { ok: true } : { ok: false, message: res.status === 401 || res.status === 403 ? "That key wasn't accepted." : `The provider answered ${res.status}.` };
   } catch {
     return { ok: false, message: "Couldn't reach the provider to check the key." };

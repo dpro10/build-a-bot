@@ -1,11 +1,12 @@
 /**
  * <Avatar /> renders one of the five Build-a-bot characters as inline SVG.
  *
- * Server-component safe: no hooks, no browser APIs. Motion comes from the global
+ * Server-component safe (only useId, which server components support; not usable
+ * inside next/og ImageResponse). No browser APIs. Motion comes from the global
  * classes in ./avatar.css (import it once from the root layout); without that
  * stylesheet the avatar still renders, just still.
  */
-import type { JSX } from "react";
+import { useId, type JSX } from "react";
 import { AVATARS, type AvatarId, type AvatarMood, type ColorwayId } from "@/lib/avatars";
 import { blip } from "./characters/blip";
 import { ember } from "./characters/ember";
@@ -41,7 +42,10 @@ export function Avatar({ avatar, color, mood = "idle", size = 96, animated = tru
   const def = AVATARS[avatar] ?? AVATARS.blip;
   const spec = CHARACTERS[def.id];
   const p = palette(color ?? def.defaultColor);
-  const id = (part: string) => `bab-${def.id}-${p.id}-${part}`;
+  // Unique per instance: a duplicate id inside a hidden (display:none) copy, like a
+  // desktop-only sidebar, would otherwise blank out every later copy's gradients.
+  const uid = useId().replace(/[^a-zA-Z0-9_-]/g, "");
+  const id = (part: string) => `bab-${def.id}-${p.id}-${uid}-${part}`;
   const label = title ?? `${def.character} the ${def.species}`;
   const compact = size < COMPACT_BELOW;
 

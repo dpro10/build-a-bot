@@ -114,5 +114,5 @@ export function greetingDirective(bot: Bot, owner: User, channelKind: string, st
     "Don't use tools for this message.",
   ]
     .filter(Boolean)
-    .join(" ");
+    .join("\n");
 }

@@ -85,8 +85,20 @@ function planFromUser(text: string, tools: Set<string>, p: Persona, system: stri
     if (t.includes("very first message")) {
       const ideas = /Ideas you can offer: (.+?)(?:\n|$)/.exec(text)?.[1]?.split(" | ").slice(0, 3) ?? [];
       const ideaText = ideas.length ? ` I can already ${ideas.map((i) => `“${i.replace(/\.$/, "")}”`).join(", ")} — just ask.` : "";
+      const who = /very first message to (.+?), who just created you/i.exec(text)?.[1]?.trim();
+      const name = who && who !== "your owner" ? who : null;
+      const hello =
+        {
+          robot: `${name ? `Hi ${name}! ` : ""}Beep boop — kidding.`,
+          cloud: `Hi ${name ?? "there"}, deep breath —`,
+          seedling: `Hi${name ? ` ${name}` : ""}! So happy to meet you 🌱`,
+          spark: `Hey hey${name ? `, ${name}` : ""}! Let's go.`,
+          octopus: `Hello${name ? `, ${name},` : ""} from all eight arms!`,
+        }[p.species] ?? f.hi;
+      const apps = /\(connected: (.+?)\)/.exec(text)?.[1]?.split(", ") ?? [];
+      const appText = apps.length ? ` Thanks for trusting me with ${apps.length > 2 ? `${apps.slice(0, -1).join(", ")} and ${apps.at(-1)}` : apps.join(" and ")}.` : "";
       return {
-        text: `${f.hi} I'm ${p.name}, your new AI assistant.${ideaText} (I'm running on the demo brain right now — connect a real one anytime in Settings.) What should we tackle first?`,
+        text: `${hello} I'm ${p.name}, your new AI assistant.${appText}${ideaText} (I'm running on the demo brain right now — connect a real one anytime in Settings.) What should we tackle first?`,
       };
     }
     if (t.includes("the owner approved")) {

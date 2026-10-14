@@ -1,0 +1,173 @@
+/**
+ * Builder state: everything the owner picks, step by step, plus validation.
+ * Saved to localStorage so a refresh doesn't lose progress — except API keys,
+ * which only ever live in memory until they're sent to the server once.
+ */
+import { AVATARS, type AvatarId, type ColorwayId } from "@/lib/avatars";
+import type { TrustLevel } from "@/lib/trust";
+import type { ChannelKind } from "@/lib/channels/catalog";
+import { INCLUDED_MODELS, PROVIDER_BY_ID, type ProviderId } from "@/lib/models/catalog";
+import type { RecipeData } from "@/lib/recipes";
+
+export const STEPS = [
+  { id: "face", label: "Face", title: "Pick a face" },
+  { id: "name", label: "Name", title: "Name it" },
+  { id: "brain", label: "Brain", title: "Choose its brain" },
+  { id: "apps", label: "Apps", title: "Give it your apps" },
+  { id: "trust", label: "Trust", title: "Decide how much it can do" },
+  { id: "channels", label: "Talk", title: "Pick how you'll talk" },
+  { id: "review", label: "Go", title: "Bring it to life" },
+] as const;
+export type StepId = (typeof STEPS)[number]["id"];
+
+export type BrainChoice =
+  | { kind: "included"; model: string; effort: "low" | "medium" | "high" }
+  | { kind: "subscription"; subscription: "claude" | "chatgpt"; model: string; whenOffline: "wait" | "included" }
+  | { kind: "byok"; provider: ProviderId; model: string; baseUrl: string };
+
+export type BuilderState = {
+  avatar: AvatarId;
+  color: ColorwayId;
+  /** True once the owner picked a colorway themselves (switching faces keeps it). */
+  colorPicked: boolean;
+  name: string;
+  ownerName: string;
+  brain: BrainChoice;
+  jobs: string[];
+  connectors: string[];
+  customMcp: { url: string; name?: string }[];
+  trust: TrustLevel;
+  channels: ChannelKind[];
+  phone: string;
+  email: string;
+  instructions: string;
+  ageConfirmed: boolean;
+  recipeSlug: string | null;
+};
+
+export const DEFAULT_MODEL = INCLUDED_MODELS.find((m) => m.default)!.id;
+
+export function initialState(recipe?: (RecipeData & { slug?: string }) | null): BuilderState {
+  const base: BuilderState = {
+    avatar: "blip",
+    color: AVATARS.blip.defaultColor,
+    colorPicked: false,
+    name: "",
+    ownerName: "",
+    brain: { kind: "included", model: DEFAULT_MODEL, effort: "low" },
+    jobs: [],
+    connectors: [],
+    customMcp: [],
+    trust: "ask",
+    channels: [],
+    phone: "",
+    email: "",
+    instructions: "",
+    ageConfirmed: false,
+    recipeSlug: null,
+  };
+  if (!recipe) return base;
+  return {
+    ...base,
+    avatar: recipe.avatar,
+    color: recipe.color,
+    colorPicked: true,
+    name: recipe.name,
+    jobs: recipe.jobs,
+    connectors: recipe.connectors,
+    trust: recipe.trust,
+    channels: recipe.channels.filter((c): c is ChannelKind => c !== "web") as ChannelKind[],
+    instructions: recipe.instructions,
+    recipeSlug: recipe.slug ?? null,
+  };
+}
+
+export const STORAGE_KEY = "bab-builder-v1";
+
+type Draft = { state: BuilderState; step: number; savedAt: number };
+
+/** Save progress (the API key is never part of BuilderState, so it's never saved). */
+export function saveDraft(state: BuilderState, step: number) {
+  try {
+    const draft: Draft = { state, step, savedAt: Date.now() };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
+  } catch {
+    // Private mode or storage full: progress just isn't saved.
+  }
+}
+
+export function loadDraft(): { state: Partial<BuilderState>; step: number } | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const draft = JSON.parse(raw) as Partial<Draft>;
+    if (!draft.state || typeof draft.state !== "object") return null;
+    // Drafts older than a week start fresh.
+    if (draft.savedAt && Date.now() - draft.savedAt > 7 * 86400_000) return null;
+    const state = { ...draft.state } as Partial<BuilderState> & { apiKey?: unknown };
+    delete state.apiKey;
+    if (state.avatar && !(state.avatar in AVATARS)) return null;
+    return { state, step: Math.max(0, Math.min(STEPS.length - 1, Number(draft.step) || 0)) };
+  } catch {
+    return null;
+  }
+}
+
+export function clearDraft() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+export const NAME_PATTERN = /build[\s-]*a[\s-]*bot/i;
+
+export function nameError(name: string): string | null {
+  const n = name.trim();
+  if (!n) return "Give it a name";
+  if (n.length > 32) return "Keep it under 32 characters";
+  if (NAME_PATTERN.test(n)) return "Pick a name that isn't the product's name";
+  return null;
+}
+
+export function isPhoneLike(v: string) {
+  const digits = v.replace(/\D/g, "");
+  return digits.length >= 10 && digits.length <= 15;
+}
+
+export function isEmailLike(v: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim());
+}
+
+/** Why the owner can't continue from a step yet (null = good to go). */
+export function stepError(step: StepId, s: BuilderState, extra: { apiKey: string; keyStatus: "idle" | "checking" | "ok" | "error" }): string | null {
+  switch (step) {
+    case "face":
+      return null;
+    case "name":
+      return nameError(s.name);
+    case "brain":
+      if (s.brain.kind === "byok") {
+        const p = PROVIDER_BY_ID[s.brain.provider];
+        if (!p) return "Pick a provider";
+        if (s.brain.provider === "custom" && !/^https?:\/\//.test(s.brain.baseUrl)) return "Add your endpoint's base URL";
+        if (!s.brain.model.trim()) return "Pick a model";
+        if (extra.apiKey.trim().length < 8) return "Paste your API key";
+        if (extra.keyStatus === "checking") return "Checking your key…";
+        if (extra.keyStatus === "error") return "That key didn't work — check it and try again";
+      }
+      return null;
+    case "apps":
+      return null;
+    case "trust":
+      return null;
+    case "channels":
+      if ((s.channels.includes("sms") || s.channels.includes("voice")) && !isPhoneLike(s.phone)) return "Add your mobile number for texts and calls";
+      if (s.channels.includes("email") && !isEmailLike(s.email)) return "Add your email address";
+      return null;
+    case "review":
+      if (!s.ageConfirmed) return "Confirm you're 18 or older";
+      return nameError(s.name);
+  }
+}
