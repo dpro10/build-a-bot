@@ -2,16 +2,17 @@
 import * as React from "react";
 import { Info, Plug, Plus, X } from "lucide-react";
 import { ConnectorBrowser } from "@/components/catalog/ConnectorBrowser";
-import { ALWAYS_ON, countsTowardLimit } from "@/components/catalog/connector-meta";
+import { ALWAYS_ON } from "@/components/catalog/connector-meta";
 import { BrandTile } from "@/components/brand/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { FieldHint, Input, Label } from "@/components/ui/input";
 import { PLANS, type PlanId } from "@/lib/billing/plans";
-import { ALL_CONNECTORS, getConnector, type ConnectorDef } from "@/lib/connectors";
+import { ALL_CONNECTORS, type ConnectorDef } from "@/lib/connectors";
 import { JOBS, JOB_BY_ID } from "@/lib/jobs";
 import { cn } from "@/lib/utils";
+import { countedApps } from "../state";
 import { StepHeading } from "./StepHeading";
 
 export function AppsStep({
@@ -24,6 +25,7 @@ export function AppsStep({
   onCustomMcp,
   plan,
   demo,
+  comingSoon,
 }: {
   botName: string;
   jobs: string[];
@@ -34,21 +36,23 @@ export function AppsStep({
   onCustomMcp: (servers: { url: string; name?: string }[]) => void;
   plan: PlanId;
   demo: boolean;
+  /** Built-ins this server can't run yet. */
+  comingSoon: string[];
 }) {
   const [mcpOpen, setMcpOpen] = React.useState(false);
   const name = botName.trim() || "your bot";
   const limit = PLANS[plan].limits.connectors;
-  const thirdParty = connectors.map((id) => getConnector(id)).filter((d): d is ConnectorDef => Boolean(d) && countsTowardLimit(d!)).length + customMcp.length;
+  const thirdParty = countedApps(connectors, customMcp);
   const overLimit = !demo && thirdParty > limit;
 
   const toggleJob = (id: string) => {
     const on = !jobs.includes(id);
     const nextJobs = on ? [...jobs, id] : jobs.filter((j) => j !== id);
-    // Jobs bring their built-in tools along (web search for research, and so on).
+    // Jobs bring their built-in tools along (web search for research, and so on), when this server runs them.
     const builtins = new Set(JOB_BY_ID[id as keyof typeof JOB_BY_ID]?.builtins ?? []);
     const stillNeeded = new Set(nextJobs.flatMap((j) => JOB_BY_ID[j as keyof typeof JOB_BY_ID]?.builtins ?? []));
     let next = connectors;
-    if (on) next = [...new Set([...connectors, ...[...builtins].filter((b) => !ALWAYS_ON.has(b))])];
+    if (on) next = [...new Set([...connectors, ...[...builtins].filter((b) => !ALWAYS_ON.has(b) && !comingSoon.includes(b))])];
     else next = connectors.filter((c) => !builtins.has(c) || stillNeeded.has(c));
     onJobs(nextJobs, next);
   };
@@ -110,7 +114,7 @@ export function AppsStep({
             </span>
           </div>
         ) : null}
-        <ConnectorBrowser selected={connectors} onToggle={toggle} jobs={jobs} onCustomMcp={() => setMcpOpen(true)} />
+        <ConnectorBrowser selected={connectors} onToggle={toggle} jobs={jobs} comingSoon={comingSoon} onCustomMcp={() => setMcpOpen(true)} />
       </section>
 
       <section className="flex flex-col gap-2 rounded-3xl border border-border bg-background-2/60 p-4">

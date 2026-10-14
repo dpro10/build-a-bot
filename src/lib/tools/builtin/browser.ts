@@ -37,7 +37,7 @@ import { defineTool, type AnyToolSpec, type ToolContext } from "../types";
 const CONNECTOR = "browser";
 /** Real browser tasks per bot per day (they cost money); the simulated browser is unlimited. */
 export const DAILY_LIVE_WEB_ACTIONS = 40;
-const NOT_SET_UP = "Web actions aren't set up on this server yet.";
+const NOT_SET_UP = "Web actions are coming soon. Say you can't browse websites or fill in forms yet.";
 const DAILY_LIMIT = "That's all the web browsing this bot can do today. Try again tomorrow.";
 const UNKNOWN_SITE = "unknown-site";
 

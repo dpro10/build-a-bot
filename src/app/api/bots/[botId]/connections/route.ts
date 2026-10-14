@@ -3,6 +3,7 @@ import { and, count, eq } from "drizzle-orm";
 import { schema } from "@/lib/db";
 import { apiError, authedBot, json, parseJson, sameOrigin, type RouteCtx } from "@/lib/api";
 import { getConnector, isBuiltinConnector } from "@/lib/connectors";
+import { connectorUsable } from "@/lib/connectors/availability";
 import { getPlan } from "@/lib/billing/plans";
 import { demoMode, live } from "@/lib/env";
 import { canonicalResource } from "@/lib/connectors/mcp/oauth";
@@ -27,7 +28,8 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string }>) {
   }
   const def = getConnector(connectorId);
   if (!def && !connectorId.startsWith("custom_mcp:")) return apiError(404, "Unknown connector");
-  if (def?.status === "soon") return apiError(409, `${def.name} is coming soon.`);
+  // Not built yet, or a built-in whose service isn't set up here (web actions without Browser Use).
+  if (def && !connectorUsable(def)) return apiError(409, `${def.name} is coming soon.`);
 
   const plan = getPlan(a.user.plan);
   if (def && !isBuiltinConnector(def) && !demoMode) {
@@ -55,7 +57,7 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string }>) {
       status = "needs_auth";
       config = { toolkit: via.toolkit };
     } else {
-      return apiError(409, `${def.name} can't be connected on this server yet.`);
+      return apiError(409, `${def.name} is coming soon.`);
     }
   }
   const [existing] = await a.db.select().from(schema.connections).where(and(eq(schema.connections.botId, botId), eq(schema.connections.connectorId, connectorId))).limit(1);

@@ -5,7 +5,7 @@ import { Bot, Brain, CalendarClock, Check, Clock, MessageCircle, Puzzle, ShieldC
 import { Avatar } from "@/components/avatar";
 import { BrandTile } from "@/components/brand/icons";
 import { channelIcon } from "@/components/catalog/channel-icon";
-import { ALWAYS_ON, countsTowardLimit } from "@/components/catalog/connector-meta";
+import { ALWAYS_ON } from "@/components/catalog/connector-meta";
 import { Textarea } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
@@ -20,7 +20,7 @@ import type { RecipeData } from "@/lib/recipes";
 import { cn } from "@/lib/utils";
 import { formatDays, formatTime as formatRoutineTime } from "@/components/marketing/recipes/format";
 import { brainSummary, colorwayTint } from "../BotPreview";
-import type { BuilderState, StepId } from "../state";
+import { countedApps, type BuilderState, type StepId } from "../state";
 import { StepHeading } from "./StepHeading";
 
 /** What the server will adjust because of the owner's plan (it does the same checks). */
@@ -38,8 +38,7 @@ export function planAdjustments(s: BuilderState, plan: PlanId, demo: boolean): s
     const def = CHANNEL_BY_KIND[kind];
     if (def && def.availability === "available" && !planAllowsChannel(p, kind)) out.push(`${def.name} is part of ${def.minPlan === "pro" ? "Pro" : "Plus"} — it'll be ready to switch on when you upgrade.`);
   }
-  const apps = s.connectors.map((id) => getConnector(id)).filter((d): d is ConnectorDef => Boolean(d) && countsTowardLimit(d!)).length + s.customMcp.length;
-  if (apps > p.limits.connectors) out.push(`${p.name} connects ${p.limits.connectors} apps per bot — the first ${p.limits.connectors} are added now.`);
+  if (countedApps(s.connectors, s.customMcp) > p.limits.connectors) out.push(`${p.name} connects ${p.limits.connectors} apps per bot — the first ${p.limits.connectors} are added now.`);
   return out;
 }
 

@@ -11,7 +11,7 @@
  * When the computer is asleep: wait (default), or — only if the owner opted in —
  * fall back to the included brain.
  */
-import { and, desc, eq, gt, isNull, lt } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
 import { schema, type Db } from "@/lib/db";
 import type { Bot, BridgeJob, User } from "@/lib/db/schema";
 import { appUrl } from "@/lib/env";
@@ -39,6 +39,29 @@ export async function onlineDevice(db: Db, ownerId: string) {
   return devices.find((d) => Boolean(d.clis?.claude || d.clis?.codex)) ?? null;
 }
 
+/** Has the owner paired the Bridge on a computer? (The desktop app pairs too, but only takes meeting notes.) */
+export async function bridgePaired(db: Db, ownerId: string): Promise<boolean> {
+  const devices = await db
+    .select({ platform: schema.bridgeDevices.platform })
+    .from(schema.bridgeDevices)
+    .where(and(eq(schema.bridgeDevices.ownerId, ownerId), isNull(schema.bridgeDevices.revokedAt)));
+  return devices.some((d) => !d.platform?.startsWith("desktop-"));
+}
+
+/** Where a subscription brain's computer stands: online to think, paired but asleep, or never paired. */
+export type ComputerState = "online" | "asleep" | "unpaired";
+
+export async function computerState(db: Db, ownerId: string): Promise<ComputerState> {
+  if (await onlineDevice(db, ownerId)) return "online";
+  return (await bridgePaired(db, ownerId)) ? "asleep" : "unpaired";
+}
+
+/** For the header and the chat: this bot's computer, when it can't think without it (else null). */
+export async function computerFor(db: Db, bot: Pick<Bot, "ownerId" | "brain">): Promise<ComputerState | null> {
+  if (bot.brain.kind !== "subscription" || bot.brain.whenOffline === "included") return null;
+  return computerState(db, bot.ownerId);
+}
+
 export function mcpTokenFor(job: Pick<BridgeJob, "id" | "botId" | "ownerId">): string {
   return signToken({ kind: "mcp", job: job.id, bot: job.botId, owner: job.ownerId }, MCP_TOKEN_TTL_S);
 }
@@ -56,11 +79,16 @@ export async function runViaBridge(
   const { db, bot, owner, conversation } = input;
   const emit = input.emit ?? (() => {});
   const device = await onlineDevice(db, owner.id);
+  const paired = Boolean(device) || (await bridgePaired(db, owner.id));
 
   if (!device && bot.brain.whenOffline === "included") {
     // Owner opted in: answer with the included brain this time.
     const { runTurn } = await import("@/lib/agent/run");
-    emit({ type: "notice", tone: "info", text: "Your computer is asleep, so I'm using the free brain for now (you opted in)." });
+    emit({
+      type: "notice",
+      tone: "info",
+      text: `${paired ? "Your computer is asleep" : "Your computer isn't paired yet"}, so I'm using the free brain for now (you opted in).`,
+    });
     const fallbackBot: Bot = { ...bot, brain: { kind: "included", provider: "nebius", model: "nvidia/Nemotron-3_5-Lightning", effort: "low" } };
     return runTurn({ ...input, bot: fallbackBot, message: null, directive: input.directive });
   }
@@ -111,6 +139,7 @@ export async function runViaBridge(
       channelKind: input.channelKind,
       mcpUrl: `${appUrl()}/api/mcp/${bot.id}`,
       meta: input.jobMeta ?? null,
+      trigger: input.trigger ?? null,
     },
     output: { tainted: Boolean(input.startTainted) || input.message?.author === "contact" },
     progress: null,
@@ -120,13 +149,31 @@ export async function runViaBridge(
     finishedAt: null,
     createdAt: new Date(),
   };
-  await db.insert(schema.bridgeJobs).values(job);
+  // Opening the chat again while its greeting waits for the computer doesn't line up another one.
+  const [greeting] =
+    input.trigger === "greeting"
+      ? await db
+          .select({ id: schema.bridgeJobs.id })
+          .from(schema.bridgeJobs)
+          .where(
+            and(
+              eq(schema.bridgeJobs.conversationId, conversation.id),
+              inArray(schema.bridgeJobs.status, ["queued", "running"]),
+              sql`${schema.bridgeJobs.input}->>'trigger' = 'greeting'`,
+            ),
+          )
+          .limit(1)
+      : [];
+  if (!greeting) await db.insert(schema.bridgeJobs).values(job);
 
   const text = device
     ? `On it — thinking with ${brain.cli === "claude" ? "your Claude" : "your ChatGPT"} on ${device.name}…`
-    : `My brain lives on your computer, and it's asleep right now. I'll answer as soon as it's back online. (You can let me fall back to the free brain in Settings → Brain.)`;
+    : paired
+      ? `My brain lives on your computer, and it's asleep right now. I'll answer as soon as it's back online. (You can let me fall back to the free brain in Settings → Brain.)`
+      : `Pair your computer to start: open Bridge (your computer)${input.channelKind === "web" ? "" : ` at ${appUrl()}/app/bridge`}.`;
   emit({ type: "status", state: device ? "thinking" : "waiting", label: device ? "Thinking on your computer" : "Waiting for your computer" });
-  emit({ type: "notice", tone: device ? "info" : "warn", text });
+  // Never paired: the chat links the sentence to the Bridge page.
+  emit({ type: "notice", tone: device ? "info" : "warn", text, ...(paired ? {} : { href: "/app/bridge" }) });
   emit({ type: "done", messageId: null, text: "", status: "queued" });
   return { status: "queued", text: device ? "" : text, messageId: null, approvals: [] };
 }

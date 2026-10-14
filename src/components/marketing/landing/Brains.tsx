@@ -1,7 +1,7 @@
 import { ArrowRight, Laptop, Lock, ShieldCheck } from "lucide-react";
 import { Avatar } from "@/components/avatar";
 import { BrandTile, type IconSpec } from "@/components/brand/icons";
-import { INCLUDED_MODELS, PROVIDERS, SUBSCRIPTIONS } from "@/lib/models/catalog";
+import { INCLUDED_MODELS, OPENAI_MARK, PROVIDERS, SUBSCRIPTIONS } from "@/lib/models/catalog";
 import { PLANS, PLAN_ORDER, type PlanId } from "@/lib/billing/plans";
 import { cn } from "@/lib/utils";
 import { Container, Section, SectionHeader } from "../ui";
@@ -12,7 +12,7 @@ type Family = { name: string; match: RegExp; icon: IconSpec };
 /** Model families we host, in the order people tend to know them. */
 const FAMILIES: Family[] = [
   { name: "Nemotron", match: /nemotron/i, icon: brandOrLetter("nvidia", "N", "76B900") },
-  { name: "gpt-oss", match: /gpt-oss/i, icon: { letter: "AI", color: "10A37F" } },
+  { name: "gpt-oss", match: /gpt-oss/i, icon: OPENAI_MARK },
   { name: "DeepSeek", match: /deepseek/i, icon: brandOrLetter("deepseek", "DS", "4D6BFE") },
   { name: "Qwen", match: /qwen/i, icon: brandOrLetter("qwen", "Q", "615CED") },
   { name: "GLM", match: /glm/i, icon: { letter: "Z", color: "3A3A4A" } },
@@ -89,7 +89,7 @@ function SubscriptionCard() {
         <div className="mt-4 flex flex-col gap-2">
           {subs.map((s) => (
             <div key={s.id} className="flex items-center gap-2.5 rounded-xl bg-card px-2.5 py-2 shadow-soft ring-1 ring-border">
-              <BrandTile icon={brandOrLetter(s.icon.simpleIcon, s.icon.letter ?? s.name.charAt(0), s.icon.color)} size={26} />
+              <BrandTile icon={s.icon.lucide ? s.icon : brandOrLetter(s.icon.simpleIcon, s.icon.letter ?? s.name.charAt(0), s.icon.color)} size={26} />
               <span className="text-sm font-semibold">{s.name}</span>
               <span className="text-xs text-muted-foreground">{s.plans}</span>
               <span className="ml-auto font-mono text-[11px] text-muted-foreground">{s.cli}</span>
@@ -124,7 +124,7 @@ function ApiKeyCard() {
         <div className="grid grid-cols-6 gap-2">
           {PROVIDERS.map((p) => (
             <span key={p.id} title={p.name} className="flex justify-center">
-              <BrandTile icon={brandOrLetter(p.icon.simpleIcon, p.icon.letter ?? p.name.charAt(0), p.icon.color)} size={34} />
+              <BrandTile icon={p.icon.lucide ? p.icon : brandOrLetter(p.icon.simpleIcon, p.icon.letter ?? p.name.charAt(0), p.icon.color)} size={34} />
             </span>
           ))}
         </div>

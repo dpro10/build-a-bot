@@ -11,6 +11,7 @@ import { mergeServerMessages, toChatMessage, type ChatMessage } from "./messages
 import { ChatMeetingNotes } from "@/components/meetings/ChatNotes";
 import { cn } from "@/lib/utils";
 import type { AvatarId, ColorwayId } from "@/lib/avatars";
+import type { ComputerState } from "@/lib/bridge/jobs";
 
 
 
@@ -19,7 +20,7 @@ type ServerEvent =
   | { type: "text"; delta: string }
   | ({ type: "tool" } & ToolView & { approvalId?: string })
   | { type: "approval"; approval: ApprovalView }
-  | { type: "notice"; tone: "info" | "warn" | "danger"; text: string }
+  | { type: "notice"; tone: "info" | "warn" | "danger"; text: string; href?: string }
   | { type: "done"; messageId: string | null; text: string; status: string }
   | { type: "error"; message: string };
 
@@ -164,6 +165,8 @@ export function ChatView({
         { id: pendingId, key: pendingId, clientClock: true, role: "assistant", text: "", createdAt: new Date().toISOString(), tools: [], approvals: [], notices: [], pending: true },
       ]);
       let finalStatus = "ok";
+      // The turn's last status. A turn handed to the owner's computer says "waiting" when no computer is there to think yet.
+      let lastState = "";
       try {
         const res = await fetch(url, {
           method: "POST",
@@ -182,6 +185,7 @@ export function ChatView({
               if (ev.state === "thinking") live.setMood("thinking");
               if (ev.state === "working") live.setMood("working");
               if (ev.state === "waiting") live.setMood("alert");
+              lastState = ev.state;
               if (ev.label) live.setActivity(ev.label);
               break;
             case "text":
@@ -206,12 +210,13 @@ export function ChatView({
               patchLast((m) => ({ ...m, approvals: [...m.approvals, ev.approval.id] }));
               break;
             case "notice":
-              patchLast((m) => ({ ...m, notices: [...m.notices, { tone: ev.tone, text: ev.text }] }));
+              patchLast((m) => ({ ...m, notices: [...m.notices, { tone: ev.tone, text: ev.text, href: ev.href }] }));
               break;
             case "done":
               finalStatus = ev.status;
               if (ev.status === "queued") {
-                setBridgeThinking(true);
+                if (lastState === "waiting") setBridgeWaiting(true);
+                else setBridgeThinking(true);
                 setMessages((prev) => prev.filter((m) => !(m.pending && !m.text && !m.notices.length)).map((m) => (m.pending ? { ...m, pending: false } : m)));
               } else {
                 patchLast((m) => ({ ...m, id: ev.messageId ?? m.id, text: ev.text || m.text, pending: false }));
@@ -232,8 +237,10 @@ export function ChatView({
         live.setActivity(null);
         abortRef.current = null;
         if (finalStatus !== "queued") {
-          live.setMood("happy");
-          setTimeout(() => live.setMood("idle"), 2400);
+          // No happy bounce for a turn that couldn't be answered (no brain, a limit, a brain error).
+          const failed = finalStatus === "unavailable" || finalStatus === "limited" || finalStatus === "error";
+          live.setMood(failed ? "idle" : "happy");
+          if (!failed) setTimeout(() => live.setMood("idle"), 2400);
         }
         // STOP / START typed in the chat: show the new state in the header right away.
         if (finalStatus === "command" || finalStatus === "paused") setTimeout(() => void syncRef.current(true), 0);
@@ -268,10 +275,12 @@ export function ChatView({
           botStatus: string;
           thinkingOnBridge: boolean;
           waitingOnBridge?: boolean;
+          computer?: ComputerState | null;
         };
         setBridgeThinking(data.thinkingOnBridge);
         setBridgeWaiting(Boolean(data.waitingOnBridge));
         live.setPaused(data.botStatus === "paused");
+        live.setComputer(data.computer ?? null);
         setApprovals((prev) => {
           const next = { ...prev };
           for (const a of data.approvals) next[a.id] = { ...next[a.id], ...a };
@@ -299,9 +308,11 @@ export function ChatView({
   }, []);
   // A bot on the owner's own Claude or ChatGPT answers from their computer. Its job is only
   // "thinking" once the Bridge there picks it up; until then the owner's message just waits.
-  const lastIsOwner = messages.length > 0 && messages[messages.length - 1].role === "user";
-  const waitingOnComputer = viaBridge && !streaming && !bridgeThinking && (lastIsOwner || bridgeWaiting) && !live.paused;
+  const last = messages.length > 0 ? messages[messages.length - 1] : null;
+  const waitingOnComputer = viaBridge && !streaming && !bridgeThinking && (last?.role === "user" || bridgeWaiting) && !live.paused;
   const quickPoll = bridgeThinking || waitingOnComputer;
+  // Said once: when the bot's last message already says why it's waiting, the status line below stays out.
+  const showWaiting = waitingOnComputer && !last?.notices.length;
   React.useEffect(() => {
     const interval = setInterval(() => void syncRef.current(), quickPoll ? 2500 : 6000);
     const onVisible = () => {
@@ -378,18 +389,30 @@ export function ChatView({
               <Avatar avatar={avatar} color={color} size={32} mood="thinking" />
               <span className="shimmer-text font-medium">Thinking on your computer…</span>
             </div>
-          ) : waitingOnComputer ? (
+          ) : showWaiting ? (
             <div className="flex items-start gap-3 text-sm text-muted-foreground" role="status">
               <Avatar avatar={avatar} color={color} size={32} mood="sleeping" />
-              <div className="min-w-0 pt-1">
-                <div className="font-medium text-foreground">Waiting for your computer</div>
-                <p className="text-xs">
-                  {botName} thinks on your computer and answers as soon as the Bridge is running there.{" "}
-                  <Link href="/app/bridge" className="font-semibold text-primary hover:underline">
-                    Check the Bridge
-                  </Link>
-                </p>
-              </div>
+              {live.computer === "unpaired" ? (
+                <div className="min-w-0 pt-1">
+                  <div className="font-medium text-foreground">Pair your computer to start</div>
+                  <p className="text-xs">
+                    {botName} thinks with your own plan, on your computer, and answers once it&apos;s paired.{" "}
+                    <Link href="/app/bridge" className="font-semibold text-primary hover:underline">
+                      Open Bridge (your computer)
+                    </Link>
+                  </p>
+                </div>
+              ) : (
+                <div className="min-w-0 pt-1">
+                  <div className="font-medium text-foreground">Waiting for your computer</div>
+                  <p className="text-xs">
+                    {botName} thinks on your computer and answers as soon as the Bridge is running there.{" "}
+                    <Link href="/app/bridge" className="font-semibold text-primary hover:underline">
+                      Check the Bridge
+                    </Link>
+                  </p>
+                </div>
+              )}
             </div>
           ) : null}
         </div>
@@ -489,17 +512,21 @@ function MessageRow({
             <Markdown text={m.text} />
           </div>
         ) : null}
-        {m.notices.map((n, i) => (
-          <div
-            key={i}
-            className={cn(
-              "self-start rounded-2xl px-3 py-2 text-sm",
-              n.tone === "danger" ? "bg-danger-soft text-danger" : n.tone === "warn" ? "bg-warning-soft text-warning" : "bg-primary-soft text-primary",
-            )}
-          >
-            {n.text}
-          </div>
-        ))}
+        {m.notices.map((n, i) => {
+          const tone = cn(
+            "self-start rounded-2xl px-3 py-2 text-sm",
+            n.tone === "danger" ? "bg-danger-soft text-danger" : n.tone === "warn" ? "bg-warning-soft text-warning" : "bg-primary-soft text-primary",
+          );
+          return n.href ? (
+            <Link key={i} href={n.href} className={cn(tone, "font-medium underline-offset-2 hover:underline")}>
+              {n.text}
+            </Link>
+          ) : (
+            <div key={i} className={tone}>
+              {n.text}
+            </div>
+          );
+        })}
         {m.approvals.map((id) =>
           approvals[id] ? (
             <div key={id} className="max-w-xl">
