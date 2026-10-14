@@ -22,6 +22,7 @@ import { LlmError } from "@/lib/llm/types";
 import { demoMode } from "@/lib/env";
 import { estimateCostMicros } from "@/lib/models/catalog";
 import { checkLimit, recordUsage } from "@/lib/billing/usage";
+import { underDailyCeiling } from "@/lib/billing/ceiling";
 import {
   CRISIS_FOOTER,
   CRISIS_GUIDANCE,
@@ -192,8 +193,19 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
   }
   const limit = await checkLimit(db, owner, brain.included ? "includedMessages" : "byoMessages");
   if (!limit.ok && input.message?.author === "owner") {
-    const text = `${limit.message} Upgrade your plan, or switch me to your own AI key or subscription in Settings → Brain to keep going.`;
+    const text = limit.signIn
+      ? limit.message
+      : `${limit.message} Upgrade your plan, or switch me to your own AI key or subscription in Settings → Brain to keep going.`;
     emit({ type: "notice", tone: "warn", text: limit.message });
+    return finish(input, text, "limited", emit, { parts: [] });
+  }
+  // The whole site's daily ceiling on the included brain (see billing/ceiling.ts).
+  if (brain.included && !(await underDailyCeiling(db, "included"))) {
+    const forOwner = input.message?.author !== "contact";
+    if (forOwner) emit({ type: "notice", tone: "warn", text: "The free brain has reached today's limit." });
+    const text = forOwner
+      ? "So many people are trying Build-a-bot today that the free brain has reached its daily limit. It resets at midnight UTC. To keep going now, switch me to your own AI key or subscription in Settings → Brain."
+      : "I can't answer right now. Please try again later.";
     return finish(input, text, "limited", emit, { parts: [] });
   }
 
@@ -457,15 +469,20 @@ export async function executeToolCall(
     };
   }
 
-  // Allowed: run it.
+  // Allowed: run it (paid lookups only while the plan and today's ceiling allow).
   let output;
-  try {
-    output = await spec.run(args, ctx);
-  } catch (err) {
-    output = { ok: false as const, error: truncate(errorMessage(err), 400) };
+  const refusal = PAID_LOOKUPS.has(spec.name) ? await lookupRefusal(ctx, spec.name) : null;
+  if (refusal) {
+    output = { ok: false as const, error: refusal };
+  } else {
+    try {
+      output = await spec.run(args, ctx);
+    } catch (err) {
+      output = { ok: false as const, error: truncate(errorMessage(err), 400) };
+    }
+    if (spec.name === "web_search" || spec.name === "news_headlines") state.searches++;
   }
   if (spec.taints ?? spec.effect === "read") state.tainted = true;
-  if (spec.name === "web_search" || spec.name === "news_headlines") state.searches++;
   if (spec.effect !== "read") state.actions++;
 
   await receipt(db, bot, "tool", output.ok ? "ok" : "error", output.ok ? summary : `Failed: ${summary}`, {
@@ -685,6 +702,21 @@ export async function receipt(
 
 export function newRunState(tainted = false): RunState {
   return { tainted, parts: [], approvals: [], searches: 0, actions: 0 };
+}
+
+/** Tools that cost us per call (web search and page reading). */
+const PAID_LOOKUPS = new Set(["web_search", "news_headlines", "read_webpage"]);
+
+/** Why a paid lookup can't run now (the model hears it and says so), or null. */
+async function lookupRefusal(ctx: ToolContext, name: string): Promise<string | null> {
+  if (name !== "read_webpage") {
+    const plan = await checkLimit(ctx.db, ctx.owner, "searches");
+    if (!plan.ok) return `${plan.message} Answer from what you already know, and say you couldn't search.`;
+  }
+  if (!(await underDailyCeiling(ctx.db, "search"))) {
+    return "Web lookups have reached today's limit for everyone (it resets at midnight UTC). Answer from what you already know, and say you couldn't look it up.";
+  }
+  return null;
 }
 
 async function finish(

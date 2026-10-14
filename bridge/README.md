@@ -16,11 +16,11 @@ Your login never leaves your machine. The Bridge drives your own, unmodified `cl
 2. On your computer:
 
    ```bash
-   npx build-a-bot-bridge pair ABCD-1234
-   npx build-a-bot-bridge            # keep this running (Ctrl+C to stop)
+   npx -y https://build-a-bot.site/downloads/build-a-bot-bridge-0.1.0.tgz pair ABCD-1234
+   npx -y https://build-a-bot.site/downloads/build-a-bot-bridge-0.1.0.tgz   # keep this running (Ctrl+C to stop)
    ```
 
-   Self-hosting? Add `--server https://your-domain` to `pair`.
+   The app shows these commands with the right address and version; copy them from there. The site serves its own copy of the Bridge, so nothing comes from npm. Self-hosting? Add `--server https://your-domain` to `pair`.
 
 3. Message your bot anywhere — web, texts, Telegram, email. Turns for subscription bots are answered on this computer.
 

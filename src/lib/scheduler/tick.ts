@@ -104,4 +104,7 @@ export async function housekeeping(db: Db, now = new Date()) {
   // Transcripts past each bot's retention setting (90 days by default) go; the notes stay.
   const { expireTranscripts } = await import("@/lib/meetings");
   await expireTranscripts(db, now);
+  // Telegram's manager webhook and Discord's commands follow their keys (and the domain).
+  const { selfSetup } = await import("@/lib/channels/self-setup");
+  await selfSetup(db).catch((err) => console.warn("[setup]", (err as Error).message));
 }
