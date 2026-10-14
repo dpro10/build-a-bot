@@ -74,6 +74,7 @@ Web chat, phone calls and texts (Twilio), email (its own brand-free address), Te
 - While it listens it stays there with a red dot, a timer, a level meter and live captions. Pause, Stop and "Stop and delete" are one click away.
 - Afterwards it writes a summary, decisions and action items, sends them to you, and answers questions about past meetings ("What did we decide?").
 - The Meetings tab does the same in Chrome or Edge, with the bot in a floating window.
+- Until signed downloads are published (`NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL`), a real server shows the desktop app as "Coming soon"; demo mode shows how to run it from this repo.
 - It never records without a yes, only listens while it's on screen, and throws the audio away once it's text. Transcripts are kept 90 days by default; notes stay until deleted.
 
 ### Web actions (beta)
@@ -91,7 +92,7 @@ An optional morning brief (on by default), routines and reminders, on any channe
 
 ### The business side
 
-- Plans and billing with Stripe: Free, Plus ($12/mo) and Pro ($39/mo). The full table is in `docs/DECISIONS.md`. In demo mode, plans switch without paying.
+- Plans and billing with Stripe: Free, Plus ($12/mo) and Pro ($39/mo). The full table is in `docs/DECISIONS.md`. In demo mode, plans switch without paying; on a real server without Stripe, Plus and Pro say "Coming soon" and offer a waitlist.
 - An operator dashboard (`/admin`, locked to `ADMIN_EMAILS`): revenue, growth, usage and costs, as aggregates only.
 - Shareable recipes (`/r/[slug]`). Each bot is also an MCP server, usable from Claude Desktop or Claude Code.
 - A public site: landing, pricing, safety, legal drafts, explore.

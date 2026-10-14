@@ -12,6 +12,7 @@ import { setTelegramProfilePhoto, telegramCall } from "@/lib/channels/telegram";
 import { INCLUDED_MODELS, PROVIDER_BY_ID, type ProviderId } from "@/lib/models/catalog";
 import { getBotSetup } from "@/lib/data";
 import { botNameSchema } from "@/lib/bots/create";
+import { settingsChange } from "@/lib/bots/labels";
 import { receipt } from "@/lib/agent/run";
 import type { BrainConfig } from "@/lib/db/schema";
 
@@ -138,8 +139,9 @@ export async function PATCH(req: Request, ctx: RouteCtx<{ botId: string }>) {
       if (p.avatar || p.color) await setTelegramProfilePhoto(token, bot);
     });
   }
-  const changed = Object.keys(p);
-  await receipt(a.db, bot, "system", "ok", `Settings changed: ${changed.join(", ")}`, {
+  // Named for what changed ("Keep transcripts: 30 days"), not the group it was saved in ("limits").
+  const { title, changed } = settingsChange(p, a.bot.limits);
+  await receipt(a.db, bot, "system", "ok", title, {
     changed,
     ...(p.trust ? { trust: p.trust } : {}),
     ...(p.brain ? { brain: { kind: bot.brain.kind, provider: bot.brain.provider, model: bot.brain.model } } : {}),

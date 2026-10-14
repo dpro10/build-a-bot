@@ -14,12 +14,16 @@ import { PricingTeaser } from "@/components/marketing/landing/PricingTeaser";
 import { FinalCta } from "@/components/marketing/landing/FinalCta";
 import { Faq, faqJsonLd, type FaqItem } from "@/components/marketing/Faq";
 import { Container, Section, SectionHeader } from "@/components/marketing/ui";
+import { available, paidPlansOpen } from "@/lib/env";
 import { SITE } from "@/lib/site";
 
 export const metadata: Metadata = {
   description: SITE.description,
   alternates: { canonical: "/" },
 };
+
+/** The desktop app can be had (signed downloads, or the repo in demo mode); otherwise it's coming soon. */
+const desktopApp = available("desktopApp");
 
 const FAQ: { q: string; text: string }[] = [
   {
@@ -32,11 +36,13 @@ const FAQ: { q: string; text: string }[] = [
   },
   {
     q: "What does Full faith mean?",
-    text: "Full faith lets your bot act on its own across the apps you connect: sending, posting, updating and deleting for you, with a receipt for every action. A few hard limits still apply. It asks before sending your data to someone new right after reading outside content, before deleting more than 10 things at once, and before spending past your cap. It never shares passwords or keys and never pretends to be human. Full faith comes with Plus and Pro.",
+    text: `Full faith lets your bot act on its own across the apps you connect: sending, posting, updating and deleting for you, with a receipt for every action. A few hard limits still apply. It asks before sending your data to someone new right after reading outside content, before deleting more than 10 things at once, and before spending past your cap. It never shares passwords or keys and never pretends to be human. Full faith comes with Plus and Pro${paidPlansOpen ? "" : ", which are coming soon"}.`,
   },
   {
     q: "Can it take notes in my meetings?",
-    text: "Yes, when you say yes. The desktop app notices when a call starts in Zoom, Meet, Teams and others, and your bot asks before it listens. You can also start notes from your browser. While it listens, it stays on your screen with a red dot. The audio is turned into text and thrown away, and you get a summary, decisions and action items. Recording laws differ by place, so let everyone on the call know.",
+    text: desktopApp
+      ? "Yes, when you say yes. The desktop app notices when a call starts in Zoom, Meet, Teams and others, and your bot asks before it listens. You can also start notes from your browser. While it listens, it stays on your screen with a red dot. The audio is turned into text and thrown away, and you get a summary, decisions and action items. Recording laws differ by place, so let everyone on the call know."
+      : "Yes, when you say yes. Start notes from Chrome or Edge on a computer, for a call in another tab or a meeting in the room. While it listens, it stays on your screen with a red dot. The audio is turned into text and thrown away, and you get a summary, decisions and action items. A desktop app that notices when a call starts is coming soon. Recording laws differ by place, so let everyone on the call know.",
   },
   {
     q: "What if it makes a mistake?",
@@ -96,7 +102,7 @@ export default function LandingPage() {
       <TrustSection />
       <InjectionSection />
       <Channels />
-      <MeetingNotes />
+      <MeetingNotes desktopApp={desktopApp} />
       <Recipes />
       <Promises />
       <PricingTeaser />

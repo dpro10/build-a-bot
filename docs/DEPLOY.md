@@ -54,6 +54,8 @@ Own-key (BYOK) and subscription brains need nothing from you.
 2. Webhook → `{APP_URL}/api/webhooks/stripe` with `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`; set `STRIPE_WEBHOOK_SECRET`.
 3. Turn on the customer portal (cancel, switch plans, update card).
 
+Until `STRIPE_SECRET_KEY` is set, Plus and Pro say "Coming soon" everywhere (pricing, the home page, Plan & usage) and offer a waitlist (`plan:plus` / `plan:pro` in the admin dashboard's Waitlists). Someone at the Free bot limit is told before the builder's first step.
+
 ## 7. Before launch
 
 - [ ] `DEMO_MODE` off in production; `ENCRYPTION_KEY`, `DATABASE_URL`, `CRON_SECRET`, `APP_URL` set.
@@ -66,5 +68,5 @@ Own-key (BYOK) and subscription brains need nothing from you.
 - [ ] Meeting notes:
   - a lawyer reviews the consent flow and transcript retention;
   - check the speech-to-text provider's data-retention and training terms;
-  - sign and notarize the desktop app (Apple Developer Program for Mac, a code-signing certificate for Windows) and publish its downloads. See `desktop/README.md`.
+  - sign and notarize the desktop app (Apple Developer Program for Mac, a code-signing certificate for Windows) and publish its downloads. See `desktop/README.md`. Then set `NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL` to the download page: until it's set, the app shows the desktop app as "Coming soon".
 - [ ] Smoke test: build a bot, chat, approve an action, STOP from a channel, a reminder fires, upgrade with a Stripe test card.

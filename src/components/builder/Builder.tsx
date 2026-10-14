@@ -31,6 +31,8 @@ import { TrustStep } from "./steps/TrustStep";
 export type BuilderProps = {
   plan: PlanId;
   demo: boolean;
+  /** Paid plans can be bought (or switched to in demo mode); otherwise plan notes say they're coming soon. */
+  paidPlans: boolean;
   live: LiveFlags;
   recipe: (RecipeData & { slug: string; tagline?: string }) | null;
   botCount: number;
@@ -55,7 +57,7 @@ function currentEntry(): StepEntry | null {
   return typeof s?.babStep === "number" ? { babStep: s.babStep, babPrev: s.babPrev ?? null } : null;
 }
 
-export function Builder({ plan, demo, live, recipe, botCount, signedIn }: BuilderProps) {
+export function Builder({ plan, demo, paidPlans, live, recipe, botCount, signedIn }: BuilderProps) {
   const router = useRouter();
   const [state, setState] = React.useState<BuilderState>(() => initialState(recipe));
   const [stepIndex, setStepIndex] = React.useState(0);
@@ -303,7 +305,7 @@ export function Builder({ plan, demo, live, recipe, botCount, signedIn }: Builde
     } catch (err) {
       setCreating(null);
       const e = err as ApiError;
-      if (e.status === 402) toast.error(e.message, { action: { label: "See plans", onClick: () => router.push("/app/billing") } });
+      if (e.status === 402) toast.error(e.message, paidPlans ? { action: { label: "See plans", onClick: () => router.push("/app/billing") } } : undefined);
       else toast.error(e.message || "Couldn't create your bot. Try again.");
     }
   };
@@ -459,9 +461,12 @@ export function Builder({ plan, demo, live, recipe, botCount, signedIn }: Builde
               onCustomMcp={(customMcp) => update({ customMcp })}
               plan={plan}
               demo={demo}
+              paidPlans={paidPlans}
             />
           ) : null}
-          {step === "trust" ? <TrustStep botName={name} trust={state.trust} onTrust={(trust) => update({ trust })} connectors={state.connectors} plan={plan} demo={demo} /> : null}
+          {step === "trust" ? (
+            <TrustStep botName={name} trust={state.trust} onTrust={(trust) => update({ trust })} connectors={state.connectors} plan={plan} demo={demo} paidPlans={paidPlans} />
+          ) : null}
           {step === "channels" ? (
             <ChannelsStep
               botName={name}
