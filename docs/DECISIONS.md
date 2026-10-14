@@ -277,7 +277,7 @@ Built (research: `docs/research/meetings-2026-10-14.md`):
 1. First users: tinkerers or everyday iPhone users? (unchanged)
 2. Pricing: confirm or change the table above. Is Full faith a paid feature?
 3. Web actions: confirm Browser Use Cloud (see above), then test with a live key on about 10 real forms before turning it on for everyone.
-4. Buy a brand-free domain for bot inboxes; Twilio A2P registration; Composio plan.
+4. Buy a brand-free domain for bot inboxes; Twilio A2P registration; Composio plan; publish the Bridge to npm. The app already shows `npx build-a-bot-bridge`, and on 2026-10-14 that name was unclaimed, so anyone could register it.
 5. Trademark clearance before brand spend (unchanged).
 6. Meeting notes before launch:
    - a lawyer's review of the consent flow and retention (California § 632, and the Granola complaint's theory);
