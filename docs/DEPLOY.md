@@ -57,4 +57,6 @@ Own-key (BYOK) and subscription brains need nothing from you.
 - [ ] Twilio A2P/toll-free registration done; email domain verified (SPF/DKIM/DMARC).
 - [ ] Google: Gmail/Drive through Composio's verified app, or your own app with Google's verification (restricted Gmail scopes need a yearly CASA assessment).
 - [ ] Support email set (`NEXT_PUBLIC_SUPPORT_EMAIL`); crisis protocol page live (`/safety`).
+- [ ] Publish the Bridge so `npx build-a-bot-bridge` works: `cd bridge && npm publish` (until then: `node bridge/bab-bridge.mjs pair CODE --server $APP_URL`).
+- [ ] Re-render avatar pictures if characters change: `npm run avatars`.
 - [ ] Smoke test: build a bot, chat, approve an action, STOP from a channel, a reminder fires, upgrade with a Stripe test card.
