@@ -44,9 +44,19 @@ function prepare(win: Window, title: string): HTMLElement {
   doc.title = title;
   for (const sheet of Array.from(document.styleSheets)) {
     try {
+      // Copied rules lose their stylesheet's address, so relative url()s (the fonts) would
+      // resolve against the page instead: make them absolute first.
+      const base = sheet.href ?? document.baseURI;
       const css = Array.from(sheet.cssRules)
         .map((r) => r.cssText)
-        .join("\n");
+        .join("\n")
+        .replace(/url\(\s*(["']?)(?!data:|blob:|https?:|\/\/|#)([^"')]+)\1\s*\)/g, (whole, quote: string, url: string) => {
+          try {
+            return `url(${quote}${new URL(url, base).href}${quote})`;
+          } catch {
+            return whole;
+          }
+        });
       const style = doc.createElement("style");
       if (sheet.media?.mediaText) style.media = sheet.media.mediaText;
       style.textContent = css;

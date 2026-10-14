@@ -104,6 +104,11 @@ export function MeetingDetail({
 
   // Follow along while it's recording or the notes are being written.
   const working = m.status === "recording" || m.status === "processing";
+  /** The status we last showed, to announce "notes are ready" once (not from inside a state updater). */
+  const shownStatus = React.useRef(m.status);
+  React.useEffect(() => {
+    shownStatus.current = m.status;
+  }, [m.status]);
   React.useEffect(() => {
     if (!working) return;
     let since: string | null = null;
@@ -117,14 +122,13 @@ export function MeetingDetail({
         if (cancelled) return;
         since = data.serverTime;
         setSegments((prev) => mergeSegments(prev, data.segments));
-        setM((prev) => {
-          const next = data.meeting;
-          if (prev.status === "processing" && next.status !== "processing") {
-            if (next.notes) toast.success("Your notes are ready!", { description: `${bot.name} also sent them to your chat.` });
-            else toast(`${bot.name} couldn't write notes for this one.`);
-          }
-          return next;
-        });
+        const next = data.meeting;
+        if (shownStatus.current === "processing" && next.status !== "processing") {
+          if (next.notes) toast.success("Your notes are ready!", { description: `${bot.name} also sent them to your chat.` });
+          else toast(`${bot.name} couldn't write notes for this one.`);
+        }
+        shownStatus.current = next.status;
+        setM(next);
       } catch (err) {
         if (!cancelled && err instanceof ApiError && err.status === 404) {
           toast("This meeting was deleted.");

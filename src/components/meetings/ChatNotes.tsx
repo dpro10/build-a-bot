@@ -12,12 +12,15 @@ import { meetingAppIcon } from "./shared";
 
 export type ChatMeetingRef = { id: string; app?: string; inPerson?: boolean; gone?: boolean };
 
-/** "📝 Notes from “Title” (12 min) — 2 decisions, 5 action items" + notes + "[Open the full transcript](…)" */
-export function parseNotesMessage(text: string): { title: string | null; duration: string | null; tally: string | null; body: string; footer: string | null } {
+/**
+ * "📝 Notes from “Title” (12 min) — 2 decisions, 5 action items" + notes + "[Open the full transcript](…)",
+ * or "No notes from “Title” (40 sec)" + why + "[Open the meeting](…)" when there were none.
+ */
+export function parseNotesMessage(text: string): { title: string | null; duration: string | null; tally: string | null; body: string; footer: string | null; missing: boolean } {
   const lines = text.replace(/\r\n/g, "\n").split("\n");
-  const head = /^\s*(?:📝\s*)?Notes from [“"](.+)[”"]\s*\(([^)]+)\)(?:\s*[—–-]\s*(.+?))?\s*$/.exec(lines[0] ?? "");
+  const head = /^\s*(?:📝\s*)?(No notes|Notes) from [“"](.+)[”"]\s*\(([^)]+)\)(?:\s*[—–-]\s*(.+?))?\s*$/.exec(lines[0] ?? "");
   let body = (head ? lines.slice(1) : lines).join("\n");
-  body = body.replace(/^\s*\[Open (?:the )?(?:full )?transcript\]\([^)]*\)\s*$/gim, "");
+  body = body.replace(/^\s*\[Open (?:the )?(?:full )?(?:transcript|meeting)\]\([^)]*\)\s*$/gim, "");
   const blocks = body
     .split(/\n{2,}/)
     .map((b) => b.trim())
@@ -25,7 +28,7 @@ export function parseNotesMessage(text: string): { title: string | null; duratio
   let footer: string | null = null;
   const last = blocks[blocks.length - 1];
   if (blocks.length > 1 && last && !/^[-*#\d•]/.test(last) && /just say so|audio is already gone|want me to/i.test(last)) footer = blocks.pop() ?? null;
-  return { title: head?.[1] ?? null, duration: head?.[2] ?? null, tally: head?.[3] ?? null, body: blocks.join("\n\n"), footer };
+  return { title: head?.[2] ?? null, duration: head?.[3] ?? null, tally: head?.[4] ?? null, body: blocks.join("\n\n"), footer, missing: head?.[1] === "No notes" };
 }
 
 const lookups = new Map<string, Promise<Record<string, { app: string; inPerson: boolean }>>>();
@@ -76,8 +79,8 @@ export function ChatMeetingNotes({ botId, text, meeting }: { botId: string; text
           </span>
         )}
         <div className="min-w-0 flex-1">
-          <div className="text-[11px] font-bold tracking-[0.08em] text-primary uppercase">Meeting notes</div>
-          <div className="truncate leading-snug font-semibold">{parsed.title ?? "Your meeting"}</div>
+          <div className="truncate text-[11px] font-bold tracking-[0.08em] text-primary uppercase">{parsed.missing ? "No notes this time" : "Meeting notes"}</div>
+          <div className="line-clamp-2 leading-snug font-semibold break-words">{parsed.title ?? "Your meeting"}</div>
           {meta ? <div className="truncate text-xs text-muted-foreground">{meta}</div> : null}
         </div>
         {meeting.gone ? (
@@ -85,9 +88,11 @@ export function ChatMeetingNotes({ botId, text, meeting }: { botId: string; text
         ) : (
           <Link
             href={href}
+            aria-label={parsed.missing ? "Open the meeting" : "Open notes"}
             className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full bg-primary-soft px-3 text-sm font-semibold text-primary transition hover:brightness-95 dark:hover:brightness-125"
           >
-            Open notes <ArrowRight className="size-3.5" aria-hidden />
+            {/* Short on phones, so the meeting's title gets the room. */}
+            Open<span className="hidden sm:inline">{parsed.missing ? " meeting" : " notes"}</span> <ArrowRight className="size-3.5" aria-hidden />
           </Link>
         )}
       </div>

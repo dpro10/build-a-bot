@@ -100,8 +100,11 @@ export default async function PricingPage() {
         </Container>
       </section>
 
-      <Section className="pt-8 sm:pt-10">
+      <Section aria-labelledby="plans-title" className="pt-8 sm:pt-10">
         <Container>
+          <h2 id="plans-title" className="sr-only">
+            Plans
+          </h2>
           <PlanCards signedIn={Boolean(viewer)} currentPlan={viewer?.plan} />
           {viewer ? (
             <p className="mt-6 text-center text-sm text-muted-foreground">

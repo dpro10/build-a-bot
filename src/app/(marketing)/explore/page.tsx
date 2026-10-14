@@ -12,7 +12,7 @@ import { pageMetadata } from "@/lib/site";
 export const metadata = pageMetadata({
   title: "Explore recipes",
   description:
-    "Ready-made AI bots for inbox zero, studying, code review, errands, research, family logistics, habits, job hunting and travel. Make one yours in a tap.",
+    "Ready-made AI bots for inbox zero, meeting notes, studying, code review, errands, research, family logistics, habits, job hunting and travel. Make one yours in a tap.",
   path: "/explore",
 });
 
@@ -68,8 +68,11 @@ export default async function ExplorePage({ searchParams }: { searchParams: Prom
         </Container>
       </section>
 
-      <section aria-label="Recipes" className="pb-20 sm:pb-28">
+      <section aria-labelledby="recipes-title" className="pb-20 sm:pb-28">
         <Container>
+          <h2 id="recipes-title" className="sr-only">
+            Recipes
+          </h2>
           <ExploreGallery items={items} filters={filters} initial={initial} trailing={<ScratchCard />} />
 
           <div className="mt-14 flex flex-col items-center gap-4 rounded-3xl border border-border bg-card p-6 text-center shadow-soft sm:flex-row sm:p-7 sm:text-left">

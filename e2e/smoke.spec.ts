@@ -40,6 +40,28 @@ test("public pages render", async ({ page }) => {
   expect(missing?.status()).toBe(404);
 });
 
+test("a missing recipe gets one friendly 404 page, inside the site's header and footer", async ({ page }) => {
+  const res = await page.goto("/r/no-such-recipe");
+  expect(res?.status()).toBe(404);
+  await expect(page.getByRole("heading", { name: /eight arms/ })).toBeVisible();
+  await expect(page.getByRole("banner")).toHaveCount(1);
+  await expect(page.getByRole("main")).toHaveCount(1);
+  await expect(page.getByRole("contentinfo")).toHaveCount(1);
+});
+
+test("every public page has a share image", async ({ page }) => {
+  for (const path of ["/", "/pricing", "/safety", "/explore", "/legal/terms", "/legal/privacy", "/r/meeting-buddy"]) {
+    const html = await (await page.request.get(path)).text();
+    const og = html.match(/<meta property="og:image" content="([^"]+)"/)?.[1];
+    const x = html.match(/<meta name="twitter:image" content="([^"]+)"/)?.[1];
+    expect(og, `${path} og:image`).toBeTruthy();
+    expect(x, `${path} twitter:image`).toBeTruthy();
+    const img = await page.request.get(new URL(og!).pathname + new URL(og!).search);
+    expect(img.status(), `${path} share image`).toBe(200);
+    expect(img.headers()["content-type"]).toContain("image/png");
+  }
+});
+
 test("the landing page leads to the builder", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("link", { name: /build your bot/i }).first().click();

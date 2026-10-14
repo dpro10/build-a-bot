@@ -68,7 +68,7 @@ function formFields(text: string): { field: string; value: string }[] {
   if (typedEmail) fields.push({ field: "Email", value: typedEmail });
   else if (/\bmy\b[^.,]{0,24}\be-?mail\b/.test(t)) fields.push({ field: "Email", value: "{{my_email}}" });
   const message = /\b(?:saying|that says|with the message|message:?)\s+["“]?(.+?)["”]?\s*$/i.exec(text)?.[1];
-  if (message) fields.push({ field: "Message", value: message.charAt(0).toUpperCase() + message.slice(1).replace(/[.!]*$/, ".") });
+  if (message) fields.push({ field: "Message", value: message.charAt(0).toUpperCase() + message.slice(1) + (/[.!?]$/.test(message) ? "" : ".") });
   if (!fields.length) fields.push({ field: "Name", value: "{{my_name}}" }, { field: "Email", value: "{{my_email}}" });
   return fields;
 }
@@ -193,7 +193,8 @@ export function demoMeetingNotes(transcript: string): string {
       body = body.slice(0, d.index);
     }
     body = body.replace(/^have\s+/i, "get ");
-    return `- [ ] ${who} — ${body}${due ? ` (by ${due})` : ""}`;
+    // In person, one microphone hears everyone ("Room"): "I'll…" there has no known owner.
+    return `- [ ] ${who === "Room" ? "" : `${who} — `}${body}${due ? ` (by ${due})` : ""}`;
   }
   const title = topic ? cap(topic.split(/\s+/).slice(0, 8).join(" ")) : "Meeting notes";
   const summary = [
@@ -626,7 +627,8 @@ function summarizeResults(results: { name: string; content: string; isError?: bo
       continue;
     }
     if (status === "pending_approval") {
-      out.push(`I've got that ready — it needs your OK first. Tap **Approve** and I'll go ahead. (${parsed?.message ?? "Approval required."})`);
+      // The approval card shows exactly what and why; the reply just says it's waiting on them.
+      out.push("I've got that ready — it needs your OK first. Tap **Approve** and I'll go ahead, or **Deny** and nothing happens.");
       continue;
     }
     if (status === "blocked") {

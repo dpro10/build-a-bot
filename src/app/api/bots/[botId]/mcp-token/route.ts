@@ -31,5 +31,6 @@ export async function DELETE(req: Request, ctx: RouteCtx<{ botId: string }>) {
   const a = await authedBot(botId);
   if (!a.ok) return a.res;
   await a.db.update(schema.bots).set({ mcpTokenHash: null }).where(eq(schema.bots.id, botId));
+  if (a.bot.mcpTokenHash) await receipt(a.db, a.bot, "system", "ok", "Revoked the token for using this bot's tools elsewhere", {});
   return json({ ok: true });
 }

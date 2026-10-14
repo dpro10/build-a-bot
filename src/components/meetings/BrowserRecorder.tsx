@@ -852,7 +852,7 @@ export function BrowserRecorder({
             </div>
             <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-end">
               <LevelBars store={levels} active={phase === "listening"} />
-              <span className="font-mono text-2xl font-semibold tabular-nums sm:text-3xl" aria-label={`Recording time ${formatClock(elapsed)}`}>
+              <span className="font-mono text-2xl font-semibold tabular-nums sm:text-3xl" role="timer" aria-label={`Recording time ${formatClock(elapsed)}`}>
                 {formatClock(elapsed)}
               </span>
             </div>

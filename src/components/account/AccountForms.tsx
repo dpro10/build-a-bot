@@ -258,7 +258,7 @@ export function DataActions({ anonymous, botCount, paid }: { anonymous: boolean;
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 10_000);
-      toast.success("Your data is downloading.", { description: "One JSON file with your bots, chats, memories and receipts. No keys or passwords." });
+      toast.success("Your data is downloading.", { description: "One JSON file with your bots, chats, memories, meetings and receipts. No keys or passwords." });
     } catch (err) {
       toast.error((err as Error).message);
     } finally {
@@ -393,7 +393,9 @@ function DeleteAccount({ botCount, paid }: { botCount: number; paid: boolean }) 
         <DialogBody>
           <ul className="flex flex-col gap-2 text-sm">
             {[
-              botCount === 1 ? "Your bot, with its chats, memories, notes and routines" : `All ${botCount} of your bots, with their chats, memories, notes and routines`,
+              botCount === 1
+                ? "Your bot, with its chats, memories, notes, meetings and routines"
+                : `All ${botCount} of your bots, with their chats, memories, notes, meetings and routines`,
               "Every receipt and approval",
               "Your saved API keys and app connections",
               paid ? "Paired computers and your plan (your subscription is canceled right away)" : "Paired computers (Bridge)",

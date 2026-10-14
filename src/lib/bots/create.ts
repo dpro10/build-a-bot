@@ -41,15 +41,18 @@ const brainSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 
+/** A bot's name: short, and never the product's own name (it stays out of anything a bot owns). */
+export const botNameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(32)
+  .refine((n) => !/build[\s-]*a[\s-]*bot/i.test(n), "Pick a name that isn't the product's name");
+
 export const createBotSchema = z.object({
   avatar: z.enum(AVATAR_IDS),
   color: z.enum(COLORWAY_IDS),
-  name: z
-    .string()
-    .trim()
-    .min(1)
-    .max(32)
-    .refine((n) => !/build[\s-]*a[\s-]*bot/i.test(n), "Pick a name that isn't the product's name"),
+  name: botNameSchema,
   jobs: z.array(z.string()).max(12).default([]),
   instructions: z.string().max(4000).optional(),
   brain: brainSchema,

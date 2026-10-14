@@ -11,7 +11,8 @@ import { getViewer } from "./viewer";
 export async function SiteHeader() {
   const viewer = await getViewer();
   return (
-    <header className="sticky top-0 z-40 border-b border-border/70 bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/65">
+    // Mostly opaque: the links stay readable while the dark prompt-injection band scrolls under a light header.
+    <header className="sticky top-0 z-40 border-b border-border/70 bg-background/90 backdrop-blur-xl supports-[backdrop-filter]:bg-background/85">
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-3 px-4 sm:px-6 lg:px-8">
         <Link href="/" aria-label="Build-a-bot home" className="mr-2 shrink-0 rounded-xl text-foreground lg:mr-6">
           <Logo className="text-[17px]" />

@@ -3,6 +3,7 @@ import { getDb } from "@/lib/db";
 import { requireUser, isAnonymous } from "@/lib/auth/session";
 import { listBots, pendingApprovalCount } from "@/lib/data";
 import { AppShell, type ShellBot } from "@/components/app/AppShell";
+import { plainPreview } from "@/components/app/preview";
 import { getPlan } from "@/lib/billing/plans";
 import { demoMode } from "@/lib/env";
 import { TRUST, isTrustLevel } from "@/lib/trust";
@@ -21,7 +22,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     color: bot.color as ColorwayId,
     status: bot.status,
     pending: pendingApprovals,
-    subtitle: lastMessage ? lastMessage.text.replace(/\s+/g, " ").slice(0, 60) : TRUST[isTrustLevel(bot.trust) ? bot.trust : "ask"].name,
+    subtitle: lastMessage ? plainPreview(lastMessage.text, 60) : TRUST[isTrustLevel(bot.trust) ? bot.trust : "ask"].name,
   }));
   return (
     <AppShell bots={shellBots} pendingTotal={pendingTotal} planName={getPlan(user.plan).name} demo={demoMode} anonymous={isAnonymous(user)}>

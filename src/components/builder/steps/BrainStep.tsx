@@ -11,6 +11,7 @@ import { PLANS, type PlanId } from "@/lib/billing/plans";
 import { INCLUDED_MODELS, PROVIDERS, PROVIDER_BY_ID, SUBSCRIPTIONS, type ModelDef, type ProviderId } from "@/lib/models/catalog";
 import { cn } from "@/lib/utils";
 import { DEFAULT_MODEL, type BrainChoice } from "../state";
+import { onRadioGroupKeyDown, radioTabIndex } from "../radio-group";
 import { StepHeading } from "./StepHeading";
 
 const TIERS: { id: ModelDef["tier"]; label: string; blurb: string }[] = [
@@ -65,8 +66,8 @@ export function BrainStep({
   return (
     <div className="flex flex-col gap-6">
       <StepHeading title="Choose its brain" subtitle={`The AI model ${botName || "your bot"} thinks with. Switch anytime — its memory and apps stay put.`} />
-      <div role="radiogroup" aria-label="Brain" className="grid gap-2.5 sm:grid-cols-3">
-        {kinds.map((k) => {
+      <div role="radiogroup" aria-label="Brain" onKeyDown={onRadioGroupKeyDown} className="grid gap-2.5 sm:grid-cols-3">
+        {kinds.map((k, i) => {
           const active = brain.kind === k.id;
           return (
             <button
@@ -74,6 +75,7 @@ export function BrainStep({
               type="button"
               role="radio"
               aria-checked={active}
+              tabIndex={radioTabIndex(active, i, false)}
               onClick={() => pick(k.id)}
               className={cn(
                 "relative flex flex-col items-start gap-2 rounded-3xl border bg-card p-4 text-left transition",
@@ -121,8 +123,8 @@ function IncludedPanel({ brain, onBrain, plan, demo }: { brain: Extract<BrainCho
               <span className="text-sm text-muted-foreground">· {tier.blurb}</span>
               {locked ? <Badge tone="accent">{needs}</Badge> : tier.id === "fast" ? <Badge tone="success">Free</Badge> : null}
             </div>
-            <div role="radiogroup" aria-label={`${tier.label} models`} className="grid gap-2 sm:grid-cols-2">
-              {models.map((m) => {
+            <div role="radiogroup" aria-label={`${tier.label} models`} onKeyDown={onRadioGroupKeyDown} className="grid gap-2 sm:grid-cols-2">
+              {models.map((m, i) => {
                 const active = m.id === brain.model;
                 return (
                   <button
@@ -130,6 +132,7 @@ function IncludedPanel({ brain, onBrain, plan, demo }: { brain: Extract<BrainCho
                     type="button"
                     role="radio"
                     aria-checked={active}
+                    tabIndex={radioTabIndex(active, i, !models.some((x) => x.id === brain.model))}
                     onClick={() => onBrain({ ...brain, model: m.id })}
                     className={cn(
                       "flex items-start gap-3 rounded-2xl border bg-card p-3 text-left transition",
@@ -184,8 +187,8 @@ function SubscriptionPanel({ brain, onBrain, onUseGeminiKey }: { brain: Extract<
   const cloud = SUBSCRIPTIONS.find((s) => s.id === "claude_cloud");
   return (
     <div className="flex flex-col gap-5 rounded-3xl border border-border bg-background-2/60 p-4 sm:p-5">
-      <div role="radiogroup" aria-label="Subscription" className="grid gap-2.5 sm:grid-cols-2">
-        {subs.map((s) => {
+      <div role="radiogroup" aria-label="Subscription" onKeyDown={onRadioGroupKeyDown} className="grid gap-2.5 sm:grid-cols-2">
+        {subs.map((s, i) => {
           const active = s.id === brain.subscription;
           return (
             <button
@@ -193,6 +196,7 @@ function SubscriptionPanel({ brain, onBrain, onUseGeminiKey }: { brain: Extract<
               type="button"
               role="radio"
               aria-checked={active}
+              tabIndex={radioTabIndex(active, i, !subs.some((x) => x.id === brain.subscription))}
               onClick={() => onBrain({ ...brain, subscription: s.id as "claude" | "chatgpt", model: "default" })}
               className={cn("flex items-center gap-3 rounded-2xl border bg-card p-3.5 text-left transition", active ? "border-primary ring-2 ring-primary/20" : "border-border hover:border-foreground/25")}
             >
@@ -260,8 +264,11 @@ function SubscriptionPanel({ brain, onBrain, onUseGeminiKey }: { brain: Extract<
           </button>
         </p>
         {cloud ? (
-          <p className="flex items-center gap-2">
-            <Badge tone="neutral">Coming soon</Badge> {cloud.name}: {cloud.how}
+          <p>
+            <Badge tone="neutral" className="mr-1.5 align-[1px]">
+              Coming soon
+            </Badge>
+            <span className="font-medium text-foreground">{cloud.name}:</span> {cloud.how}
           </p>
         ) : null}
       </div>
@@ -300,8 +307,8 @@ function ByokPanel({
 
   return (
     <div className="flex flex-col gap-5 rounded-3xl border border-border bg-background-2/60 p-4 sm:p-5">
-      <div role="radiogroup" aria-label="Provider" className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-        {PROVIDERS.map((p) => {
+      <div role="radiogroup" aria-label="Provider" onKeyDown={onRadioGroupKeyDown} className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+        {PROVIDERS.map((p, i) => {
           const active = p.id === brain.provider;
           return (
             <button
@@ -309,6 +316,7 @@ function ByokPanel({
               type="button"
               role="radio"
               aria-checked={active}
+              tabIndex={radioTabIndex(active, i, !PROVIDERS.some((x) => x.id === brain.provider))}
               onClick={() => setProvider(p.id)}
               className={cn("flex items-center gap-2.5 rounded-2xl border bg-card p-2.5 text-left text-sm font-semibold transition", active ? "border-primary ring-2 ring-primary/20" : "border-border hover:border-foreground/25")}
             >

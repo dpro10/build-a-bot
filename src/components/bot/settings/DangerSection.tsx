@@ -39,7 +39,7 @@ export function DangerSection({ botId, botName }: { botId: string; botName: stri
         <div className="min-w-0 flex-1 text-sm">
           <div className="font-semibold">Delete {botName}</div>
           <p className="text-muted-foreground">
-            Erases {botName} for good: its chats, memories, notes, routines, receipts, channels and app connections.
+            Erases {botName} for good: its chats, memories, notes, meetings, routines, receipts, channels and app connections.
           </p>
         </div>
         <Button
@@ -60,7 +60,7 @@ export function DangerSection({ botId, botName }: { botId: string; botName: stri
             <DialogHeader>
               <DialogTitle>Delete {botName}?</DialogTitle>
               <DialogDescription>
-                Everything goes: chats, memories, notes, routines, receipts and connections. Your account and your other bots stay.
+                Everything goes: chats, memories, notes, meetings, routines, receipts and connections. Your account and your other bots stay.
               </DialogDescription>
             </DialogHeader>
             <DialogBody className="flex flex-col gap-2">

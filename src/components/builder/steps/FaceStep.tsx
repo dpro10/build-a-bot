@@ -4,6 +4,7 @@ import { Check } from "lucide-react";
 import { Avatar } from "@/components/avatar";
 import { AVATAR_IDS, AVATARS, COLORWAY_IDS, COLORWAYS, type AvatarId, type ColorwayId } from "@/lib/avatars";
 import { cn } from "@/lib/utils";
+import { onRadioGroupKeyDown, radioTabIndex } from "../radio-group";
 import { StepHeading } from "./StepHeading";
 
 export function FaceStep({ avatar, color, onAvatar, onColor }: { avatar: AvatarId; color: ColorwayId; onAvatar: (id: AvatarId) => void; onColor: (id: ColorwayId) => void }) {
@@ -11,8 +12,8 @@ export function FaceStep({ avatar, color, onAvatar, onColor }: { avatar: AvatarI
   return (
     <div className="flex flex-col gap-6">
       <StepHeading title="Pick a face" subtitle="Five originals, each with its own personality. You can change looks anytime." />
-      <div role="radiogroup" aria-label="Character" className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
-        {AVATAR_IDS.map((id) => {
+      <div role="radiogroup" aria-label="Character" onKeyDown={onRadioGroupKeyDown} className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+        {AVATAR_IDS.map((id, i) => {
           const a = AVATARS[id];
           const active = id === avatar;
           return (
@@ -21,6 +22,7 @@ export function FaceStep({ avatar, color, onAvatar, onColor }: { avatar: AvatarI
               type="button"
               role="radio"
               aria-checked={active}
+              tabIndex={radioTabIndex(active, i, !AVATAR_IDS.includes(avatar))}
               onClick={() => onAvatar(id)}
               className={cn(
                 "group relative flex flex-col items-center rounded-3xl border bg-card px-2 pt-3 pb-3.5 transition",
@@ -62,8 +64,8 @@ export function FaceStep({ avatar, color, onAvatar, onColor }: { avatar: AvatarI
           <span className="font-display text-lg font-semibold">Colors</span>
           <span className="text-sm text-muted-foreground">{COLORWAYS[color].name}</span>
         </div>
-        <div role="radiogroup" aria-label="Color" className="flex flex-wrap gap-2.5">
-          {COLORWAY_IDS.map((id) => {
+        <div role="radiogroup" aria-label="Color" onKeyDown={onRadioGroupKeyDown} className="flex flex-wrap gap-2.5">
+          {COLORWAY_IDS.map((id, i) => {
             const c = COLORWAYS[id];
             const active = id === color;
             return (
@@ -72,6 +74,7 @@ export function FaceStep({ avatar, color, onAvatar, onColor }: { avatar: AvatarI
                 type="button"
                 role="radio"
                 aria-checked={active}
+                tabIndex={radioTabIndex(active, i, !COLORWAY_IDS.includes(color))}
                 aria-label={c.name}
                 title={c.name}
                 onClick={() => onColor(id)}

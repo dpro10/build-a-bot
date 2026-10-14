@@ -105,7 +105,11 @@ export function BotHeader({
           <span className="hidden sm:inline">{live.paused ? "Resume" : "Stop"}</span>
         </Button>
       </div>
-      <nav className="no-scrollbar mx-auto flex w-full max-w-5xl gap-1 overflow-x-auto px-3 sm:px-5" aria-label="Bot sections">
+      {/* On phones the tabs scroll sideways; soft edges hint that there's more. */}
+      <nav
+        className="no-scrollbar mx-auto flex w-full max-w-5xl gap-1 overflow-x-auto px-3 [mask-image:linear-gradient(to_right,transparent,black_14px,black_calc(100%-14px),transparent)] sm:px-5 md:[mask-image:none]"
+        aria-label="Bot sections"
+      >
         {TABS.map((t) => {
           const href = `${base}${t.href}`;
           const active = t.href === "" ? pathname === base : pathname.startsWith(href);

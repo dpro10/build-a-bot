@@ -18,15 +18,14 @@ export function JobsSection({ botId, botName, initial }: { botId: string; botNam
   const [saving, setSaving] = React.useState(false);
   const dirty = [...jobs].sort().join() !== [...saved].sort().join();
 
-  const toggle = (id: string) =>
-    setJobs((cur) => {
-      if (cur.includes(id)) return cur.filter((j) => j !== id);
-      if (cur.length >= MAX) {
-        toast(`Pick up to ${MAX}.`);
-        return cur;
-      }
-      return [...cur, id];
-    });
+  const toggle = (id: string) => {
+    // The toast stays out of the state updater (React may run updaters twice).
+    if (!jobs.includes(id) && jobs.length >= MAX) {
+      toast(`Pick up to ${MAX}.`);
+      return;
+    }
+    setJobs((cur) => (cur.includes(id) ? cur.filter((j) => j !== id) : cur.length >= MAX ? cur : [...cur, id]));
+  };
 
   const save = async () => {
     setSaving(true);

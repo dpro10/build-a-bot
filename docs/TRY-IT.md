@@ -181,7 +181,8 @@ npm run dev
 - **The demo brain** only knows everyday requests. Anything else gets an honest "I'm on the demo brain" answer. With a Token Factory key, the real models answer.
 - **Subscriptions (the Bridge):** it runs on a computer that has the `claude` or `codex` CLI installed and signed in.
   - Pair it from **Bridge (your computer)**.
-  - The app shows `npx build-a-bot-bridge …`, which works once the Bridge is published to npm. Until then, run the same command from this folder as `node bridge/bab-bridge.mjs …` (for example `node bridge/bab-bridge.mjs pair ABCD-1234 --server http://localhost:3000`, then `node bridge/bab-bridge.mjs`).
+  - On your own computer the app shows commands that run from this folder, like `node bridge/bab-bridge.mjs pair ABCD-1234 --server http://localhost:3000`, then `node bridge/bab-bridge.mjs` to start it.
+  - On a deployment it shows `npx build-a-bot-bridge …`, which works once the Bridge is published to npm. Until then, set `BRIDGE_CLI=node bridge/bab-bridge.mjs` there and run the commands from your copy of the repo.
 
 **Meeting notes:**
 - The Mac app isn't signed or notarized yet. That needs a Developer ID certificate and notarization credentials in CI secrets, built on a Mac.

@@ -96,3 +96,81 @@ test("the builder keeps a draft and never stores the API key", async ({ page }) 
   await expect(page.getByText("Picked up where you left off")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Choose its brain" })).toBeVisible();
 });
+
+test("typing an API key and pressing Continue checks it and moves on in one click", async ({ page }) => {
+  await page.goto("/build");
+  await footer(page).getByRole("button", { name: /Continue/ }).click();
+  await page.getByLabel("Bot name").fill("Keyed");
+  await footer(page).getByRole("button", { name: /Continue/ }).click();
+  await page.getByRole("radio", { name: /Your own API key/ }).click();
+  await page.getByRole("radio", { name: /Custom$/ }).click();
+  // .invalid never resolves, so the demo server saves it without a live check (no network needed).
+  await page.getByLabel("Base URL").fill("https://llm.example.invalid/v1");
+  await page.getByLabel("Model").fill("my-model");
+  await page.getByLabel("API key").fill("sk-test-not-a-real-key-1234567890");
+  // The click blurs the key field, which starts a check; the click must wait for it, not get lost.
+  await footer(page).getByRole("button", { name: /Continue/ }).click();
+  await expect(page.getByRole("heading", { name: "Give it your apps" })).toBeVisible({ timeout: 20_000 });
+});
+
+test("a recipe brings its apps, its jobs' tools and its routines along", async ({ page }) => {
+  await page.goto("/r/meeting-buddy");
+  await page.getByRole("link", { name: /Make this bot/ }).first().click();
+  await expect(page.getByText(/Making your own/)).toBeVisible();
+  await page.getByRole("button", { name: /Skip to the brain/ }).click();
+  await footer(page).getByRole("button", { name: /Continue/ }).click();
+  await expect(page.getByRole("button", { name: /Meetings/ }).first()).toHaveAttribute("aria-pressed", "true");
+  for (const app of ["Meeting notes", "Google Calendar", "Notion", "Notes & lists"]) {
+    await expect(page.getByRole("button", { name: `Remove ${app}` })).toBeVisible();
+  }
+  await footer(page).getByRole("button", { name: /Continue/ }).click();
+  await footer(page).getByRole("button", { name: /Continue/ }).click();
+  // The recipe talks by email, and an email address is the one thing a recipe can't bring.
+  await page.getByLabel("Your email").fill("owner@example.com");
+  await footer(page).getByRole("button", { name: /Continue/ }).click();
+  await expect(page.getByRole("heading", { name: "Ready to meet Otto?" })).toBeVisible();
+  await expect(page.getByText("Routines from the recipe")).toBeVisible();
+  await expect(page.getByText("Friday follow-ups")).toBeVisible();
+  await expect(page.getByRole("switch", { name: "Morning brief" })).not.toBeChecked();
+  await page.getByText("I'm 18 or older").click();
+  await footer(page).getByRole("button", { name: /Bring Otto to life/ }).click();
+  await page.waitForURL(/\/app\/bots\/bot_/, { timeout: 30_000 });
+  const botId = page.url().match(/bots\/(bot_[a-z0-9]+)/)![1];
+  const { connections } = await (await page.request.get(`/api/bots/${botId}`)).json();
+  const ids = connections.map((c: { connectorId: string }) => c.connectorId);
+  for (const id of ["meetings", "google_calendar", "notion", "notes"]) expect(ids).toContain(id);
+  const { schedules } = await (await page.request.get(`/api/bots/${botId}/schedules`)).json();
+  expect(schedules.map((x: { title: string }) => x.title)).toEqual(["Friday follow-ups"]);
+});
+
+test("steps skipped with the step bar are still checked before the bot is made", async ({ page, isMobile }) => {
+  test.skip(isMobile, "phones have no step bar to jump with");
+  // Study buddy talks by text, so it needs a phone number, which a recipe can't bring.
+  await page.goto("/build?recipe=study-buddy");
+  await page.getByRole("navigation", { name: "Builder steps" }).getByRole("button", { name: /Go/ }).click();
+  await expect(page.getByRole("heading", { name: "Ready to meet Sprout?" })).toBeVisible();
+  await page.getByText("I'm 18 or older").click();
+  await footer(page).getByRole("button", { name: /to life/ }).click();
+  await expect(page.getByRole("heading", { name: "How do you want to talk?" })).toBeVisible();
+  await expect(footer(page).getByText("Add your mobile number for texts and calls")).toBeVisible();
+  await expect(page).toHaveURL(/\/build/);
+});
+
+test("the browser's Back and Forward move between builder steps", async ({ page }) => {
+  await page.goto("/build");
+  await footer(page).getByRole("button", { name: /Continue/ }).click();
+  await page.getByLabel("Bot name").fill("Hopper");
+  await footer(page).getByRole("button", { name: /Continue/ }).click();
+  await expect(page.getByRole("heading", { name: "Choose its brain" })).toBeVisible();
+  await expect(page).toHaveURL(/\?step=brain$/);
+  await page.goBack();
+  await expect(page.getByRole("heading", { name: "Name it" })).toBeVisible();
+  await expect(page.getByLabel("Bot name")).toHaveValue("Hopper");
+  await page.goForward();
+  await expect(page.getByRole("heading", { name: "Choose its brain" })).toBeVisible();
+  // A refresh keeps the step, and Back still goes one step back.
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Choose its brain" })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole("heading", { name: "Name it" })).toBeVisible();
+});

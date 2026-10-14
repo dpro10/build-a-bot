@@ -11,6 +11,22 @@ const deliverOn = z
   .optional()
   .describe("Where to deliver it. 'auto' = the owner's usual channel. 'voice' = a phone call.");
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "14:57" → "2:57 PM" (the owner's own clock, as typed). */
+function clockLabel(hhmm: string): string {
+  const m = /^(\d{1,2}):(\d{2})/.exec(hhmm);
+  if (!m) return hhmm;
+  const h = Number(m[1]);
+  return `${((h + 11) % 12) + 1}:${m[2]} ${h < 12 ? "AM" : "PM"}`;
+}
+
+/** "2026-10-14T14:57" (owner's local time) → "Oct 14, 2:57 PM". */
+function localLabel(at: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{1,2}:\d{2})/.exec(at);
+  return m ? `${MONTHS[Number(m[2]) - 1] ?? m[2]} ${Number(m[3])}, ${clockLabel(m[4])}` : `at ${at}`;
+}
+
 export const createReminder = defineTool({
   name: "create_reminder",
   title: "Set a reminder",
@@ -29,7 +45,7 @@ export const createReminder = defineTool({
   risk: "low",
   taints: false,
   ownerOnly: true,
-  summarize: (a) => `Reminder: “${a.text}” ${a.at ? `at ${a.at}` : a.daily_time ? `daily at ${a.daily_time}` : ""}`.trim(),
+  summarize: (a) => `Reminder: “${a.text}” ${a.at ? localLabel(a.at) : a.daily_time ? `daily at ${clockLabel(a.daily_time)}` : ""}`.trim(),
   async run(args, ctx) {
     const tz = ctx.owner.timezone || "UTC";
     let schedule: Schedule;
@@ -77,7 +93,7 @@ export const scheduleRoutine = defineTool({
   risk: "low",
   taints: false,
   ownerOnly: true,
-  summarize: (a) => `Routine “${a.title}” at ${a.daily_time}`,
+  summarize: (a) => `Routine “${a.title}” at ${clockLabel(a.daily_time)}`,
   async run(args, ctx) {
     const tz = ctx.owner.timezone || "UTC";
     const schedule: Schedule = { type: "daily", time: args.daily_time.padStart(5, "0"), days: args.days };

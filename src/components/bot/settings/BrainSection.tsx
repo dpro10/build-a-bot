@@ -121,7 +121,8 @@ export function BrainSection({
   const [customModel, setCustomModel] = React.useState(initial.kind === "byok" && !pdef.models.some((m) => m.id === initialByokModel) ? initialByokModel : "");
   const [baseUrl, setBaseUrl] = React.useState(initial.kind === "byok" ? (initial.baseUrl ?? "") : "");
   const [apiKey, setApiKey] = React.useState("");
-  const [keyState, setKeyState] = React.useState<{ state: "idle" | "checking" | "ok" | "error"; message?: string }>({ state: "idle" });
+  // "unverified": saved, but the provider couldn't be reached to check it (demo servers).
+  const [keyState, setKeyState] = React.useState<{ state: "idle" | "checking" | "ok" | "unverified" | "error"; message?: string }>({ state: "idle" });
 
   // Subscription
   const [sub, setSub] = React.useState<"claude" | "chatgpt">(initial.kind === "subscription" && initial.provider === "codex" ? "chatgpt" : "claude");
@@ -168,7 +169,7 @@ export function BrainSection({
           body: { provider, apiKey: key, ...(provider === "custom" ? { baseUrl: baseUrl.trim() } : {}) },
         });
         if (!res.ok) return setKeyState({ state: "error", message: res.message ?? "That key didn't work." });
-        setKeyState({ state: "ok", message: res.unverified ? res.message : "Key works." });
+        setKeyState(res.unverified ? { state: "unverified", message: res.message } : { state: "ok", message: "Key works." });
       } catch (err) {
         return setKeyState({ state: "error", message: (err as Error).message || "Couldn't check the key." });
       }
@@ -421,10 +422,10 @@ export function BrainSection({
                   role="status"
                   className={cn(
                     "flex items-center gap-2 text-sm",
-                    keyState.state === "error" ? "text-danger" : keyState.state === "ok" ? "text-success" : "text-muted-foreground",
+                    keyState.state === "error" ? "text-danger" : keyState.state === "ok" ? "text-success" : keyState.state === "unverified" ? "text-warning" : "text-muted-foreground",
                   )}
                 >
-                  {keyState.state === "checking" ? <Spinner /> : keyState.state === "ok" ? <Check className="size-4" /> : <CircleAlert className="size-4" />}
+                  {keyState.state === "checking" ? <Spinner /> : keyState.state === "ok" ? <Check className="size-4 shrink-0" /> : <CircleAlert className="size-4 shrink-0" />}
                   {keyState.state === "checking" ? "Checking your key…" : keyState.message}
                 </div>
               ) : null}

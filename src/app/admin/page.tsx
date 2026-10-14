@@ -9,7 +9,7 @@ import { getConnector } from "@/lib/connectors";
 import { CHANNEL_BY_KIND, type ChannelKind } from "@/lib/channels/catalog";
 import { AVATARS, isAvatarId } from "@/lib/avatars";
 import { TRUST, isTrustLevel } from "@/lib/trust";
-import { INCLUDED_MODELS } from "@/lib/models/catalog";
+import { INCLUDED_MODELS, PROVIDERS } from "@/lib/models/catalog";
 import { Logo } from "@/components/brand/Logo";
 import { Badge } from "@/components/ui/badge";
 
@@ -19,6 +19,29 @@ export const dynamic = "force-dynamic";
 const fmt = new Intl.NumberFormat("en-US");
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
 
+/** Subscription models are stored by the CLI's short names. */
+const SUBSCRIPTION_MODEL: Record<string, string> = {
+  default: "Subscription default",
+  opus: "Claude Opus (subscription)",
+  sonnet: "Claude Sonnet (subscription)",
+  haiku: "Claude Haiku (subscription)",
+};
+
+/** Approval and receipt states, in the words the app uses for them. */
+const STATUS_LABEL: Record<string, string> = {
+  executed: "Approved and done",
+  approved: "Approved",
+  pending: "Waiting",
+  pending_approval: "Waiting",
+  denied: "Declined",
+  expired: "Expired",
+  failed: "Approved, but failed",
+  ok: "Done",
+  blocked: "Blocked",
+  error: "Error",
+};
+const statusLabel = (k: string) => STATUS_LABEL[k] ?? k.charAt(0).toUpperCase() + k.slice(1).replace(/_/g, " ");
+
 export default async function AdminPage() {
   const user = await getUser();
   if (!isAdmin(user)) notFound();
@@ -26,7 +49,8 @@ export default async function AdminPage() {
 
   const label = {
     brain: (k: string) => ({ included: "Included models", byok: "Own API key", subscription: "Subscription (Bridge)" })[k] ?? k,
-    model: (k: string) => INCLUDED_MODELS.find((x) => x.id === k)?.label ?? k,
+    model: (k: string) =>
+      INCLUDED_MODELS.find((x) => x.id === k)?.label ?? PROVIDERS.flatMap((p) => p.models).find((x) => x.id === k)?.label ?? SUBSCRIPTION_MODEL[k] ?? k,
     trust: (k: string) => (isTrustLevel(k) ? `${TRUST[k].emoji} ${TRUST[k].name}` : k),
     avatar: (k: string) => (isAvatarId(k) ? AVATARS[k].character : k),
     channel: (k: string) => CHANNEL_BY_KIND[k as ChannelKind]?.name ?? k,
@@ -41,7 +65,7 @@ export default async function AdminPage() {
             <Logo className="text-lg" />
           </Link>
           <Badge tone="primary">Operator</Badge>
-          <span className="ml-auto text-xs text-muted-foreground">Updated {new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</span>
+          <span className="ml-auto text-xs text-muted-foreground">Updated {new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "UTC", timeZoneName: "short" })}</span>
         </div>
       </header>
       <main className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6">
@@ -101,10 +125,10 @@ export default async function AdminPage() {
             <Bars data={m.connectors} format={label.connector} />
           </Panel>
           <Panel title="Approvals (7 days)">
-            <Bars data={m.approvals} />
+            <Bars data={m.approvals} format={statusLabel} />
           </Panel>
           <Panel title="Receipts (7 days)">
-            <Bars data={m.receipts} />
+            <Bars data={m.receipts} format={statusLabel} />
             {m.errorKinds.length ? (
               <p className="mt-3 text-xs text-muted-foreground">Errors by kind: {m.errorKinds.map((e) => `${e.key} ${e.n}`).join(" · ")}</p>
             ) : null}
@@ -113,9 +137,11 @@ export default async function AdminPage() {
             <Bars data={mergeWaitlists(m.waitlistChannels, m.waitlist, label)} />
           </Panel>
           <Panel title="Most-cloned recipes">
-            {m.recipes.length ? (
+            {m.recipes.some((r) => r.clones > 0) ? (
               <ul className="flex flex-col gap-1.5 text-sm">
-                {m.recipes.map((r) => (
+                {m.recipes
+                  .filter((r) => r.clones > 0)
+                  .map((r) => (
                   <li key={r.slug} className="flex justify-between gap-2">
                     <Link href={`/r/${r.slug}`} className="truncate hover:underline">
                       {r.name}
@@ -125,7 +151,9 @@ export default async function AdminPage() {
                 ))}
               </ul>
             ) : (
-              <Empty />
+              <p className="text-sm text-muted-foreground">
+                {m.recipes.length ? `Nobody has made a copy yet. ${fmt.format(m.recipes.length)} shared so far.` : "Nothing shared yet."}
+              </p>
             )}
           </Panel>
         </section>
@@ -199,16 +227,43 @@ function Bars({ data, format = (k) => k }: { data: Breakdown; format?: (key: str
   );
 }
 
+/** All 14 days (UTC, like the query), so quiet days show as gaps instead of disappearing. */
+function lastDays(data: { day: string; n: number }[], days = 14): { day: string; n: number }[] {
+  const byDay = new Map(data.map((d) => [d.day, d.n]));
+  const today = new Date();
+  return Array.from({ length: days }, (_, i) => {
+    const d = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - (days - 1 - i)));
+    const day = d.toISOString().slice(0, 10);
+    return { day, n: byDay.get(day) ?? 0 };
+  });
+}
+
+const shortDay = (day: string) => new Date(`${day}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+
 function Spark({ data }: { data: { day: string; n: number }[] }) {
   if (!data.length) return <Empty />;
-  const max = Math.max(...data.map((d) => d.n), 1);
+  const series = lastDays(data);
+  const max = Math.max(...series.map((d) => d.n), 1);
+  const total = series.reduce((sum, d) => sum + d.n, 0);
   return (
-    <div className="flex h-28 items-end gap-1" role="img" aria-label={`Signups per day: ${data.map((d) => `${d.day} ${d.n}`).join(", ")}`}>
-      {data.map((d) => (
-        <div key={d.day} className="group relative flex-1" title={`${d.day}: ${d.n}`}>
-          <div className="w-full rounded-t-md bg-primary/80 transition group-hover:bg-primary" style={{ height: `${Math.max(4, (d.n / max) * 104)}px` }} />
-        </div>
-      ))}
+    <div>
+      <div className="mb-2 text-sm text-muted-foreground">
+        <span className="font-semibold text-foreground tabular-nums">{fmt.format(total)}</span> in 14 days
+      </div>
+      <div className="flex h-24 items-end gap-1" role="img" aria-label={`Signups per day: ${series.map((d) => `${shortDay(d.day)} ${d.n}`).join(", ")}`}>
+        {series.map((d) => (
+          <div key={d.day} className="group relative flex h-full flex-1 items-end" title={`${shortDay(d.day)}: ${fmt.format(d.n)}`}>
+            <div
+              className={d.n ? "w-full rounded-t-md bg-primary/80 transition group-hover:bg-primary" : "h-1 w-full rounded-full bg-muted"}
+              style={d.n ? { height: `${Math.max(6, (d.n / max) * 100)}%` } : undefined}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="mt-1.5 flex justify-between text-[11px] text-muted-foreground">
+        <span>{shortDay(series[0].day)}</span>
+        <span>Today</span>
+      </div>
     </div>
   );
 }

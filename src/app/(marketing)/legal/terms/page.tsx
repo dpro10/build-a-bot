@@ -121,6 +121,12 @@ export default function TermsPage() {
             expect to hear from you, follow the laws on calls, texts and email where you and they are, and respect requests to stop. If someone
             replies STOP to a text, your bot stops messaging them.
           </p>
+          <p>
+            <strong>Meeting notes.</strong> Your bot only takes notes in a meeting after you say yes, and it stays on your screen while it listens.
+            Recording laws differ by place, and some require everyone&apos;s permission, so you&apos;re responsible for letting people know and
+            getting their consent where the law requires it. Your bot offers a heads-up you can paste into the call&apos;s chat. If someone objects,
+            stop the notes; &ldquo;Stop and delete&rdquo; throws away everything from that call.
+          </p>
         </DocSection>
 
         <DocSection id="third-parties" title={title("third-parties")}>
@@ -141,7 +147,8 @@ export default function TermsPage() {
               <strong>Apps</strong>: the apps you connect, either directly or through Composio, which handles sign-in and actions for many of them;
             </li>
             <li>
-              <strong>Other building blocks</strong>: web search, payments (Stripe) and hosting.
+              <strong>Other building blocks</strong>: web search, speech-to-text for meeting notes (Groq, with Together AI as a backup), payments
+              (Stripe) and hosting.
             </li>
           </ul>
           <p>
@@ -175,7 +182,7 @@ export default function TermsPage() {
             </li>
             <li>
               <strong>Recipes you publish</strong> are public: anyone with the link can see them and make their own copy. Recipes never include
-              your keys, memories, contacts or messages. If you want a recipe you published taken down, contact us and we&apos;ll remove it.
+              your keys, memories, contacts or messages. You can stop sharing one at any time from your bot&apos;s Settings.
             </li>
           </ul>
         </DocSection>

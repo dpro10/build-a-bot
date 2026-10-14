@@ -157,7 +157,7 @@ export function ConnectorBrowser({
             >
               {c.icon}
               {c.label}
-              {c.count ? <span className={cn("text-xs", filter === c.id ? "opacity-70" : "opacity-60")}>{c.count}</span> : null}
+              {c.count ? <span className={cn("text-xs tabular-nums", filter === c.id ? "opacity-75" : "text-muted-foreground")}>{c.count}</span> : null}
             </button>
           ))}
         </div>
@@ -231,8 +231,9 @@ function ConnectorCard({ def, selected, added, onPick }: { def: ConnectorDef; se
     >
       <BrandTile icon={def.icon} size={40} className={cn(!available && "grayscale")} />
       <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-1.5">
-          <span className="truncate font-semibold">{def.name}</span>
+        {/* Badges wrap under the name when they don't fit, so the name itself never shrinks to a letter. */}
+        <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+          <span className="max-w-full min-w-0 truncate font-semibold">{def.name}</span>
           {def.sensitive ? (
             <Tooltip content="Money, health or identity data: changes always ask you first.">
               <span className="inline-flex text-warning" aria-label="Sensitive: always asks before changes">

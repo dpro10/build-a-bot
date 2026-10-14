@@ -17,7 +17,8 @@ function safeHref(href: string): string | null {
 function inline(text: string, keyBase: string): React.ReactNode[] {
   const out: React.ReactNode[] = [];
   // Tokens: `code`, **bold**, *italic*/_italic_, [text](url), bare URLs.
-  const re = /(`[^`\n]+`)|(\*\*[^*\n]+\*\*)|(\*[^*\n]+\*|_[^_\n]+_)|(\[[^\]\n]+\]\([^)\s]+\))|(https?:\/\/[^\s)<>]+)/g;
+  // Underscores inside a word (TAVILY_API_KEY, snake_case) are not italics.
+  const re = /(`[^`\n]+`)|(\*\*[^*\n]+\*\*)|(\*[^*\n]+\*|(?<![\p{L}\p{N}_])_[^_\n]+_(?![\p{L}\p{N}_]))|(\[[^\]\n]+\]\([^)\s]+\))|(https?:\/\/[^\s)<>]+)/gu;
   let last = 0;
   let m: RegExpExecArray | null;
   let i = 0;

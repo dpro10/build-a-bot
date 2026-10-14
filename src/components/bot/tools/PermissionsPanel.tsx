@@ -97,7 +97,7 @@ export function PermissionsPanel({
                     <span className="truncate">{cap.label}</span>
                     {rule ? (
                       <Tooltip content={`You set this. ${TRUST[trust].name} alone would ${base === "allow" ? "allow it" : base === "ask" ? "ask you" : "keep it off"}.`}>
-                        <span className="inline-flex size-1.5 shrink-0 rounded-full bg-primary" aria-label="Your rule" />
+                        <span className="inline-flex size-1.5 shrink-0 rounded-full bg-primary" role="img" aria-label="Your rule" />
                       </Tooltip>
                     ) : null}
                   </div>

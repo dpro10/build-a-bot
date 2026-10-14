@@ -59,14 +59,16 @@ export function ApprovalCard({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ decision }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast.error(data.error ?? "Couldn't do that");
+        toast.error(data.error ?? "Couldn't do that. Try again.");
         if (data.approval?.status) setStatus(data.approval.status);
         return;
       }
       setStatus(data.approval.status);
       onDecided?.({ ...approval, status: data.approval.status }, data.followUp ?? null);
+    } catch {
+      toast.error("Couldn't reach the server. Check your connection and try again.");
     } finally {
       setBusy(null);
     }
@@ -93,7 +95,7 @@ export function ApprovalCard({
           </div>
           <div className="mt-1 font-semibold leading-snug">{approval.title}</div>
           {webForm ? (
-            <WebFormPreview preview={webForm} compact={compact} />
+            <WebFormPreview preview={webForm} compact={compact} status={status} />
           ) : approval.detail ? (
             <pre className="scrollbar-thin mt-2 max-h-48 overflow-auto rounded-2xl bg-muted/70 p-3 font-sans text-[13px] leading-relaxed whitespace-pre-wrap text-foreground">
               {approval.detail}

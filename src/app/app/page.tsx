@@ -7,6 +7,7 @@ import { listBots } from "@/lib/data";
 import { Avatar } from "@/components/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { plainPreview } from "@/components/app/preview";
 import { TRUST, isTrustLevel } from "@/lib/trust";
 import { relativeTime } from "@/lib/utils";
 import type { AvatarId, ColorwayId } from "@/lib/avatars";
@@ -50,7 +51,7 @@ export default async function BotsHome({ searchParams }: { searchParams: Promise
                 </div>
               </div>
             </div>
-            <p className="line-clamp-2 min-h-10 text-sm text-muted-foreground">{lastMessage ? lastMessage.text : "No messages yet. Say hi!"}</p>
+            <p className="line-clamp-2 min-h-10 text-sm text-muted-foreground">{lastMessage ? plainPreview(lastMessage.text, 160) : "No messages yet. Say hi!"}</p>
             <div className="text-xs text-muted-foreground">{bot.lastActiveAt ? `Active ${relativeTime(bot.lastActiveAt)}` : `Born ${relativeTime(bot.createdAt)}`}</div>
           </Link>
         ))}

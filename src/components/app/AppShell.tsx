@@ -2,6 +2,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Dialog as D } from "radix-ui";
 import { Bell, CreditCard, Laptop, Menu, Plus, Settings, X } from "lucide-react";
 import { Avatar } from "@/components/avatar";
 import { Logo } from "@/components/brand/Logo";
@@ -28,8 +29,18 @@ export function AppShell({
   children: React.ReactNode;
 }) {
   const [open, setOpen] = React.useState(false);
+  const menuButton = React.useRef<HTMLButtonElement>(null);
   const pathname = usePathname();
   React.useEffect(() => setOpen(false), [pathname]);
+  // The drawer is for phones: close it if the window grows into the desktop layout.
+  React.useEffect(() => {
+    const wide = window.matchMedia("(min-width: 1024px)");
+    const onChange = () => {
+      if (wide.matches) setOpen(false);
+    };
+    wide.addEventListener("change", onChange);
+    return () => wide.removeEventListener("change", onChange);
+  }, []);
 
   const nav = (
     <SidebarContent bots={bots} pendingTotal={pendingTotal} planName={planName} pathname={pathname} anonymous={anonymous} />
@@ -41,7 +52,15 @@ export function AppShell({
 
       {/* Mobile top bar */}
       <div className="fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between border-b border-border bg-background/85 px-3 backdrop-blur-xl lg:hidden">
-        <button type="button" onClick={() => setOpen(true)} className="inline-flex size-10 items-center justify-center rounded-full hover:bg-muted" aria-label="Open menu">
+        <button
+          ref={menuButton}
+          type="button"
+          onClick={() => setOpen(true)}
+          className="inline-flex size-10 items-center justify-center rounded-full hover:bg-muted"
+          aria-label="Open menu"
+          aria-expanded={open}
+          aria-haspopup="dialog"
+        >
           <Menu className="size-5" />
         </button>
         <Link href="/app" className="flex items-center">
@@ -54,17 +73,29 @@ export function AppShell({
           ) : null}
         </Link>
       </div>
-      {open ? (
-        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => setOpen(false)} />
-          <div className="absolute inset-y-0 left-0 flex w-[86%] max-w-[320px] animate-[fade-up_0.2s_ease-out] flex-col bg-background shadow-lift">
-            <button type="button" onClick={() => setOpen(false)} className="absolute top-3 right-3 rounded-full p-2 hover:bg-muted" aria-label="Close menu">
+      {/* Phone menu: a drawer that traps focus, closes on Escape and gives focus back to the menu button. */}
+      <D.Root open={open} onOpenChange={setOpen}>
+        <D.Portal>
+          <D.Overlay className="fixed inset-0 z-50 bg-black/40 backdrop-blur-[2px] lg:hidden" />
+          <D.Content
+            aria-describedby={undefined}
+            onCloseAutoFocus={(e) => {
+              // Back to the menu button (it isn't a Radix trigger), unless a link moved focus on purpose.
+              if (menuButton.current && document.activeElement === document.body) {
+                e.preventDefault();
+                menuButton.current.focus();
+              }
+            }}
+            className="fixed inset-y-0 left-0 z-50 flex w-[86%] max-w-[320px] animate-[fade-up_0.2s_ease-out] flex-col bg-background shadow-lift outline-none lg:hidden"
+          >
+            <D.Title className="sr-only">Menu</D.Title>
+            <D.Close className="absolute top-3 right-3 rounded-full p-2 hover:bg-muted" aria-label="Close menu">
               <X className="size-5" />
-            </button>
+            </D.Close>
             {nav}
-          </div>
-        </div>
-      ) : null}
+          </D.Content>
+        </D.Portal>
+      </D.Root>
 
       {/* One screen tall: pages scroll inside, so the chat composer stays put on phones too. */}
       <main className="flex h-dvh min-w-0 flex-1 flex-col pt-14 lg:pt-0">
@@ -110,6 +141,7 @@ function SidebarContent({
               <Link
                 key={b.id}
                 href={`/app/bots/${b.id}`}
+                aria-current={active ? "page" : undefined}
                 className={cn(
                   "group flex items-center gap-3 rounded-2xl px-2 py-2 transition",
                   active ? "bg-card shadow-soft ring-1 ring-border" : "hover:bg-muted/70",
@@ -162,6 +194,7 @@ function NavItem({ href, icon, label, active, badge, trailing }: { href: string;
   return (
     <Link
       href={href}
+      aria-current={active ? "page" : undefined}
       className={cn("flex flex-1 items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition", active ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/70 hover:text-foreground")}
     >
       {icon}

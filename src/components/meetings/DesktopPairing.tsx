@@ -82,8 +82,9 @@ export function DesktopPairing() {
           </div>
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-3">
-          <span className="font-mono text-[34px] leading-tight font-bold tracking-[0.14em] sm:text-[40px]" aria-label={pairing.code.split("").join(" ")}>
-            {pairing.code}
+          <span className="font-mono text-[34px] leading-tight font-bold tracking-[0.14em] sm:text-[40px]">
+            <span aria-hidden>{pairing.code}</span>
+            <span className="sr-only">{pairing.code.split("").join(" ")}</span>
           </span>
           <CopyButton value={pairing.code} label="Copy" aria-label="Copy the pairing code" />
         </div>

@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { ago, useNow, whenLabel } from "@/components/bot/activity/time";
 import { RoutineDialog, blankForm, formFrom, type DeliverOption, type RoutineForm } from "./RoutineDialog";
 import { TEMPLATES, describeSchedule, isFinished, routineEmoji, type ScheduleView, type Template } from "./schedule";
+import { PLANS } from "@/lib/billing/plans";
 
 type DialogState = { open: boolean; initial: RoutineForm; editing: ScheduleView | null };
 
@@ -34,6 +35,27 @@ function normalize(row: ScheduleView & { description?: string }): ScheduleView {
     runCount: row.runCount ?? 0,
     createdAt: new Date(row.createdAt).toISOString(),
   };
+}
+
+/**
+ * The order the page opens with: routines that are on first, soonest next; reminders still
+ * to come first, finished ones last. It stays put after that, so a card doesn't jump away
+ * from under the switch you just flipped (new ones show up on top).
+ */
+function initialRank(list: ScheduleView[], now: Date): Map<string, number> {
+  const routines = list
+    .filter((s) => s.kind === "routine")
+    .sort((a, b) => Number(b.active) - Number(a.active) || (a.nextRunAt ?? "9").localeCompare(b.nextRunAt ?? "9"));
+  const reminders = list
+    .filter((s) => s.kind === "reminder")
+    .sort((a, b) => {
+      const fa = isFinished(a, now);
+      const fb = isFinished(b, now);
+      if (fa !== fb) return fa ? 1 : -1;
+      if (fa) return (b.lastRunAt ?? b.createdAt).localeCompare(a.lastRunAt ?? a.createdAt);
+      return Number(b.active) - Number(a.active) || (a.nextRunAt ?? "9").localeCompare(b.nextRunAt ?? "9");
+    });
+  return new Map([...routines, ...reminders].map((s, i) => [s.id, i]));
 }
 
 export function RoutinesView({
@@ -66,20 +88,15 @@ export function RoutinesView({
   const [deleting, setDeleting] = React.useState(false);
   const [running, setRunning] = React.useState<string | null>(null);
 
-  const routines = items
-    .filter((s) => s.kind === "routine")
-    .sort((a, b) => Number(b.active) - Number(a.active) || (a.nextRunAt ?? "9").localeCompare(b.nextRunAt ?? "9"));
-  const reminders = items
-    .filter((s) => s.kind === "reminder")
-    .sort((a, b) => {
-      const fa = isFinished(a, now);
-      const fb = isFinished(b, now);
-      if (fa !== fb) return fa ? 1 : -1;
-      if (fa) return (b.lastRunAt ?? b.createdAt).localeCompare(a.lastRunAt ?? a.createdAt);
-      return Number(b.active) - Number(a.active) || (a.nextRunAt ?? "9").localeCompare(b.nextRunAt ?? "9");
-    });
+  const [rank] = React.useState(() => initialRank(initial, new Date(serverNow)));
+  // Unranked (just made here, or new since the page opened) first, in the order they arrived.
+  const byRank = (a: ScheduleView, b: ScheduleView) => (rank.get(a.id) ?? -1) - (rank.get(b.id) ?? -1);
+  const routines = items.filter((s) => s.kind === "routine").sort(byRank);
+  const reminders = items.filter((s) => s.kind === "reminder").sort(byRank);
   const activeRoutines = routines.filter((r) => r.active).length;
   const atLimit = activeRoutines >= plan.limit;
+  const overLimit = activeRoutines > plan.limit;
+  const nextPlan = plan.id === "free" ? PLANS.plus : PLANS.pro;
   const nextUp = items
     .filter((s) => s.active && s.nextRunAt)
     .sort((a, b) => a.nextRunAt!.localeCompare(b.nextRunAt!))[0];
@@ -204,7 +221,7 @@ export function RoutinesView({
         <div className="flex flex-col justify-center gap-2 rounded-3xl border border-border bg-card p-4 shadow-soft">
           <div className="flex items-center justify-between gap-3 text-sm">
             <span className="font-semibold">
-              {activeRoutines} of {plan.limit} routines on
+              {overLimit ? `${activeRoutines} routines on · ${plan.name} includes ${plan.limit}` : `${activeRoutines} of ${plan.limit} routines on`}
             </span>
             <span className="flex items-center gap-2">
               <Badge tone="primary">{plan.name}</Badge>
@@ -224,8 +241,9 @@ export function RoutinesView({
         <div className="flex flex-col gap-3 rounded-3xl border border-primary/20 bg-primary-soft/60 p-4 sm:flex-row sm:items-center">
           <Sparkles className="size-5 shrink-0 text-primary" aria-hidden />
           <p className="min-w-0 flex-1 text-sm">
-            You&apos;re using all {plan.limit} routines on {plan.name}. {plan.id === "free" ? "Plus" : "Pro"} gives you up to{" "}
-            {plan.id === "free" ? 25 : 200}, or turn one off to make room.
+            {overLimit
+              ? `You have ${activeRoutines} routines on, and ${plan.name} includes ${plan.limit}. ${nextPlan.name} gives you up to ${nextPlan.limits.routines}, or turn some off.`
+              : `You're using all ${plan.limit} routines on ${plan.name}. ${nextPlan.name} gives you up to ${nextPlan.limits.routines}, or turn one off to make room.`}
           </p>
           <Button asChild size="sm">
             <Link href="/app/billing">See plans</Link>

@@ -9,13 +9,18 @@ import { Avatar } from "@/components/avatar";
 import { BrandTile } from "@/components/brand/icons";
 import { channelIcon } from "@/components/catalog/channel-icon";
 import { ALWAYS_ON } from "@/components/catalog/connector-meta";
-import { AVATARS, COLORWAYS, type AvatarMood } from "@/lib/avatars";
+import { AVATARS, COLORWAYS, type AvatarMood, type ColorwayId } from "@/lib/avatars";
 import { CHANNEL_BY_KIND } from "@/lib/channels/catalog";
 import { getConnector, type ConnectorDef } from "@/lib/connectors";
 import { INCLUDED_MODELS, PROVIDER_BY_ID, SUBSCRIPTIONS } from "@/lib/models/catalog";
 import { TRUST } from "@/lib/trust";
 import { cn } from "@/lib/utils";
 import type { BuilderState, StepId } from "./state";
+
+/** A wash of the colorway that reads well in both themes: a little of its color mixed into the card. */
+export function colorwayTint(color: ColorwayId, percent = 18): string {
+  return `color-mix(in oklab, ${COLORWAYS[color].base} ${percent}%, var(--card))`;
+}
 
 export function brainSummary(s: BuilderState): { title: string; sub: string } {
   const b = s.brain;
@@ -95,7 +100,7 @@ export function BotPreview({ state: s, step, stepIndex, typing }: { state: Build
 
   return (
     <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-lift">
-      <div className="relative flex flex-col items-center px-6 pt-6 pb-5" style={{ background: `radial-gradient(120% 90% at 50% 0%, ${color.tint} 0%, transparent 70%)` }}>
+      <div className="relative flex flex-col items-center px-6 pt-6 pb-5" style={{ background: `radial-gradient(120% 90% at 50% 0%, ${colorwayTint(s.color, 22)} 0%, transparent 70%)` }}>
         <div className="pointer-events-none absolute inset-0 opacity-50 dark:opacity-20" style={{ background: `radial-gradient(60% 50% at 50% 35%, ${color.light}55 0%, transparent 70%)` }} aria-hidden />
         <div key={`${step}-${speech(step, s)}`} className="relative z-10 mb-1 max-w-[260px] animate-pop rounded-2xl rounded-bl-md bg-card px-3.5 py-2 text-center text-sm font-medium shadow-soft ring-1 ring-border">
           {speech(step, s)}
@@ -107,8 +112,13 @@ export function BotPreview({ state: s, step, stepIndex, typing }: { state: Build
           <div className={cn("font-display text-2xl font-bold leading-tight", !s.name.trim() && "text-muted-foreground/80")}>{s.name.trim() || "Your bot"}</div>
           <div className="mt-1.5 flex flex-wrap justify-center gap-1">
             {a.traits.map((t) => (
-              <span key={t} className="rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ background: `${color.base}1f`, color: color.deep }}>
-                <span className="dark:brightness-[1.8]">{t}</span>
+              <span
+                key={t}
+                className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                // Half the colorway, half the text color: readable in both themes, even for Midnight.
+                style={{ background: `${color.base}1f`, color: `color-mix(in oklab, ${color.deep} 55%, var(--foreground))` }}
+              >
+                {t}
               </span>
             ))}
           </div>

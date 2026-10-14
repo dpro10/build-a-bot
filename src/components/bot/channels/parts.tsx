@@ -116,8 +116,10 @@ export function Mono({ children, className, big }: { children: React.ReactNode; 
 /** A big, copyable one-time code. */
 export function CodeDisplay({ code, label }: { code: string; label?: string }) {
   return (
-    <span aria-label={label ?? `Code ${code.split("").join(" ")}`} className="inline-flex items-center gap-1 rounded-2xl bg-primary-soft px-3 py-1.5 font-mono text-lg font-bold tracking-[0.25em] text-primary">
-      {code}
+    <span className="inline-flex items-center gap-1 rounded-2xl bg-primary-soft px-3 py-1.5 font-mono text-lg font-bold tracking-[0.25em] text-primary">
+      {/* Read out digit by digit; shown as one big code. */}
+      <span aria-hidden>{code}</span>
+      <span className="sr-only">{label ?? `Code ${code.split("").join(" ")}`}</span>
     </span>
   );
 }
