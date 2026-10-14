@@ -101,4 +101,7 @@ export async function housekeeping(db: Db, now = new Date()) {
   const { wrapUpStaleMeetings, rescueStuckNotes } = await import("@/lib/meetings/notes");
   await wrapUpStaleMeetings(db, now);
   await rescueStuckNotes(db, now);
+  // Transcripts past each bot's retention setting (90 days by default) go; the notes stay.
+  const { expireTranscripts } = await import("@/lib/meetings");
+  await expireTranscripts(db, now);
 }

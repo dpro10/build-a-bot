@@ -21,3 +21,6 @@ coverage/
 .vercel
 bridge/node_modules/
 bridge/dist/
+desktop/node_modules/
+desktop/dist/
+desktop/test-results/

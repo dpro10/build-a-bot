@@ -67,6 +67,30 @@ export const FEATURED_RECIPES: FeaturedRecipe[] = [
   },
   {
     version: 1,
+    slug: "meeting-buddy",
+    name: "Otto",
+    avatar: "otto",
+    color: "grape",
+    tagline: "Takes notes in your calls and turns them into action items.",
+    who: "People who live in meetings",
+    jobs: ["meetings", "calendar", "work"],
+    instructions:
+      "After each meeting, lead with decisions and action items, then a short summary. Use people's names when they're said. Offer to draft a recap email, but never send it without showing me first.",
+    trust: "ask",
+    connectors: ["meetings", "google_calendar", "notion"],
+    channels: ["telegram", "email"],
+    routines: [
+      {
+        title: "Friday follow-ups",
+        instruction: "Look at this week's meetings and list the action items still open, grouped by person, with the meeting each came from.",
+        time: "16:00",
+        days: [5],
+      },
+    ],
+    highlights: ["Asks before it listens", "Notes, decisions and action items", "Friday list of open follow-ups"],
+  },
+  {
+    version: 1,
     slug: "study-buddy",
     name: "Sprout",
     avatar: "sprout",

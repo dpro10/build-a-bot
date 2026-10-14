@@ -2,7 +2,7 @@
  * This month's usage against the plan's limits. Server-component safe.
  */
 import * as React from "react";
-import { Bot, KeyRound, MessageCircle, MessageSquareText, Phone, Search } from "lucide-react";
+import { AudioLines, Bot, KeyRound, MessageCircle, MessageSquareText, Phone, Search } from "lucide-react";
 import { Progress } from "@/components/ui/misc";
 import type { Plan } from "@/lib/billing/plans";
 import { cn } from "@/lib/utils";
@@ -13,6 +13,7 @@ export type UsageNumbers = {
   searches: number;
   voiceMinutes: number;
   smsSegments: number;
+  meetingMinutes: number;
   bots: number;
 };
 
@@ -53,6 +54,13 @@ const METERS: MeterDef[] = [
     hint: "Counted in segments of about 160 characters.",
     locked: "Texting your bot starts on Plus.",
     icon: <MessageSquareText className="size-4" />,
+  },
+  {
+    key: "meetingMinutes",
+    label: "Meeting notes",
+    hint: "Minutes of calls your bots took notes in.",
+    locked: "Meeting notes aren't on this plan.",
+    icon: <AudioLines className="size-4" />,
   },
   {
     key: "bots",

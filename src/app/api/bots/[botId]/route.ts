@@ -37,6 +37,7 @@ const patchSchema = z.object({
       dailyActions: z.number().int().min(0).max(1000).optional(),
       spendCapUsd: z.number().min(0).max(10000).optional(),
       quietHours: z.object({ start: z.string().regex(/^\d{2}:\d{2}$/), end: z.string().regex(/^\d{2}:\d{2}$/) }).nullable().optional(),
+      transcriptDays: z.number().int().min(1).max(3650).nullable().optional(),
     })
     .optional(),
   brain: z

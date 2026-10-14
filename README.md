@@ -21,6 +21,7 @@ Anyone makes their own AI agent in about a minute: pick a face, give it a name, 
   - Hard limits apply even under Full faith: prompt-injection guard, no secrets out, money off without a cap, bulk deletes ask, quiet hours.
   - STOP works from any channel, and every action gets an append-only receipt.
 - **Channels, several at once:** web, phone calls and texts (Twilio), email (its own brand-free address), Telegram (one-tap managed bot), Discord (`/ask`), Slack (per-bot app). WhatsApp and iMessage are on a waitlist.
+- **Meeting notes (beta):** the desktop app notices when a call starts, and the bot peeks up from the bottom of the screen to ask "Want me to take notes?". While it listens it stays there with a red dot and a timer. It writes a summary, decisions and action items, sends them to you, and can answer questions about past meetings. It never records without a yes; the audio is thrown away once it's text. The Meetings tab does the same in Chrome or Edge.
 - **Web actions (beta):** it browses sites and fills in forms in a cloud browser (Browser Use Cloud). Before anything is sent, the owner sees every field it filled and a picture of the form, and taps to send. Payment pages, card details, passwords and logins are refused in code.
 - **The dashboard:**
   - Chat with inline approvals.
@@ -119,6 +120,7 @@ Then the bot messages them first, within a minute.
 ## Files
 
 - `BUILD.md`: the first build brief (rules still apply).
+- `desktop/`: the desktop app for meeting notes (Electron).
 - `docs/ARCHITECTURE.md`, `docs/DEPLOY.md`: how it works and how to ship it.
 - `docs/research/`: integration, MCP/brains, connectors and web-actions research (2026-10-14).
 - `docs/DECISIONS.md`: the workspace's memory notes (decisions, gotchas, open threads), copied from Cookbook.

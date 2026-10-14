@@ -51,7 +51,16 @@ export type MeetingView = {
   notesBy: string | null;
   /** The notes are being written on the owner's computer (Bridge). */
   waitingForComputer: boolean;
+  /** One microphone in a room: lines are labeled "Room", not the owner. */
+  inPerson: boolean;
+  /** The transcript was deleted (by the owner or the retention setting); the notes stay. */
+  transcriptDeleted: boolean;
+  /** The owner copied the heads-up for the call (before or during the recording). */
+  noticeCopied: boolean;
 };
+
+/** Transcripts are kept this long unless the owner picks otherwise (notes stay until deleted). */
+export const DEFAULT_TRANSCRIPT_DAYS = 90;
 
 export type SegmentView = { id: string; track: MeetingTrack; speaker: string; startMs: number; endMs: number; text: string; createdAt: string };
 
@@ -74,6 +83,9 @@ export function meetingView(m: Meeting): MeetingView {
     error: m.error,
     notesBy: typeof meta.notesBy === "string" ? meta.notesBy : null,
     waitingForComputer: m.status === "processing" && meta.notesVia === "bridge",
+    inPerson: meta.inPerson === true,
+    transcriptDeleted: typeof meta.transcriptDeletedAt === "string",
+    noticeCopied: Boolean((meta.consent as { noticeCopied?: boolean } | undefined)?.noticeCopied),
   };
 }
 
@@ -136,7 +148,7 @@ export function clock(ms: number): string {
 export function transcriptLines(segments: Pick<MeetingSegment, "startMs" | "speaker" | "track" | "text">[], ownerLabel: string): string[] {
   return segments
     .filter((s) => s.text.trim())
-    .map((s) => `[${clock(s.startMs)}] ${s.track === "mic" ? ownerLabel : s.speaker || "Others"}: ${s.text.trim()}`);
+    .map((s) => `[${clock(s.startMs)}] ${s.track === "mic" && s.speaker !== "Room" ? ownerLabel : s.speaker || "Others"}: ${s.text.trim()}`);
 }
 
 export function formatDuration(sec: number): string {
@@ -152,7 +164,18 @@ export function formatDuration(sec: number): string {
 
 export async function startMeeting(
   db: Db,
-  input: { bot: Bot; owner: User; source: "browser" | "desktop"; app?: string; title?: string; deviceId?: string | null },
+  input: {
+    bot: Bot;
+    owner: User;
+    source: "browser" | "desktop";
+    app?: string;
+    title?: string;
+    deviceId?: string | null;
+    /** One microphone in a room (no call audio). */
+    inPerson?: boolean;
+    /** The owner copied the heads-up for the call before starting. */
+    consentNotice?: boolean;
+  },
 ): Promise<{ ok: true; meeting: Meeting } | MeetingFailure> {
   const { bot, owner } = input;
   if (bot.status === "paused") return { ok: false, status: 409, code: "paused", error: `${bot.name} is paused. Resume it to take notes.` };
@@ -189,7 +212,12 @@ export async function startMeeting(
       deviceId: input.deviceId ?? null,
       status: "recording",
       startedAt: now,
-      meta: input.title?.trim() ? { renamed: true } : {},
+      meta: {
+        ...(input.title?.trim() ? { renamed: true } : {}),
+        ...(input.inPerson ? { inPerson: true } : {}),
+        // Proof that we asked: who said yes, when, where, and whether they told the others.
+        consent: { acceptedAt: now.toISOString(), via: input.source, deviceId: input.deviceId ?? null, noticeCopied: Boolean(input.consentNotice) },
+      },
     })
     .returning();
   await receipt(db, bot, "meeting", "ok", `Started taking notes${app === "other" || app === "browser" ? "" : ` in ${meetingAppName(app)}`}`, {
@@ -259,7 +287,7 @@ export async function addChunk(db: Db, input: ChunkInput): Promise<{ ok: true; s
     }
   }
 
-  const speaker = track === "mic" ? "You" : "Others";
+  const speaker = track === "mic" ? ((meeting.meta as { inPerson?: boolean } | null)?.inPerson ? "Room" : "You") : "Others";
   const rows = segments.length
     ? segments.map((s, i) => ({
         id: sortableId("seg"),
@@ -315,6 +343,54 @@ export async function setActionItemDone(db: Db, meeting: Meeting, index: number,
   items[index] = { ...items[index], done };
   const [updated] = await db.update(schema.meetings).set({ actionItems: items, updatedAt: new Date() }).where(eq(schema.meetings.id, meeting.id)).returning();
   return updated;
+}
+
+export async function markNoticeCopied(db: Db, meeting: Meeting): Promise<Meeting> {
+  const meta = (meeting.meta ?? {}) as Record<string, unknown>;
+  const consent = { ...((meta.consent as Record<string, unknown>) ?? {}), noticeCopied: true, noticeCopiedAt: new Date().toISOString() };
+  const [updated] = await db.update(schema.meetings).set({ meta: { ...meta, consent }, updatedAt: new Date() }).where(eq(schema.meetings.id, meeting.id)).returning();
+  return updated ?? meeting;
+}
+
+/** Throw away the transcript, keep the notes. */
+export async function deleteTranscript(db: Db, bot: Bot, meeting: Meeting, by: "owner" | "retention" = "owner"): Promise<Meeting> {
+  await db.delete(schema.meetingSegments).where(eq(schema.meetingSegments.meetingId, meeting.id));
+  const [updated] = await db
+    .update(schema.meetings)
+    .set({ meta: { ...(meeting.meta ?? {}), transcriptDeletedAt: new Date().toISOString(), transcriptDeletedBy: by }, updatedAt: new Date() })
+    .where(eq(schema.meetings.id, meeting.id))
+    .returning();
+  if (by === "owner") await receipt(db, bot, "meeting", "ok", `Deleted the transcript of “${truncate(meeting.title, 80)}” (kept the notes)`, { meetingId: meeting.id });
+  return updated ?? meeting;
+}
+
+/** Retention: transcripts older than each bot's setting (90 days unless changed) are deleted; notes stay. */
+export async function expireTranscripts(db: Db, now = new Date()) {
+  const rows = await db
+    .select({ meeting: schema.meetings, limits: schema.bots.limits })
+    .from(schema.meetings)
+    .innerJoin(schema.bots, eq(schema.bots.id, schema.meetings.botId))
+    .where(
+      and(
+        inArray(schema.meetings.status, ["ready", "failed"]),
+        lt(schema.meetings.startedAt, new Date(now.getTime() - 86400_000)),
+        sql`(${schema.meetings.meta}->>'transcriptDeletedAt') is null`,
+      ),
+    )
+    .orderBy(asc(schema.meetings.startedAt))
+    .limit(200);
+  let expired = 0;
+  for (const { meeting, limits } of rows) {
+    const days = limits?.transcriptDays === null ? null : (limits?.transcriptDays ?? DEFAULT_TRANSCRIPT_DAYS);
+    if (days === null || meeting.startedAt.getTime() > now.getTime() - days * 86400_000) continue;
+    await db.delete(schema.meetingSegments).where(eq(schema.meetingSegments.meetingId, meeting.id));
+    await db
+      .update(schema.meetings)
+      .set({ meta: { ...(meeting.meta ?? {}), transcriptDeletedAt: now.toISOString(), transcriptDeletedBy: "retention" } })
+      .where(eq(schema.meetings.id, meeting.id));
+    expired++;
+  }
+  return expired;
 }
 
 export async function deleteMeeting(db: Db, bot: Bot, meeting: Meeting) {

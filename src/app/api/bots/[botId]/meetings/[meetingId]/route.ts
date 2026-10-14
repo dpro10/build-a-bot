@@ -3,7 +3,7 @@ import { after } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { schema } from "@/lib/db";
 import { apiError, json, parseJson, type RouteCtx } from "@/lib/api";
-import { deleteMeeting, getMeeting, getSegments, meetingView, renameMeeting, segmentView, setActionItemDone } from "@/lib/meetings";
+import { deleteMeeting, deleteTranscript, getMeeting, getSegments, markNoticeCopied, meetingView, renameMeeting, segmentView, setActionItemDone } from "@/lib/meetings";
 import { meetingAuth } from "@/lib/meetings/auth";
 import { writeMeetingNotes } from "@/lib/meetings/notes";
 
@@ -37,13 +37,23 @@ export async function PATCH(req: Request, ctx: Ctx) {
       actionItem: z.object({ index: z.number().int().min(0).max(100), done: z.boolean() }).optional(),
       /** Write the notes again (e.g. after they failed). */
       rewrite: z.literal(true).optional(),
+      /** The owner copied the heads-up for the call. */
+      noticeCopied: z.literal(true).optional(),
+      /** Throw away the transcript, keep the notes. */
+      deleteTranscript: z.literal(true).optional(),
     }),
   );
   if (!parsed.ok) return parsed.res;
   if (parsed.data.title) meeting = await renameMeeting(a.db, meeting, parsed.data.title);
   if (parsed.data.actionItem) meeting = await setActionItemDone(a.db, meeting, parsed.data.actionItem.index, parsed.data.actionItem.done);
+  if (parsed.data.noticeCopied) meeting = await markNoticeCopied(a.db, meeting);
+  if (parsed.data.deleteTranscript) {
+    if (meeting.status === "recording" || meeting.status === "processing") return apiError(409, "Wait until the notes are written, then delete the transcript.");
+    meeting = await deleteTranscript(a.db, a.bot, meeting, "owner");
+  }
   if (parsed.data.rewrite) {
     if (meeting.status === "recording" || meeting.status === "processing") return apiError(409, "The notes are already on their way.");
+    if ((meeting.meta as { transcriptDeletedAt?: string } | null)?.transcriptDeletedAt) return apiError(409, "The transcript was deleted, so there's nothing to write new notes from.");
     const meta = { ...(meeting.meta ?? {}) } as Record<string, unknown>;
     delete meta.notesStartedAt;
     delete meta.notesVia;

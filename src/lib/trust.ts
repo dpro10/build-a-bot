@@ -89,6 +89,7 @@ export const HARD_LIMITS = [
   "It never sends passwords, API keys or other secrets anywhere.",
   "Money is off unless you set a monthly cap, and it can never exceed it.",
   "Changes in money, health or identity apps, and forms sent on websites, always wait for your tap.",
+  "It only listens to a meeting after you say yes, and it stays on your screen the whole time it's listening.",
   "Messages it sends to other people are labeled as coming from your AI assistant.",
   "Every action gets a receipt you can review.",
 ] as const;

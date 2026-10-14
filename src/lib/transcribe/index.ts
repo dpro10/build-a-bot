@@ -37,26 +37,39 @@ export type TranscribeInput = {
 
 type Preset = { baseUrl: string; model: string; label: string };
 
-/** Defaults per provider. Any of them can be overridden with TRANSCRIBE_BASE_URL / TRANSCRIBE_MODEL. */
+/**
+ * Providers with an OpenAI-shaped endpoint that returns segment timestamps (verbose_json) for webm/ogg.
+ * Nebius Token Factory has no speech-to-text model (docs/research/meetings-2026-10-14.md §4.1).
+ */
 export const TRANSCRIBE_PRESETS: Record<string, Preset> = {
+  // ~$0.04 per audio hour, billed at least 10 s per request; the free tier is 7,200 audio-seconds an hour.
   groq: { baseUrl: "https://api.groq.com/openai/v1", model: "whisper-large-v3-turbo", label: "Whisper large-v3 turbo on Groq" },
+  // ~$0.09 per audio hour; also offers nvidia/parakeet-tdt-0.6b-v3 and speaker separation (diarize).
+  together: { baseUrl: "https://api.together.ai/v1", model: "openai/whisper-large-v3", label: "Whisper large-v3 on Together AI" },
+  // whisper-1 returns timestamps; the gpt-4o transcribe models return plain text (handled below).
   openai: { baseUrl: "https://api.openai.com/v1", model: "whisper-1", label: "Whisper on OpenAI" },
-  fireworks: { baseUrl: "https://audio-turbo.us-virginia-1.direct.fireworks.ai/v1", model: "whisper-v3-turbo", label: "Whisper v3 turbo on Fireworks" },
-  deepinfra: { baseUrl: "https://api.deepinfra.com/v1/openai", model: "openai/whisper-large-v3-turbo", label: "Whisper large-v3 turbo on DeepInfra" },
-  together: { baseUrl: "https://api.together.xyz/v1", model: "openai/whisper-large-v3", label: "Whisper large-v3 on Together" },
+  // Any OpenAI-compatible server: speaches/faster-whisper, whisper.cpp's server, LocalAI…
   custom: { baseUrl: "", model: "whisper-1", label: "Your speech-to-text server" },
 };
 
 const DEFAULT_PROVIDER = "groq";
 
-export function transcriptionSetup(): { provider: string; baseUrl: string; model: string; label: string } | null {
-  const t = config.transcribe;
+type Setup = { provider: string; baseUrl: string; model: string; label: string; apiKey: string };
+
+function resolveSetup(t: { provider?: string; apiKey?: string; baseUrl?: string; model?: string }): Setup | null {
   if (!t.apiKey) return null;
   const provider = t.provider && TRANSCRIBE_PRESETS[t.provider] ? t.provider : t.baseUrl ? "custom" : DEFAULT_PROVIDER;
   const preset = TRANSCRIBE_PRESETS[provider];
   const baseUrl = (t.baseUrl ?? preset.baseUrl).replace(/\/$/, "");
   if (!baseUrl) return null;
-  return { provider, baseUrl, model: t.model ?? preset.model, label: preset.label };
+  return { provider, baseUrl, model: t.model ?? preset.model, label: preset.label, apiKey: t.apiKey };
+}
+
+export function transcriptionSetup(): Omit<Setup, "apiKey"> | null {
+  const s = resolveSetup(config.transcribe);
+  if (!s) return null;
+  const { apiKey: _k, ...rest } = s;
+  return rest;
 }
 
 /** Meeting notes can run: a real speech-to-text key, or demo mode. */
@@ -113,11 +126,21 @@ export function cleanSegments(raw: VerboseSegment[], durationMs: number): Transc
 }
 
 export async function transcribe(input: TranscribeInput): Promise<Transcription> {
-  const setup = transcriptionSetup();
-  if (!setup) {
+  const primary = resolveSetup(config.transcribe);
+  if (!primary) {
     if (!demoMode) throw new TranscriptionError("Meeting notes aren't set up on this server yet.", false);
     return { segments: demoTranscription(input.track, input.chunk, input.durationMs), provider: "demo", model: "demo", simulated: true };
   }
+  try {
+    return await transcribeWith(primary, input);
+  } catch (err) {
+    const fallback = resolveSetup(config.transcribe.fallback);
+    if (fallback && err instanceof TranscriptionError && err.retryable) return transcribeWith(fallback, input);
+    throw err;
+  }
+}
+
+async function transcribeWith(setup: Setup, input: TranscribeInput): Promise<Transcription> {
   const ext = audioExtension(input.mime);
   if (!ext) throw new TranscriptionError(`Unsupported audio format: ${input.mime}`, false);
 
@@ -130,12 +153,17 @@ export async function transcribe(input: TranscribeInput): Promise<Transcription>
     if (input.language) form.append("language", input.language);
     if (input.prompt) form.append("prompt", input.prompt.slice(-600));
     form.append("temperature", "0");
-    return fetchWithTimeout(`${setup.baseUrl}/audio/transcriptions`, {
-      method: "POST",
-      headers: { authorization: `Bearer ${config.transcribe.apiKey}` },
-      body: form,
-      timeoutMs: 90_000,
-    });
+    try {
+      return await fetchWithTimeout(`${setup.baseUrl}/audio/transcriptions`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${setup.apiKey}` },
+        body: form,
+        timeoutMs: 90_000,
+      });
+    } catch {
+      // Timeouts and dropped connections: the recorder retries the chunk.
+      throw new TranscriptionError("Couldn't reach speech-to-text.", true);
+    }
   };
 
   let res = await send("verbose_json");

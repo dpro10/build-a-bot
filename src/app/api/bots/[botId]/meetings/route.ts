@@ -22,6 +22,8 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string }>) {
     z.object({
       app: z.enum(MEETING_APP_IDS).optional(),
       title: z.string().trim().max(120).optional(),
+      inPerson: z.boolean().optional(),
+      consentNotice: z.boolean().optional(),
     }),
   );
   if (!parsed.ok) return parsed.res;
@@ -34,6 +36,8 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string }>) {
     app: parsed.data.app,
     title: parsed.data.title,
     deviceId: a.device?.id ?? null,
+    inPerson: parsed.data.inPerson,
+    consentNotice: parsed.data.consentNotice,
   });
   if (!res.ok) return apiError(res.status, res.error, { code: res.code, upgrade: res.upgrade, meetingId: res.meetingId });
   return json({ meeting: meetingView(res.meeting), chunkMs: CHUNK_MS }, { status: 201 });

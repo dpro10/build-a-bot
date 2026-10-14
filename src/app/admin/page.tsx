@@ -72,6 +72,7 @@ export default async function AdminPage() {
               <Kv k="Tokens in / out" v={`${fmt.format(m.usage.tokensIn)} / ${fmt.format(m.usage.tokensOut)}`} />
               <Kv k="Searches" v={fmt.format(m.usage.searches)} />
               <Kv k="Voice minutes" v={fmt.format(m.usage.voiceMinutes)} />
+              <Kv k="Meeting minutes" v={fmt.format(m.usage.meetingMinutes)} />
               <Kv k="Text segments" v={fmt.format(m.usage.smsSegments)} />
             </dl>
           </Panel>

@@ -23,6 +23,8 @@ export type BuddyAction =
   | "pause"
   | "resume"
   | "stop"
+  /** Stop and delete everything captured so far (someone on the call objected). */
+  | "discard"
   /** open the meeting (or the app) in the browser */
   | "open"
   /** tuck the bot away (done/error) */
