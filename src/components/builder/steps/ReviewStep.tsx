@@ -1,12 +1,15 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { Bot, Brain, Check, Clock, MessageCircle, Puzzle, ShieldCheck, Sparkles, UserRound } from "lucide-react";
+import { Bot, Brain, Check, Clock, MessageCircle, Puzzle, ShieldCheck, Sparkles, Sun, UserRound } from "lucide-react";
 import { Avatar } from "@/components/avatar";
 import { BrandTile } from "@/components/brand/icons";
 import { channelIcon } from "@/components/catalog/channel-icon";
 import { ALWAYS_ON, countsTowardLimit } from "@/components/catalog/connector-meta";
 import { Textarea } from "@/components/ui/input";
+import { Segmented } from "@/components/ui/segmented";
+import { Select } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { AVATARS, COLORWAYS } from "@/lib/avatars";
 import { PLANS, planAllowsChannel, type PlanId } from "@/lib/billing/plans";
 import { CHANNEL_BY_KIND } from "@/lib/channels/catalog";
@@ -38,9 +41,21 @@ export function planAdjustments(s: BuilderState, plan: PlanId, demo: boolean): s
   return out;
 }
 
+const BRIEF_TIMES = Array.from({ length: 13 }, (_, i) => {
+  const h = 5 + Math.floor(i / 2);
+  const m = i % 2 ? "30" : "00";
+  return `${String(h).padStart(2, "0")}:${m}`;
+});
+
+function formatTime(t: string) {
+  const [h, m] = t.split(":").map(Number);
+  return `${((h + 11) % 12) + 1}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
+}
+
 export function ReviewStep({
   state: s,
   onInstructions,
+  onBrief,
   onAge,
   goTo,
   plan,
@@ -50,6 +65,7 @@ export function ReviewStep({
 }: {
   state: BuilderState;
   onInstructions: (v: string) => void;
+  onBrief: (v: BuilderState["brief"]) => void;
   onAge: (v: boolean) => void;
   goTo: (step: StepId) => void;
   plan: PlanId;
@@ -126,6 +142,44 @@ export function ReviewStep({
             <span className="text-muted-foreground">{timezone.replace(/_/g, " ")} (from your device)</span>
           </Row>
         </dl>
+      </div>
+
+      <div className={cn("rounded-3xl border p-4 transition sm:p-5", s.brief?.on ? "border-accent/70 bg-accent/10" : "border-border bg-card")}>
+        <div className="flex items-start gap-3">
+          <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-2xl", s.brief?.on ? "bg-accent text-accent-foreground" : "bg-muted text-muted-foreground")}>
+            <Sun className="size-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <label htmlFor="brief-on" className="font-display text-lg font-semibold">
+              Morning brief
+            </label>
+            <p className="text-sm text-muted-foreground">
+              {name} reaches out every morning with what matters today — your calendar, emails that need a reply, reminders and the weather. Turn it off anytime.
+            </p>
+          </div>
+          <Switch id="brief-on" checked={Boolean(s.brief?.on)} onCheckedChange={(on) => onBrief({ ...s.brief, on })} aria-label="Morning brief" />
+        </div>
+        {s.brief?.on ? (
+          <div className="mt-3 flex flex-wrap items-center gap-3 pl-[52px]">
+            <Select size="sm" aria-label="Brief time" value={s.brief.time} onChange={(e) => onBrief({ ...s.brief, time: e.target.value })} className="w-32">
+              {BRIEF_TIMES.map((t) => (
+                <option key={t} value={t}>
+                  {formatTime(t)}
+                </option>
+              ))}
+            </Select>
+            <Segmented
+              size="sm"
+              aria-label="Which days"
+              value={s.brief.weekdays ? "weekdays" : "daily"}
+              onChange={(v) => onBrief({ ...s.brief, weekdays: v === "weekdays" })}
+              options={[
+                { value: "daily", label: "Every day" },
+                { value: "weekdays", label: "Weekdays" },
+              ]}
+            />
+          </div>
+        ) : null}
       </div>
 
       <div className="flex flex-col gap-2">

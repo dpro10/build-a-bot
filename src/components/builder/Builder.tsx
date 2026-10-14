@@ -70,7 +70,7 @@ export function Builder({ plan, demo, live, recipe, botCount, signedIn }: Builde
     if (!recipe) {
       const draft = loadDraft();
       if (draft && (draft.state.name || draft.step > 0)) {
-        setState((s) => ({ ...s, ...draft.state, ageConfirmed: false }));
+        setState((s) => ({ ...s, ...draft.state, brief: draft.state.brief ?? s.brief, ageConfirmed: false }));
         setStepIndex(draft.step);
         setMaxReached(draft.step);
         toast("Picked up where you left off", {
@@ -191,6 +191,7 @@ export function Builder({ plan, demo, live, recipe, botCount, signedIn }: Builde
           timezone,
           ageConfirmed: true,
           ...(state.recipeSlug ? { recipeId: state.recipeSlug } : {}),
+          morningBrief: state.brief?.on ? { time: state.brief.time, ...(state.brief.weekdays ? { days: [1, 2, 3, 4, 5] } : {}) } : null,
         },
       });
       clearDraft();
@@ -379,6 +380,7 @@ export function Builder({ plan, demo, live, recipe, botCount, signedIn }: Builde
             <ReviewStep
               state={state}
               onInstructions={(instructions) => update({ instructions })}
+              onBrief={(brief) => update({ brief })}
               onAge={(ageConfirmed) => update({ ageConfirmed })}
               goTo={(id: StepId) => goTo(STEPS.findIndex((s) => s.id === id))}
               plan={plan}
