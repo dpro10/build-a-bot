@@ -4,8 +4,8 @@ import { apiError, authedBot, sameOrigin, type RouteCtx } from "@/lib/api";
 import { runTurn } from "@/lib/agent/run";
 import { greetingDirective } from "@/lib/agent/prompt";
 import { ensureConversation } from "@/lib/channels/outbound";
-import { connectionName, getConnector } from "@/lib/connectors";
-import { JOB_BY_ID } from "@/lib/jobs";
+import { appKinds, connectionName, getConnector } from "@/lib/connectors";
+import { startersFor } from "@/lib/jobs";
 import { sseResponse } from "@/lib/sse";
 
 export const maxDuration = 120;
@@ -27,7 +27,7 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string }>) {
       return Boolean(d && !d.via.some((v) => v.kind === "builtin"));
     })
     .map(connectionName);
-  const starters = (a.bot.jobs ?? []).flatMap((j) => JOB_BY_ID[j as keyof typeof JOB_BY_ID]?.starters ?? []);
+  const starters = startersFor(a.bot.jobs ?? [], appKinds(connections.filter((c) => c.status !== "disabled").map((c) => c.connectorId)));
 
   return sseResponse(async (send, signal) => {
     await runTurn({

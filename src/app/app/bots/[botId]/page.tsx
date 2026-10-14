@@ -1,11 +1,12 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { requireUser } from "@/lib/auth/session";
 import { getOwnedBot, listApprovals, listMessages } from "@/lib/data";
 import { ensureConversation } from "@/lib/channels/outbound";
 import { ChatView } from "@/components/chat/ChatView";
 import { toChatMessage } from "@/components/chat/messages";
-import { JOB_BY_ID } from "@/lib/jobs";
+import { appKinds } from "@/lib/connectors";
+import { startersFor } from "@/lib/jobs";
 import { brainLabel } from "@/lib/bots/labels";
 import type { AvatarId, ColorwayId } from "@/lib/avatars";
 import { notFound } from "next/navigation";
@@ -19,7 +20,14 @@ export default async function BotChatPage({ params, searchParams }: { params: Pr
   const bot = await getOwnedBot(db, user.id, botId);
   if (!bot) notFound();
   const conversation = await ensureConversation(db, botId, "web", "owner");
-  const [messages, approvals] = await Promise.all([listMessages(db, conversation.id, { limit: 80 }), listApprovals(db, user.id, { botId, limit: 100 })]);
+  const [messages, approvals, apps] = await Promise.all([
+    listMessages(db, conversation.id, { limit: 80 }),
+    listApprovals(db, user.id, { botId, limit: 100 }),
+    db
+      .select({ connectorId: schema.connections.connectorId })
+      .from(schema.connections)
+      .where(and(eq(schema.connections.botId, botId), ne(schema.connections.status, "disabled"))),
+  ]);
   const visible = messages.filter((m) => m.role === "user" || m.role === "assistant");
   // Meeting notes in the chat show the meeting's app (and whether it was deleted since).
   const meetingIds = [
@@ -41,7 +49,8 @@ export default async function BotChatPage({ params, searchParams }: { params: Pr
       ? { ...meta, meetingApp: info.app, meetingInPerson: (info.meta as { inPerson?: boolean } | null)?.inPerson === true }
       : { ...meta, meetingGone: true };
   };
-  const starters = [...new Set((bot.jobs ?? []).flatMap((j) => JOB_BY_ID[j as keyof typeof JOB_BY_ID]?.starters ?? []))];
+  // Ideas about email, a calendar and the like only show once the bot has an app for them.
+  const starters = startersFor(bot.jobs ?? [], appKinds(apps.map((a) => a.connectorId)));
   if (!starters.length) starters.push("What can you do?", "Remind me to stretch in 20 minutes", "What's the weather this week?");
 
   return (

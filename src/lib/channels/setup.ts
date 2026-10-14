@@ -8,10 +8,10 @@ import { schema, type Db } from "@/lib/db";
 import type { Bot, Channel, User } from "@/lib/db/schema";
 import { appUrl, config, demoMode, live } from "@/lib/env";
 import { numericCode, pairingCode } from "@/lib/crypto";
-import { isEmail, newId, normalizePhone } from "@/lib/utils";
+import { isEmail, newId, normalizePhone, UnreachableError } from "@/lib/utils";
 import { getPlan, planAllowsChannel } from "@/lib/billing/plans";
 import { botEmailAddress } from "@/lib/tools/builtin";
-import { CHANNEL_BY_KIND, type ChannelKind } from "./catalog";
+import { CHANNEL_BY_KIND, channelUsable, comingSoonNote, type ChannelKind } from "./catalog";
 import { deliver } from "./outbound";
 import { storeCredential } from "./secrets";
 import { slackCall } from "./slack";
@@ -130,8 +130,12 @@ export async function channelAction(
       .onConflictDoUpdate({ target: [schema.waitlist.email, schema.waitlist.feature], set: { userId: owner.id } });
     return { ok: true, data: { message: `You're on the list for ${def.name}.` } };
   }
-  if (def.availability === "waitlist" || def.availability === "soon") return { ok: false, error: `${def.name} isn't available yet.` };
-  if (!planAllowsChannel(plan, kind) && !demoMode) return { ok: false, error: `${def.name} is part of ${def.minPlan === "pro" ? "Pro" : "Plus"}.`, status: 402 };
+  // Not offered yet, or its service isn't set up on this server (demo mode simulates it).
+  if (!channelUsable(def, demoMode, live)) return { ok: false, error: comingSoonNote(def) };
+  if (!planAllowsChannel(plan, kind) && !demoMode) {
+    const planName = def.minPlan === "pro" ? "Pro" : "Plus";
+    return { ok: false, error: `${def.name} ${def.plural ? "are" : "is"} part of ${planName}.${live.stripe ? "" : " Paid plans are coming soon."}`, status: 402 };
+  }
 
   const channel = await ensureChannel(db, bot, kind);
 
@@ -179,7 +183,7 @@ export async function channelAction(
         const managed = await startManagedTelegram(db, bot, channel);
         if (managed) return { ok: true, data: managed };
         if (demoMode) return { ok: true, data: { demo: true } };
-        return { ok: false, error: "One-tap Telegram isn't set up here yet. Paste a BotFather token instead." };
+        return { ok: false, error: "One-tap Telegram is coming soon. Paste a BotFather token instead." };
       }
       if (action === "token") {
         const token = String(payload.token ?? "").trim();
@@ -231,7 +235,7 @@ export async function channelAction(
           return { ok: true, data: { sent: true } };
         }
         if (demoMode) return { ok: true, data: { sent: false, demoCode: code } };
-        return { ok: false, error: "Texting isn't set up on this server yet." };
+        return { ok: false, error: "Texts and calls are coming soon." };
       }
       if (action === "verify") {
         const used = await useCode(db, channel, "phone", "ph", String(payload.code ?? ""));
@@ -258,24 +262,26 @@ export async function channelAction(
       break;
     }
     case "email": {
+      const botAddress = botEmailAddress(bot);
+      if (!botAddress) return { ok: false, error: "Email is coming soon." };
       if (action === "send_code") {
         const email = String(payload.email ?? owner.email ?? "").trim().toLowerCase();
         if (!isEmail(email)) return { ok: false, error: "Enter a valid email." };
-        const limited = await codeLimit(db, owner, email, live.email, meta.ip);
+        const limited = await codeLimit(db, owner, email, live.botEmail, meta.ip);
         if (limited) return limited;
         const code = await saveCode(db, owner, bot, channel, "email", "em", { email });
-        if (live.email) {
+        if (live.botEmail) {
           await sendEmailRaw({
-            from: botEmailAddress(bot),
+            from: botAddress,
             fromName: `${bot.name} (AI assistant)`,
             to: email,
             subject: `Your ${bot.name} code: ${code}`,
             text: `Hi! Enter ${code} in the app to let ${bot.name} email you and read what you forward.\n\nIf you didn't ask for this, ignore it.`,
           });
-          return { ok: true, data: { sent: true, botAddress: botEmailAddress(bot) } };
+          return { ok: true, data: { sent: true, botAddress } };
         }
-        if (demoMode) return { ok: true, data: { sent: false, demoCode: code, botAddress: botEmailAddress(bot) } };
-        return { ok: false, error: "Email isn't set up on this server yet." };
+        if (demoMode) return { ok: true, data: { sent: false, demoCode: code, botAddress } };
+        return { ok: false, error: "Email is coming soon." };
       }
       if (action === "verify") {
         const used = await useCode(db, channel, "email", "em", String(payload.code ?? ""));
@@ -283,9 +289,9 @@ export async function channelAction(
         const email = String((used.row.data as { email?: string }).email);
         await db
           .update(schema.channels)
-          .set({ ownerAddress: email, ownerVerifiedAt: new Date(), status: "active", address: botEmailAddress(bot), config: { ...channel.config, simulated: !live.email } })
+          .set({ ownerAddress: email, ownerVerifiedAt: new Date(), status: "active", address: botAddress, config: { ...channel.config, simulated: !live.botEmail } })
           .where(eq(schema.channels.id, channel.id));
-        return { ok: true, data: { email, botAddress: botEmailAddress(bot) } };
+        return { ok: true, data: { email, botAddress } };
       }
       break;
     }
@@ -318,7 +324,7 @@ export async function channelAction(
             const auth = await slackCall<{ team?: string }>(botToken, "auth.test", {});
             team = auth.team ?? team;
           } catch (err) {
-            return { ok: false, error: `Slack didn't accept that token: ${(err as Error).message}` };
+            return { ok: false, error: err instanceof UnreachableError ? err.message : `Slack didn't accept that token: ${(err as Error).message}` };
           }
         }
         const credentialId = await storeCredential(db, { ownerId: owner.id, kind: "bot_token", provider: "slack", secret: JSON.stringify({ botToken, signingSecret }), label: team });
@@ -340,7 +346,7 @@ export async function channelAction(
     }
     case "discord": {
       if (action === "link") {
-        if (!live.discord && !demoMode) return { ok: false, error: "Discord isn't set up on this server yet." };
+        if (!live.discord && !demoMode) return { ok: false, error: "Discord is coming soon." };
         const code = await saveCode(db, owner, bot, channel, "discord_owner", "dsc");
         const installUrl = config.discord.applicationId
           ? `https://discord.com/oauth2/authorize?client_id=${config.discord.applicationId}&integration_type=1&scope=applications.commands`

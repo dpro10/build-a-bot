@@ -58,11 +58,12 @@ export default async function BuildPage({ searchParams }: { searchParams: Promis
       plan={plan.id}
       demo={demoMode}
       paidPlans={paidPlansOpen}
-      live={{ twilio: live.twilio, email: live.email, discord: live.discord, telegramManaged: live.telegramManaged, slackOAuth: live.slackOAuth }}
+      live={{ twilio: live.twilio, botEmail: live.botEmail, discord: live.discord, telegramManaged: live.telegramManaged, slackOAuth: live.slackOAuth, stripe: live.stripe }}
       comingSoon={comingSoonConnectors()}
       recipe={recipe}
       botCount={botCount}
       signedIn={Boolean(user?.email)}
+      ownerEmail={user?.email ?? null}
     />
   );
 }

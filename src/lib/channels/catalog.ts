@@ -3,6 +3,7 @@
  * Availability reflects platform rules checked 2026-10-13 (docs/research-2026-10-13.md).
  */
 import type { live } from "@/lib/env";
+import { joinList } from "@/lib/utils";
 
 export const CHANNEL_KINDS = [
   "web",
@@ -23,6 +24,8 @@ export type ChannelKind = (typeof CHANNEL_KINDS)[number];
 export type ChannelDef = {
   kind: ChannelKind;
   name: string;
+  /** The name reads as a plural ("Phone calls are…"). */
+  plural?: boolean;
   tagline: string;
   description: string;
   /** lucide icon name, or simple-icons slug when `brand` is true. */
@@ -56,6 +59,7 @@ export const CHANNELS: ChannelDef[] = [
   {
     kind: "voice",
     name: "Phone calls",
+    plural: true,
     tagline: "Call it, or let it call you",
     description: "Talk out loud. It can also call you with your morning brief.",
     icon: "Phone",
@@ -70,6 +74,7 @@ export const CHANNELS: ChannelDef[] = [
   {
     kind: "sms",
     name: "Text messages",
+    plural: true,
     tagline: "Plain old SMS",
     description: "Text it like a friend. Works on any phone.",
     icon: "MessageSquareText",
@@ -91,7 +96,7 @@ export const CHANNELS: ChannelDef[] = [
     minPlan: "free",
     availability: "available",
     needs: "email",
-    requires: "email",
+    requires: "botEmail",
     style: "email",
   },
   {
@@ -204,4 +209,53 @@ export const CHANNEL_BY_KIND = Object.fromEntries(CHANNELS.map((c) => [c.kind, c
 
 export function isChannelKind(value: unknown): value is ChannelKind {
   return typeof value === "string" && (CHANNEL_KINDS as readonly string[]).includes(value);
+}
+
+/** The `live` flags (src/lib/env.ts), as server pages hand them to the browser. */
+export type LiveFlags = Partial<Record<keyof typeof live, boolean>>;
+
+/**
+ * Where a channel stands on this server. The catalog's waitlist and soon stand. Outside demo
+ * mode (which simulates everything), a channel whose integration isn't configured is coming soon.
+ */
+export function channelAvailability(def: ChannelDef, demo: boolean, flags: LiveFlags): ChannelDef["availability"] {
+  if (def.availability === "waitlist" || def.availability === "soon") return def.availability;
+  if (def.requires && !demo && !flags[def.requires]) return "soon";
+  return def.availability;
+}
+
+/** The channel can be turned on here: for real, or simulated in demo mode. */
+export function channelUsable(def: ChannelDef, demo: boolean, flags: LiveFlags): boolean {
+  const availability = channelAvailability(def, demo, flags);
+  return availability === "available" || availability === "beta";
+}
+
+/** "Text messages are coming soon." / "Email is coming soon." */
+export function comingSoonNote(def: ChannelDef): string {
+  return `${def.name} ${def.plural ? "are" : "is"} coming soon.`;
+}
+
+/** The talk-anywhere channels, as they read in a sentence. */
+const CHANNEL_WORDS: [ChannelKind, string][] = [
+  ["voice", "calls"],
+  ["sms", "texts"],
+  ["email", "email"],
+  ["telegram", "Telegram"],
+  ["discord", "Discord"],
+  ["slack", "Slack"],
+];
+
+/** For public copy: the talk-anywhere channels that work here, and the ones coming soon. */
+export function talkChannels(demo: boolean, flags: LiveFlags): { ready: string[]; soon: string[] } {
+  const ready: string[] = [];
+  const soon: string[] = [];
+  for (const [kind, word] of CHANNEL_WORDS) (channelUsable(CHANNEL_BY_KIND[kind], demo, flags) ? ready : soon).push(word);
+  return { ready, soon };
+}
+
+/** ["calls", "texts", "email"] → "Calls, texts and email are coming soon." */
+export function comingSoonLine(words: string[]): string {
+  if (!words.length) return "";
+  const list = joinList(words);
+  return `${list.charAt(0).toUpperCase()}${list.slice(1)} ${words.length === 1 ? "is" : "are"} coming soon.`;
 }

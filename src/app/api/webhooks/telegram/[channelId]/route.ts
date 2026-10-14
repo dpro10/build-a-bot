@@ -1,5 +1,5 @@
 import { after } from "next/server";
-import { and, eq, gt, isNull } from "drizzle-orm";
+import { and, eq, gt, isNull, ne } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { timingSafeEqualStr } from "@/lib/crypto";
 import { channelSecret } from "@/lib/channels/secrets";
@@ -9,7 +9,8 @@ import { decideApproval, readApprovalButtonToken, resolveShortApprovalKey } from
 import { runTurn } from "@/lib/agent/run";
 import { greetingDirective } from "@/lib/agent/prompt";
 import { ensureConversation } from "@/lib/channels/outbound";
-import { JOB_BY_ID } from "@/lib/jobs";
+import { appKinds } from "@/lib/connectors";
+import { startersFor } from "@/lib/jobs";
 import type { RouteCtx } from "@/lib/api";
 
 export const maxDuration = 300;
@@ -87,7 +88,11 @@ export async function POST(req: Request, ctx: RouteCtx<{ channelId: string }>) {
       // First hello on Telegram: the bot introduces itself.
       await telegramCall(token, "sendChatAction", { chat_id: msg.chat.id, action: "typing" }).catch(() => {});
       const conversation = await ensureConversation(db, bot.id, "telegram", String(msg.chat.id));
-      const starters = (bot.jobs ?? []).flatMap((j) => JOB_BY_ID[j as keyof typeof JOB_BY_ID]?.starters ?? []);
+      const apps = await db
+        .select({ connectorId: schema.connections.connectorId })
+        .from(schema.connections)
+        .where(and(eq(schema.connections.botId, bot.id), ne(schema.connections.status, "disabled")));
+      const starters = startersFor(bot.jobs ?? [], appKinds(apps.map((c) => c.connectorId)));
       const result = await runTurn({
         db, bot, owner, conversation, channelKind: "telegram", message: null, noTools: true,
         directive: greetingDirective(bot, owner, "telegram", starters, []),

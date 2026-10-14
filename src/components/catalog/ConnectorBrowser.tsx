@@ -91,7 +91,7 @@ export function ConnectorBrowser({
         .map((x) => x.c);
     }
     let list: ConnectorDef[];
-    if (filter === "suggested") list = suggestions;
+    if (filter === "suggested") list = [...suggestions].sort((a, b) => Number(isAvailable(b, soon)) - Number(isAvailable(a, soon)));
     else if (filter === "popular") list = visible.filter((c) => c.popular);
     else if (filter === "all") list = visible;
     else list = visible.filter((c) => c.category === filter);

@@ -22,8 +22,10 @@ export type ChannelsProps = {
   channels: ChannelView[];
   planId: string;
   demo: boolean;
+  /** Paid plans can be bought here (Stripe, or switched freely in demo mode). */
+  plansOnSale: boolean;
   ownerEmail: string | null;
-  botEmail: string;
+  botEmail: string | null;
   /** The integration behind each channel is usable here (live, or simulated in demo mode). */
   availability: Partial<Record<ChannelKind, boolean>>;
   /** Channel kinds the owner already joined the waitlist for. */
@@ -33,7 +35,7 @@ export type ChannelsProps = {
 const POLL_MS = 4000;
 const EXPECT_MS = 4 * 60_000;
 
-export function ChannelsView({ bot, channels: initial, planId, demo, ownerEmail, botEmail, availability, joined: initialJoined }: ChannelsProps) {
+export function ChannelsView({ bot, channels: initial, planId, demo, plansOnSale, ownerEmail, botEmail, availability, joined: initialJoined }: ChannelsProps) {
   const router = useRouter();
   const [channels, setChannels] = React.useState<ChannelView[]>(() => sortChannels(initial));
   const [joined, setJoined] = React.useState<Set<ChannelKind>>(() => new Set(initialJoined));
@@ -75,7 +77,7 @@ export function ChannelsView({ bot, channels: initial, planId, demo, ownerEmail,
         return await api<ActionData>(`/api/bots/${bot.id}/channels`, { body: { kind, action, ...(payload ? { payload } : {}) } });
       } catch (err) {
         const message = err instanceof Error ? err.message : "Something went wrong. Try again.";
-        if (err instanceof ApiError && err.status === 402) {
+        if (err instanceof ApiError && err.status === 402 && plansOnSale) {
           toast.error(message, { action: { label: "See plans", onClick: () => router.push("/app/billing") } });
         } else {
           toast.error(message);
@@ -83,7 +85,7 @@ export function ChannelsView({ bot, channels: initial, planId, demo, ownerEmail,
         return null;
       }
     },
-    [bot.id, router],
+    [bot.id, router, plansOnSale],
   );
 
   const expect = React.useCallback((kind: ChannelKind) => setExpecting((e) => ({ ...e, [kind]: Date.now() + EXPECT_MS })), []);
@@ -105,8 +107,8 @@ export function ChannelsView({ bot, channels: initial, planId, demo, ownerEmail,
   }, [waiting, refresh]);
 
   const ctx: ChannelCtx = React.useMemo(
-    () => ({ botId: bot.id, botName: bot.name, demo, ownerEmail, botEmail, run, refresh, expect }),
-    [bot.id, bot.name, demo, ownerEmail, botEmail, run, refresh, expect],
+    () => ({ botId: bot.id, botName: bot.name, demo, plansOnSale, ownerEmail, botEmail, run, refresh, expect }),
+    [bot.id, bot.name, demo, plansOnSale, ownerEmail, botEmail, run, refresh, expect],
   );
 
   const join = async (kind: ChannelKind, email?: string) => {
@@ -201,7 +203,16 @@ export function ChannelsView({ bot, channels: initial, planId, demo, ownerEmail,
 
         {toAdd.length ? (
           <Section id="add-channel" title="Add a channel" icon={<Plus />} description="More ways to reach it. Each one proves it's really you before it takes your instructions.">
-            <AddChannelGrid kinds={toAdd} planGates={planGates} availability={availability} joined={joined} ownerEmail={ownerEmail} onAdd={add} onJoin={join} />
+            <AddChannelGrid
+              kinds={toAdd}
+              planGates={planGates}
+              plansOnSale={plansOnSale}
+              availability={availability}
+              joined={joined}
+              ownerEmail={ownerEmail}
+              onAdd={add}
+              onJoin={join}
+            />
           </Section>
         ) : null}
 
