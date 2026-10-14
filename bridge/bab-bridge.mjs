@@ -297,7 +297,7 @@ async function pair() {
 async function start() {
   const cfg = readConfig();
   if (!cfg) {
-    console.error("Not paired yet. In the app: Settings → Brain → Connect your subscription, then run `build-a-bot-bridge pair CODE`.");
+    console.error("Not paired yet. In the app, open Bridge (your computer) and get a pairing code, then run `build-a-bot-bridge pair CODE`.");
     process.exit(1);
   }
   const clis = detectClis();
@@ -365,7 +365,7 @@ function status() {
 
 function unpair() {
   fs.rmSync(CONFIG, { force: true });
-  log("Unpaired this computer. (Also revoke it in the app: Settings → Bridge.)");
+  log("Unpaired this computer. (Also revoke it in the app: Bridge (your computer) → Revoke.)");
 }
 
 function doctor() {

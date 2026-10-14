@@ -34,7 +34,7 @@ export async function POST(req: Request) {
       ),
     )
     .returning();
-  if (!row) return apiError(404, "That code is wrong or expired. Get a new one in the app (Settings → Bridge).");
+  if (!row) return apiError(404, "That code is wrong or expired. Get a new one in the app (Bridge, your computer).");
 
   const token = `bab_dev_${randomToken(32)}`;
   const id = newId("dev");
