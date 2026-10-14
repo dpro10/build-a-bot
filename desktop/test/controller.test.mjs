@@ -344,3 +344,76 @@ test("tray menu: no auto-record option; Stop when recording; bots with notes off
   assert.ok(labels(out).includes("Pair this computer…"));
   assert.ok(!labels(out).includes("Show live captions"));
 });
+
+test("pause: the last chunk uploads before the server hears 'paused' (a long pause isn't wrapped up as abandoned)", async () => {
+  const env = setup();
+  const order = [];
+  env.c.api.setPaused = async (_b, _m, paused) => {
+    order.push(`setPaused:${paused}`);
+    return {};
+  };
+  let drained;
+  env.uploads.drain = (meetingId) => {
+    order.push(`drain:${meetingId}`);
+    return new Promise((r) => (drained = r));
+  };
+  await listening(env);
+  env.c.onBuddyAction("pause");
+  await flush();
+  assert.deepEqual(order, ["drain:mtg_1"], "nothing tells the server before the audio is up");
+  drained({ ok: true, left: 0 });
+  await flush();
+  assert.deepEqual(order, ["drain:mtg_1", "setPaused:true"]);
+  env.c.onBuddyAction("resume");
+  await flush();
+  assert.deepEqual(order.at(-1), "setPaused:false");
+  env.c.dispose();
+});
+
+test("pause: a failed 'paused' call is retried", async () => {
+  const env = setup({ limits: { retryBaseMs: 5 } });
+  let calls = 0;
+  env.c.api.setPaused = async () => {
+    calls++;
+    if (calls === 1) throw Object.assign(new Error("offline"), { status: 0 });
+    return {};
+  };
+  await listening(env);
+  env.c.onBuddyAction("pause");
+  await flush(10);
+  assert.equal(calls, 2);
+  env.c.dispose();
+});
+
+test("Stop and delete offline: the delete is retried while the app runs, not only at the next launch", async () => {
+  const env = setup({ limits: { pendingRetryMs: 0 } });
+  let fail = true;
+  env.c.api.deleteMeeting = async () => {
+    env.calls.push("api.delete");
+    if (fail) throw Object.assign(new Error("offline"), { status: 0 });
+    return { ok: true };
+  };
+  await listening(env);
+  env.c.onBuddyAction("discard");
+  await flush(10);
+  assert.equal(env.settingsData.pending.length, 1);
+  assert.equal(env.settingsData.pending[0].kind, "delete");
+  fail = false;
+  env.c.tick();
+  await flush(10);
+  assert.equal(env.calls.filter((x) => x === "api.delete").length, 2);
+  assert.equal(env.settingsData.pending.length, 0);
+  env.c.dispose();
+});
+
+test("a meeting that ended without notes says why, not 'your notes are ready'", async () => {
+  const env = setup();
+  env.c.api.getMeeting = async () => ({ meeting: { status: "ready", title: "Zoom meeting", notes: null, error: "I didn't catch any speech in this one. Was the microphone muted?" }, segments: [] });
+  await listening(env);
+  env.c.onBuddyAction("stop");
+  await flush(12);
+  assert.equal(env.c.state.phase, "error");
+  assert.match(env.c.state.message, /didn't catch any speech/);
+  assert.ok(!env.notes.some((n) => /are ready/.test(n)));
+  env.c.dispose();
+});

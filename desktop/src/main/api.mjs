@@ -32,11 +32,15 @@ export function createApi(o) {
    * @param {{ json?: any, body?: Uint8Array, contentType?: string, auth?: boolean, server?: string, timeoutMs?: number }} [opts]
    */
   async function call(method, route, opts = {}) {
-    const server = opts.server ?? o.server();
+    const paired = o.server();
+    const server = opts.server ?? paired;
     if (!server) throw new ApiError(0, "Not paired", "not_paired");
     /** @type {Record<string, string>} */
     const headers = { "user-agent": ua, accept: "application/json" };
     if (opts.auth !== false) {
+      // The token belongs to the server it was issued by. A chunk, finish or poll addressed to
+      // the server this computer was paired with before must never carry the new token.
+      if (server !== paired) throw new ApiError(401, "This computer isn't paired with that server anymore.", "not_paired");
       const token = o.token();
       if (!token) throw new ApiError(401, "This computer isn't paired.", "not_paired");
       headers.authorization = `Bearer ${token}`;
@@ -103,6 +107,9 @@ export function createApi(o) {
      * @param {import('./spool.mjs').ChunkItem} item
      */
     async uploadChunk(item) {
+      // Audio for a server this computer is no longer paired with: that meeting is gone for us
+      // (the queue drops just its chunks; 401 would drop every meeting's).
+      if (item.server !== o.server()) return { status: 404, body: { error: "This computer is paired with another server now.", code: "other_server" } };
       const q = new URLSearchParams({
         track: item.track,
         chunk: String(item.chunk),

@@ -7,7 +7,7 @@ import { and, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import { schema, type Db } from "@/lib/db";
 import type { Bot, Channel, User } from "@/lib/db/schema";
 import { appUrl, config, demoMode, live } from "@/lib/env";
-import { numericCode } from "@/lib/crypto";
+import { numericCode, pairingCode } from "@/lib/crypto";
 import { isEmail, newId, normalizePhone } from "@/lib/utils";
 import { getPlan, planAllowsChannel } from "@/lib/billing/plans";
 import { botEmailAddress } from "@/lib/tools/builtin";
@@ -30,9 +30,11 @@ async function ensureChannel(db: Db, bot: Bot, kind: ChannelKind): Promise<Chann
 }
 
 async function saveCode(db: Db, owner: User, bot: Bot, channel: Channel, purpose: string, prefix: string, data: Record<string, unknown> = {}) {
-  const code = numericCode(6);
+  // Discord's /link can't say which bot it's for, so its code is matched against every
+  // pending one: it gets a long code (~40 bits, like "K7XQ-29MD") that can't be guessed.
+  const code = prefix === "dsc" ? pairingCode() : numericCode(6);
   await db.insert(schema.pairingCodes).values({
-    code: `${prefix}_${channel.id}_${code}`,
+    code: `${prefix}_${channel.id}_${prefix === "dsc" ? normalizeLinkCode(code) : code}`,
     purpose,
     ownerId: owner.id,
     botId: bot.id,
@@ -41,6 +43,11 @@ async function saveCode(db: Db, owner: User, bot: Bot, channel: Channel, purpose
     expiresAt: new Date(Date.now() + 30 * 60_000),
   });
   return code;
+}
+
+/** Discord link codes as stored and matched: upper case, no dash or spaces. */
+export function normalizeLinkCode(input: string): string {
+  return input.toUpperCase().replace(/[\s-]/g, "");
 }
 
 /** Wrong guesses allowed per code before it stops working (6 digits, so brute force is hopeless). */

@@ -107,6 +107,26 @@ export async function connectTelegramToken(db: Db, bot: Bot, owner: User, channe
   return { username: me.username, startLink: `https://t.me/${me.username}?start=own_${code}` };
 }
 
+/**
+ * "/start link_<code>" sent to our manager bot: the owner came from the app, so remember their
+ * Telegram id for matching the bot they're about to create. Keyed by the pending request's own
+ * random code (never the bot id, which isn't a secret): otherwise anyone who knew a bot's id
+ * could claim its pending request and have their own Telegram bot linked to it, as its owner.
+ */
+export async function rememberManagerStart(db: Db, startParam: string, telegramUserId: string) {
+  await db
+    .update(schema.pairingCodes)
+    .set({ data: sql`${schema.pairingCodes.data} || ${JSON.stringify({ telegramUserId })}::jsonb` })
+    .where(
+      and(
+        eq(schema.pairingCodes.code, `tg_${startParam}`),
+        eq(schema.pairingCodes.purpose, "telegram_managed"),
+        isNull(schema.pairingCodes.usedAt),
+        gt(schema.pairingCodes.expiresAt, new Date()),
+      ),
+    );
+}
+
 /** Manager bot received `managed_bot`: a user just created their bot through our link. */
 export async function onManagedBotCreated(db: Db, update: { user: { id: number }; bot: { id: number; username: string } }) {
   const managerToken = config.telegram.managerToken!;

@@ -150,3 +150,22 @@ test("discarding a meeting deletes its queued chunks and spool files; persist() 
   q.dispose();
   q2.dispose();
 });
+
+test("dropAll (unpaired): every meeting's queued audio is thrown away, spool files included", async () => {
+  const spool = tmpSpool();
+  let release;
+  const q = new UploadQueue({ spool, concurrency: 1, send: () => new Promise((r) => (release = r)) });
+  q.push(item(0, "mic", "mtg_a"));
+  q.push(item(1, "mic", "mtg_a"));
+  q.push(item(0, "mic", "mtg_b"));
+  for (const i of q.queue) spool.write(i);
+  assert.ok(spool.list().length >= 2);
+  q.dropAll();
+  assert.equal(q.queue.length, 0);
+  assert.equal(spool.list().length, 0);
+  release({ status: 200, body: {} });
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(q.size(), 0);
+  q.push(item(2, "mic", "mtg_a"));
+  assert.equal(q.size(), 0, "a dropped meeting takes no more chunks");
+});

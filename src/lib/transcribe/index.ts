@@ -20,6 +20,8 @@ export type Transcription = {
   model: string;
   /** True when no real speech-to-text ran (demo mode). */
   simulated: boolean;
+  /** How long the audio really was, as the provider measured it (verbose_json `duration`). */
+  audioMs?: number;
 };
 
 export type TranscribeInput = {
@@ -177,9 +179,10 @@ async function transcribeWith(setup: Setup, input: TranscribeInput): Promise<Tra
     const body = await res.text().catch(() => "");
     throw new TranscriptionError(`Speech-to-text failed (${res.status}): ${body.slice(0, 200)}`, res.status === 429 || res.status >= 500);
   }
-  const data = (await res.json().catch(() => ({}))) as { text?: string; segments?: VerboseSegment[] };
+  const data = (await res.json().catch(() => ({}))) as { text?: string; segments?: VerboseSegment[]; duration?: number };
   const segments = Array.isArray(data.segments)
     ? cleanSegments(data.segments, input.durationMs)
     : cleanSegments([{ start: 0, end: input.durationMs / 1000, text: data.text ?? "" }], input.durationMs);
-  return { segments, provider: setup.provider, model: setup.model, simulated: false };
+  const audioMs = typeof data.duration === "number" && Number.isFinite(data.duration) && data.duration > 0 ? Math.round(data.duration * 1000) : undefined;
+  return { segments, provider: setup.provider, model: setup.model, simulated: false, ...(audioMs ? { audioMs } : {}) };
 }

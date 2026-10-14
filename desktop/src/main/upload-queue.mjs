@@ -81,6 +81,11 @@ export class UploadQueue {
     this.settle();
   }
 
+  /** Throw away everything queued, for every meeting (this computer was unpaired). */
+  dropAll() {
+    for (const meetingId of new Set([...this.queue, ...this.inFlight].map((i) => i.meetingId))) this.drop(meetingId);
+  }
+
   /** Let a meeting id be used again (only tests need this). */
   undrop(meetingId) {
     this.dropped.delete(meetingId);

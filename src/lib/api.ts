@@ -59,6 +59,34 @@ export function sameOrigin(req: Request): boolean {
 
 export type RouteCtx<P extends Record<string, string>> = { params: Promise<P> };
 
+/**
+ * The request body, read up to `maxBytes` (null when it's bigger). Unlike req.arrayBuffer(),
+ * a body sent without a Content-Length can't make the server buffer more than the limit.
+ */
+export async function readBodyCapped(req: Request, maxBytes: number): Promise<ArrayBuffer | null> {
+  if (!req.body) return new ArrayBuffer(0);
+  const reader = req.body.getReader();
+  const parts: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maxBytes) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    parts.push(value);
+  }
+  const out = new Uint8Array(size);
+  let offset = 0;
+  for (const p of parts) {
+    out.set(p, offset);
+    offset += p.byteLength;
+  }
+  return out.buffer;
+}
+
 /** Best-effort client IP (Vercel and most proxies set x-forwarded-for); null when unknown. */
 export function clientIp(req: Request): string | null {
   const fwd = req.headers.get("x-forwarded-for");
