@@ -6,8 +6,9 @@
 import { config, live } from "@/lib/env";
 import type { ChannelAdapter } from "./outbound";
 import { botEmailAddress } from "@/lib/tools/builtin/inbox";
+import { botEmailHtml, loginEmailHtml } from "./email-html";
 
-export async function sendEmailRaw(input: { from: string; fromName: string; to: string; subject: string; text: string; replyTo?: string; inReplyTo?: string }) {
+export async function sendEmailRaw(input: { from: string; fromName: string; to: string; subject: string; text: string; html?: string; replyTo?: string; inReplyTo?: string }) {
   if (config.email.resendKey) {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -17,6 +18,7 @@ export async function sendEmailRaw(input: { from: string; fromName: string; to: 
         to: [input.to],
         subject: input.subject,
         text: input.text,
+        ...(input.html ? { html: input.html } : {}),
         ...(input.replyTo ? { reply_to: input.replyTo } : {}),
         ...(input.inReplyTo ? { headers: { "In-Reply-To": input.inReplyTo, References: input.inReplyTo } } : {}),
       }),
@@ -29,7 +31,7 @@ export async function sendEmailRaw(input: { from: string; fromName: string; to: 
     const res = await fetch(`https://api.agentmail.to/v0/inboxes/${encodeURIComponent(input.from)}/messages/send`, {
       method: "POST",
       headers: { authorization: `Bearer ${config.email.agentmailKey}`, "content-type": "application/json" },
-      body: JSON.stringify({ to: [input.to], subject: input.subject, text: input.text }),
+      body: JSON.stringify({ to: [input.to], subject: input.subject, text: input.text, ...(input.html ? { html: input.html } : {}) }),
     });
     const data = (await res.json().catch(() => ({}))) as { message_id?: string; message?: string };
     if (!res.ok) throw new Error(`AgentMail ${res.status}: ${data.message ?? "error"}`);
@@ -49,6 +51,7 @@ export const emailAdapter: ChannelAdapter = {
       to: msg.to,
       subject: msg.subject ?? `A note from ${bot.name}`,
       text: msg.text,
+      html: botEmailHtml({ botName: bot.name, avatar: bot.avatar, color: bot.color, text: msg.text, toOwner: msg.toOwner }),
       inReplyTo: msg.replyTo,
     });
     return { status: "sent", providerId: sent.id };
@@ -66,6 +69,7 @@ export async function sendLoginEmail(to: string, link: string) {
       to: [to],
       subject: "Your Build-a-bot sign-in link",
       text: `Tap to sign in to Build-a-bot:\n\n${link}\n\nThis link works once and expires in 20 minutes. If you didn't ask for it, ignore this email.`,
+      html: loginEmailHtml(link),
     }),
   });
   return res.ok;
