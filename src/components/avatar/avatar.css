@@ -1,0 +1,663 @@
+/*
+ * Build-a-bot avatar motion. Import once, globally (root layout).
+ * Every class is prefixed bab-av-. Lengths inside the SVG are viewBox units
+ * (the avatar is drawn on a 200x200 grid), so motion scales with the avatar.
+ *
+ * The un-animated state of every element is a complete pose, so .bab-av-still,
+ * prefers-reduced-motion, and "CSS not loaded" all render correctly.
+ */
+
+.bab-av {
+  display: inline-block;
+  flex: none;
+  overflow: visible;
+  vertical-align: middle;
+}
+
+/* ---------- reference boxes ---------- */
+
+.bab-av-motion,
+.bab-av-body,
+.bab-av-flame,
+.bab-av-core {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+}
+
+.bab-av-shadow,
+.bab-av-blink,
+.bab-av-sparkle,
+.bab-av-dot,
+.bab-av-badge,
+.bab-av-bulb,
+.bab-av-bulb-halo,
+.bab-av-spark,
+.bab-av-tile,
+.bab-av-z {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* Parts drawn around a pivot at their local (0,0): leaves, arms. */
+.bab-av-leaf,
+.bab-av-arm {
+  transform-box: view-box;
+  transform-origin: 0 0;
+}
+
+.bab-av-progress {
+  transform-box: fill-box;
+  transform-origin: 0 50%;
+  transform: scaleX(0.62);
+}
+
+/* Paused bots look paused: desaturated (SVG filter in the markup) and slightly faded. */
+.bab-av-dim {
+  opacity: 0.78;
+}
+
+/* ---------- body motion per mood ---------- */
+
+@keyframes bab-av-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes bab-av-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-7px);
+  }
+}
+
+@keyframes bab-av-shadow {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(0.88);
+    opacity: 0.72;
+  }
+}
+
+@keyframes bab-av-shadow-far {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(0.8);
+    opacity: 0.6;
+  }
+}
+
+@keyframes bab-av-hop {
+  0%,
+  56%,
+  100% {
+    transform: translateY(0) scale(1, 1);
+  }
+  18% {
+    transform: translateY(-9px) scale(0.98, 1.03);
+  }
+  36% {
+    transform: translateY(0) scale(1.04, 0.96);
+  }
+  46% {
+    transform: translateY(-2px) scale(1, 1);
+  }
+}
+
+@keyframes bab-av-hop-shadow {
+  0%,
+  56%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  18% {
+    transform: scale(0.82);
+    opacity: 0.65;
+  }
+  36% {
+    transform: scale(1.04);
+    opacity: 1;
+  }
+}
+
+@keyframes bab-av-ponder {
+  0%,
+  100% {
+    transform: rotate(-2.5deg) translateY(0);
+  }
+  50% {
+    transform: rotate(2deg) translateY(-2px);
+  }
+}
+
+@keyframes bab-av-busy {
+  0%,
+  100% {
+    transform: rotate(-1.6deg) translateY(0);
+  }
+  50% {
+    transform: rotate(1.6deg) translateY(-1.5px);
+  }
+}
+
+@keyframes bab-av-breathe {
+  0%,
+  100% {
+    transform: scale(1, 1);
+  }
+  50% {
+    transform: scale(1.025, 1.04);
+  }
+}
+
+@keyframes bab-av-startle {
+  0%,
+  38%,
+  100% {
+    transform: translateY(0) scale(1, 1);
+  }
+  6% {
+    transform: translateY(-10px) scale(0.97, 1.04);
+  }
+  14% {
+    transform: translateY(0) scale(1.04, 0.96);
+  }
+  22% {
+    transform: translateY(-5px) scale(1, 1);
+  }
+  30% {
+    transform: translateY(0) scale(1.02, 0.98);
+  }
+}
+
+.bab-av--idle .bab-av-motion {
+  animation: bab-av-bob 3.6s ease-in-out infinite;
+}
+.bab-av--idle .bab-av-shadow {
+  animation: bab-av-shadow 3.6s ease-in-out infinite;
+}
+
+.bab-av--happy .bab-av-motion {
+  animation: bab-av-hop 1.5s ease-in-out infinite;
+}
+.bab-av--happy .bab-av-shadow {
+  animation: bab-av-hop-shadow 1.5s ease-in-out infinite;
+}
+
+.bab-av--thinking .bab-av-motion {
+  animation: bab-av-ponder 4.2s ease-in-out infinite;
+}
+
+.bab-av--working .bab-av-motion {
+  animation: bab-av-busy 0.55s ease-in-out infinite;
+}
+
+.bab-av--sleeping .bab-av-motion {
+  animation: bab-av-breathe 4.8s ease-in-out infinite;
+}
+
+.bab-av--alert .bab-av-motion {
+  animation: bab-av-startle 2.2s ease-out infinite;
+}
+.bab-av--alert .bab-av-shadow {
+  animation: bab-av-hop-shadow 2.2s ease-out infinite;
+}
+
+/* Nimbus floats a little higher and slower than the rest. */
+.bab-av--nimbus.bab-av--idle .bab-av-motion {
+  animation: bab-av-float 4.8s ease-in-out infinite;
+}
+.bab-av--nimbus.bab-av--idle .bab-av-shadow {
+  animation: bab-av-shadow-far 4.8s ease-in-out infinite;
+}
+
+/* Different rhythms, so a row of avatars never moves in lockstep. */
+.bab-av--blip.bab-av--idle .bab-av-motion,
+.bab-av--blip.bab-av--idle .bab-av-shadow {
+  animation-duration: 3.2s;
+}
+.bab-av--sprout.bab-av--idle .bab-av-motion,
+.bab-av--sprout.bab-av--idle .bab-av-shadow {
+  animation-duration: 4s;
+  animation-delay: -1s;
+}
+.bab-av--ember.bab-av--idle .bab-av-motion,
+.bab-av--ember.bab-av--idle .bab-av-shadow {
+  animation-duration: 2.8s;
+  animation-delay: -0.5s;
+}
+.bab-av--otto.bab-av--idle .bab-av-motion,
+.bab-av--otto.bab-av--idle .bab-av-shadow {
+  animation-duration: 3.8s;
+  animation-delay: -2s;
+}
+
+/* ---------- face ---------- */
+
+@keyframes bab-av-blink {
+  0%,
+  91%,
+  97%,
+  100% {
+    transform: scaleY(1);
+  }
+  94% {
+    transform: scaleY(0.1);
+  }
+}
+
+.bab-av-blink {
+  animation: bab-av-blink 5s ease-in-out infinite;
+}
+.bab-av--blip .bab-av-blink {
+  animation-duration: 4.4s;
+  animation-delay: -1.2s;
+}
+.bab-av--nimbus .bab-av-blink {
+  animation-duration: 6.2s;
+  animation-delay: -3.1s;
+}
+.bab-av--sprout .bab-av-blink {
+  animation-duration: 5.4s;
+  animation-delay: -0.4s;
+}
+.bab-av--ember .bab-av-blink {
+  animation-duration: 3.9s;
+  animation-delay: -2.2s;
+}
+.bab-av--otto .bab-av-blink {
+  animation-duration: 4.8s;
+  animation-delay: -3.6s;
+}
+
+/* Idle eyes glance around now and then. */
+@keyframes bab-av-look {
+  0%,
+  58%,
+  100% {
+    transform: translate(0, 0);
+  }
+  62%,
+  72% {
+    transform: translate(2.4px, -0.6px);
+  }
+  77%,
+  87% {
+    transform: translate(-2.4px, -0.6px);
+  }
+}
+.bab-av-look {
+  animation: bab-av-look 9s ease-in-out infinite;
+}
+.bab-av--nimbus .bab-av-look {
+  animation-delay: -3s;
+  animation-duration: 11s;
+}
+.bab-av--sprout .bab-av-look {
+  animation-delay: -6s;
+}
+.bab-av--ember .bab-av-look {
+  animation-delay: -1.5s;
+  animation-duration: 8s;
+}
+.bab-av--otto .bab-av-look {
+  animation-delay: -4.5s;
+  animation-duration: 10s;
+}
+
+/* ---------- effects ---------- */
+
+@keyframes bab-av-twinkle {
+  0%,
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(0.45) rotate(45deg);
+    opacity: 0.4;
+  }
+}
+.bab-av-sparkle {
+  animation: bab-av-twinkle 1.6s ease-in-out infinite;
+}
+
+@keyframes bab-av-dot {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+.bab-av-dot {
+  animation: bab-av-dot 1.3s ease-in-out infinite;
+}
+
+@keyframes bab-av-z {
+  0% {
+    transform: translate(-5px, 8px) scale(0.5);
+    opacity: 0;
+  }
+  25%,
+  65% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(5px, -9px) scale(1.05);
+    opacity: 0;
+  }
+}
+.bab-av-z {
+  animation: bab-av-z 2.7s ease-in-out infinite;
+}
+
+@keyframes bab-av-badge {
+  0%,
+  64%,
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+  72% {
+    transform: scale(1.16) rotate(-8deg);
+  }
+  80% {
+    transform: scale(1.04) rotate(7deg);
+  }
+  88% {
+    transform: scale(1.08) rotate(-3deg);
+  }
+}
+.bab-av-badge {
+  animation: bab-av-badge 2.2s ease-in-out infinite;
+}
+
+/* Blip: the antenna bulb glows (fast while working, blinking when it needs you). */
+@keyframes bab-av-glow {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(0.82);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+}
+.bab-av-bulb-halo {
+  animation: bab-av-glow 2.4s ease-in-out infinite;
+}
+.bab-av--working .bab-av-bulb-halo {
+  animation-duration: 0.8s;
+}
+@keyframes bab-av-blinker {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0.35;
+  }
+}
+.bab-av-bulb--blink {
+  animation: bab-av-blinker 0.9s steps(1, end) infinite;
+}
+
+@keyframes bab-av-progress {
+  0% {
+    transform: scaleX(0.1);
+  }
+  75%,
+  100% {
+    transform: scaleX(1);
+  }
+}
+.bab-av-progress {
+  animation: bab-av-progress 2.2s cubic-bezier(0.45, 0, 0.3, 1) infinite;
+}
+
+/* Sprout: leaves sway; flutter when busy, perk up when happy, rest when asleep. */
+@keyframes bab-av-sway-l {
+  0%,
+  100% {
+    transform: rotate(-5deg);
+  }
+  50% {
+    transform: rotate(5deg);
+  }
+}
+@keyframes bab-av-sway-r {
+  0%,
+  100% {
+    transform: rotate(5deg);
+  }
+  50% {
+    transform: rotate(-5deg);
+  }
+}
+.bab-av-leaf--l {
+  animation: bab-av-sway-l 3.4s ease-in-out infinite;
+}
+.bab-av-leaf--r {
+  animation: bab-av-sway-r 3.4s ease-in-out infinite;
+  animation-delay: -0.6s;
+}
+.bab-av--happy .bab-av-leaf--l,
+.bab-av--happy .bab-av-leaf--r {
+  animation-duration: 0.75s;
+}
+.bab-av--working .bab-av-leaf--l,
+.bab-av--working .bab-av-leaf--r {
+  animation-duration: 0.45s;
+}
+.bab-av--sleeping .bab-av-leaf--l,
+.bab-av--sleeping .bab-av-leaf--r {
+  animation-duration: 6s;
+}
+
+/* Ember: the flame and its core flicker out of step; sparks drift up. */
+@keyframes bab-av-flicker {
+  0%,
+  100% {
+    transform: scale(1, 1) skewX(0deg);
+  }
+  25% {
+    transform: scale(1.02, 0.97) skewX(-2deg);
+  }
+  50% {
+    transform: scale(0.98, 1.04) skewX(1.5deg);
+  }
+  75% {
+    transform: scale(1.01, 0.99) skewX(-1deg);
+  }
+}
+.bab-av-flame {
+  animation: bab-av-flicker 1.7s ease-in-out infinite;
+}
+.bab-av-core {
+  animation: bab-av-flicker 1.3s ease-in-out infinite reverse;
+}
+.bab-av--working .bab-av-flame,
+.bab-av--alert .bab-av-flame {
+  animation-duration: 0.7s;
+}
+.bab-av--sleeping .bab-av-flame,
+.bab-av--sleeping .bab-av-core {
+  animation-duration: 4s;
+}
+
+@keyframes bab-av-spark {
+  0% {
+    transform: translateY(8px) scale(0.5);
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-16px) scale(1);
+    opacity: 0;
+  }
+}
+.bab-av-spark {
+  animation: bab-av-spark 2.2s ease-out infinite;
+}
+.bab-av--working .bab-av-spark {
+  animation-duration: 1.1s;
+}
+
+/* Otto: the outer arms wave; while working it juggles little app tiles. */
+@keyframes bab-av-wave-l {
+  0%,
+  100% {
+    transform: rotate(-4deg);
+  }
+  50% {
+    transform: rotate(10deg);
+  }
+}
+@keyframes bab-av-wave-r {
+  0%,
+  100% {
+    transform: rotate(4deg);
+  }
+  50% {
+    transform: rotate(-10deg);
+  }
+}
+.bab-av-arm--l {
+  animation: bab-av-wave-l 2.8s ease-in-out infinite;
+}
+.bab-av-arm--r {
+  animation: bab-av-wave-r 2.8s ease-in-out infinite;
+  animation-delay: -1.4s;
+}
+.bab-av--happy .bab-av-arm--l,
+.bab-av--happy .bab-av-arm--r {
+  animation-duration: 0.9s;
+}
+.bab-av--working .bab-av-arm--l,
+.bab-av--working .bab-av-arm--r {
+  animation-duration: 0.6s;
+}
+
+@keyframes bab-av-juggle {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-9px) rotate(10deg);
+  }
+}
+.bab-av-tile {
+  animation: bab-av-juggle 1.2s ease-in-out infinite;
+}
+
+/* Nimbus: little gusts while it works. */
+@keyframes bab-av-gust {
+  0% {
+    transform: translateX(8px);
+    opacity: 0;
+  }
+  40% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateX(-10px);
+    opacity: 0;
+  }
+}
+.bab-av-gust {
+  animation: bab-av-gust 1.1s ease-out infinite;
+}
+
+/* ---------- listening (taking meeting notes) ---------- */
+
+@keyframes bab-av-nod {
+  0%,
+  100% {
+    transform: rotate(0deg) translateY(0);
+  }
+  30% {
+    transform: rotate(-2.5deg) translateY(1px);
+  }
+  60% {
+    transform: rotate(1.5deg) translateY(-1px);
+  }
+}
+.bab-av--listening .bab-av-motion {
+  animation: bab-av-nod 3.2s ease-in-out infinite;
+}
+.bab-av--listening .bab-av-shadow {
+  animation: bab-av-shadow 3.2s ease-in-out infinite;
+}
+
+@keyframes bab-av-wave {
+  0% {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+  35% {
+    opacity: 0.95;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(4px);
+  }
+}
+/* Visible when still (reduced motion): the waves stay on as a plain icon. */
+.bab-av-wave {
+  opacity: 0.9;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: bab-av-wave 2.5s ease-out infinite;
+}
+
+@keyframes bab-av-rec {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+.bab-av-rec {
+  animation: bab-av-rec 2s ease-in-out infinite;
+}
+
+/* ---------- still poses ---------- */
+
+.bab-av-still,
+.bab-av-still * {
+  animation: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bab-av,
+  .bab-av * {
+    animation: none !important;
+  }
+}

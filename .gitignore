@@ -1,0 +1,26 @@
+# deps
+node_modules/
+# next
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+# local data (PGlite database, dev secrets)
+.data/
+# env
+.env
+.env.local
+.env.*.local
+# tests
+test-results/
+playwright-report/
+coverage/
+# misc
+.DS_Store
+*.log
+.vercel
+bridge/node_modules/
+bridge/dist/
+desktop/node_modules/
+desktop/dist/
+desktop/test-results/

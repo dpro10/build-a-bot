@@ -1,0 +1,6 @@
+    1 /sbin/launchd
+  398 /usr/libexec/avconferenced
+ 4410 /Applications/zoom.us.app/Contents/MacOS/zoom.us
+ 4502 /Applications/zoom.us.app/Contents/Frameworks/cpthost.app/Contents/MacOS/CptHost
+ 5120 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/131.0.6778.86/Helpers/Google Chrome Helper.app/Contents/MacOS/Google Chrome Helper
+ 9001 /Users/dana/Downloads/CptHost

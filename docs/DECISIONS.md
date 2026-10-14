@@ -80,3 +80,263 @@ Build-a-bot is its own brand with its own friendlier look; Cookbook's DESIGN.md 
 5. Timing: design now, build after the hackathon (submission due 2026-10-30, 10am PT) and finals. Competes with the Jan 8 Cookbook decision.
 6. Claude subscriptions in a cloud sandbox in v1, or later?
 7. When the user's computer is asleep: wait, or fall back to Free (opt-in)?
+
+---
+
+# 2026-10-14: the first full build
+
+## Decision: build the whole product now, end to end
+
+**Diego (2026-10-14):** "give people the option to choose from 5 cute different avatars that you design, then people can name them, and then the next steps need to be pick which model, they can bring their subcription or pick from an open weight model we can route them trhough nebius. Then they pick what tools they want their agent to be able to access and how much they want to trust it. There should be the option to put full faith in your agent and it can connect to your email, github, google drive, etc. I know theres much more. They should pick what all they want it connected to very easily from a extensive list of connectors. They also should be able to pick how they want to communicate with it, phone call, text, email, slack, telegram, discord, etc. Multiple ways are fine. Try and build the full end to end product, not just a slice. I want something genuenily impressive, and innovative, something that could start generating revenue."
+
+What this settles:
+- **Timing:** building started 2026-10-14 (supersedes "design now, build after the hackathon").
+- **Five original avatars**, designed: Blip (robot), Nimbus (cloud), Sprout (seedling), Ember (spark), Otto (octopus), in 8 colorways, each with its own personality. No bears, no toys.
+- **Builder order:** face → name → brain → apps → trust → channels → review. The bot greets its owner first.
+- **Brains:** the owner's subscription (through the Bridge) or open-weight models on Nebius Token Factory; own API keys too.
+- **Trust includes "Full faith"**: the bot acts across email, GitHub, Drive and the rest without asking (hard limits still apply; below).
+- **An extensive, easy app list** and **several channels at once**: phone calls, texts, email, Slack, Telegram, Discord.
+
+## Build choice: a standalone app with its own Postgres (Cookbook later)
+
+The "Cookbook on the inside" proposal stays open. v1 is a standalone Next.js app with its own database, so it can ship and earn on its own. Bot-to-bot in Cookbook can come later by giving each bot a Cookbook identity.
+
+## Build choice (Claude; Diego to confirm): four trust levels, limits enforced in code
+
+- Levels: **Look only**, **Ask me first** (default), **Trusted helper**, **Full faith**. The policy engine (`src/lib/policy/engine.ts`) enforces them; the model is told but never relied on.
+- Hard limits at every level, Full faith included:
+  - **Prompt-injection guard:** after reading outside content, sending to someone new asks.
+  - Secrets never sent.
+  - Money off unless a monthly cap is set; never over the cap.
+  - Bulk deletes (more than 10) ask.
+  - Sensitive apps (money, health, identity) ask before changes.
+  - Quiet hours.
+  - STOP from any channel.
+  - AI disclosure on messages to other people.
+  - A receipt for every action (append-only in the database).
+- Owners can fine-tune each app's capabilities (allow / ask / off). An owner's "allow" never relaxes the injection guard.
+
+## Build choice (Claude; Diego to confirm): pricing
+
+| | Free | Plus | Pro |
+|---|---|---|---|
+| Price | $0 | $12/mo ($10 yearly) | $39/mo ($32 yearly) |
+| Bots | 1 | 3 | 10 |
+| Included-model messages | 300 | 3,000 | 15,000 |
+| Own key / subscription messages | 2,000 (fair use) | 20,000 | 100,000 |
+| Searches | 50 | 600 | 3,000 |
+| Apps per bot | 3 | 50 | 200 |
+| Calls / texts | — | 60 min / 300 | 300 min / 1,500 |
+| Full faith | — | ✓ | ✓ |
+| Included models | Fast | + Balanced | + Smart |
+
+Cost basis: Nemotron 3.5 Lightning ≈ $0.0004 a turn; Tavily $0.008 a search after 1,000 free; SMS ≈ $0.013 a segment; voice ≈ $0.02–0.09 a minute.
+
+## Build choice: how apps connect
+
+- **Official remote MCP servers come first** when the vendor allows self-registration (OAuth 2.1 with a Client ID Metadata Document at `/oauth/client.json`, else dynamic registration).
+- **Composio** covers the rest (managed sign-in), and **any MCP server by URL** works.
+- The catalog lists ~190 apps; ~50 are honestly marked "soon".
+- Demo mode simulates apps with sample data.
+
+## Build choice: channels
+
+- **Telegram:** managed bots (one tap; the bot's username comes from its name, e.g. `inky_k7x2_bot`).
+- **Texts and calls:** Twilio, US & Canada first. Needs A2P 10DLC registration before launch.
+- **Email:** every bot gets its own address on a brand-free domain (`BOT_EMAIL_DOMAIN`, still to buy).
+- **Slack:** a per-bot app from a manifest.
+- **Discord:** `/ask` slash commands.
+- **WhatsApp and iMessage:** waitlist (Meta's US rules; Apple's business program).
+- **Teams, Google Chat, Signal:** later.
+
+## Build choice: subscriptions only through the Bridge; computer asleep = wait unless opted in
+
+- `claude -p` / `codex exec` run on the owner's computer, with built-in tools and hooks off and only our MCP tools.
+- We never see the login.
+- "Claude, always on" (a per-user cloud sandbox) is on the waitlist, not in v1.
+- Gemini is API key only.
+- When the computer sleeps, the bot waits by default. The owner can opt in per bot to fall back to the included model (answers open questions 6 and 7 for now).
+
+## Build choice: what makes it more than a chatbot builder
+
+- **Recipes:** shareable bot blueprints at `/r/[slug]` (look, personality, jobs, apps, channels, trust, routines — never secrets, memories or messages). "Make this bot" opens the builder prefilled, and its routines come along.
+- **Bots are MCP servers:** owners can use their bot's apps from Claude Desktop/Code or any MCP client, under the same rules.
+- **Routines:** morning briefs, inbox sweeps and reminders in the owner's time zone, on any channel.
+- **Demo mode:** every flow works with zero keys, so the product can be shown before any vendor is signed up.
+
+## Build choice (Claude; Diego to confirm): the bot reaches out first, every day
+
+- The builder offers a **morning brief**, on by default with a one-tap off. It is a real routine in the owner's time zone.
+- Its content follows the jobs they picked: calendar, emails to answer, reminders, weather.
+- Recipes that bring their own routines start with it off.
+- Reason: the README's point that the reach-out "is what keeps people coming back".
+
+## Build choice: the bot's face goes everywhere
+
+- Telegram bots get the avatar as their profile photo, and follow name and face changes made in Settings.
+- Bot emails have an HTML part with the face and an "AI assistant" footer.
+- 40 pre-rendered pictures live in `public/avatars/` (re-render with `npm run avatars`).
+
+## Build choice: an operator dashboard
+
+- `/admin` shows aggregates only: revenue estimate, people, bots, messages, brains, trust levels, channels, top apps, approvals, included-model spend and waitlists.
+- It is locked to `ADMIN_EMAILS`. In demo mode without that variable, any signed-in user can see it.
+
+## Build choice: abuse limits
+
+- Fixed-window rate limits in Postgres on:
+  - bot creation (which also creates anonymous accounts);
+  - API-key checks, so the endpoint can't be used as a stolen-key oracle;
+  - the waitlist, chat, sign-in links and verification codes.
+- IP-based limits are skipped when there is no proxy IP, and are 10× looser in demo mode.
+
+## Build choice (Claude; Diego to confirm): web actions on Browser Use Cloud
+
+Diego decided on 2026-10-13 that bots act on the web. Built as a beta:
+- **Provider:** Browser Use Cloud (API v2, plain `fetch`, no new dependencies).
+  - A hosted browser agent takes one plain-language task per step.
+  - A session stays open after "fill", so "send" runs in the same browser after the owner approves.
+  - `allowedDomains` keeps it on the form's site.
+  - It reports exactly what it typed.
+  - Stagehand + Browserbase remains the fallback behind the same interface.
+- **Tools:**
+  - `web_browse` (read).
+  - `web_form_fill` (stops before sending; the site counts as a recipient).
+  - `web_form_submit` (always asks, at every trust level — new hard limit).
+- **What the owner sees:** the approval card shows each field and value and a picture of the filled form, built from the stored fill, not the model's words.
+- **Refused in code:**
+  - payment pages, card or bank details;
+  - passwords, one-time codes and login pages;
+  - private addresses;
+  - secrets.
+- **Limits:** 40 live browser tasks per bot per day.
+- `BROWSER_USE_API_KEY` turns it on; demo mode simulates it.
+- Details: `docs/research/web-actions-2026-10-14.md`.
+
+## Decision: the bot can take notes in meetings (Diego, 2026-10-14)
+
+Diego (an idea from his mom): "One of the options for what the agent can do is kind of like Whisper, where it detects when you're in a meeting and it pops up and says, do you want to record this meeting? And then the agents will be able to transcribe it… there should be the cute little agent maybe on like the very, very bottom of the screen that's kind of there so you can see when it's being transcribed."
+
+Built (research: `docs/research/meetings-2026-10-14.md`):
+- **Two ways in, no bot joins the call:**
+  - The desktop app (`desktop/`, Electron) notices when an app starts using the microphone (Zoom, Meet, Teams, Webex, Slack, Discord…). The bot then peeks up from the bottom of the screen and asks "Want me to take notes?".
+  - The Meetings tab records in Chrome or Edge: the call's tab audio plus the mic.
+- **While it listens,** the bot sits at the very bottom of the screen with a red dot, a timer, a level meter and live captions; Pause, Stop and "Stop and delete" are one click away. In the browser it floats in a picture-in-picture window.
+- **Two tracks:** the mic is the owner ("You"); the call's audio is everyone else ("Others"). In-person meetings use one mic, labeled "Room". No voiceprints.
+- **Speech-to-text:** any OpenAI-compatible endpoint. The default is Groq's Whisper large-v3 turbo (about $0.04 per audio hour), with Together AI as an automatic fallback. Nebius Token Factory has no speech-to-text model.
+- **Notes:** the bot writes a summary, decisions and action items with a tool-free model call, then sends them to the web chat and the owner's best channel. Bots on the owner's own Claude/ChatGPT plan write them on the owner's computer.
+- **The bot's meeting tools** (list, read, search) count as outside content, so a line said in a call can't make it email anyone without the owner's tap (tested under Full faith).
+- **Limits:** Free 2 hours, Plus 15 hours, Pro 50 hours a month. That costs us about $0.09 / $0.69 / $2.30 a month on Groq. Meetings are capped at 4 hours, and recording stops after 15 minutes of silence.
+
+## Build choice (Claude; Diego to confirm): meeting-notes safety rules
+
+- **It never records before the owner says yes.** No auto-record setting: Granola (botless, like us) was sued on 2026-07-30 and Otter in 2025 over "surreptitious" recording.
+- **It only listens while it's visible on the screen,** enforced in code. The desktop app stops when its window is hidden, minimized, off-screen, or the screen locks. The web recorder runs only while its floating window is open. The window is never hidden from screen shares.
+- **Consent:**
+  - The first time, the owner acknowledges a short note about all-party-consent states.
+  - The pop-up offers a one-tap heads-up to paste in the call chat.
+  - Each meeting records who said yes, when, where, and whether the heads-up was copied.
+- **What we keep:**
+  - Audio is transcribed in memory and never stored on our servers. The desktop app writes audio to a temporary folder on the owner's own computer only when an upload fails or the app quits mid-upload, and deletes it once it's uploaded.
+  - Transcripts are kept 90 days by default (30 days, 90 days or forever in the Meetings tab), and can be deleted while keeping the notes.
+  - Notes stay until deleted.
+  - Meetings are in the account export and go with account deletion.
+- **New hard limit,** shown everywhere the others are: "It only listens to a meeting after you say yes, and it stays on your screen the whole time it's listening."
+- **Diego on consent (2026-10-14):** "It's one party consent. So as long as one person hits record, we're good."
+  - That holds under federal law and in most states: the owner is on the call and taps "Take notes".
+  - The caveats are in the research (§5): about 10 all-party states, California applying its rule to calls from other states, and the Otter and Granola suits arguing the vendor is a third party listening in.
+  - What's built stays until Diego decides otherwise: it asks first, stays visible, the heads-up is optional, and the first-time note is shown once. He can shorten or drop that note.
+- **Web recorder choices:**
+  - Starting takes up to three clicks: the one-time consent note, sharing the call's tab, then Start. Start opens the floating window and the mic in one click, because browsers need a click for each.
+  - Recording runs only while the floating window is open; closing it stops and writes the notes.
+  - Safari and phones can't open the floating window, so they're pointed to Chrome or Edge on a computer, or the desktop app.
+  - A paused recording (web or desktop) tells the server it's paused, so it isn't wrapped up as abandoned after 20 minutes. It still counts toward the 4-hour cap.
+- **Desktop app choices:**
+  - FaceTime and phone calls aren't detected.
+  - On a Mac, reading browser tab titles (to spot Google Meet in a browser) needs an Automation permission, so it's off unless the owner turns it on from the menu bar.
+  - When a Mac can't get the call's audio, the app says it's a permission problem and keeps going with the mic only.
+  - "Unpair" revokes the computer's token on the server, not just on the computer.
+
+## Decision: host on Vercel + Supabase; public demo for the walkthrough (Diego, 2026-10-14)
+
+Diego asked: "Is vercel the right software to use for this? or AWS or google or something else?" and, about the database, "is supabase google aws cloudfare which one is the best? look into cloudfare especially." Research: `docs/research/hosting-2026-10-14.md`.
+
+- **Host: Vercel.** Diego's team is already on Pro, which allows commercial use and the every-minute reminder cron.
+  - Vercel and Supabase run the app with no code changes.
+  - Cloudflare Workers would need about a week of changes (`after()` stops 30 s after the response, among others) to save $15–30 a month.
+  - AWS Amplify doesn't support Next 16, App Runner is closed to new customers, and Cloud Run costs about $45–50 a month always on.
+- **Database: Supabase Postgres.** Cloudflare D1 is SQLite, so it would mean a data-layer rewrite (1–2 weeks) to save about $10 a month. Cloudflare has no Postgres of its own.
+- **Free first.** Diego: "cant we use the free version at first to test this out and the move it to paid after if its working?"
+  - Start in a free Supabase organization; Diego's main org is on Pro, where each project is billed.
+  - Move the project to the Pro org (Transfer project) once it's working.
+- **Cloudflare later, all free:** Turnstile on bot creation; Email Routing for bots' inboxes; Workers AI Whisper as the transcription fallback.
+- **Public demo.** Diego: "anyone can open it, only i have the admin account."
+  - The walkthrough runs in demo mode on a public URL; the admin is Diego's Gmail.
+  - Demo mode shows sign-in links on screen, so admin emails also need `ADMIN_SIGNIN_CODE`, a code Diego sets on the server.
+  - Other demo accounts can still be claimed by anyone, so testers shouldn't paste real API keys or connect real accounts until real email sign-in (Resend + a verified domain) is set up.
+- **Brain:** Diego adds his own Token Factory and Tavily keys in Vercel; keys never go through chat or the repo.
+
+## Security review before Diego's walkthrough (2026-10-14)
+
+A code review of the server and the desktop app. Each fix has a test that fails on the old code.
+
+**Fixed:**
+- **Critical, Discord `/link`:** the typed code went into a LIKE pattern, so `/link code:%` made any Discord user the owner of a bot with a pending link. Codes are now 8 letters and digits (`K7XQ-29MD`), matched exactly, claimed once, 10 tries per 10 minutes per Discord user.
+- **High, app sign-in:** the sign-in callback now finishes only for the signed-in person who started it. Before, a stranger's link could connect someone else's Gmail to the stranger's bot.
+- **High, notes on the owner's computer:** that Bridge job now only gets the read-only meeting tools, so a line said in a call can't make it send, save or schedule anything.
+- **High, notes in the chat:** meeting notes in the recent history count as outside content, so "email the recap to everyone" asks before writing to someone new.
+- **Medium:**
+  - meeting minutes also count the audio really transcribed, so a recorder can't hide minutes;
+  - notes are sent once, and never for a deleted meeting;
+  - retention can't be starved by meetings kept forever;
+  - meeting settings are merged in SQL, never rewritten from a stale copy;
+  - desktop: a long pause no longer ends the meeting, offline "Stop and delete" retries every minute, and the token only goes to the paired server.
+- **Low:**
+  - the Telegram manager webhook refuses updates without `TELEGRAM_MANAGER_WEBHOOK_SECRET`;
+  - audio uploads stop reading at 8 MB;
+  - the bot API no longer returns the Telegram webhook secret;
+  - logout checks the origin;
+  - switching a routine back on counts against the plan.
+
+**Build choice (Claude; Diego to confirm): a paused bot doesn't write meeting notes.** STOP means no model runs and nothing is sent. The transcript is kept, and **Try again** on the meeting page writes the notes after resuming. STOP also cancels turns still waiting for the owner's computer.
+
+**For Diego to decide:**
+1. **Taint across turns.**
+   - The bot's own summary of an email or web page doesn't carry the "outside content" mark into the next turn.
+   - Under Full faith, writes and deletes after reading outside content aren't held. Sends to someone new are.
+2. **Owner by email address or caller ID.** Both can be forged.
+   - Email from the owner already counts as outside content, so a forged one can't write to strangers. It can still make writes in the owner's own apps under Trusted helper or Full faith, and send STOP or START.
+   - Fix: require the email provider's DKIM/SPF pass, and STIR/SHAKEN attestation for calls.
+3. **Bot-sent texts aren't metered.** Only incoming ones count toward the plan.
+4. **The monthly spending cap is still a placeholder** (`spentThisMonthUsd` is 0). This is harmless today: no tool reports amounts, so all spending is refused.
+5. **One recording per bot isn't enforced by the database.** A double start can make two meetings. It needs a partial unique index (a migration).
+6. **Long meetings:** notes for a meeting near 4 hours may exceed Vercel's 300-second function limit. Housekeeping writes notes inside the cron tick.
+
+## Gotchas found while building
+
+- Nemotron and other reasoning models: thinking eats `max_tokens`. Included models get 8–16K, and thinking is off on "Quick".
+- Avatars and the logo use per-instance SVG gradient ids. A duplicate id inside a hidden copy (the desktop sidebar on phones) blanks every later copy.
+- Custom OpenAI-compatible endpoints are checked against private and metadata addresses and may not redirect (SSRF).
+- `ENCRYPTION_KEY` must be shared by every server instance. Production refuses to start with `DATABASE_URL` but no key.
+- `next dev` appends Next.js agent rules to AGENTS.md unless `agentRules: false` (set in `next.config.ts`).
+- Per-minute Vercel Cron needs a paid plan; otherwise an external pinger calls `/api/cron/tick`.
+- Build output tracing followed `path.join(process.cwd(), ".data")` and put the local dev database and dev encryption key into every server bundle's file list. `next.config.ts` now excludes `.data/**`, and runtime-only paths carry `/* turbopackIgnore: true */`.
+
+- Electron gives no error when macOS system-audio permission is missing: the track arrives already ended. The desktop app checks for that and continues mic-only.
+- Document Picture-in-Picture windows can't be positioned by the page, so "bottom of the screen" is exact only in the desktop app.
+- Times a model passes to tools are the owner's local time. The demo brain must do its time math on the owner's clock (the time zone is in the system prompt), not the server's: on a UTC server, a Chicago owner's "remind me in 1 minute" fired 5 hours late. The unit test now pins "in 20 minutes" to under 25.
+- The demo brain is what people meet first without keys, so every starter idea in `src/lib/jobs.ts` should get a real answer from it. Check them all after changing either file.
+
+## Open questions (updated 2026-10-14)
+
+1. First users: tinkerers or everyday iPhone users? (unchanged)
+2. Pricing: confirm or change the table above. Is Full faith a paid feature?
+3. Web actions: confirm Browser Use Cloud (see above), then test with a live key on about 10 real forms before turning it on for everyone.
+4. Buy a brand-free domain for bot inboxes; Twilio A2P registration; Composio plan; publish the Bridge to npm. The app already shows `npx build-a-bot-bridge`, and on 2026-10-14 that name was unclaimed, so anyone could register it.
+5. Trademark clearance before brand spend (unchanged).
+6. Meeting notes before launch:
+   - a lawyer's review of the consent flow and retention (California § 632, and the Granola complaint's theory);
+   - Groq's paid tier (the free tier allows 7,200 audio-seconds an hour per organization);
+   - sign and notarize the Mac app. Diego already has an Apple Developer account (2026-10-14); what's needed is a Developer ID Application certificate and notarization credentials in CI secrets, and a Mac or macOS runner to build;
+   - whether to merge the desktop app with the Bridge into one "Build-a-bot app".
+7. Meeting notes, next: transcription on the owner's own key or on-device (sherpa-onnx with Parakeet), and calendar-based meeting titles.

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Build-a-bot</title>
+    <link rel="stylesheet" href="pairing.css" />
+    <script src="pairing.js" defer></script>
+  </head>
+  <body>
+    <header class="top">
+      <img src="icon.png" alt="" width="40" height="40" />
+      <div>
+        <p class="brand">Build-a-bot</p>
+        <p class="sub">on this computer</p>
+      </div>
+    </header>
+
+    <main id="loading" class="view" aria-busy="true">
+      <p class="muted">One moment…</p>
+    </main>
+
+    <main id="signed-out" class="view" hidden>
+      <h1>Pair this computer</h1>
+      <p>Your bot can notice when a call starts and offer to take notes. To connect this computer, open Build-a-bot, go to <strong>Bridge (your computer)</strong>, and type the code you see under Desktop app.</p>
+      <p id="signed-out-reason" class="notice" role="status" hidden></p>
+      <button type="button" class="link" id="open-pair-page">Open that page</button>
+
+      <form id="pair-form" novalidate>
+        <label for="code">Pairing code</label>
+        <input id="code" name="code" class="code" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" placeholder="ABCD-1234" maxlength="9" required />
+        <details id="server-details">
+          <summary>Server</summary>
+          <label for="server" class="sr-only">Server address</label>
+          <input id="server" name="server" type="url" spellcheck="false" />
+          <p class="hint">Only change this for testing, like <code>http://localhost:3000</code>.</p>
+        </details>
+        <p id="pair-error" class="error" role="alert" hidden></p>
+        <button type="submit" class="primary" id="pair-button">Pair</button>
+      </form>
+
+      <ul class="promises">
+        <li>It asks before it takes notes, every time.</li>
+        <li>It stays at the bottom of your screen the whole time it listens. Stop is one click.</li>
+        <li>Audio is turned into text, then thrown away.</li>
+      </ul>
+    </main>
+
+    <main id="paired" class="view" hidden>
+      <h1>You're all set</h1>
+      <p id="paired-line"></p>
+      <p id="offline" class="notice" role="status" hidden>I can't reach Build-a-bot right now. I'll keep trying.</p>
+
+      <section aria-labelledby="who-heading">
+        <h2 id="who-heading">Who takes notes</h2>
+        <div id="bots" role="radiogroup" aria-labelledby="who-heading"></div>
+        <div id="no-bots" hidden>
+          <p id="no-bots-text"></p>
+          <div class="row">
+            <button type="button" class="primary" id="turn-on">Turn on meeting notes</button>
+            <button type="button" class="secondary" id="check-again">Check again</button>
+          </div>
+        </div>
+      </section>
+
+      <p id="storage" class="hint"></p>
+      <p class="hint" id="close-hint"></p>
+      <div class="row end">
+        <button type="button" class="link danger" id="unpair">Unpair this computer</button>
+        <button type="button" class="primary" id="done">Done</button>
+      </div>
+    </main>
+  </body>
+</html>
