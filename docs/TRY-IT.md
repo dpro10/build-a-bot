@@ -182,7 +182,7 @@ npm run dev
 - **Subscriptions (the Bridge):** it runs on a computer that has the `claude` or `codex` CLI installed and signed in.
   - Pair it from **Bridge (your computer)**.
   - On your own computer the app shows commands that run from this folder, like `node bridge/bab-bridge.mjs pair ABCD-1234 --server http://localhost:3000`, then `node bridge/bab-bridge.mjs` to start it.
-  - On a deployment it shows `npx build-a-bot-bridge …`, which works once the Bridge is published to npm. Until then, set `BRIDGE_CLI=node bridge/bab-bridge.mjs` there and run the commands from your copy of the repo.
+  - On a deployment it shows `npx -y https://build-a-bot.site/downloads/build-a-bot-bridge-0.1.0.tgz …`: the site serves its own copy of the Bridge, so it works without the repo or anything on npm.
 
 **Meeting notes:**
 - The Mac app isn't signed or notarized yet. That needs a Developer ID certificate and notarization credentials in CI secrets, built on a Mac.

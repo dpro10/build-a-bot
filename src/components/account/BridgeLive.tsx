@@ -54,7 +54,7 @@ export function BridgeLive({
   allBots,
   serverNow,
   prerequisites,
-  startCommand = "npx build-a-bot-bridge",
+  startCommand,
 }: {
   initialDevices: DeviceView[];
   subscriptionBots: SubscriptionBot[];
@@ -62,7 +62,8 @@ export function BridgeLive({
   serverNow: number;
   prerequisites: React.ReactNode;
   /** How the Bridge is started on this server (src/lib/bridge/cli.ts). */
-  startCommand?: string;
+  /** How this server tells owners to start the Bridge (src/lib/bridge/cli.ts). */
+  startCommand: string;
 }) {
   const router = useRouter();
   const [devices, setDevices] = React.useState(initialDevices);
