@@ -38,6 +38,7 @@ export function AddAppsDialog({
   spendCapUsd,
   composioLive,
   paidPlans,
+  comingSoon,
   onAdded,
   onConnect,
   startInCustom,
@@ -54,6 +55,8 @@ export function AddAppsDialog({
   composioLive: boolean;
   /** Paid plans can be bought here; otherwise the app limit says they're coming soon, with no link. */
   paidPlans: boolean;
+  /** Built-ins this server can't run yet. */
+  comingSoon: string[];
   onAdded: (conn: ConnectionView) => void;
   /** Starts sign-in; resolves with what happened. */
   onConnect: (conn: ConnectionView, plan: ConnectPlan, opts?: { fromDialog?: boolean }) => Promise<ConnectOutcome>;
@@ -139,6 +142,7 @@ export function AddAppsDialog({
                 onToggle={(d) => void add(d)}
                 jobs={jobs}
                 added={added}
+                comingSoon={comingSoon}
                 onCustomMcp={() => setView("custom")}
                 autoFocus
                 maxHeight="calc(var(--sheet-h) - 234px)"
@@ -198,7 +202,7 @@ export function AddAppsDialog({
                           ? `Paste an access token so ${botName} can use it.`
                           : plan
                             ? `Sign in to ${name} so ${botName} can use it.`
-                            : `${name} can't be connected on this server yet.`}
+                            : `${name} is coming soon.`}
               </DialogDescription>
             </DialogHeader>
             <DialogBody className="sm:px-10">

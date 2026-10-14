@@ -12,8 +12,9 @@ export function isBuiltin(def: ConnectorDef): boolean {
   return def.via.some((v) => v.kind === "builtin");
 }
 
-export function isAvailable(def: ConnectorDef): boolean {
-  return def.status !== "soon";
+/** Can be picked today. `comingSoon`: built-ins this server can't run yet (from comingSoonBuiltins()). */
+export function isAvailable(def: ConnectorDef, comingSoon?: ReadonlySet<string>): boolean {
+  return def.status !== "soon" && !comingSoon?.has(def.id);
 }
 
 /** Third-party apps that count toward a plan's app limit. */
@@ -63,10 +64,10 @@ export function matchScore(def: ConnectorDef, query: string): number {
 }
 
 /** Apps that fit the chosen jobs, best first (popular before niche, available before soon). */
-export function suggestedFor(jobs: string[], limit = 12): ConnectorDef[] {
+export function suggestedFor(jobs: string[], limit = 12, comingSoon?: ReadonlySet<string>): ConnectorDef[] {
   if (!jobs.length) return [];
   const want = new Set(jobs);
-  return ALL_CONNECTORS.filter((c) => isAvailable(c) && !ALWAYS_ON.has(c.id) && c.id !== "custom_mcp" && (c.jobs ?? []).some((j) => want.has(j)))
+  return ALL_CONNECTORS.filter((c) => isAvailable(c, comingSoon) && !ALWAYS_ON.has(c.id) && c.id !== "custom_mcp" && (c.jobs ?? []).some((j) => want.has(j)))
     .map((c) => ({ c, score: (c.popular ? 10 : 0) + (c.jobs ?? []).filter((j) => want.has(j)).length * 3 + (isBuiltin(c) ? 1 : 0) }))
     .sort((a, b) => b.score - a.score || a.c.name.localeCompare(b.c.name))
     .slice(0, limit)

@@ -71,6 +71,7 @@ export function ConnectionRow({
   spendCapUsd,
   plan,
   builtin,
+  comingSoon,
   highlighted,
   expanded,
   onExpandedChange,
@@ -88,6 +89,8 @@ export function ConnectionRow({
   plan: ConnectPlan | null;
   /** Built-in tool (no sign-in): compact row with an on/off switch. */
   builtin?: boolean;
+  /** A built-in this server can't run yet: no switch or permissions, only "Coming soon". */
+  comingSoon?: boolean;
   highlighted?: boolean;
   expanded: boolean;
   onExpandedChange: (open: boolean) => void;
@@ -174,13 +177,13 @@ export function ConnectionRow({
   if (!builtin) {
     if (conn.status === "demo") {
       statusLine = !plan ? (
-        <Line icon={<FlaskConical className="text-primary" />}>Uses sample data. A real connection isn&apos;t available on this server yet.</Line>
+        <Line icon={<FlaskConical className="text-primary" />}>Uses sample data. A real connection is coming soon.</Line>
       ) : null;
     } else if (conn.status === "needs_auth") {
       statusLine = (
         <Line icon={<KeyRound className="text-warning" />}>
           {!plan
-            ? `${name} can't be connected on this server yet.`
+            ? `${name} is coming soon.`
             : plan.kind === "token"
               ? `Paste an access token so ${botName} can use ${name}.`
               : `Sign in to ${name} so ${botName} can use it.`}
@@ -201,10 +204,11 @@ export function ConnectionRow({
       )}
     >
       <div className="flex items-start gap-3">
-        <BrandTile icon={def.icon} size={builtin ? 36 : 44} className={cn(off && "opacity-50 grayscale")} />
+        <BrandTile icon={def.icon} size={builtin ? 36 : 44} className={cn((off || comingSoon) && "opacity-50 grayscale")} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className={cn("font-semibold", off && "text-muted-foreground")}>{name}</span>
+            <span className={cn("font-semibold", (off || comingSoon) && "text-muted-foreground")}>{name}</span>
+            {comingSoon ? <Badge tone="neutral">Coming soon</Badge> : null}
             {def.sensitive ? (
               <Tooltip content="Money, health or identity data: changes always ask you first.">
                 <span className="inline-flex text-warning" role="img" aria-label="Sensitive app">
@@ -226,7 +230,7 @@ export function ConnectionRow({
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           {primary ? <div className="hidden sm:block">{primary}</div> : null}
-          {builtin ? (
+          {builtin && !comingSoon ? (
             <Switch
               checked={!off}
               onCheckedChange={(v) => actions.onEnabled(conn, v)}
@@ -240,7 +244,7 @@ export function ConnectionRow({
 
       {primary ? <div className="mt-3 pl-14 sm:hidden [&>button]:w-full">{primary}</div> : null}
 
-      {def.capabilities.length && !(builtin && def.capabilities.every((c) => c.effect === "read")) ? (
+      {def.capabilities.length && !comingSoon && !(builtin && def.capabilities.every((c) => c.effect === "read")) ? (
         <div className={cn("mt-2.5", builtin ? "pl-12" : "pl-14")}>
           <button
             type="button"

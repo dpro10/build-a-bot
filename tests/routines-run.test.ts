@@ -169,8 +169,19 @@ describe("routine results", () => {
     expect(latest).toMatchObject({ status: "error", title: "Routine “Morning brief” didn't finish" });
   });
 
+  it("with no computer paired yet, the brief says how to pair one, once", async () => {
+    const { bot, brief } = await botWithBrief("Newcomer", { kind: "subscription", subscription: "claude" });
+    const before = await chat(bot);
+    await runNow(bot.id, brief.id);
+    const added = await newInChat(bot, before);
+    expect(added).toHaveLength(1);
+    expect(added[0].text).toMatch(/Pair your computer/);
+  });
+
   it("a brief waiting on the owner's sleeping computer still says so in the chat, once", async () => {
     const { bot, brief } = await botWithBrief("Napper", { kind: "subscription", subscription: "claude" });
+    // Paired once, not seen for an hour.
+    await db.insert(schema.bridgeDevices).values({ id: "brd_napper", ownerId: bot.ownerId, name: "Laptop", tokenHash: "hash-napper", platform: "darwin", lastSeenAt: new Date(Date.now() - 3600_000) });
     const before = await chat(bot);
     const res = await runNow(bot.id, brief.id);
     expect(await res.json()).toMatchObject({ outcome: "queued" });

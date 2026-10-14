@@ -74,7 +74,7 @@ export const webSearch = defineTool({
   summarize: (a) => `Search: “${a.query}”`,
   async run(args, ctx) {
     if (!config.tavily.apiKey) {
-      if (!ctx.demo) return { ok: false, error: "Web search isn't set up on this server." };
+      if (!ctx.demo) return { ok: false, error: "Web search is coming soon. Answer from what you already know, and say you couldn't search the web." };
       const d = demoResults(args.query);
       return formatResults(d.answer, d.results);
     }
@@ -96,7 +96,7 @@ export const newsHeadlines = defineTool({
   summarize: (a) => `News: “${a.topic}”`,
   async run(args, ctx) {
     if (!config.tavily.apiKey) {
-      if (!ctx.demo) return { ok: false, error: "News search isn't set up on this server." };
+      if (!ctx.demo) return { ok: false, error: "News is coming soon. Answer from what you already know, and say you couldn't check the news." };
       const d = demoResults(args.topic, true);
       return formatResults(d.answer, d.results);
     }

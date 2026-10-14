@@ -6,10 +6,12 @@
 import { AVATARS, type AvatarId, type ColorwayId } from "@/lib/avatars";
 import type { TrustLevel } from "@/lib/trust";
 import type { ChannelKind } from "@/lib/channels/catalog";
+import { PLANS, type PlanId } from "@/lib/billing/plans";
+import { getConnector } from "@/lib/connectors";
 import { INCLUDED_MODELS, PROVIDER_BY_ID, type ProviderId } from "@/lib/models/catalog";
 import { isJobId, JOB_BY_ID } from "@/lib/jobs";
 import type { RecipeData } from "@/lib/recipes";
-import { ALWAYS_ON } from "@/components/catalog/connector-meta";
+import { ALWAYS_ON, countsTowardLimit } from "@/components/catalog/connector-meta";
 
 export const STEPS = [
   { id: "face", label: "Face", title: "Pick a face" },
@@ -51,7 +53,16 @@ export type BuilderState = {
 
 export const DEFAULT_MODEL = INCLUDED_MODELS.find((m) => m.default)!.id;
 
-export function initialState(recipe?: (RecipeData & { slug?: string }) | null): BuilderState {
+/** Apps that count toward the plan's limit: third-party apps from the catalog plus your own MCP servers. */
+export function countedApps(connectors: string[], customMcp: unknown[]): number {
+  return connectors.filter((id) => {
+    const def = getConnector(id);
+    return Boolean(def && countsTowardLimit(def));
+  }).length + customMcp.length;
+}
+
+/** `comingSoon`: built-ins this server can't run yet, left out of a recipe's picks. */
+export function initialState(recipe?: (RecipeData & { slug?: string }) | null, comingSoon: readonly string[] = []): BuilderState {
   const base: BuilderState = {
     avatar: "blip",
     color: AVATARS.blip.defaultColor,
@@ -81,7 +92,7 @@ export function initialState(recipe?: (RecipeData & { slug?: string }) | null): 
     name: recipe.name,
     jobs,
     // Jobs bring their built-in tools (web search for research, and so on), just like picking them by hand.
-    connectors: [...new Set([...recipe.connectors, ...jobs.flatMap((j) => JOB_BY_ID[j].builtins).filter((b) => !ALWAYS_ON.has(b))])],
+    connectors: [...new Set([...recipe.connectors, ...jobs.flatMap((j) => JOB_BY_ID[j].builtins).filter((b) => !ALWAYS_ON.has(b))])].filter((id) => !comingSoon.includes(id)),
     trust: recipe.trust,
     channels: recipe.channels.filter((c): c is ChannelKind => c !== "web") as ChannelKind[],
     instructions: recipe.instructions,
@@ -89,6 +100,18 @@ export function initialState(recipe?: (RecipeData & { slug?: string }) | null): 
     // The recipe brings its own routines.
     brief: { ...base.brief, on: !recipe.routines?.length },
   };
+}
+
+/** An included model from a tier the plan doesn't have (Plus or Pro). Demo mode has every tier. */
+export function modelLocked(modelId: string, plan: PlanId, demo: boolean): boolean {
+  const m = INCLUDED_MODELS.find((x) => x.id === modelId);
+  return !demo && Boolean(m) && !PLANS[plan].includedModels.includes(m!.tier);
+}
+
+/** A saved draft, trimmed to what can be picked here now: no coming-soon built-ins, and a model the plan has. */
+export function fitToServer(s: BuilderState, opts: { plan: PlanId; demo: boolean; comingSoon: readonly string[] }): BuilderState {
+  const brain = s.brain.kind === "included" && modelLocked(s.brain.model, opts.plan, opts.demo) ? { ...s.brain, model: DEFAULT_MODEL } : s.brain;
+  return { ...s, brain, connectors: (s.connectors ?? []).filter((id) => !opts.comingSoon.includes(id)) };
 }
 
 export const STORAGE_KEY = "bab-builder-v1";
