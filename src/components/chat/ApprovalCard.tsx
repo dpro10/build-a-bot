@@ -41,6 +41,10 @@ export function ApprovalCard({
 }) {
   const [busy, setBusy] = React.useState<"approve" | "deny" | null>(null);
   const [status, setStatus] = React.useState(approval.status ?? "pending");
+  // Follow the server: a decision made elsewhere (another tab, a channel, a remount) shows up here.
+  React.useEffect(() => {
+    if (approval.status) setStatus(approval.status);
+  }, [approval.status]);
 
   const decide = async (decision: "approve" | "deny") => {
     setBusy(decision);

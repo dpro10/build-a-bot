@@ -80,3 +80,103 @@ Build-a-bot is its own brand with its own friendlier look; Cookbook's DESIGN.md 
 5. Timing: design now, build after the hackathon (submission due 2026-10-30, 10am PT) and finals. Competes with the Jan 8 Cookbook decision.
 6. Claude subscriptions in a cloud sandbox in v1, or later?
 7. When the user's computer is asleep: wait, or fall back to Free (opt-in)?
+
+---
+
+# 2026-10-14: the first full build
+
+## Decision: build the whole product now, end to end
+
+**Diego (2026-10-14):** "give people the option to choose from 5 cute different avatars that you design, then people can name them, and then the next steps need to be pick which model, they can bring their subcription or pick from an open weight model we can route them trhough nebius. Then they pick what tools they want their agent to be able to access and how much they want to trust it. There should be the option to put full faith in your agent and it can connect to your email, github, google drive, etc. I know theres much more. They should pick what all they want it connected to very easily from a extensive list of connectors. They also should be able to pick how they want to communicate with it, phone call, text, email, slack, telegram, discord, etc. Multiple ways are fine. Try and build the full end to end product, not just a slice. I want something genuenily impressive, and innovative, something that could start generating revenue."
+
+What this settles:
+- **Timing:** building started 2026-10-14 (supersedes "design now, build after the hackathon").
+- **Five original avatars**, designed: Blip (robot), Nimbus (cloud), Sprout (seedling), Ember (spark), Otto (octopus), in 8 colorways, each with its own personality. No bears, no toys.
+- **Builder order:** face → name → brain → apps → trust → channels → review. The bot greets its owner first.
+- **Brains:** the owner's subscription (through the Bridge) or open-weight models on Nebius Token Factory; own API keys too.
+- **Trust includes "Full faith"**: the bot acts across email, GitHub, Drive and the rest without asking (hard limits still apply; below).
+- **An extensive, easy app list** and **several channels at once**: phone calls, texts, email, Slack, Telegram, Discord.
+
+## Build choice: a standalone app with its own Postgres (Cookbook later)
+
+The "Cookbook on the inside" proposal stays open. v1 is a standalone Next.js app with its own database, so it can ship and earn on its own. Bot-to-bot in Cookbook can come later by giving each bot a Cookbook identity.
+
+## Build choice (Claude; Diego to confirm): four trust levels, limits enforced in code
+
+- Levels: **Look only**, **Ask me first** (default), **Trusted helper**, **Full faith**. The policy engine (`src/lib/policy/engine.ts`) enforces them; the model is told but never relied on.
+- Hard limits at every level, Full faith included:
+  - **Prompt-injection guard:** after reading outside content, sending to someone new asks.
+  - Secrets never sent.
+  - Money off unless a monthly cap is set; never over the cap.
+  - Bulk deletes (more than 10) ask.
+  - Sensitive apps (money, health, identity) ask before changes.
+  - Quiet hours.
+  - STOP from any channel.
+  - AI disclosure on messages to other people.
+  - A receipt for every action (append-only in the database).
+- Owners can fine-tune each app's capabilities (allow / ask / off). An owner's "allow" never relaxes the injection guard.
+
+## Build choice (Claude; Diego to confirm): pricing
+
+| | Free | Plus | Pro |
+|---|---|---|---|
+| Price | $0 | $12/mo ($10 yearly) | $39/mo ($32 yearly) |
+| Bots | 1 | 3 | 10 |
+| Included-model messages | 300 | 3,000 | 15,000 |
+| Own key / subscription messages | 2,000 (fair use) | 20,000 | 100,000 |
+| Searches | 50 | 600 | 3,000 |
+| Apps per bot | 3 | 50 | 200 |
+| Calls / texts | — | 60 min / 300 | 300 min / 1,500 |
+| Full faith | — | ✓ | ✓ |
+| Included models | Fast | + Balanced | + Smart |
+
+Cost basis: Nemotron 3.5 Lightning ≈ $0.0004 a turn; Tavily $0.008 a search after 1,000 free; SMS ≈ $0.013 a segment; voice ≈ $0.02–0.09 a minute.
+
+## Build choice: how apps connect
+
+- **Official remote MCP servers come first** when the vendor allows self-registration (OAuth 2.1 with a Client ID Metadata Document at `/oauth/client.json`, else dynamic registration).
+- **Composio** covers the rest (managed sign-in), and **any MCP server by URL** works.
+- The catalog lists ~190 apps; ~50 are honestly marked "soon".
+- Demo mode simulates apps with sample data.
+
+## Build choice: channels
+
+- **Telegram:** managed bots (one tap; the bot's username comes from its name, e.g. `inky_k7x2_bot`).
+- **Texts and calls:** Twilio, US & Canada first. Needs A2P 10DLC registration before launch.
+- **Email:** every bot gets its own address on a brand-free domain (`BOT_EMAIL_DOMAIN`, still to buy).
+- **Slack:** a per-bot app from a manifest.
+- **Discord:** `/ask` slash commands.
+- **WhatsApp and iMessage:** waitlist (Meta's US rules; Apple's business program).
+- **Teams, Google Chat, Signal:** later.
+
+## Build choice: subscriptions only through the Bridge; computer asleep = wait unless opted in
+
+- `claude -p` / `codex exec` run on the owner's computer, with built-in tools and hooks off and only our MCP tools.
+- We never see the login.
+- "Claude, always on" (a per-user cloud sandbox) is on the waitlist, not in v1.
+- Gemini is API key only.
+- When the computer sleeps, the bot waits by default. The owner can opt in per bot to fall back to the included model (answers open questions 6 and 7 for now).
+
+## Build choice: what makes it more than a chatbot builder
+
+- **Recipes:** shareable bot blueprints at `/r/[slug]` (look, personality, jobs, apps, channels, trust, routines — never secrets, memories or messages). "Make this bot" opens the builder prefilled, and its routines come along.
+- **Bots are MCP servers:** owners can use their bot's apps from Claude Desktop/Code or any MCP client, under the same rules.
+- **Routines:** morning briefs, inbox sweeps and reminders in the owner's time zone, on any channel.
+- **Demo mode:** every flow works with zero keys, so the product can be shown before any vendor is signed up.
+
+## Gotchas found while building
+
+- Nemotron and other reasoning models: thinking eats `max_tokens`. Included models get 8–16K, and thinking is off on "Quick".
+- Avatars and the logo use per-instance SVG gradient ids. A duplicate id inside a hidden copy (the desktop sidebar on phones) blanks every later copy.
+- Custom OpenAI-compatible endpoints are checked against private and metadata addresses and may not redirect (SSRF).
+- `ENCRYPTION_KEY` must be shared by every server instance. Production refuses to start with `DATABASE_URL` but no key.
+- `next dev` appends Next.js agent rules to AGENTS.md unless `agentRules: false` (set in `next.config.ts`).
+- Per-minute Vercel Cron needs a paid plan; otherwise an external pinger calls `/api/cron/tick`.
+
+## Open questions (updated 2026-10-14)
+
+1. First users: tinkerers or everyday iPhone users? (unchanged)
+2. Pricing: confirm or change the table above. Is Full faith a paid feature?
+3. Web actions: provider and model (see `docs/research/web-actions-2026-10-14.md` once written).
+4. Buy a brand-free domain for bot inboxes; Twilio A2P registration; Composio plan.
+5. Trademark clearance before brand spend (unchanged).

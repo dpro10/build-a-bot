@@ -68,6 +68,7 @@ export async function runDueSchedules(db: Db, now = new Date(), limit = 25) {
           channelKind: "web",
           message: null,
           directive: `Run your scheduled routine “${s.title}” now: ${s.prompt}\nWrite the result as a message to the owner (it will be delivered${channel !== "auto" && channel !== "web" ? ` by ${channel}` : ""}). Keep it short and useful.`,
+          trigger: s.kind === "reminder" ? "reminder" : "routine",
         });
         await receipt(db, bot, "routine", "ok", `Ran routine “${s.title}”`, { scheduleId: s.id });
         if (result.text && channel !== "web") {

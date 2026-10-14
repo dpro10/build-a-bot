@@ -144,6 +144,7 @@ async function followUpTurn(db: Db, bot: Bot, owner: User, approval: Approval, d
     channelKind: conversation.channelKind,
     message: null,
     directive,
+    trigger: "approval",
     noTools: true,
   });
   if (conversation.channelKind !== "web" && result.text) {

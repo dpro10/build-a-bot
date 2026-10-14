@@ -62,8 +62,11 @@ export function Builder({ plan, demo, live, recipe, botCount, signedIn }: Builde
   }, []);
 
   // Restore a saved draft (unless a recipe link brought them here) and detect the time zone.
+  const restoredOnce = React.useRef(false);
   React.useEffect(() => {
     setTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
+    if (restoredOnce.current) return;
+    restoredOnce.current = true;
     if (!recipe) {
       const draft = loadDraft();
       if (draft && (draft.state.name || draft.step > 0)) {

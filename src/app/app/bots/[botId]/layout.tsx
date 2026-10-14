@@ -15,7 +15,7 @@ export default async function BotLayout({ children, params }: { children: React.
   const pending = await listApprovals(db, user.id, { botId, status: "pending" });
   return (
     <BotLiveProvider initialPaused={bot.status === "paused"} initialPending={pending.length}>
-      <div className="flex min-h-0 flex-1 flex-col lg:h-dvh">
+      <div className="flex min-h-0 flex-1 flex-col">
         <BotHeader
           bot={{ id: bot.id, name: bot.name, avatar: bot.avatar, color: bot.color, trust: bot.trust, status: bot.status }}
           brain={brainLabel(bot.brain)}

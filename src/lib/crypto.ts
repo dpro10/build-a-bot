@@ -25,6 +25,12 @@ function loadKey(): Buffer {
     cachedKey = key;
     return key;
   }
+  // A shared database needs one shared key: per-instance keys would make secrets
+  // saved by one server unreadable by the next. Only a single local instance
+  // (dev, or a demo on PGlite) may fall back to a key file.
+  if (process.env.DATABASE_URL && process.env.NODE_ENV === "production") {
+    throw new Error("ENCRYPTION_KEY is required with DATABASE_URL in production (openssl rand -base64 32)");
+  }
   if (process.env.NODE_ENV === "production" && !process.env.DEMO_MODE && !process.env.VERCEL_ENV?.startsWith("preview")) {
     throw new Error("ENCRYPTION_KEY is required in production");
   }

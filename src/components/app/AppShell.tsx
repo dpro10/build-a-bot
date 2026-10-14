@@ -66,13 +66,16 @@ export function AppShell({
         </div>
       ) : null}
 
-      <main className="flex min-w-0 flex-1 flex-col pt-14 lg:pt-0">
+      {/* One screen tall: pages scroll inside, so the chat composer stays put on phones too. */}
+      <main className="flex h-dvh min-w-0 flex-1 flex-col pt-14 lg:pt-0">
         {demo ? (
-          <div className="border-b border-warning/30 bg-warning-soft px-4 py-1.5 text-center text-xs font-medium text-warning">
+          <div className="shrink-0 border-b border-warning/30 bg-warning-soft px-4 py-1.5 text-center text-xs font-medium text-warning">
             Demo mode: integrations without keys are simulated — nothing real is sent or charged.
           </div>
         ) : null}
-        {children}
+        <div id="app-scroll" className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          {children}
+        </div>
       </main>
     </div>
   );
