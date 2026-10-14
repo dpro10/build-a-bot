@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { cache } from "react";
+import { ArrowLeft } from "lucide-react";
 import { getDb } from "@/lib/db";
 import { getUser } from "@/lib/auth/session";
 import { adminEmails, adminMetrics, isAdmin, type Breakdown } from "@/lib/admin/metrics";
@@ -10,11 +12,20 @@ import { CHANNEL_BY_KIND, type ChannelKind } from "@/lib/channels/catalog";
 import { AVATARS, isAvatarId } from "@/lib/avatars";
 import { TRUST, isTrustLevel } from "@/lib/trust";
 import { INCLUDED_MODELS, PROVIDERS } from "@/lib/models/catalog";
+import { getPlan } from "@/lib/billing/plans";
 import { Logo } from "@/components/brand/Logo";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
-export const metadata: Metadata = { title: "Operator dashboard", robots: { index: false } };
 export const dynamic = "force-dynamic";
+
+/** One lookup per request, shared by the title and the page. */
+const viewer = cache(getUser);
+
+/** Everyone else gets the 404 page, so they get its plain title too (not a hint of what's here). */
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: isAdmin(await viewer()) ? "Operator dashboard" : "Page not found", robots: { index: false } };
+}
 
 const fmt = new Intl.NumberFormat("en-US");
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
@@ -43,7 +54,7 @@ const STATUS_LABEL: Record<string, string> = {
 const statusLabel = (k: string) => STATUS_LABEL[k] ?? k.charAt(0).toUpperCase() + k.slice(1).replace(/_/g, " ");
 
 export default async function AdminPage() {
-  const user = await getUser();
+  const user = await viewer();
   if (!isAdmin(user)) notFound();
   const m = await adminMetrics(await getDb());
 
@@ -61,11 +72,18 @@ export default async function AdminPage() {
     <div className="min-h-dvh bg-background">
       <header className="border-b border-border bg-background/80 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-6xl items-center gap-3 px-4 sm:px-6">
-          <Link href="/app" aria-label="Back to the app">
+          <Link href="/app" aria-label="Your bots">
             <Logo className="text-lg" />
           </Link>
           <Badge tone="primary">Operator</Badge>
-          <span className="ml-auto text-xs text-muted-foreground">Updated {new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "UTC", timeZoneName: "short" })}</span>
+          <span className="ml-auto hidden text-xs text-muted-foreground sm:inline">
+            Updated {new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "UTC", timeZoneName: "short" })}
+          </span>
+          <Button asChild variant="ghost" size="sm" className="ml-auto sm:ml-0">
+            <Link href="/app">
+              <ArrowLeft /> Back to the app
+            </Link>
+          </Button>
         </div>
       </header>
       <main className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6">
@@ -163,14 +181,17 @@ export default async function AdminPage() {
   );
 }
 
-/** Channel rows on the waitlist plus waitlist sign-ups ("channel:whatsapp", "connector:strava"), under one readable label each. */
+/** Channel rows on the waitlist plus waitlist sign-ups ("channel:whatsapp", "connector:strava", "plan:plus"), under one readable label each. */
 function mergeWaitlists(channels: Breakdown, signups: Breakdown, label: { channel: (k: string) => string; connector: (k: string) => string }): Breakdown {
   const out = new Map<string, number>();
   const add = (key: string, n: number) => out.set(key, (out.get(key) ?? 0) + n);
   for (const c of channels) add(`${label.channel(c.key)} (channel)`, c.n);
   for (const w of signups) {
     const [kind, id] = w.key.includes(":") ? w.key.split(":", 2) : ["", w.key];
-    add(kind === "channel" ? `${label.channel(id)} (channel)` : kind === "connector" ? `${label.connector(id)} (app)` : w.key, w.n);
+    add(
+      kind === "channel" ? `${label.channel(id)} (channel)` : kind === "connector" ? `${label.connector(id)} (app)` : kind === "plan" ? `${getPlan(id).name} (plan)` : w.key,
+      w.n,
+    );
   }
   return [...out].map(([key, n]) => ({ key, n })).sort((a, b) => b.n - a.n);
 }

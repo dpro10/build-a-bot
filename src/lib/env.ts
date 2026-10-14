@@ -97,6 +97,8 @@ export const config = {
       pro_yearly: v("STRIPE_PRICE_PRO_YEARLY"),
     },
   },
+  /** The desktop app for meeting notes (desktop/): where its signed downloads are. Unset = "Coming soon". */
+  desktop: { downloadUrl: v("NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL") },
   cronSecret: v("CRON_SECRET"),
 };
 
@@ -113,9 +115,14 @@ export const live = {
   slackOAuth: Boolean(config.slack.clientId && config.slack.clientSecret && config.slack.signingSecret),
   discord: Boolean(config.discord.applicationId && config.discord.publicKey && config.discord.botToken),
   stripe: Boolean(config.stripe.secretKey),
+  /** Signed downloads of the desktop app are published (demo mode shows how to run it from the repo instead). */
+  desktopApp: Boolean(config.desktop.downloadUrl),
 };
 
 /** Integration is usable: live, or simulated because we're in demo mode. */
 export function available(key: keyof typeof live): boolean {
   return live[key] || demoMode;
 }
+
+/** Plus and Pro can be bought (Stripe), or switched to without paying in demo mode. Otherwise they're "Coming soon". */
+export const paidPlansOpen = available("stripe");

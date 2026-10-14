@@ -72,6 +72,8 @@ export function LoginCard({
   const [step, setStep] = React.useState<"form" | "sent">("form");
   const [sending, setSending] = React.useState(false);
   const [fieldError, setFieldError] = React.useState<string | null>(null);
+  /** The link couldn't be sent (server or connection trouble): not a problem with the address typed. */
+  const [formError, setFormError] = React.useState<string | null>(null);
   const [linkError, setLinkError] = React.useState<string | null>(error);
   const [sentTo, setSentTo] = React.useState("");
   const [demoLink, setDemoLink] = React.useState<string | null>(null);
@@ -107,7 +109,7 @@ export function LoginCard({
     ? ["thinking", "thinking", "thinking"]
     : step === "sent"
       ? ["happy", "happy", "happy"]
-      : fieldError || linkError
+      : fieldError || formError || linkError
         ? ["idle", "alert", "idle"]
         : valid
           ? ["happy", "happy", "happy"]
@@ -122,6 +124,7 @@ export function LoginCard({
     }
     setSending(true);
     setFieldError(null);
+    setFormError(null);
     try {
       const res = await api<{ sent: boolean; demoLink: string | null }>("/api/auth/magic", {
         body: { email: value, next, ...(needsAdminCode && adminCode.trim() ? { adminCode: adminCode.trim() } : {}) },
@@ -143,12 +146,15 @@ export function LoginCard({
       setCooldownUntil(Date.now() + RESEND_COOLDOWN_MS);
       if (opts.resend) toast.success(res.sent ? "Sent a fresh link. Check your inbox." : "Here's a fresh link.");
     } catch (err) {
-      const message = (err as Error).message || "Couldn't send the link. Try again.";
-      if (err instanceof ApiError && err.data.needsAdminCode) {
+      const apiErr = err instanceof ApiError ? err : null;
+      const message = apiErr ? apiErr.message || "Couldn't send the link. Try again." : "Couldn't reach the server. Check your connection and try again.";
+      if (apiErr?.data.needsAdminCode) {
         setNeedsAdminCode(true);
         setFieldError(message);
         requestAnimationFrame(() => adminCodeRef.current?.focus());
       } else if (opts.resend) toast.error(message);
+      // Sending failed, too many tries, or no connection: the address is fine, so don't mark it wrong.
+      else if (!apiErr || apiErr.status === 429 || apiErr.status >= 500) setFormError(message);
       else setFieldError(message);
     } finally {
       setSending(false);
@@ -234,6 +240,7 @@ export function LoginCard({
                 onChange={(e) => {
                   setEmail(e.target.value);
                   if (fieldError) setFieldError(null);
+                  if (formError) setFormError(null);
                   if (needsAdminCode) setNeedsAdminCode(false);
                 }}
                 aria-invalid={fieldError ? true : undefined}
@@ -262,6 +269,13 @@ export function LoginCard({
                   value={adminCode}
                   onChange={(e) => setAdminCode(e.target.value)}
                 />
+              </div>
+            ) : null}
+
+            {formError ? (
+              <div role="alert" className="mt-4 flex gap-3 rounded-2xl border border-warning/40 bg-warning-soft p-3.5 text-sm">
+                <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
+                <span className="text-foreground/80">{formError}</span>
               </div>
             ) : null}
 

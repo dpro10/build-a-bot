@@ -19,6 +19,7 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string; schedule
     .returning();
   if (!row) return apiError(404, "Not found");
   // Only this schedule — never anyone else's that happens to be due.
-  const result = await runDueSchedules(a.db, new Date(), 1, { scheduleId: row.id });
-  return json({ ok: true, ...result });
+  const { ran, due: dueCount, runs } = await runDueSchedules(a.db, new Date(), 1, { scheduleId: row.id });
+  // How it went, so the toast can say so (a brain that failed isn't "the result is in your chat").
+  return json({ ok: true, ran, due: dueCount, outcome: runs[0]?.outcome ?? null });
 }

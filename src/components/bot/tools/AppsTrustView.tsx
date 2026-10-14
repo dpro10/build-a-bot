@@ -41,13 +41,15 @@ export type AppsTrustProps = {
   bot: { id: string; name: string; trust: TrustLevel; jobs: string[]; limits: LimitsView };
   connections: ConnectionView[];
   planBadges: Partial<Record<TrustLevel, string>>;
+  /** Paid plans can be bought here; otherwise plan prompts say they're coming soon, with no link. */
+  paidPlans: boolean;
   composioLive: boolean;
   timezone: string;
   /** From the sign-in callbacks: ?connected=1 or ?connect_error=… */
   flash: { connected: boolean; error: string | null };
 };
 
-export function AppsTrustView({ bot, connections: initial, planBadges, composioLive, timezone, flash }: AppsTrustProps) {
+export function AppsTrustView({ bot, connections: initial, planBadges, paidPlans, composioLive, timezone, flash }: AppsTrustProps) {
   const botId = bot.id;
   const [trust, setTrust] = React.useState<TrustLevel>(bot.trust);
   const [limits, setLimits] = React.useState<LimitsView>(bot.limits);
@@ -338,7 +340,7 @@ export function AppsTrustView({ bot, connections: initial, planBadges, composioL
           </p>
         </header>
 
-        <TrustSection botId={botId} botName={bot.name} trust={trust} onTrustChange={setTrust} apps={pickerApps} planBadges={planBadges} />
+        <TrustSection botId={botId} botName={bot.name} trust={trust} onTrustChange={setTrust} apps={pickerApps} planBadges={planBadges} paidPlans={paidPlans} />
 
         <Section id="limits" title="Limits" icon={<SlidersHorizontal />} description="Guardrails that hold at every trust level.">
           <LimitsCard botId={botId} botName={bot.name} trust={trust} limits={limits} timezone={timezone} onSaved={setLimits} />
@@ -446,6 +448,7 @@ export function AppsTrustView({ bot, connections: initial, planBadges, composioL
         trust={trust}
         spendCapUsd={spendCapUsd}
         composioLive={composioLive}
+        paidPlans={paidPlans}
         onAdded={(conn) => {
           setConnections((list) => (list.some((c) => c.id === conn.id) ? list.map((c) => (c.id === conn.id ? conn : c)) : [...list, conn]));
           // Scrolling behind an open dialog fights its scroll lock: show the row once it closes.

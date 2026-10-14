@@ -3,7 +3,8 @@ import Link from "next/link";
 import { ArrowRight, EyeOff, KeyRound, OctagonX, Receipt } from "lucide-react";
 import { getDb } from "@/lib/db";
 import { isAnonymous, requireUser } from "@/lib/auth/session";
-import { getPlan } from "@/lib/billing/plans";
+import { PAID_PLANS_SOON, getPlan } from "@/lib/billing/plans";
+import { paidPlansOpen } from "@/lib/env";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/misc";
@@ -73,7 +74,11 @@ export default async function AccountPage() {
                   </span>
                 </div>
                 <Progress value={(used.bots / plan.limits.bots) * 100} tone="primary" className="mt-2.5" />
-                <p className="mt-2 text-xs text-muted-foreground">{used.bots >= plan.limits.bots ? `${plan.name} includes ${plan.limits.bots}. Upgrade to make more.` : `Room for ${plan.limits.bots - used.bots} more.`}</p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {used.bots >= plan.limits.bots
+                    ? `${plan.name} includes ${plan.limits.bots}. ${paidPlansOpen ? "Upgrade to make more." : PAID_PLANS_SOON}`
+                    : `Room for ${plan.limits.bots - used.bots} more.`}
+                </p>
               </div>
             </div>
             <Link href="/app/billing" className="group mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-primary">

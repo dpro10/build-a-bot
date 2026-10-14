@@ -8,13 +8,15 @@ import { cache } from "react";
 import { unstable_rethrow } from "next/navigation";
 import { getUser, isAnonymous } from "@/lib/auth/session";
 
-export type Viewer = { id: string; anonymous: boolean; plan: string };
+/** `email` is their confirmed address (null until they've signed in with one). */
+export type Viewer = { id: string; anonymous: boolean; plan: string; email: string | null };
 
 export const getViewer = cache(async (): Promise<Viewer | null> => {
   try {
     const user = await getUser();
     if (!user) return null;
-    return { id: user.id, anonymous: isAnonymous(user), plan: user.plan };
+    const anonymous = isAnonymous(user);
+    return { id: user.id, anonymous, plan: user.plan, email: anonymous ? null : user.email };
   } catch (err) {
     unstable_rethrow(err);
     return null;

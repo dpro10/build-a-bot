@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { paidPlansOpen } from "@/lib/env";
 import { Container, Section, SectionHeader } from "../ui";
 import { PlanCards } from "../pricing/PlanCards";
 import { getViewer } from "../viewer";
@@ -13,7 +14,7 @@ export async function PricingTeaser() {
           Messages on your own key or subscription don&apos;t use your included ones. No surprise bills: limits pause, they never charge extra.
         </SectionHeader>
         <div className="mt-12">
-          <PlanCards teaser signedIn={Boolean(viewer)} currentPlan={viewer?.plan} />
+          <PlanCards teaser signedIn={Boolean(viewer)} currentPlan={viewer?.plan} paidPlans={paidPlansOpen} email={viewer?.email ?? null} />
         </div>
         <div className="mt-8 text-center">
           <Link href="/pricing" className="inline-flex items-center gap-1 font-semibold text-primary hover:underline">
