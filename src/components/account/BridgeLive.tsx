@@ -35,7 +35,11 @@ const SUB_NAME = { claude: "Your Claude", codex: "Your ChatGPT" } as const;
 export function CommandBlock({ command, className }: { command: string; className?: string }) {
   return (
     <div className={cn("flex items-center gap-2 rounded-2xl border border-border bg-background-2 py-1.5 pr-1.5 pl-4", className)}>
-      <code className="no-scrollbar min-w-0 flex-1 overflow-x-auto font-mono text-[13px] whitespace-nowrap text-foreground">
+      {/* Focusable so a long command can be scrolled from the keyboard too. */}
+      <code
+        tabIndex={0}
+        className="no-scrollbar min-w-0 flex-1 overflow-x-auto rounded-md font-mono text-[13px] whitespace-nowrap text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+      >
         <span className="text-muted-foreground select-none">$ </span>
         {command}
       </code>

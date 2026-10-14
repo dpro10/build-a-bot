@@ -276,6 +276,19 @@ Diego asked: "Is vercel the right software to use for this? or AWS or google or 
   - Other demo accounts can still be claimed by anyone, so testers shouldn't paste real API keys or connect real accounts until real email sign-in (Resend + a verified domain) is set up.
 - **Brain:** Diego adds his own Token Factory and Tavily keys in Vercel; keys never go through chat or the repo.
 
+## Live: https://build-a-bot-blue.vercel.app (2026-10-14)
+
+- **Vercel:** project `build-a-bot` in Diego's Pro team, built from `main`. Functions run in iad1.
+- **Database:** a Supabase project in Diego's free organization, East US (North Virginia), through the Session pooler (port 5432) with `?sslmode=require`. The first cron tick ran the migrations.
+- **Settings:** Diego set every variable for Production and Preview ("everything should be set to production and preview right?"):
+  - `DEMO_MODE`, `ADMIN_EMAILS`, `BRIDGE_CLI`;
+  - `ENCRYPTION_KEY` and `CRON_SECRET`, generated on Diego's Mac and never in chat;
+  - `DATABASE_URL`, `ADMIN_SIGNIN_CODE`, `TOKEN_FACTORY_API_KEY`, `TAVILY_API_KEY`.
+- **Previews share the live database and key.** A branch with a new migration applies it to the live database the first time its preview runs. Give Preview its own database before any migration that isn't purely additive.
+- **Deployment Protection:** Vercel's default (Vercel Authentication, `all_except_custom_domains`).
+- **The Vercel connector** can read projects, deployments and logs. It can't create projects or list environment variables (403), so Diego does those in the dashboard.
+- **Log noise:** each cold start logs Postgres NOTICEs from the migrator ("already exists, skipping"). They're harmless.
+
 ## Security review before Diego's walkthrough (2026-10-14)
 
 A code review of the server and the desktop app. Each fix has a test that fails on the old code.
@@ -326,6 +339,9 @@ A code review of the server and the desktop app. Each fix has a test that fails 
 - Document Picture-in-Picture windows can't be positioned by the page, so "bottom of the screen" is exact only in the desktop app.
 - Times a model passes to tools are the owner's local time. The demo brain must do its time math on the owner's clock (the time zone is in the system prompt), not the server's: on a UTC server, a Chicago owner's "remind me in 1 minute" fired 5 hours late. The unit test now pins "in 20 minutes" to under 25.
 - The demo brain is what people meet first without keys, so every starter idea in `src/lib/jobs.ts` should get a real answer from it. Check them all after changing either file.
+- **A Date in a `sql` template broke sign-in on Supabase.** The first sign-in on the live site failed with a 500. drizzle makes postgres.js pass date values through untouched, so a Date written straight into `sql` (the rate limiter, the admin numbers) reached the wire as an object. PGlite, which the tests use, accepts that, so every test passed.
+  - The fix: `createPostgres` sends Dates as ISO text.
+  - `tests/postgres.test.ts` and the e2e suite run against a real Postgres; see ARCHITECTURE → Testing.
 
 ## Open questions (updated 2026-10-14)
 
