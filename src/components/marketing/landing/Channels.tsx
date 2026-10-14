@@ -81,7 +81,7 @@ export function Channels() {
                       <PlanBadge def={def} />
                     </div>
                     <p className="mt-0.5 text-sm leading-snug text-muted-foreground">{def.description}</p>
-                    {def.note ? <p className="mt-1 text-xs text-muted-foreground/80">{def.note}</p> : null}
+                    {def.note ? <p className="mt-1 text-xs text-muted-foreground">{def.note}</p> : null}
                   </div>
                 </li>
               ))}

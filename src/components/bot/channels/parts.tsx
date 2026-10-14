@@ -67,7 +67,7 @@ export function Step({
       <span
         className={cn(
           "relative z-10 flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-bold transition",
-          state === "done" && "bg-success text-white",
+          state === "done" && "bg-success text-success-foreground",
           state === "current" && "bg-primary text-primary-foreground ring-4 ring-primary/15",
           state === "upcoming" && "bg-muted text-muted-foreground",
         )}

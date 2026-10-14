@@ -163,7 +163,7 @@ export function AddAppsDialog({
                 <div className="relative mb-2">
                   <BrandTile icon={def.icon} size={64} className="animate-pop" />
                   {conn ? (
-                    <span className="absolute -right-1.5 -bottom-1.5 flex size-6 animate-pop items-center justify-center rounded-full bg-success text-white ring-4 ring-card">
+                    <span className="absolute -right-1.5 -bottom-1.5 flex size-6 animate-pop items-center justify-center rounded-full bg-success text-success-foreground ring-4 ring-card">
                       <Check className="size-3.5" strokeWidth={3} />
                     </span>
                   ) : null}

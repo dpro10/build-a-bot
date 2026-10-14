@@ -17,11 +17,11 @@ export function Kbd({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function Progress({ value, className, tone = "primary" }: { value: number; className?: string; tone?: "primary" | "warning" | "danger" | "success" }) {
+export function Progress({ value, className, tone = "primary", label = "Progress" }: { value: number; className?: string; tone?: "primary" | "warning" | "danger" | "success"; label?: string }) {
   const pct = Math.max(0, Math.min(100, value));
   const color = { primary: "bg-primary", warning: "bg-warning", danger: "bg-danger", success: "bg-success" }[tone];
   return (
-    <div className={cn("h-2 w-full overflow-hidden rounded-full bg-muted", className)} role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+    <div className={cn("h-2 w-full overflow-hidden rounded-full bg-muted", className)} role="progressbar" aria-label={label} aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
       <div className={cn("h-full rounded-full transition-[width] duration-500", color)} style={{ width: `${pct}%` }} />
     </div>
   );

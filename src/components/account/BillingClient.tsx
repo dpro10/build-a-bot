@@ -244,7 +244,7 @@ export function CheckoutNotice({ status, planName }: { status: "success" | "canc
         success ? "border-success/40 bg-success-soft" : "border-border bg-muted/60",
       )}
     >
-      <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-2xl", success ? "bg-success text-white" : "bg-card text-muted-foreground")}>
+      <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-2xl", success ? "bg-success text-success-foreground" : "bg-card text-muted-foreground")}>
         {success ? <PartyPopper className="size-5" aria-hidden /> : <Info className="size-5" aria-hidden />}
       </span>
       <div className="min-w-0 flex-1">

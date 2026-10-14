@@ -184,7 +184,7 @@ function IncludedCard() {
       <CardTitle
         kicker="Option 3"
         title="Included open models"
-        badge={<span className="rounded-full bg-success px-2.5 py-1 text-xs font-bold text-white shadow-soft">Free to start</span>}
+        badge={<span className="rounded-full bg-success px-2.5 py-1 text-xs font-bold text-success-foreground shadow-soft">Free to start</span>}
       >
         No key, no subscription, no problem. Use open models we host through Nebius Token Factory: {rows.map((r) => r.name).join(", ")}.
       </CardTitle>

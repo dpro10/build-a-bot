@@ -78,7 +78,7 @@ export function SettingsNav() {
                 className={cn(
                   "flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium transition",
                   on ? "bg-card text-foreground shadow-soft ring-1 ring-border" : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
-                  i.id === "danger" && !on && "text-danger/80 hover:text-danger",
+                  i.id === "danger" && !on && "text-danger hover:text-danger",
                 )}
               >
                 <i.icon className="size-4" aria-hidden />

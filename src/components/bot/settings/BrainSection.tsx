@@ -669,7 +669,7 @@ function ModelCard({
         ) : null}
       </span>
       <span className="text-xs text-muted-foreground">by {m.maker ?? "an open lab"}</span>
-      <span className="text-sm text-foreground/80">{m.blurb}</span>
+      <span className="text-sm text-foreground">{m.blurb}</span>
       <span className="mt-1 flex flex-wrap gap-1.5">
         {ctx ? <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">{ctx}</span> : null}
         {m.reasoning ? <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">Can think it through</span> : null}

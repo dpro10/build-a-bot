@@ -58,7 +58,7 @@ export const PLANS: Record<PlanId, Plan> = {
     highlights: [
       "1 bot",
       "300 messages/month on open models",
-      "Unlimited* on your own key or subscription",
+      "2,000 messages/month on your own key or subscription",
       "Web, email, Telegram, Discord, Slack",
       "3 app connections",
     ],
@@ -86,9 +86,9 @@ export const PLANS: Record<PlanId, Plan> = {
       "3 bots",
       "3,000 messages/month on open models",
       "Phone calls (60 min) and texts (300)",
-      "Unlimited app connections",
+      "Up to 50 apps per bot",
       "Full faith mode",
-      "Morning briefs and routines",
+      "25 routines (briefs, check-ins, reminders)",
     ],
   },
   pro: {
@@ -113,9 +113,9 @@ export const PLANS: Record<PlanId, Plan> = {
     highlights: [
       "10 bots",
       "15,000 messages/month incl. our smartest open model",
-      "Its own phone number",
       "300 call minutes, 1,500 texts",
-      "Priority brains and early access (web actions, bot-to-bot)",
+      "Up to 200 apps per bot",
+      "Early access to new features",
     ],
   },
 };

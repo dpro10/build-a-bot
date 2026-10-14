@@ -417,7 +417,7 @@ export function Builder({ plan, demo, live, recipe, botCount, signedIn }: Builde
             ) : (
               <span className="hidden text-muted-foreground sm:inline">
                 Step {stepIndex + 1} of {STEPS.length}
-                <span className="text-muted-foreground/70"> · Ctrl+Enter to continue</span>
+                <span className="text-muted-foreground"> · Ctrl+Enter to continue</span>
               </span>
             )}
           </div>

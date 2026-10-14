@@ -115,7 +115,7 @@ export const INCLUDED_MODELS: ModelDef[] = [
     label: "gpt-oss-120b",
     maker: "OpenAI (open weights)",
     blurb: "OpenAI's open model. Solid all-rounder with tools.",
-    tier: "balanced",
+    tier: "fast",
     context: 131_072,
     priceIn: 0.15,
     priceOut: 0.6,

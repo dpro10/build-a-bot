@@ -125,7 +125,7 @@ export function ConnectorBrowser({
           value={query}
           autoFocus={autoFocus}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder={`Search ${AVAILABLE_APP_COUNT_ROUNDED}+ apps — Gmail, GitHub, Notion…`}
+          placeholder={`Search ${AVAILABLE_APP_COUNT_ROUNDED}+ apps…`}
           aria-label="Search apps"
           className="h-12 w-full rounded-2xl border border-input bg-card pr-12 pl-12 text-base text-foreground outline-none transition placeholder:text-muted-foreground/70 focus:border-primary focus:ring-4 focus:ring-primary/15 [&::-webkit-search-cancel-button]:hidden"
         />
@@ -258,7 +258,7 @@ function ConnectorCard({ def, selected, added, onPick }: { def: ConnectorDef; se
         <span
           className={cn(
             "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border-2 transition",
-            added ? "border-success bg-success text-white" : selected ? "border-primary bg-primary text-primary-foreground animate-pop" : "border-input text-transparent group-hover:border-foreground/30",
+            added ? "border-success bg-success text-success-foreground" : selected ? "border-primary bg-primary text-primary-foreground animate-pop" : "border-input text-transparent group-hover:border-foreground/30",
           )}
           aria-hidden
         >

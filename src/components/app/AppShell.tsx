@@ -143,7 +143,7 @@ function SidebarContent({
       <div className="border-t border-border p-3">
         {anonymous ? (
           <Link href="/login?next=/app" className="mb-2 block rounded-2xl bg-primary-soft px-3 py-2.5 text-sm font-semibold text-primary">
-            Save your account →<span className="block text-xs font-normal opacity-80">Add your email so you never lose your bots.</span>
+            Save your account →<span className="block text-xs font-normal">Add your email so you never lose your bots.</span>
           </Link>
         ) : null}
         <NavItem href="/app/approvals" icon={<Bell className="size-[18px]" />} label="Approvals" active={pathname === "/app/approvals"} badge={pendingTotal} />
