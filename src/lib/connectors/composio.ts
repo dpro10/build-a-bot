@@ -77,6 +77,20 @@ export async function startComposioConnection(db: Db, conn: Connection, callback
   return redirect;
 }
 
+/**
+ * Cookie naming the connection a person is signing in to, so the callback identity check
+ * (api/connectors/composio/verify) knows which bot to confirm. Same browser only, 15 minutes.
+ */
+export const COMPOSIO_PENDING_COOKIE = "bab_composio";
+
+/**
+ * Composio's callback identity check: tells Composio who came back from a sign-in. The connection
+ * activates only if it was started for this user (our bot id); any other id fails it for good.
+ */
+export async function completeComposioAuth(userId: string, sessionUri: string) {
+  return call<{ connected_account_id?: string; toolkit_slug?: string }>("POST", "/connected_accounts/complete_auth", { user_id: userId, session_uri: sessionUri });
+}
+
 export async function refreshComposioStatus(db: Db, conn: Connection): Promise<Connection["status"]> {
   const accountId = (conn.config as { accountId?: string }).accountId;
   if (!accountId) return conn.status;
