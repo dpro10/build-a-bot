@@ -158,9 +158,21 @@ Plans live in `src/lib/billing/plans.ts`; limits are enforced in code. Stripe Ch
 
 ## Demo mode
 
-`DEMO_MODE=1` (default outside production) simulates whatever isn't configured: a scripted brain that uses real tools, simulated apps and channels, and instant plan switching. Every flow in the product can be tried with zero keys, and nothing real is sent or charged.
+`DEMO_MODE=1` (default outside production) simulates whatever isn't configured:
+- **A scripted brain** (`src/lib/llm/demo.ts`) that calls the real tools, so the policy engine, approvals and receipts all run for real. It answers every job's starter ideas, and does its time math on the owner's clock.
+- **Simulated apps and channels** with sample data: an inbox with a phishing email, a week of calendar, a few PRs.
+- **A scripted meeting** for transcription.
+- **Instant plan switching.**
+
+Every flow in the product can be tried with zero keys, and nothing real is sent or charged. `docs/TRY-IT.md` walks through it.
 
 ## Testing
 
 - `npm test`: the policy engine, scheduler math, the receipts trigger, and the full agent pipeline on in-memory Postgres (greeting, STOP/START, reminders, phishing detection, the injection guard under Full faith, approvals, Look only, strangers can't drive the bot, append-only receipts), and meeting notes end to end (chunks → transcript → notes → tools, device tokens, plan limits, stale recordings, notes on the owner's computer, a transcript that tries to make the bot email a stranger).
-- `npm run test:e2e`: Playwright through the builder to a live chat and an approval.
+- `npm run test:e2e` (after `npm run build`; it starts `next start` on port 3100 with its own database), on a phone and a desktop:
+  - the builder to a live chat, an approval and STOP;
+  - meeting notes in the browser with a fake microphone: consent, the floating window, the transcript, the notes, deleting;
+  - every page loads;
+  - axe accessibility scans in light and dark.
+- `cd desktop && npm test`: call detection on each OS (parsers on captured-style output), the call state machine, the controller's safety rules, the upload queue, placement, token storage.
+- `cd desktop && npm run test:e2e`: the real Electron app under Xvfb against a running dev server: pair, a fake call, ask, take notes, pause, stop, notes ready, stop and delete, and the mic-only path.
