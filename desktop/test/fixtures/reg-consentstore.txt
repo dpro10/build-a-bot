@@ -1,0 +1,38 @@
+
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone
+    Value    REG_SZ    Allow
+
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone\Microsoft.WindowsSoundRecorder_8wekyb3d8bbwe
+    Value    REG_SZ    Allow
+    LastUsedTimeStart    REG_QWORD    0x1db1d2c3e4f5a60
+    LastUsedTimeStop    REG_QWORD    0x1db1d2c4a1b2c30
+
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone\MSTeams_8wekyb3d8bbwe
+    Value    REG_SZ    Allow
+    LastUsedTimeStart    REG_QWORD    0x1db3e8f2b0c1d20
+    LastUsedTimeStop    REG_QWORD    0x0
+
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone\5319275A.WhatsAppDesktop_cv1g1gvanyjgm
+    Value    REG_SZ    Allow
+    LastUsedTimeStart    REG_QWORD    0x1db2a01b2c3d4e0
+    LastUsedTimeStop    REG_QWORD    0x0
+
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone\NonPackaged
+    Value    REG_SZ    Allow
+
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone\NonPackaged\C:#Users#dana#AppData#Roaming#Zoom#bin#Zoom.exe
+    LastUsedTimeStart    REG_QWORD    0x1db3e8f0a1b2c30
+    LastUsedTimeStop    REG_QWORD    0x0
+
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone\NonPackaged\C:#Program Files#Google#Chrome#Application#chrome.exe
+    LastUsedTimeStart    REG_QWORD    0x1db3e8f1c2d3e40
+    LastUsedTimeStop    REG_QWORD    0x0
+
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone\NonPackaged\C:#Users#dana#AppData#Local#Discord#app-1.0.9188#Discord.exe
+    LastUsedTimeStart    REG_QWORD    0x1db3c11a2b3c4d0
+    LastUsedTimeStop    REG_QWORD    0x1db3c12f0e1d2c0
+
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone\NonPackaged\C:#Users#dana#AppData#Local#Programs#build-a-bot#Build-a-bot.exe
+    LastUsedTimeStart    REG_QWORD    0x1db3e8f2d0e1f20
+    LastUsedTimeStop    REG_QWORD    0x0
+

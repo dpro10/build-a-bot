@@ -1,0 +1,113 @@
+/**
+ * Small helpers for route handlers: JSON responses, auth, body parsing.
+ */
+import { NextResponse } from "next/server";
+import type { z } from "zod";
+import { getDb, type Db } from "@/lib/db";
+import type { Bot, User } from "@/lib/db/schema";
+import { getUser } from "@/lib/auth/session";
+import { getOwnedBot } from "@/lib/data";
+
+export function json<T>(data: T, init?: ResponseInit) {
+  return NextResponse.json(data, init);
+}
+
+export function apiError(status: number, message: string, extra: Record<string, unknown> = {}) {
+  return NextResponse.json({ error: message, ...extra }, { status });
+}
+
+export async function parseJson<S extends z.ZodTypeAny>(req: Request, schema: S): Promise<{ ok: true; data: z.infer<S> } | { ok: false; res: Response }> {
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return { ok: false, res: apiError(400, "Invalid JSON body") };
+  }
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    return { ok: false, res: apiError(422, issue ? `${issue.path.join(".") || "body"}: ${issue.message}` : "Invalid input") };
+  }
+  return { ok: true, data: parsed.data };
+}
+
+export async function authed(): Promise<{ ok: true; user: User; db: Db } | { ok: false; res: Response }> {
+  const user = await getUser();
+  if (!user) return { ok: false, res: apiError(401, "Sign in first") };
+  return { ok: true, user, db: await getDb() };
+}
+
+export async function authedBot(botId: string): Promise<{ ok: true; user: User; db: Db; bot: Bot } | { ok: false; res: Response }> {
+  const a = await authed();
+  if (!a.ok) return a;
+  const bot = await getOwnedBot(a.db, a.user.id, botId);
+  if (!bot) return { ok: false, res: apiError(404, "Bot not found") };
+  return { ok: true, user: a.user, db: a.db, bot };
+}
+
+/** Same-origin check for state-changing requests from browsers (defense in depth vs CSRF). */
+export function sameOrigin(req: Request): boolean {
+  const origin = req.headers.get("origin");
+  if (!origin) return true; // non-browser clients
+  try {
+    const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
+    return new URL(origin).host === host;
+  } catch {
+    return false;
+  }
+}
+
+export type RouteCtx<P extends Record<string, string>> = { params: Promise<P> };
+
+/**
+ * The request body, read up to `maxBytes` (null when it's bigger). Unlike req.arrayBuffer(),
+ * a body sent without a Content-Length can't make the server buffer more than the limit.
+ */
+export async function readBodyCapped(req: Request, maxBytes: number): Promise<ArrayBuffer | null> {
+  if (!req.body) return new ArrayBuffer(0);
+  const reader = req.body.getReader();
+  const parts: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maxBytes) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    parts.push(value);
+  }
+  const out = new Uint8Array(size);
+  let offset = 0;
+  for (const p of parts) {
+    out.set(p, offset);
+    offset += p.byteLength;
+  }
+  return out.buffer;
+}
+
+/** Best-effort client IP (Vercel and most proxies set x-forwarded-for); null when unknown. */
+export function clientIp(req: Request): string | null {
+  const fwd = req.headers.get("x-forwarded-for");
+  if (fwd) return fwd.split(",")[0].trim().slice(0, 64) || null;
+  return req.headers.get("x-real-ip")?.slice(0, 64) ?? null;
+}
+
+/**
+ * 429 with a friendly message when a fixed-window limit is exceeded; null when allowed.
+ * A null key (e.g. no client IP behind a bare dev server) skips the check; demo mode is 10× looser.
+ */
+export async function limitOr429(db: Db, key: string | null, limit: number, windowSeconds: number, message = "Slow down a little — try again in a minute."): Promise<Response | null> {
+  if (!key) return null;
+  const { rateLimit } = await import("@/lib/safety/ratelimit");
+  const { demoMode } = await import("@/lib/env");
+  const r = await rateLimit(db, key, demoMode ? limit * 10 : limit, windowSeconds);
+  return r.ok ? null : apiError(429, message);
+}
+
+/** Rate-limit key for this client's IP, or null when the IP is unknown. */
+export function ipKey(prefix: string, req: Request): string | null {
+  const ip = clientIp(req);
+  return ip ? `${prefix}:${ip}` : null;
+}
