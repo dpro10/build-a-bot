@@ -112,6 +112,9 @@ export async function composioToolsForConnection(conn: Connection, def: Connecto
     return [];
   }
   const toolkit = String((conn.config as { toolkit?: string }).toolkit ?? def.id);
+  const via = def.via.find((v) => v.kind === "composio" && v.toolkit === toolkit);
+  const filter = via && via.kind === "composio" && via.toolFilter ? new RegExp(via.toolFilter, "i") : null;
+  if (filter) tools = tools.filter((t) => filter.test(t.slug));
   const pinned = process.env[`COMPOSIO_TOOLKIT_VERSION_${toolkit.toUpperCase()}`];
   const prefix = safeToolName(def.id).slice(0, 20);
   const ranked = [...tools].sort((a, b) => Number(classifyTool(a.slug).effect !== "read") - Number(classifyTool(b.slug).effect !== "read"));

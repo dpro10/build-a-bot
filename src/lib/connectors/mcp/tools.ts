@@ -60,6 +60,10 @@ export async function mcpToolsForConnection(conn: Connection, def: ConnectorDef,
   }
 
   const prefix = safeToolName(def.id).slice(0, 20);
+  const url = String((conn.config as { url?: string }).url ?? "");
+  const via = def.via.find((v) => v.kind === "mcp" && v.url === url);
+  const filter = via && via.kind === "mcp" && via.toolFilter ? new RegExp(via.toolFilter, "i") : null;
+  if (filter) tools = tools.filter((t) => filter.test(t.name));
   // Prefer read tools first so the cap keeps the most useful mix.
   const sorted = [...tools].sort((a, b) => Number(classifyTool(a.name, a.annotations).effect !== "read") - Number(classifyTool(b.name, b.annotations).effect !== "read"));
   return sorted.slice(0, MAX_TOOLS_PER_CONNECTION).map((tool) => {
