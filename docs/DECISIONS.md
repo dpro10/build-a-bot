@@ -276,6 +276,15 @@ Diego asked: "Is vercel the right software to use for this? or AWS or google or 
   - Other demo accounts can still be claimed by anyone, so testers shouldn't paste real API keys or connect real accounts until real email sign-in (Resend + a verified domain) is set up.
 - **Brain:** Diego adds his own Token Factory and Tavily keys in Vercel; keys never go through chat or the repo.
 
+## Decision: a real beta for anyone with the link (Diego, 2026-10-14)
+
+Diego: "I want build-a-bot up and running soon. Not just simulated. We need to move quick. I want to start sending this link out to real users who can start testing it soon, but i dont want them to run into any issues."
+
+- **What testers get:** real email sign-in, chat, web search, Telegram, apps through Composio, meeting notes, Discord and Slack. Anything not set up shows "coming soon"; nothing is simulated.
+- **Sign-ups:** anyone with the link. Free-plan limits cap what each person can cost.
+- **Deploys:** Claude merges and deploys tested fixes without asking, until launch.
+- **Domain:** build-a-bot.site for the site and the sign-in emails (Resend).
+
 ## Live: https://build-a-bot-blue.vercel.app (2026-10-14)
 
 - **Vercel:** project `build-a-bot` in Diego's Pro team, built from `main`. Functions run in iad1.
@@ -342,6 +351,11 @@ A code review of the server and the desktop app. Each fix has a test that fails 
 - **A Date in a `sql` template broke sign-in on Supabase.** The first sign-in on the live site failed with a 500. drizzle makes postgres.js pass date values through untouched, so a Date written straight into `sql` (the rate limiter, the admin numbers) reached the wire as an object. PGlite, which the tests use, accepts that, so every test passed.
   - The fix: `createPostgres` sends Dates as ISO text.
   - `tests/postgres.test.ts` and the e2e suite run against a real Postgres; see ARCHITECTURE → Testing.
+- **Supabase's session pooler ran out of clients.** Chat failed with "Failed query" once a few pages had loaded. The session pooler allows only as many clients as its pool (15 on the free plan). Every Vercel function instance kept up to 5 connections, and frozen instances keep theirs.
+  - The app now always uses the transaction pooler (port 6543, same host and login).
+  - Migrations run in one transaction under `pg_advisory_xact_lock`, since a session lock doesn't survive a transaction pooler.
+  - A failed start is retried on the next request instead of breaking that server.
+  - Chat errors go to the server log; the chat shows a plain sentence, never SQL.
 
 ## Open questions (updated 2026-10-14)
 
