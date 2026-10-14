@@ -26,6 +26,12 @@ function day(offset: number, hour = 9, minute = 0) {
   return d;
 }
 
+/** "2026-10-15T10:00" → "on Thu, Oct 15, 10:00 AM" (as typed if it doesn't parse). */
+function friendlyStart(start: string) {
+  const d = new Date(start);
+  return Number.isNaN(d.getTime()) ? `at ${start}` : `on ${d.toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`;
+}
+
 async function emailRecipients(addresses: string[], ctx: ToolContext): Promise<Recipient[]> {
   const normalized = [...new Set(addresses.map((a) => a.trim().toLowerCase()).filter(Boolean))];
   const known = normalized.length
@@ -179,7 +185,7 @@ function calendarTools(def: ConnectorDef): AnyToolSpec[] {
         ];
         return {
           ok: true,
-          content: `${DEMO}\n${events.map((e) => `- ${e.start.toLocaleString()} → ${e.end.toLocaleTimeString()}: ${e.title}`).join("\n")}`,
+          content: `${DEMO}\n${events.map((e) => `- ${e.start.toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} → ${e.end.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}: ${e.title}`).join("\n")}`,
           summary: `${events.length} events`,
         };
       },
@@ -199,7 +205,7 @@ function calendarTools(def: ConnectorDef): AnyToolSpec[] {
       effect: "write",
       risk: "medium",
       recipients: (a, ctx) => emailRecipients(a.attendees ?? [], ctx),
-      summarize: (a) => `Add “${a.title}” at ${a.start}${a.attendees?.length ? ` with ${a.attendees.join(", ")}` : ""}`,
+      summarize: (a) => `Add “${a.title}” ${friendlyStart(a.start)}${a.attendees?.length ? ` with ${a.attendees.join(", ")}` : ""}`,
       async run(args) {
         return { ok: true, content: `${DEMO} Added “${args.title}” at ${args.start}.`, summary: "Added (demo)" };
       },

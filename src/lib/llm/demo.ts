@@ -77,6 +77,25 @@ function pad(n: number) {
   return String(n).padStart(2, "0");
 }
 
+/**
+ * The owner's wall clock (from "(timezone …)" in the system prompt) as a Date whose
+ * local fields read like their clock. Only for arithmetic and formatting below.
+ */
+function ownerClock(system: string, now = new Date()): Date {
+  const tz = /\(timezone ([^)\s]+)\)/.exec(system)?.[1];
+  if (!tz) return now;
+  try {
+    const parts = Object.fromEntries(
+      new Intl.DateTimeFormat("en-US", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" })
+        .formatToParts(now)
+        .map((x) => [x.type, x.value]),
+    );
+    return new Date(Number(parts.year), Number(parts.month) - 1, Number(parts.day), Number(parts.hour), Number(parts.minute), Number(parts.second));
+  } catch {
+    return now;
+  }
+}
+
 /** "in 20 minutes", "at 5pm", "tomorrow at 9", "tonight" → local YYYY-MM-DDTHH:MM (best effort). */
 function parseWhen(text: string, now = new Date()): string | null {
   const t = text.toLowerCase();
@@ -197,6 +216,133 @@ export function demoMeetingNotes(transcript: string): string {
 
 type Plan = { calls: LlmToolCall[] } | { text: string };
 
+/** Connectors whose demo tools have their own sample data and inputs (connectors/demo-tools.ts). */
+const SAMPLE_DATA_APPS = new Set(["gmail", "outlook", "outlook_mail", "google_calendar", "outlook_calendar", "github", "google_drive", "onedrive", "dropbox"]);
+
+/** Lists the demo brain saves as notes when asked ("make a grocery list for tacos for 6"). */
+const LISTS: { match: RegExp; title: string; example: string; items: string[] }[] = [
+  {
+    match: /\b(grocery|shopping) list\b.*\btacos?\b|\btacos?\b.*\b(grocery|shopping) list\b/,
+    title: "Taco night",
+    example: "napkins",
+    items: ["24 small tortillas", "2 lb chicken thighs or ground beef", "1 white onion", "1 bunch cilantro", "4 limes", "2 avocados", "1 jar salsa", "Shredded cheese", "Sour cream", "Hot sauce"],
+  },
+  {
+    match: /\bmake (?:me )?a (grocery|shopping) list\b/,
+    title: "Groceries",
+    example: "bananas",
+    items: ["Milk", "Eggs", "Bread", "Fruit", "Veggies for the week", "Coffee"],
+  },
+  {
+    match: /\bmake (?:me )?a packing list\b/,
+    title: "Packing list",
+    example: "sunscreen",
+    items: ["ID or passport", "Phone charger and cables", "Toothbrush and toiletries", "Clothes for each day, plus one extra", "Comfy shoes", "Medications", "A light jacket", "Headphones"],
+  },
+  {
+    match: /\bchore (chart|list)\b/,
+    title: "Weekly chores",
+    example: "water the plants",
+    items: ["Mon: dishes and counters", "Tue: laundry", "Wed: vacuum", "Thu: bathroom", "Fri: trash and recycling", "Sat: change the sheets", "Sun: plan meals and groceries"],
+  },
+];
+
+function capabilities(tools: Set<string>): string {
+  const has = (name: string) => [...tools].some((n) => n === name || n.endsWith(`__${name}`));
+  const can = [
+    has("search_email") && "read your email, flag what matters and draft replies (you approve before anything is sent)",
+    has("list_events") && "check your calendar and find free time",
+    has("create_reminder") && "set reminders and routines, like a morning brief",
+    has("read_meeting") && "take notes in your calls and answer questions about them",
+    has("list_notifications") && "keep an eye on GitHub",
+    has("web_search") && "search the web",
+    has("web_browse") && "read websites and fill in forms (you approve before anything is sent)",
+    has("get_weather") && "check the weather",
+    has("write_note") && "keep notes and lists",
+    has("remember") && "remember what matters to you",
+  ].filter(Boolean);
+  return `Here's what I can do for you right now:\n${can.map((c) => `- ${c}`).join("\n")}\n\nAdd more apps anytime in **Apps & trust**.`;
+}
+
+function trip(text: string): string {
+  const days = /\b(\d+|two|three|four|five)\s+days?\b/i.exec(text)?.[1] ?? "3";
+  const city = /\bin ([A-Z][\w .'-]+?)[.?!]*$/.exec(text.trim())?.[1] ?? "the city";
+  if (/mexico city|cdmx/i.test(city)) {
+    return [
+      "Three days in Mexico City:",
+      "- **Day 1, the center:** the Zócalo and the cathedral, Templo Mayor, then Bellas Artes at sunset and dinner in Roma.",
+      "- **Day 2, Chapultepec:** the National Museum of Anthropology (give it 3 hours), a walk in the park, then tacos al pastor in Condesa.",
+      "- **Day 3, the south:** the Frida Kahlo Museum in Coyoacán (book ahead), the market, then a trajinera boat in Xochimilco.",
+      "",
+      "Want the forecast? Ask “what's the weather in Mexico City?”",
+    ].join("\n");
+  }
+  return `Here's a shape for ${days} days in ${city}:\n- **Day 1:** the historic center and a food market\n- **Day 2:** the big museum, then a park\n- **Day 3:** a neighborhood walk and a sunset spot\n\nOn a real brain I'll fill in actual places, hours and prices.`;
+}
+
+/** Starter ideas (src/lib/jobs.ts) that need a few words rather than a tool. */
+const CANNED: [RegExp, (text: string, tools: Set<string>) => string][] = [
+  [/\bwhat can you do\b|\bhow can you help\b/, (_t, tools) => capabilities(tools)],
+  [
+    /\bdraft a polite no\b/,
+    () =>
+      "Here's a polite no you can use:\n\n> Thanks so much for the invite! I can't make this one, but I'd love to hear how it goes. Could you send me the notes after?\n\nWant me to send it? Say who to, like “email Alex saying thanks for the invite, but I can't make it”.",
+  ],
+  [/\bthese notes\b|\bturn (?:my |the )?notes into\b/, () => "Paste the notes here and I'll pull out the action items: who does what, and by when."],
+  [
+    /\b(?:open|create|file) an? (?:issue|bug)(?: for (?:this|that|the) bug)?[.!?]*$/,
+    () => "Tell me the repo and the bug in a sentence, like “open an issue in acme/app: login button does nothing on Safari”. You'll see it before it's opened.",
+  ],
+  [/\bexplain this error\b|\berror message\b/, () => "Paste the error (and the line of code that caused it, if you have it), and I'll explain what it means and how to fix it."],
+  [/\bexplain this topic\b|\bexplain (?:it|this) like i'?m new\b/, () => "Sure! Which topic? Say something like “explain black holes simply” and I'll start from zero."],
+  [
+    /\bquiz me\b/,
+    () => "Let's do it! Paste the key terms or a page of notes from the chapter, or just tell me the subject, and I'll ask one question at a time and tell you how you did.",
+  ],
+  [
+    /\bstudy plan\b/,
+    () =>
+      "Here's a plan that works for most exams:\n1. **Today:** skim everything once and list what feels fuzzy.\n2. **Tomorrow:** practice problems on the fuzzy parts only.\n3. **The day before:** a timed practice test, then go over every mistake.\n4. **Exam morning:** a light review and a real breakfast. No cramming.\n\nWant a nudge? Say “remind me to study tomorrow at 7pm”.",
+  ],
+  [
+    /\bstatus update\b/,
+    () =>
+      "Here's a shape to fill in:\n\n> **Status update**\n> **Done:** …\n> **In progress:** …\n> **Blocked on:** …\n> **Next:** …\n\nTell me what you worked on and I'll write it up.",
+  ],
+  [
+    /\bbills?\b.*\bdue\b/,
+    () => "I don't see any bills yet. Tell me one, like “remind me to pay the phone bill tomorrow at 9am”, and I'll make sure you don't miss it.",
+  ],
+  [
+    /\bmonthly budget\b|\bmake (?:me )?a budget\b/,
+    () =>
+      "A simple way to start is 50/30/20:\n- **50%** for needs: rent, groceries, bills, getting around\n- **30%** for wants: eating out, fun, subscriptions\n- **20%** for savings and paying down debt\n\nTell me your monthly take-home pay and your big fixed costs, and I'll turn it into real numbers.",
+  ],
+  [
+    /\bworkout\b/,
+    () =>
+      "A 20-minute workout, no equipment:\n- **4 min warm-up:** march in place, arm circles, easy squats\n- **12 min, twice through:** 45 seconds each of squats, push-ups (knees are fine), lunges, plank, glute bridges and jumping jacks, with 15 seconds of rest after each\n- **4 min cool-down:** slow stretches\n\nWant a nudge tomorrow? Say “remind me to work out tomorrow at 7am”.",
+  ],
+  [/\bpick(?:ing)? up the kids\b/, () => "I don't see a pickup on your calendar. Tell me who's doing it and I'll remember, like “remember that Alex picks up the kids on Thursdays”."],
+  [/\bturn (?:off|on) the lights?\b/, () => "I can't control lights yet (smart-home apps are coming), but I can nudge you. Say “remind me to turn off the lights at 11pm”."],
+  [/\bplan (?:\d+|two|three|four|five) days? in\b|\bitinerary\b/, (text) => trip(text)],
+  [
+    /\bdraft a post\b/,
+    () =>
+      "Here's a draft:\n\n> Some news: I'm starting a new job as [role] at [company]! Grateful to everyone who helped along the way, and excited to learn a ton. Here's to the next chapter. 🎉\n\nTell me the role and the company and I'll make it sound like you.",
+  ],
+  [
+    /\bremind me (?:of|about) (?:\w+ )?birthdays?\b/,
+    () => "Tell me whose birthday it is and when, like “remember that Mom's birthday is March 3”, and I'll keep track. For a nudge, say “remind me to call Mom tomorrow at 9am”.",
+  ],
+  [/\bhelp me reply\b|\breply to this message\b/, () => "Paste the message here and tell me the vibe (yes, no, or maybe later), and I'll draft a reply."],
+  [
+    /\bplan my (?:\w+ )?errands\b/,
+    () =>
+      "Here's an order that saves backtracking:\n1. **9:00** Groceries, while the store is quiet\n2. **10:00** Pharmacy and bank\n3. **11:00** Returns and drop-offs\n4. **12:00** Gas on the way home\n\nTell me your real stops, like “add groceries, pharmacy and dry cleaning to my errands list”, and I'll keep the list.",
+  ],
+];
+
 function planFromUser(text: string, tools: Set<string>, p: Persona, system: string): Plan {
   const t = text.toLowerCase();
   const f = FLAVOR[p.species] ?? FLAVOR.robot;
@@ -248,30 +394,48 @@ function planFromUser(text: string, tools: Set<string>, p: Persona, system: stri
     return { text: "On it." };
   }
 
-  // Memory.
+  // Memory. Questions ("what do you remember about me?") recall; statements save.
+  if (/what do you (know|remember) about me|\bdo you remember\b/.test(t) && tools.has("recall")) return { calls: [call("recall", {})] };
   const rememberMatch = /\bremember (?:that )?(.+)/i.exec(text);
-  if (rememberMatch && tools.has("remember")) return { calls: [call("remember", { fact: rememberMatch[1].replace(/[.!]+$/, "") })] };
-  if (/what do you (know|remember) about me/.test(t) && tools.has("recall")) return { calls: [call("recall", {})] };
+  if (rememberMatch && !/\?\s*$/.test(text) && tools.has("remember")) return { calls: [call("remember", { fact: rememberMatch[1].replace(/[.!]+$/, "") })] };
+
+  // Starter ideas (src/lib/jobs.ts): lists it can save, and requests that need a few words, not a tool.
+  if (!/\b(remind|nudge) me (to|at|in)\b/.test(t)) {
+    const list = LISTS.find((l) => l.match.test(t));
+    if (list && tools.has("write_note")) {
+      return { calls: [call("write_note", { title: list.title, content: list.items.map((i) => `- [ ] ${i}`).join("\n"), mode: "replace" })] };
+    }
+    const canned = CANNED.find(([re]) => re.test(t));
+    if (canned) return { text: canned[1](text, tools) };
+  }
 
   // Routines & reminders.
-  if (/(every (morning|day|weekday)|morning brief|daily brief)/.test(t) && tools.has("schedule_routine")) {
+  if (/\bevery (morning|evening|night|day|weekday)\b|\b(morning|daily) brief\b/.test(t) && tools.has("schedule_routine")) {
+    const evening = /\b(evening|night)\b/.test(t);
     const time = /(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/.exec(t);
-    let h = time ? Number(time[1]) : 8;
-    if (time?.[3] === "pm" && h < 12) h += 12;
+    let h = time ? Number(time[1]) : evening ? 20 : 8;
+    if ((time?.[3] === "pm" || (evening && !time?.[3])) && h < 12) h += 12;
+    const habits = /\bhabits?\b/.test(t);
     return {
       calls: [
         call("schedule_routine", {
-          title: "Morning brief",
-          instruction: "Send a short morning brief: today's weather, what's on the calendar, and anything urgent.",
+          title: evening ? (habits ? "Evening habit check-in" : "Evening check-in") : "Morning brief",
+          instruction: evening
+            ? habits
+              ? "Ask how today's habits went (water, movement, sleep), cheer the wins, and suggest one small thing for tomorrow."
+              : "Ask how the day went and what's on for tomorrow."
+            : "Send a short morning brief: today's weather, what's on the calendar, and anything urgent.",
           daily_time: `${pad(h)}:${time?.[2] ?? "00"}`,
           days: t.includes("weekday") ? [1, 2, 3, 4, 5] : undefined,
         }),
       ],
     };
   }
-  if (/\bremind me\b/.test(t) && tools.has("create_reminder")) {
-    const what = /remind me (?:to )?(.+?)(?:\s+(?:at|in|tomorrow|tonight)\b.*)?$/i.exec(text)?.[1] ?? "do the thing";
-    const at = parseWhen(t);
+  if (/\b(remind|nudge) me\b/.test(t) && tools.has("create_reminder")) {
+    const what = /(?:remind|nudge) me (?:to )?(.+?)(?:\s+(?:at|in|tomorrow|tonight)\b.*)?$/i.exec(text)?.[1] ?? "do the thing";
+    // Times are the owner's local time (like a real model reading the system prompt), not the server's.
+    const clock = ownerClock(system);
+    const at = parseWhen(t, clock) ?? (/\bnudge me\b/.test(t) ? parseWhen("in 60 minutes", clock) : null);
     if (!at) return { text: "Sure — when should I remind you? (e.g. “at 5pm” or “in 20 minutes”)" };
     return { calls: [call("create_reminder", { text: what.charAt(0).toUpperCase() + what.slice(1), at })] };
   }
@@ -314,7 +478,9 @@ function planFromUser(text: string, tools: Set<string>, p: Persona, system: stri
     };
   }
   const searchEmail = findTool(tools, "search_email");
-  if (/\b(inbox|emails?|mail)\b/.test(t) && searchEmail) return { calls: [call(searchEmail, { query: "" })] };
+  if (/\b(inbox|emails?|mail|gmail|outlook|unread)\b|\bcame in\b|\bneeds? a reply\b|\breply from me\b/.test(t) && searchEmail) {
+    return { calls: [call(searchEmail, { query: "" })] };
+  }
   if (/\b(inbox|emails?)\b/.test(t) && tools.has("read_inbox")) return { calls: [call("read_inbox", {})] };
 
   // Meetings the bot took notes in.
@@ -333,8 +499,24 @@ function planFromUser(text: string, tools: Set<string>, p: Persona, system: stri
   }
 
   // Calendar, GitHub, files.
+  // Any other connected app the owner names ("what's in my Notion?"): its first look-up tool.
+  // (Apps with their own sample data are handled above, with their own inputs.)
+  const appLookup = [...tools].find((name) => {
+    const [prefix, cap] = name.split("__");
+    if (!cap || SAMPLE_DATA_APPS.has(prefix) || prefix.length < 3) return false;
+    return /^(search|read|list|get|find)/.test(cap) && new RegExp(`\\b${prefix.replace(/_/g, " ")}\\b`).test(t);
+  });
+  if (appLookup) return { calls: [call(appLookup, { request: text.trim() })] };
   const listEvents = findTool(tools, "list_events");
-  if (/\b(calendar|schedule|meetings?|today|tomorrow|plate)\b/.test(t) && listEvents) return { calls: [call(listEvents, { days: 3 })] };
+  if (/\b(calendar|schedule|meetings?|today|tomorrow|plate|deep work|free time)\b|\bfind (?:an|a free|some) (?:hour|time|slot)\b/.test(t) && !/\b(news|headlines)\b/.test(t) && listEvents) {
+    return { calls: [call(listEvents, { days: 3 })] };
+  }
+  const newIssue = /\b(?:open|create|file) an? (?:issue|bug) in ([\w.-]+\/[\w.-]+)\s*[:,—-]\s*(.+)$/i.exec(text);
+  const createIssue = findTool(tools, "create_issue");
+  if (newIssue && createIssue) {
+    const title = newIssue[2].trim().replace(/[.!]+$/, "");
+    return { calls: [call(createIssue, { repo: newIssue[1], title: title.charAt(0).toUpperCase() + title.slice(1), body: `Reported by ${p.owner} through ${p.name}.` })] };
+  }
   const gh = findTool(tools, "list_notifications");
   if (/\b(github|pull requests?|prs?|reviews?|issues?)\b/.test(t) && gh) return { calls: [call(gh, {})] };
   const files = findTool(tools, "search_files");
@@ -345,9 +527,16 @@ function planFromUser(text: string, tools: Set<string>, p: Persona, system: stri
   // Weather, money, math.
   const weatherMatch = /\bweather\b(?:.*?\b(?:in|for|at)\s+([a-z .,'-]+))?/i.exec(text);
   if (weatherMatch && tools.has("get_weather")) {
-    return { calls: [call("get_weather", { location: (weatherMatch[1] ?? "Austin, TX").replace(/[?.!]+$/, "").trim(), days: 3 })] };
+    const place = (weatherMatch[1] ?? "Austin, TX").replace(/[?.!]+$/, "").replace(/\s+(?:next week|this week(?:end)?|today|tomorrow|tonight|right now|now)$/i, "").trim();
+    return { calls: [call("get_weather", { location: place || "Austin, TX", days: /\bweek\b/.test(t) ? 7 : 3 })] };
   }
-  const fx = /(\d+(?:\.\d+)?)\s*([a-z]{3})\s+(?:to|in|into)\s+([a-z]{3})\b/i.exec(text);
+  const money = t
+    .replace(/\beuros?\b/g, "eur")
+    .replace(/\b(?:us )?dollars?\b/g, "usd")
+    .replace(/\b(?:british )?pounds?\b/g, "gbp")
+    .replace(/\byen\b/g, "jpy")
+    .replace(/\b(?:mexican )?pesos?\b/g, "mxn");
+  const fx = /(\d+(?:\.\d+)?)\s*([a-z]{3})\s+(?:to|in|into)\s+([a-z]{3})\b/i.exec(money);
   if (fx && tools.has("convert_currency")) {
     return { calls: [call("convert_currency", { amount: Number(fx[1]), from: fx[2].toUpperCase(), to: fx[3].toUpperCase() })] };
   }
@@ -361,7 +550,13 @@ function planFromUser(text: string, tools: Set<string>, p: Persona, system: stri
     const items = listAdd[1].split(/,| and /).map((s) => `- [ ] ${s.trim()}`).join("\n");
     return { calls: [call("write_note", { title, content: items, mode: "append" })] };
   }
-  if (/\b(my notes|my lists?)\b/.test(t) && tools.has("list_notes")) return { calls: [call("list_notes", {})] };
+  if (/\b(my notes|my lists?|task list|to-?do(?: list)?|my tasks)\b/.test(t) && tools.has("list_notes")) return { calls: [call("list_notes", {})] };
+
+  // "Explain derivatives simply" → an encyclopedia summary.
+  const explain = /^(?:can you |please )?explain (.+?)(?: (?:simply|to me|like i'?m (?:new|five|5)))?[.?!]*$/i.exec(text.trim());
+  if (explain && tools.has("wikipedia_lookup") && !/^(this|it|that|these)\b/i.test(explain[1])) {
+    return { calls: [call("wikipedia_lookup", { topic: explain[1] })] };
+  }
 
   // Reach me elsewhere.
   const reach = /\b(text|call|message) me\b(.*)/i.exec(text);
@@ -374,7 +569,12 @@ function planFromUser(text: string, tools: Set<string>, p: Persona, system: stri
   const url = /(https?:\/\/\S+)/.exec(text);
   if (url && tools.has("read_webpage")) return { calls: [call("read_webpage", { url: url[1].replace(/[).,!?]+$/, "") })] };
   if (/\b(news|headlines)\b/.test(t) && tools.has("news_headlines")) {
-    return { calls: [call("news_headlines", { topic: text.replace(/.*\b(?:news|headlines)\b\s*(?:about|on|for)?\s*/i, "") || "today" })] };
+    const topic = text
+      .replace(/.*\b(?:news|headlines)\b\s*(?:about|on|for)?\s*/i, "")
+      .replace(/[?.!]+$/, "")
+      .replace(/^(?:today|this morning|right now|lately)$/i, "")
+      .trim();
+    return { calls: [call("news_headlines", { topic: topic || "top stories" })] };
   }
   if (
     /\b(search|look up|google|find|latest|who is|what is|what's|when is|where is|how (do|to|much|many)|compare|best)\b/.test(t) &&
@@ -411,15 +611,24 @@ function summarizeResults(results: { name: string; content: string; isError?: bo
       out.push("The form is filled in but **not sent**. Check the preview and tap **Approve** to send it, or Deny and nothing goes out.");
       continue;
     }
+    if (status === "pending_approval" && /prompt-injection guard/.test(parsed?.message ?? "")) {
+      const email = /approve: Email (\S+?): “(.+?)”/.exec(parsed?.message ?? "");
+      const what = email ? `send “${email[2]}” to ${email[1]}` : "do something for someone I don't know";
+      out.push(
+        `⚠️ I stopped before doing that. Something I just read asked me to ${what}. Instructions inside outside content aren't yours, so I'm asking first (the prompt-injection guard). Tap **Deny** unless you really mean it.`,
+      );
+      continue;
+    }
     if (status === "pending_approval") {
-      out.push(`I've got that ready — it needs your OK first. Tap **Approve** and I'll send it. (${parsed?.message ?? "Approval required."})`);
+      out.push(`I've got that ready — it needs your OK first. Tap **Approve** and I'll go ahead. (${parsed?.message ?? "Approval required."})`);
       continue;
     }
     if (status === "blocked") {
       out.push(`I can't do that one: ${parsed?.message ?? "it's not allowed."}`);
       continue;
     }
-    const content = parsed?.content ?? parsed?.error ?? r.content;
+    // Outside content arrives wrapped (see runTool); summarize what's inside.
+    const content = unwrapUntrusted(parsed?.content ?? parsed?.error ?? r.content);
     if (r.isError || status === "error") {
       out.push(`Hmm, that didn't work: ${content}`);
       continue;
@@ -436,7 +645,7 @@ function summarizeResults(results: { name: string; content: string; isError?: bo
         break;
       }
       case "get_weather":
-        out.push(content.split("\n").slice(0, 3).join("\n"));
+        out.push(content.split("\n").slice(0, /\bweek\b/i.test(userText) ? 9 : 3).join("\n"));
         break;
       case "list_meetings": {
         const rows = [...content.matchAll(/^- (mtg_\S+) · “(.+?)” · (.+?) · (.+?) · (.+?)$/gm)];
@@ -488,6 +697,16 @@ function summarizeResults(results: { name: string; content: string; isError?: bo
         }
         const suspicious = emails.find((m) => /acc0unt|verify|urgent action/i.test(`${m[1]} ${m[2]}`));
         const normal = emails.filter((m) => m !== suspicious).slice(0, 4);
+        if (/\b(reply|respond|answer)\b/i.test(userText)) {
+          // People, not notifications, are the ones waiting on an answer.
+          const people = normal.filter((m) => !/notifications?@|no-?reply@/i.test(m[1]));
+          out.push(
+            people.length
+              ? `These look like they need a reply from you:\n${people.map((m) => `- **${m[1].replace(/<.+>/, "").trim()}** — ${m[2]}`).join("\n")}\n\nWant me to answer one? Say something like “reply to Sam saying yes, 12:30 works”.`
+              : "Nothing's waiting on a reply from you.",
+          );
+          break;
+        }
         out.push(
           `You've got ${emails.length} emails. The ones that matter:\n${normal
             .map((m) => `- **${m[1].replace(/<.+>/, "").trim()}** — ${m[2]}`)
@@ -501,11 +720,85 @@ function summarizeResults(results: { name: string; content: string; isError?: bo
       }
       case "create_reminder":
       case "schedule_routine":
-        out.push(`${f.done} ${content.replace(/\(sch_[a-z0-9]+\)/, "").replace(/\s+/g, " ").trim()}`);
+        out.push(`${f.done} ${content.replace(/\s*\(sch_[a-z0-9]+\)/, "").replace(/\s+/g, " ").trim()}`);
         break;
+      case "list_reminders": {
+        const rows = [...content.matchAll(/^- sch_\S+ \[(\w+)\] (.+?) — (.+)$/gm)];
+        const line = (m: RegExpMatchArray) => `- **${m[2]}** — ${m[3]}`;
+        const reminders = rows.filter((m) => m[1] !== "routine");
+        const routines = rows.filter((m) => m[1] === "routine");
+        out.push(
+          rows.length
+            ? [
+                reminders.length ? `Your reminders:\n${reminders.map(line).join("\n")}` : "",
+                routines.length ? `Your routines:\n${routines.map(line).join("\n")}` : "",
+              ]
+                .filter(Boolean)
+                .join("\n\n")
+            : "Nothing scheduled yet. Try “remind me to stretch in 20 minutes”.",
+        );
+        break;
+      }
+      case "list_events": {
+        const rows = [...content.matchAll(/^- (.+?) → (.+?): (.+)$/gm)];
+        const u = userText.toLowerCase();
+        const slot = freeHour(content);
+        if (rows.length && slot && /\b(find|free|open)\b[^?]*\b(hour|time|slot)\b|\bdeep work\b/.test(u)) {
+          out.push(`You're free on **${slot.day}, ${clockLabel(slot.start)} to ${clockLabel(slot.start + 60)}**. Want it? Say “block it” and I'll hold it for you.`);
+          break;
+        }
+        if (rows.length && /\bprep\b|\bnext meeting\b/.test(u)) {
+          const next = rows.find((m) => /\b(1:1|standup|sync|meeting|call|interview|review)\b/i.test(m[3])) ?? rows[0];
+          const start = clockMinutes(next[1]);
+          const nudge = start !== null && start >= 10 ? ` Want a nudge first? Say “remind me to prep for ${next[3]} at ${clockLabel(start - 10).replace(" ", "").toLowerCase()}”.` : "";
+          out.push(`Your next meeting is **${next[3]}**, ${next[1]} to ${next[2]}.${nudge}`);
+          break;
+        }
+        // "What's on my plate tomorrow?" → just that day, when the dates line up.
+        const day = /\btomorrow\b/.test(u) ? dayLabel(1) : /\btoday\b/.test(u) ? dayLabel(0) : null;
+        const shown = day && rows.some((m) => m[1].startsWith(day)) ? rows.filter((m) => m[1].startsWith(day)) : rows;
+        out.push(
+          shown.length
+            ? `${day && shown !== rows ? (/\btomorrow\b/.test(u) ? "Tomorrow" : "Today") + " you've got:" : "Here's what's coming up:"}\n${shown.map((m) => `- **${m[3]}** — ${day && shown !== rows ? m[1].slice(day.length).replace(/^,\s*/, "") : m[1]} to ${m[2]}`).join("\n")}${demoNote(content)}`
+            : "Your calendar is clear.",
+        );
+        break;
+      }
+      case "list_notifications": {
+        const rows = [...content.matchAll(/^- (.+)$/gm)];
+        out.push(rows.length ? `Here's what's waiting on you on GitHub:\n${rows.map((m) => `- ${m[1]}`).join("\n")}${demoNote(content)}` : "Nothing's waiting on you on GitHub.");
+        break;
+      }
+      case "search_files": {
+        const rows = [...content.matchAll(/^- (.+)$/gm)];
+        out.push(rows.length ? `I found these files:\n${rows.map((m) => `- ${m[1]}`).join("\n")}${demoNote(content)}` : "I didn't find any matching files.");
+        break;
+      }
       case "remember":
         out.push(content.startsWith("Already") ? "I already had that one noted. 👍" : "Got it — I'll remember that.");
         break;
+      case "write_note": {
+        const list = LISTS.find((l) => l.match.test(userText.toLowerCase()));
+        const title = /“(.+?)”/.exec(content)?.[1] ?? list?.title ?? "your list";
+        out.push(
+          list
+            ? `Done! I saved “${list.title}”:\n${list.items.map((i) => `- ${i}`).join("\n")}\n\nIt's under **Memory → Notes**. Add to it anytime: “add ${list.example} to my ${list.title.toLowerCase().replace(/ list$/, "")} list”.`
+            : `${content.startsWith("Created") ? "Started" : "Updated"} your “${title}” list. It's under **Memory → Notes**.`,
+        );
+        break;
+      }
+      case "list_notes":
+        out.push(
+          content === "No notes yet."
+            ? "Your lists are empty so far. Say “add call the bank and pay rent to my to-do list” and I'll start one."
+            : `Here are your notes and lists:\n${content.replace(/- \[[ x]\] /g, "")}`,
+        );
+        break;
+      case "wikipedia_lookup": {
+        const [heading, extract, link] = content.split("\n");
+        out.push(link?.startsWith("http") ? `**${heading}:** ${extract}\n\n[More on Wikipedia](${link})` : content);
+        break;
+      }
       case "web_browse": {
         const where = /^Site: (.+)$/m.exec(content)?.[1] ?? "the site";
         const answer = /^(?:Answer|Not found on the site): (.+)$/m.exec(content)?.[1];
@@ -525,13 +818,83 @@ function summarizeResults(results: { name: string; content: string; isError?: bo
       case "recall":
         out.push(content === "Nothing saved yet." ? "I don't know much about you yet! Tell me a few things you'd like me to remember." : `Here's what I know about you:\n${content}`);
         break;
-      default:
-        out.push(content.length > 600 ? `${content.slice(0, 600)}…` : content);
+      default: {
+        // Demo connections for apps without their own sample data.
+        const demoApp = /^\(demo data\) (.+?) is connected in demo mode/.exec(content)?.[1];
+        if (demoApp) {
+          out.push(`${demoApp} is connected in demo mode, so there's nothing real to show yet. Once it's really connected, I'll look there for you.`);
+          break;
+        }
+        const body = content.replace(/^\(demo data\)\s*/, "").trim();
+        const text = body.length > 600 ? `${body.slice(0, 600)}…` : body;
+        out.push(`${body.startsWith("- ") ? `Here's what I found:\n${text}` : text}${/^Simulated\b/.test(body) ? "" : demoNote(content)}`);
+      }
     }
   }
   if (!out.length) return `${f.done}`;
   void userText;
   return out.join("\n\n");
+}
+
+/** "Wed, Oct 14, 10:00 AM" → minutes after midnight. */
+function clockMinutes(s: string): number | null {
+  const m = /(\d{1,2}):(\d{2})\s*([AP]M)/i.exec(s);
+  return m ? ((Number(m[1]) % 12) + (/pm/i.test(m[3]) ? 12 : 0)) * 60 + Number(m[2]) : null;
+}
+
+function clockLabel(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  return `${((h + 11) % 12) + 1}:${pad(minutes % 60)} ${h < 12 ? "AM" : "PM"}`;
+}
+
+/** The label the demo calendar uses for a day: "Wed, Oct 14". */
+function dayLabel(offset: number, now = new Date()): string {
+  const d = new Date(now);
+  d.setDate(d.getDate() + offset);
+  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+}
+
+/** The first free hour between 9 and 5, after today, in the demo calendar's listing. */
+function freeHour(content: string): { day: string; start: number } | null {
+  const busy = new Map<string, [number, number][]>();
+  for (const m of content.matchAll(/^- (.+?), (\d{1,2}:\d{2} [AP]M) → (.+?): .+$/gm)) {
+    const start = clockMinutes(m[2]);
+    const end = clockMinutes(m[3]);
+    if (start === null || end === null) continue;
+    busy.set(m[1], [...(busy.get(m[1]) ?? []), [start, end]]);
+  }
+  for (const [day, spans] of [...busy].slice(1)) {
+    for (let start = 9 * 60; start <= 16 * 60; start += 60) {
+      if (spans.every(([a, b]) => start + 60 <= a || start >= b)) return { day, start };
+    }
+  }
+  return null;
+}
+
+/** "Block it" right after it offered a free hour: hold that hour on the calendar (the owner approves first). */
+function holdSlot(userText: string, messages: LlmMessage[], tools: Set<string>): LlmToolCall | null {
+  if (!/^(?:yes[,!. ]*)?(?:please )?(?:block|hold|book) (?:it|that)\b/i.test(userText.trim())) return null;
+  const createEvent = findTool(tools, "create_event");
+  const offered = [...messages].reverse().find((m) => m.role === "assistant" && /You're free on \*\*/.test(m.content));
+  const slot = offered && /You're free on \*\*(.+?), (\d{1,2}:\d{2} [AP]M) to (\d{1,2}:\d{2} [AP]M)\*\*/.exec(offered.content);
+  if (!createEvent || !slot) return null;
+  const date = new Date(`${slot[1]} ${new Date().getFullYear()}`);
+  const start = clockMinutes(slot[2]);
+  const end = clockMinutes(slot[3]);
+  if (Number.isNaN(date.getTime()) || start === null || end === null) return null;
+  const at = (minutes: number) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
+  const deepWork = messages.some((m) => m.role === "user" && /\bdeep work\b/i.test(m.content));
+  return call(createEvent, { title: deepWork ? "Deep work" : "Focus time", start: at(start), end: at(end) });
+}
+
+/** The inside of an <untrusted_content> envelope, or the text as it was. */
+function unwrapUntrusted(text: string): string {
+  const m = /^<untrusted_content[^>]*>\n([\s\S]*?)\n<\/untrusted_content>/.exec(text);
+  return m ? m[1] : text;
+}
+
+function demoNote(content: string): string {
+  return /^\(demo data\)/.test(content) ? "\n\n(Demo mode: this is sample data.)" : "";
 }
 
 export function createDemoProvider(): LlmProvider {
@@ -581,7 +944,8 @@ export function createDemoProvider(): LlmProvider {
           text = summarizeResults(results, p, userText);
         }
       } else {
-        const plan = planFromUser(lastUserText(req.messages), tools, p, req.system);
+        const held = holdSlot(lastUserText(req.messages), req.messages, tools);
+        const plan: Plan = held ? { calls: [held] } : planFromUser(lastUserText(req.messages), tools, p, req.system);
         if ("calls" in plan) calls = plan.calls;
         else text = plan.text;
       }
