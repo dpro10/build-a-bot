@@ -74,6 +74,15 @@ export function transcriptionSetup(): Omit<Setup, "apiKey"> | null {
   return rest;
 }
 
+/** The key speech-to-text uses when it runs on Groq: voice typing's cleanup can use the same provider. */
+export function groqApiKey(): string | null {
+  for (const t of [config.transcribe, config.transcribe.fallback]) {
+    const s = resolveSetup(t);
+    if (s?.provider === "groq") return s.apiKey;
+  }
+  return null;
+}
+
 /** Meeting notes can run: a real speech-to-text key, or demo mode. */
 export function transcriptionAvailable(): boolean {
   return Boolean(transcriptionSetup()) || demoMode;

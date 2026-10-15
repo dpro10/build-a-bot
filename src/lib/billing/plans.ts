@@ -8,6 +8,8 @@
  *  - SMS ~$0.013/segment, voice ~$0.02–0.09/min incl. speech recognition.
  *  - Meeting notes: speech-to-text per hour of audio (docs/research/meetings-2026-10-14.md)
  *    plus one notes call (~15K tokens in for an hour-long meeting).
+ *  - Voice typing: speech-to-text (billed at least 10 s a request) plus one short cleanup call:
+ *    about $0.0003 a dictation, so ~$0.01 for 1,000 words.
  */
 import type { TrustLevel } from "@/lib/trust";
 
@@ -32,6 +34,8 @@ export type Plan = {
     routines: number;
     /** Minutes of meetings the bot can take notes in per month. */
     meetingMinutes: number;
+    /** Words typed by voice per month (voice typing). Infinity: unlimited, with a daily fair-use guard. */
+    dictationWords: number;
   };
   trust: TrustLevel[];
   includedModels: ("fast" | "balanced" | "smart")[];
@@ -56,6 +60,7 @@ export const PLANS: Record<PlanId, Plan> = {
       smsSegments: 0,
       routines: 2,
       meetingMinutes: 120,
+      dictationWords: 8000,
     },
     trust: ["look", "ask", "trusted"],
     includedModels: ["fast"],
@@ -85,6 +90,7 @@ export const PLANS: Record<PlanId, Plan> = {
       smsSegments: 300,
       routines: 25,
       meetingMinutes: 900,
+      dictationWords: Number.POSITIVE_INFINITY,
     },
     trust: ["look", "ask", "trusted", "full"],
     includedModels: ["fast", "balanced"],
@@ -115,6 +121,7 @@ export const PLANS: Record<PlanId, Plan> = {
       smsSegments: 1500,
       routines: 200,
       meetingMinutes: 3000,
+      dictationWords: Number.POSITIVE_INFINITY,
     },
     trust: ["look", "ask", "trusted", "full"],
     includedModels: ["fast", "balanced", "smart"],
