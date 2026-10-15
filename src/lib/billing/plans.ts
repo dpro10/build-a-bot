@@ -64,7 +64,7 @@ export const PLANS: Record<PlanId, Plan> = {
       "1 bot",
       "300 messages/month on open models",
       "2,000 messages/month on your own key or subscription",
-      "Web, email, Telegram, Discord, Slack",
+      "Web, Telegram, Discord, Slack",
       "3 app connections",
       "2 hours of meeting notes",
     ],
@@ -147,3 +147,15 @@ export const PLAN_ORDER: PlanId[] = ["free", "plus", "pro"];
 export function minPlanFor(predicate: (p: Plan) => boolean): PlanId | null {
   return PLAN_ORDER.find((id) => predicate(PLANS[id])) ?? null;
 }
+
+/** Whole-percent saving of yearly vs monthly billing, rounded down so it's never overstated. */
+export function yearlySaving(p: Plan): number {
+  if (!p.priceMonthly) return 0;
+  return Math.floor(((p.priceMonthly - p.priceYearly) / p.priceMonthly) * 100);
+}
+
+/** "Save up to 17%": the best yearly saving of any plan. Pricing and Plan & usage both show this one number. */
+export const MAX_YEARLY_SAVING = Math.max(...PLAN_ORDER.map((id) => yearlySaving(PLANS[id])));
+
+/** What upgrade prompts say while paid plans can't be bought yet (no Stripe, outside demo mode). */
+export const PAID_PLANS_SOON = "Paid plans are coming soon.";

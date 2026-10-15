@@ -11,7 +11,7 @@ import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
 import { toast } from "@/components/ui/toaster";
 import { api, ApiError } from "@/lib/client/api";
-import { INCLUDED_MODELS, PROVIDERS, PROVIDER_BY_ID, SUBSCRIPTIONS, type ModelDef, type ProviderId } from "@/lib/models/catalog";
+import { INCLUDED_MODELS, PROVIDERS, PROVIDER_BY_ID, SUBSCRIPTIONS, contextLabel, type ModelDef, type ProviderId } from "@/lib/models/catalog";
 import { cn } from "@/lib/utils";
 import { ago } from "@/components/bot/activity/time";
 import { FieldGroup, SettingsSection, useApiErrorToast } from "./ui";
@@ -43,11 +43,6 @@ const EFFORT_HINT = {
 };
 
 const OTHER = "__other__";
-
-function contextLabel(n?: number) {
-  if (!n) return null;
-  return n >= 1_000_000 ? `${Math.round(n / 1_000_000)}M context` : `${Math.round(n / 1024)}K context`;
-}
 
 export function brainText(b: BrainValue, demoBrain: boolean): string {
   if (b.kind === "subscription") return b.provider === "codex" ? "Your ChatGPT · via Bridge" : "Your Claude · via Bridge";
@@ -83,6 +78,8 @@ export function BrainSection({
   label,
   keyHint,
   plan,
+  demo,
+  paidPlans,
   demoBrain,
   devices,
   serverNow,
@@ -94,6 +91,10 @@ export function BrainSection({
   label: string;
   keyHint: string | null;
   plan: { id: string; name: string; includedModels: string[] };
+  /** Demo mode: any model can be tried, whatever the plan. */
+  demo: boolean;
+  /** Plus and Pro can be bought here (or are simulated in demo mode). */
+  paidPlans: boolean;
   demoBrain: boolean;
   devices: BridgeDeviceView[];
   serverNow: string;
@@ -253,10 +254,13 @@ export function BrainSection({
             <p className="text-sm text-muted-foreground">
               Open models we run for you. Nothing to set up; your plan covers the messages.
               {demoBrain ? " In this demo, answers come from a stand-in brain." : ""}
+              {!paidPlans && TIERS.some((t) => !plan.includedModels.includes(t.id)) ? " Paid plans are coming soon." : ""}
             </p>
             {TIERS.map((tier) => {
               const models = INCLUDED_MODELS.filter((m) => m.tier === tier.id);
               const locked = !plan.includedModels.includes(tier.id);
+              // Outside demo mode a model from a plan you don't have can't be picked.
+              const blocked = locked && !demo;
               return (
                 <div key={tier.id} className="flex flex-col gap-2">
                   <div className="flex items-baseline gap-2">
@@ -275,6 +279,7 @@ export function BrainSection({
                         selected={model === m.id}
                         current={current.kind === "included" && current.model === m.id}
                         lockedPlan={locked ? PLAN_FOR_TIER[tier.id] : null}
+                        disabled={blocked}
                         onSelect={() => {
                           setModel(m.id);
                           setUpgrade(null);
@@ -292,8 +297,8 @@ export function BrainSection({
                 onChange={(x) => setEffort(x)}
                 options={[
                   { value: "low", label: "Quick", disabled: !selected.reasoning },
-                  { value: "medium", label: "Balanced", disabled: !selected.reasoning },
-                  { value: "high", label: "Thinks harder", disabled: !selected.reasoning },
+                  { value: "medium", label: "Thoughtful", disabled: !selected.reasoning },
+                  { value: "high", label: "Deep", disabled: !selected.reasoning },
                 ]}
                 className="self-start"
               />
@@ -636,6 +641,7 @@ function ModelCard({
   selected,
   current,
   lockedPlan,
+  disabled,
   onSelect,
 }: {
   m: ModelDef;
@@ -643,6 +649,7 @@ function ModelCard({
   selected: boolean;
   current: boolean;
   lockedPlan: string | null;
+  disabled?: boolean;
   onSelect: () => void;
 }) {
   const ctx = contextLabel(m.context);
@@ -651,12 +658,14 @@ function ModelCard({
       type="button"
       role="radio"
       aria-checked={selected}
+      disabled={disabled}
       tabIndex={tabIndex}
       onKeyDown={radioKeyDown}
       onClick={onSelect}
       className={cn(
         "flex flex-col gap-1 rounded-2xl border p-3.5 text-left transition",
-        selected ? "border-primary bg-primary-soft/60 ring-4 ring-primary/10" : "border-border bg-card hover:border-foreground/20 hover:bg-muted/40",
+        selected ? "border-primary bg-primary-soft/60 ring-4 ring-primary/10" : "border-border bg-card",
+        disabled ? "cursor-not-allowed opacity-60" : !selected && "hover:border-foreground/20 hover:bg-muted/40",
       )}
     >
       <span className="flex items-center gap-2">
@@ -672,8 +681,8 @@ function ModelCard({
       <span className="text-xs text-muted-foreground">by {m.maker ?? "an open lab"}</span>
       <span className="text-sm text-foreground">{m.blurb}</span>
       <span className="mt-1 flex flex-wrap gap-1.5">
-        {ctx ? <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">{ctx}</span> : null}
-        {m.reasoning ? <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">Can think it through</span> : null}
+        {ctx ? <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">{ctx} context</span> : null}
+        {m.reasoning ? <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">Can think step by step</span> : null}
       </span>
     </button>
   );

@@ -2,14 +2,19 @@ import { z } from "zod";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { schema } from "@/lib/db";
 import type { Bot } from "@/lib/db/schema";
-import { config } from "@/lib/env";
+import { config, demoMode, live } from "@/lib/env";
 import { isEmail, newId, truncate } from "@/lib/utils";
 import { deliver } from "@/lib/channels/outbound";
 import type { Recipient } from "@/lib/policy/engine";
 import { defineTool, type ToolContext } from "../types";
 
-export function botEmailAddress(bot: Pick<Bot, "handle">): string {
-  return `${bot.handle}@${config.email.botDomain}`;
+/** Stands in for BOT_EMAIL_DOMAIN in demo mode, where nothing is really sent or received. */
+const DEMO_BOT_EMAIL_DOMAIN = "example.com";
+
+/** The bot's own address, or null when bots don't get inboxes on this server. */
+export function botEmailAddress(bot: Pick<Bot, "handle">): string | null {
+  const domain = live.botEmail ? config.email.botDomain : demoMode ? (config.email.botDomain ?? DEMO_BOT_EMAIL_DOMAIN) : null;
+  return domain ? `${bot.handle}@${domain}` : null;
 }
 
 async function emailRecipients(addresses: string[], ctx: ToolContext): Promise<Recipient[]> {
@@ -77,12 +82,13 @@ export const sendEmail = defineTool({
     const failed = results.filter((r) => r.status === "failed");
     if (failed.length === results.length) return { ok: false, error: `Email failed: ${failed[0]?.error ?? "unknown error"}` };
     const simulated = results.every((r) => r.status === "simulated");
+    const from = botEmailAddress(ctx.bot);
     return {
       ok: true,
       content: `${simulated ? "(Demo: simulated, nothing actually sent.) " : ""}Sent “${args.subject}” to ${results
         .filter((r) => r.status !== "failed")
         .map((r) => r.to)
-        .join(", ")} from ${botEmailAddress(ctx.bot)}.${failed.length ? ` Failed for: ${failed.map((f) => f.to).join(", ")}.` : ""}`,
+        .join(", ")}${from ? ` from ${from}` : ""}.${failed.length ? ` Failed for: ${failed.map((f) => f.to).join(", ")}.` : ""}`,
       summary: simulated ? "Simulated send" : "Sent",
     };
   },
@@ -107,9 +113,10 @@ export const readInbox = defineTool({
       .orderBy(desc(schema.messages.createdAt))
       .limit(args.limit ?? 10);
     if (!rows.length) {
+      const address = botEmailAddress(ctx.bot);
       return {
         ok: true,
-        content: `No emails yet. The owner can forward things to ${botEmailAddress(ctx.bot)}.`,
+        content: `No emails yet.${address ? ` The owner can forward things to ${address}.` : ""}`,
         summary: "Empty",
       };
     }

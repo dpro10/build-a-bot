@@ -32,7 +32,7 @@ The app is one Next.js project plus a Postgres database. Recommended: **Vercel +
 |---|---|---|
 | Included open models | `TOKEN_FACTORY_API_KEY` | Nebius Token Factory. If Token Factory renames a model, override with `TF_MODEL_*` without a deploy. |
 | Web search & reader | `TAVILY_API_KEY` | 1,000 free credits/month, then $0.008/credit. Searches are metered per plan. |
-| Managed app sign-in | `COMPOSIO_API_KEY` | Without it, only apps with an open MCP server (and custom MCP URLs) can connect for real. |
+| Managed app sign-in | `COMPOSIO_API_KEY` | One-click sign-in for about 70 apps (Google, Microsoft, Slack, GitHub, Dropbox, HubSpot, Zoom…). Composio makes each app's auth config on first use. Apps Composio has no OAuth app of its own for (X, Spotify, Shopify, PayPal, Xero…; `src/lib/connectors/composio-auth.ts`) stay "Coming soon" until you register an app with the vendor, add it in Composio and set `COMPOSIO_AUTH_CONFIG_<TOOLKIT>`. **Turn on callback identity verification** (Composio: Settings → General → Configuration, verifier URL `{APP_URL}/api/connectors/composio/verify`): without it, someone could send a person their own sign-in link and attach that person's account to their bot. Consent screens say "Composio"; for launch, register your own Google/Microsoft apps (Google's Gmail scopes need its verification and a CASA assessment). |
 | MCP servers needing a pre-registered app | `MCP_OAUTH_CLIENTS` | JSON map of issuer/host → client id/secret, once you register Build-a-bot with that vendor. |
 | Meeting notes (speech-to-text) | `TRANSCRIBE_API_KEY` (+ `TRANSCRIBE_PROVIDER`, optional `TRANSCRIBE_FALLBACK_*`) | Groq's Whisper large-v3 turbo by default (~$0.04/audio hour). **Use Groq's paid tier**: the free tier allows only 7,200 audio-seconds an hour per organization. Together AI is the suggested fallback. Token Factory has no speech-to-text. |
 
@@ -44,7 +44,7 @@ Own-key (BYOK) and subscription brains need nothing from you.
 |---|---|
 | **Telegram** | Create a manager bot with @BotFather and turn on Bot Management (Bot Settings). Set `TELEGRAM_MANAGER_BOT_TOKEN`, `TELEGRAM_MANAGER_BOT_USERNAME` and `TELEGRAM_MANAGER_WEBHOOK_SECRET` (required: without it the webhook refuses every update), The server points the manager bot's webhook at itself as soon as those keys are live, and checks it every 30 minutes, so a new domain or secret is picked up. Each owner's own bot gets its webhook automatically. Without a manager bot, owners can still paste a BotFather token. |
 | **SMS & calls** | Twilio account + a US/Canada number. `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER`. On the number: *A message comes in* → `POST {APP_URL}/api/webhooks/twilio/sms`; *A call comes in* → `POST {APP_URL}/api/webhooks/twilio/voice`. **US texting needs A2P 10DLC (or toll-free) registration before launch.** |
-| **Email** | Buy a brand-free domain for bot inboxes (never containing "build-a-bot") and set `BOT_EMAIL_DOMAIN`. Either AgentMail (`AGENTMAIL_API_KEY`, webhook `message.received` → `{APP_URL}/api/webhooks/email/agentmail`, `AGENTMAIL_WEBHOOK_SECRET`) or Resend (`RESEND_API_KEY`, inbound on the domain, webhook `email.received` → `{APP_URL}/api/webhooks/email/resend`, `RESEND_WEBHOOK_SECRET`). `EMAIL_FROM` sends sign-in links. |
+| **Email** | Buy a brand-free domain for bot inboxes (never containing "build-a-bot") and set `BOT_EMAIL_DOMAIN`. Either AgentMail (`AGENTMAIL_API_KEY`, webhook `message.received` → `{APP_URL}/api/webhooks/email/agentmail`, `AGENTMAIL_WEBHOOK_SECRET`) or Resend (`RESEND_API_KEY`, inbound on the domain, webhook `email.received` → `{APP_URL}/api/webhooks/email/resend`, `RESEND_WEBHOOK_SECRET`). Until the domain and one provider's key and webhook secret are all set, the Email channel and "Its own inbox" show as Coming soon. Bots' mail goes out through that provider. `EMAIL_FROM` sends sign-in links, and `RESEND_API_KEY` on its own only does that. |
 | **Slack** | Nothing global: each owner creates their bot's Slack app from a manifest link in the app (events and interactivity URLs are filled in). |
 | **Discord** | Create an application. `DISCORD_APPLICATION_ID`, `DISCORD_PUBLIC_KEY`, `DISCORD_BOT_TOKEN`. Once those are live, set the Interactions Endpoint URL to `{APP_URL}/api/webhooks/discord` (Discord checks it right away). The server registers `/ask` and `/link` by itself, and again every 6 hours; `npm run discord:register` does it on demand. |
 
@@ -53,6 +53,8 @@ Own-key (BYOK) and subscription brains need nothing from you.
 1. Create two products (Plus, Pro) with monthly and yearly prices; set `STRIPE_PRICE_PLUS_MONTHLY`, `STRIPE_PRICE_PLUS_YEARLY`, `STRIPE_PRICE_PRO_MONTHLY`, `STRIPE_PRICE_PRO_YEARLY` and `STRIPE_SECRET_KEY`.
 2. Webhook → `{APP_URL}/api/webhooks/stripe` with `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`; set `STRIPE_WEBHOOK_SECRET`.
 3. Turn on the customer portal (cancel, switch plans, update card).
+
+Until `STRIPE_SECRET_KEY` is set, Plus and Pro say "Coming soon" everywhere (pricing, the home page, Plan & usage) and offer a waitlist (`plan:plus` / `plan:pro` in the admin dashboard's Waitlists). Someone at the Free bot limit is told before the builder's first step.
 
 ## 7. Before launch
 
@@ -66,5 +68,5 @@ Own-key (BYOK) and subscription brains need nothing from you.
 - [ ] Meeting notes:
   - a lawyer reviews the consent flow and transcript retention;
   - check the speech-to-text provider's data-retention and training terms;
-  - sign and notarize the desktop app (Apple Developer Program for Mac, a code-signing certificate for Windows) and publish its downloads. See `desktop/README.md`.
+  - sign and notarize the desktop app (Apple Developer Program for Mac, a code-signing certificate for Windows) and publish its downloads. See `desktop/README.md`. Then set `NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL` to the download page: until it's set, the app shows the desktop app as "Coming soon".
 - [ ] Smoke test: build a bot, chat, approve an action, STOP from a channel, a reminder fires, upgrade with a Stripe test card.

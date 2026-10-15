@@ -7,11 +7,14 @@ import { FinalCta } from "@/components/marketing/landing/FinalCta";
 import { Container, Section, SectionHeader } from "@/components/marketing/ui";
 import { getViewer } from "@/components/marketing/viewer";
 import { PLANS } from "@/lib/billing/plans";
+import { demoMode, live, paidPlansOpen } from "@/lib/env";
 import { contactLink, pageMetadata } from "@/lib/site";
 
 export const metadata = pageMetadata({
   title: "Pricing",
-  description: `Start free. Plus is $${PLANS.plus.priceMonthly}/month and Pro is $${PLANS.pro.priceMonthly}/month, with calls, texts, Full faith mode and smarter included models. Your own key or subscription never uses your included messages.`,
+  description: paidPlansOpen
+    ? `Start free. Plus is $${PLANS.plus.priceMonthly}/month and Pro is $${PLANS.pro.priceMonthly}/month, with calls, texts, Full faith mode and smarter included models. Your own key or subscription never uses your included messages.`
+    : "Start free: one bot, open models, web search and your apps. Plus and Pro are coming soon. Your own key or subscription never uses your included messages.",
   path: "/pricing",
 });
 
@@ -44,22 +47,32 @@ export default async function PricingPage() {
       a: (
         <p>
           No overage charges, ever. Your bot tells you it&apos;s reached the month&apos;s limit and pauses that one thing until your next month starts.
-          You can upgrade any time, or switch it to your own key or subscription to keep going.
+          {paidPlansOpen ? " You can upgrade any time, or switch it" : " You can switch it"} to your own key or subscription to keep going.
         </p>
       ),
     },
-    {
-      q: "Can I cancel any time?",
-      a: (
-        <p>
-          Yes, from Plan &amp; usage in the app, in a couple of taps. Your plan stays active until the end of the period you paid for, then your
-          account moves to Free. Your bots and their history stay put.
-        </p>
-      ),
-    },
+    paidPlansOpen
+      ? {
+          q: "Can I cancel any time?",
+          a: (
+            <p>
+              Yes, from Plan &amp; usage in the app, in a couple of taps. Your plan stays active until the end of the period you paid for, then your
+              account moves to Free. Your bots and their history stay put.
+            </p>
+          ),
+        }
+      : {
+          q: "When can I get Plus or Pro?",
+          a: <p>They&apos;re coming soon. Join the waitlist on either plan above and we&apos;ll email you when it&apos;s ready.</p>,
+        },
     {
       q: "Is there a free trial?",
-      a: <p>Free is free for as long as you like, with no card needed. Upgrade when your bot needs more messages, calls, texts or Full faith.</p>,
+      a: (
+        <p>
+          Free is free for as long as you like, with no card needed.
+          {paidPlansOpen ? " Upgrade when your bot needs more messages, calls, texts or Full faith." : null}
+        </p>
+      ),
     },
     {
       q: "What currency are prices in?",
@@ -91,7 +104,7 @@ export default async function PricingPage() {
             Start free and upgrade when your bot gets busy. Messages on your own API key or Claude or ChatGPT plan never use your included ones.
           </p>
           <ul className="mx-auto mt-6 flex max-w-2xl flex-wrap justify-center gap-x-5 gap-y-2 text-sm text-muted-foreground">
-            {["No card to start", "Cancel any time", "No overage charges"].map((t) => (
+            {["No card to start", ...(paidPlansOpen ? ["Cancel any time"] : []), "No overage charges"].map((t) => (
               <li key={t} className="inline-flex items-center gap-1.5">
                 <Check className="size-4 text-success" aria-hidden="true" /> {t}
               </li>
@@ -105,12 +118,12 @@ export default async function PricingPage() {
           <h2 id="plans-title" className="sr-only">
             Plans
           </h2>
-          <PlanCards signedIn={Boolean(viewer)} currentPlan={viewer?.plan} />
+          <PlanCards signedIn={Boolean(viewer)} currentPlan={viewer?.plan} paidPlans={paidPlansOpen} email={viewer?.email ?? null} />
           {viewer ? (
             <p className="mt-6 text-center text-sm text-muted-foreground">
               You&apos;re signed in.{" "}
               <Link href="/app/billing" className="font-semibold text-primary hover:underline">
-                Manage your plan and usage
+                {paidPlansOpen ? "Manage your plan and usage" : "See your plan and usage"}
               </Link>
               .
             </p>
@@ -125,7 +138,7 @@ export default async function PricingPage() {
             <CompareTable />
           </div>
           <p className="mt-4 text-center text-xs text-muted-foreground">
-            Calls and texts use US &amp; Canada numbers to start. WhatsApp and iMessage are on the waitlist.
+            {live.twilio || demoMode ? "Calls and texts use US & Canada numbers to start." : "Calls, texts and email are coming soon."} WhatsApp and iMessage are on the waitlist.
           </p>
         </Container>
       </Section>

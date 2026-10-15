@@ -4,10 +4,11 @@ import Link from "next/link";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/segmented";
-import { PLANS, PLAN_ORDER, type Plan, type PlanId } from "@/lib/billing/plans";
+import { MAX_YEARLY_SAVING, PLANS, PLAN_ORDER, type Plan, type PlanId } from "@/lib/billing/plans";
 import { TRUST } from "@/lib/trust";
 import { cn } from "@/lib/utils";
 import { CheckDot } from "../ui";
+import { PlanWaitlist } from "./PlanWaitlist";
 
 export type Interval = "monthly" | "yearly";
 
@@ -25,7 +26,7 @@ export function planBullets(p: Plan): string[] {
   const out = [`${n(L.bots)} bot${L.bots === 1 ? "" : "s"}`, `${n(L.includedMessages)} messages a month on included models`];
   if (p.includedModels.includes("smart")) out.push("Our smartest open models");
   else if (p.includedModels.includes("balanced")) out.push("Bigger, smarter open models");
-  out.push(L.voiceMinutes || L.smsSegments ? `${n(L.voiceMinutes)} call minutes and ${n(L.smsSegments)} texts` : "Web, email, Telegram, Discord and Slack");
+  out.push(L.voiceMinutes || L.smsSegments ? `${n(L.voiceMinutes)} call minutes and ${n(L.smsSegments)} texts` : "Web, Telegram, Discord and Slack");
   out.push(p.trust.includes("full") ? `${TRUST.full.name} mode` : `Trust levels up to ${TRUST.trusted.name}`);
   out.push(`${n(L.connectors)} apps per bot`);
   out.push(`${n(L.byoMessages)} messages a month on your own key or plan`);
@@ -35,24 +36,22 @@ export function planBullets(p: Plan): string[] {
   return out;
 }
 
-/** Whole-percent saving of yearly vs monthly billing, rounded down so it's never overstated. */
-export function yearlySaving(p: Plan): number {
-  if (!p.priceMonthly) return 0;
-  return Math.floor(((p.priceMonthly - p.priceYearly) / p.priceMonthly) * 100);
-}
-
-const MAX_SAVING = Math.max(...PLAN_ORDER.map((id) => yearlySaving(PLANS[id])));
-
 export function PlanCards({
   signedIn = false,
   currentPlan,
   teaser = false,
   defaultInterval = "monthly",
+  paidPlans,
+  email = null,
 }: {
   signedIn?: boolean;
   currentPlan?: string;
   teaser?: boolean;
   defaultInterval?: Interval;
+  /** Plus and Pro can be bought (or switched to in demo mode). Otherwise they say "Coming soon" and offer a waitlist. */
+  paidPlans: boolean;
+  /** The viewer's email, so joining a waitlist takes one tap. */
+  email?: string | null;
 }) {
   const [interval, setBilling] = React.useState<Interval>(defaultInterval);
   return (
@@ -67,7 +66,7 @@ export function PlanCards({
             value: "yearly",
             label: (
               <span className="inline-flex items-center gap-1.5">
-                Yearly <span className="rounded-full bg-success-soft px-1.5 py-px text-[11px] font-bold text-success">save up to {MAX_SAVING}%</span>
+                Yearly <span className="rounded-full bg-success-soft px-1.5 py-px text-[11px] font-bold text-success">save up to {MAX_YEARLY_SAVING}%</span>
               </span>
             ),
           },
@@ -75,16 +74,34 @@ export function PlanCards({
       />
       <div className="mt-8 grid w-full gap-5 lg:grid-cols-3">
         {PLAN_ORDER.map((id) => (
-          <PlanCard key={id} plan={PLANS[id]} interval={interval} signedIn={signedIn} current={currentPlan === id} teaser={teaser} />
+          <PlanCard key={id} plan={PLANS[id]} interval={interval} signedIn={signedIn} current={currentPlan === id} teaser={teaser} paidPlans={paidPlans} email={email} />
         ))}
       </div>
     </div>
   );
 }
 
-function PlanCard({ plan, interval, signedIn, current, teaser }: { plan: Plan; interval: Interval; signedIn: boolean; current: boolean; teaser: boolean }) {
+function PlanCard({
+  plan,
+  interval,
+  signedIn,
+  current,
+  teaser,
+  paidPlans,
+  email,
+}: {
+  plan: Plan;
+  interval: Interval;
+  signedIn: boolean;
+  current: boolean;
+  teaser: boolean;
+  paidPlans: boolean;
+  email: string | null;
+}) {
   const featured = plan.id === "plus";
   const paid = plan.priceMonthly > 0;
+  // With no way to pay, Plus and Pro don't pretend to start anything.
+  const soon = paid && !paidPlans && !current;
   const price = interval === "yearly" ? plan.priceYearly : plan.priceMonthly;
   const bullets = planBullets(plan);
   const shown = teaser ? bullets.slice(0, 5) : bullets;
@@ -109,6 +126,8 @@ function PlanCard({ plan, interval, signedIn, current, teaser }: { plan: Plan; i
         <h3 className="font-display text-2xl font-bold tracking-tight">{plan.name}</h3>
         {current ? (
           <span className="rounded-full bg-success-soft px-2.5 py-1 text-xs font-bold text-success">Your plan</span>
+        ) : soon ? (
+          <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-bold text-muted-foreground">Coming soon</span>
         ) : featured ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-primary px-2.5 py-1 text-xs font-bold text-primary-foreground">
             <Sparkles className="size-3" aria-hidden="true" /> Recommended
@@ -129,11 +148,15 @@ function PlanCard({ plan, interval, signedIn, current, teaser }: { plan: Plan; i
           : "No card needed."}
       </p>
 
-      <Button asChild size="lg" variant={featured ? "primary" : "outline"} className="relative mt-5 w-full">
-        <Link href={cta.href}>
-          {cta.label} <ArrowRight />
-        </Link>
-      </Button>
+      {soon && plan.id !== "free" ? (
+        <PlanWaitlist plan={plan.id} email={email} className="relative mt-5" />
+      ) : (
+        <Button asChild size="lg" variant={featured ? "primary" : "outline"} className="relative mt-5 w-full">
+          <Link href={cta.href}>
+            {cta.label} <ArrowRight />
+          </Link>
+        </Button>
+      )}
 
       <ul className="relative mt-6 flex flex-col gap-2.5 border-t border-border pt-6">
         {shown.map((b) => (

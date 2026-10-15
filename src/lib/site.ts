@@ -13,7 +13,7 @@ export const SITE = {
   domain: "build-a-bot.site",
   tagline: "Your own AI agent, in about a minute.",
   description:
-    "Pick a face, name it, give it a brain and your apps, and talk to it anywhere: calls, texts, email, Telegram, Discord, Slack. Safety rules enforced in code.",
+    "Pick a face, name it, give it a brain and your apps, and talk to it on the web, Telegram, Discord or Slack. Calls, texts and email are coming soon. Safety rules enforced in code.",
   supportEmail,
   /** Where people manage their data, export it and reach us when no email is configured. */
   accountPath: "/app/account",

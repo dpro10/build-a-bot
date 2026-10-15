@@ -7,9 +7,11 @@ export type ChannelCtx = {
   botId: string;
   botName: string;
   demo: boolean;
+  /** Paid plans can be bought here (Stripe, or switched freely in demo mode). */
+  plansOnSale: boolean;
   ownerEmail: string | null;
-  /** The bot's own email address (brand-free handle). */
-  botEmail: string;
+  /** The bot's own email address (brand-free handle), when bots get inboxes here. */
+  botEmail: string | null;
   /** Runs a channel setup action; resolves null after showing the error. */
   run: (kind: ChannelKind, action: string, payload?: Record<string, unknown>) => Promise<ActionData | null>;
   refresh: () => Promise<void>;

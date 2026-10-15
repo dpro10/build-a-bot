@@ -15,7 +15,7 @@ import { getConnector, type ConnectorDef } from "@/lib/connectors";
 import { INCLUDED_MODELS, PROVIDER_BY_ID, SUBSCRIPTIONS } from "@/lib/models/catalog";
 import { TRUST } from "@/lib/trust";
 import { cn } from "@/lib/utils";
-import type { BuilderState, StepId } from "./state";
+import { countedApps, type BuilderState, type StepId } from "./state";
 
 /** A wash of the colorway that reads well in both themes: a little of its color mixed into the card. */
 export function colorwayTint(color: ColorwayId, percent = 18): string {
@@ -37,7 +37,8 @@ export function brainSummary(s: BuilderState): { title: string; sub: string } {
   return { title: m?.label ?? (b.model || "Your model"), sub: `Your ${p?.name ?? "provider"} key` };
 }
 
-export function speech(step: StepId, s: BuilderState): string {
+/** `appLimit`: apps the plan connects (left out in demo mode, which connects them all). */
+export function speech(step: StepId, s: BuilderState, appLimit?: number): string {
   const a = AVATARS[s.avatar];
   const name = s.name.trim();
   switch (step) {
@@ -48,8 +49,10 @@ export function speech(step: StepId, s: BuilderState): string {
     case "brain":
       return s.brain.kind === "subscription" ? "I'll think with your own plan, on your computer." : s.brain.kind === "byok" ? "Your key, your model. Nice." : "Which brain should I think with?";
     case "apps": {
-      const n = s.connectors.filter((c) => !ALWAYS_ON.has(c)).length + s.customMcp.length;
-      return n ? `${n} app${n === 1 ? "" : "s"}! I'll put ${n === 1 ? "it" : "them"} to work.` : "Which apps can I help with?";
+      // The apps that will really be connected, counted like the plan counts them (built-in tools aren't apps).
+      const n = Math.min(countedApps(s.connectors, s.customMcp), appLimit ?? Infinity);
+      if (n) return `${n} app${n === 1 ? "" : "s"}! I'll put ${n === 1 ? "it" : "them"} to work.`;
+      return s.connectors.some((c) => !ALWAYS_ON.has(c)) ? "Tools packed! Which apps do you use?" : "Which apps can I help with?";
     }
     case "trust":
       return {
@@ -89,7 +92,7 @@ function appDefs(s: BuilderState): ConnectorDef[] {
     .filter((d): d is ConnectorDef => Boolean(d));
 }
 
-export function BotPreview({ state: s, step, stepIndex, typing }: { state: BuilderState; step: StepId; stepIndex: number; typing: boolean }) {
+export function BotPreview({ state: s, step, stepIndex, typing, appLimit }: { state: BuilderState; step: StepId; stepIndex: number; typing: boolean; appLimit?: number }) {
   const a = AVATARS[s.avatar];
   const color = COLORWAYS[s.color];
   const apps = appDefs(s);
@@ -97,13 +100,14 @@ export function BotPreview({ state: s, step, stepIndex, typing }: { state: Build
   const trust = TRUST[s.trust];
   const channels = ["web", ...s.channels].map((k) => CHANNEL_BY_KIND[k as keyof typeof CHANNEL_BY_KIND]).filter(Boolean);
   const reached = (id: StepId) => stepIndex >= ["face", "name", "brain", "apps", "trust", "channels", "review"].indexOf(id);
+  const said = speech(step, s, appLimit);
 
   return (
     <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-lift">
       <div className="relative flex flex-col items-center px-6 pt-6 pb-5" style={{ background: `radial-gradient(120% 90% at 50% 0%, ${colorwayTint(s.color, 22)} 0%, transparent 70%)` }}>
         <div className="pointer-events-none absolute inset-0 opacity-50 dark:opacity-20" style={{ background: `radial-gradient(60% 50% at 50% 35%, ${color.light}55 0%, transparent 70%)` }} aria-hidden />
-        <div key={`${step}-${speech(step, s)}`} className="relative z-10 mb-1 max-w-[260px] animate-pop rounded-2xl rounded-bl-md bg-card px-3.5 py-2 text-center text-sm font-medium shadow-soft ring-1 ring-border">
-          {speech(step, s)}
+        <div key={`${step}-${said}`} className="relative z-10 mb-1 max-w-[260px] animate-pop rounded-2xl rounded-bl-md bg-card px-3.5 py-2 text-center text-sm font-medium shadow-soft ring-1 ring-border">
+          {said}
         </div>
         <div className="relative z-10">
           <Avatar avatar={s.avatar} color={s.color} size={168} mood={moodFor(step, s, typing)} />
@@ -182,14 +186,15 @@ function PreviewRow({ icon, label, pending, children }: { icon: React.ReactNode;
 }
 
 /** Compact version for phones: avatar + name + what's set so far. */
-export function BotPreviewStrip({ state: s, step, typing }: { state: BuilderState; step: StepId; typing: boolean }) {
+export function BotPreviewStrip({ state: s, step, typing, appLimit }: { state: BuilderState; step: StepId; typing: boolean; appLimit?: number }) {
+  const said = speech(step, s, appLimit);
   return (
     <div className="flex items-center gap-3 rounded-2xl border border-border bg-card px-3 py-2 shadow-soft">
       <Avatar avatar={s.avatar} color={s.color} size={52} mood={moodFor(step, s, typing)} />
       <div className="min-w-0 flex-1">
         <div className={cn("truncate font-display text-lg font-bold leading-tight", !s.name.trim() && "text-muted-foreground")}>{s.name.trim() || "Your bot"}</div>
-        <div key={speech(step, s)} className="animate-fade-up truncate text-xs text-muted-foreground">
-          {speech(step, s)}
+        <div key={said} className="animate-fade-up truncate text-xs text-muted-foreground">
+          {said}
         </div>
       </div>
     </div>

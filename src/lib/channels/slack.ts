@@ -4,6 +4,7 @@
  */
 import crypto from "node:crypto";
 import type { Channel } from "@/lib/db/schema";
+import { UnreachableError } from "@/lib/utils";
 import type { ChannelAdapter, OutboundButton } from "./outbound";
 import { channelSecret } from "./secrets";
 
@@ -12,6 +13,8 @@ export async function slackCall<T = Record<string, unknown>>(token: string, meth
     method: "POST",
     headers: { authorization: `Bearer ${token}`, "content-type": "application/json; charset=utf-8" },
     body: JSON.stringify(body),
+  }).catch((cause) => {
+    throw new UnreachableError("Slack", { cause });
   });
   const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string } & T;
   if (!data.ok) throw new Error(`Slack ${method}: ${data.error ?? res.status}`);

@@ -5,7 +5,7 @@ import { Bot, Brain, CalendarClock, Check, Clock, MessageCircle, Puzzle, ShieldC
 import { Avatar } from "@/components/avatar";
 import { BrandTile } from "@/components/brand/icons";
 import { channelIcon } from "@/components/catalog/channel-icon";
-import { ALWAYS_ON, countsTowardLimit } from "@/components/catalog/connector-meta";
+import { ALWAYS_ON } from "@/components/catalog/connector-meta";
 import { Textarea } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
@@ -13,14 +13,15 @@ import { Switch } from "@/components/ui/switch";
 import { AVATARS, COLORWAYS } from "@/lib/avatars";
 import { PLANS, planAllowsChannel, type PlanId } from "@/lib/billing/plans";
 import { CHANNEL_BY_KIND } from "@/lib/channels/catalog";
-import { getConnector, type ConnectorDef } from "@/lib/connectors";
+import { appKinds, getConnector, type ConnectorDef } from "@/lib/connectors";
+import { briefParts, type BriefPart } from "@/lib/jobs";
 import { INCLUDED_MODELS } from "@/lib/models/catalog";
 import { TRUST } from "@/lib/trust";
 import type { RecipeData } from "@/lib/recipes";
-import { cn } from "@/lib/utils";
+import { cn, joinList } from "@/lib/utils";
 import { formatDays, formatTime as formatRoutineTime } from "@/components/marketing/recipes/format";
 import { brainSummary, colorwayTint } from "../BotPreview";
-import type { BuilderState, StepId } from "../state";
+import { countedApps, type BuilderState, type StepId } from "../state";
 import { StepHeading } from "./StepHeading";
 
 /** What the server will adjust because of the owner's plan (it does the same checks). */
@@ -36,10 +37,9 @@ export function planAdjustments(s: BuilderState, plan: PlanId, demo: boolean): s
   }
   for (const kind of s.channels) {
     const def = CHANNEL_BY_KIND[kind];
-    if (def && def.availability === "available" && !planAllowsChannel(p, kind)) out.push(`${def.name} is part of ${def.minPlan === "pro" ? "Pro" : "Plus"} — it'll be ready to switch on when you upgrade.`);
+    if (def && def.availability === "available" && !planAllowsChannel(p, kind)) out.push(`${def.name} ${def.plural ? "are" : "is"} part of ${def.minPlan === "pro" ? "Pro" : "Plus"} — ready to switch on when you upgrade.`);
   }
-  const apps = s.connectors.map((id) => getConnector(id)).filter((d): d is ConnectorDef => Boolean(d) && countsTowardLimit(d!)).length + s.customMcp.length;
-  if (apps > p.limits.connectors) out.push(`${p.name} connects ${p.limits.connectors} apps per bot — the first ${p.limits.connectors} are added now.`);
+  if (countedApps(s.connectors, s.customMcp) > p.limits.connectors) out.push(`${p.name} connects ${p.limits.connectors} apps per bot — the first ${p.limits.connectors} are added now.`);
   return out;
 }
 
@@ -54,17 +54,19 @@ function formatTime(t: string) {
   return `${((h + 11) % 12) + 1}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
 }
 
-/** What the morning brief covers, from the jobs picked. Mirrors briefPrompt() in src/lib/bots/create.ts. */
-export function briefTopics(jobs: string[]): string {
-  const parts: string[] = [];
-  if (jobs.includes("calendar")) parts.push("your calendar");
-  if (jobs.includes("inbox")) parts.push("emails that need a reply");
-  if (jobs.includes("reminders") || !parts.length) parts.push("your reminders");
-  if (jobs.includes("research")) parts.push("a headline worth knowing");
-  if (jobs.includes("money")) parts.push("bills coming due");
-  if (jobs.includes("health")) parts.push("a nudge on your habits");
-  parts.push("the weather");
-  return `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;
+const BRIEF_TOPICS: Record<BriefPart, string> = {
+  calendar: "your calendar",
+  email: "emails that need a reply",
+  reminders: "your reminders",
+  headline: "a headline worth knowing",
+  bills: "bills coming due",
+  habits: "a nudge on your habits",
+  weather: "the weather",
+};
+
+/** What the morning brief covers, from the jobs and apps picked (the same parts as briefPrompt() in src/lib/bots/create.ts). */
+export function briefTopics(jobs: string[], connectors: string[]): string {
+  return joinList(briefParts(jobs, appKinds(connectors)).map((part) => BRIEF_TOPICS[part]));
 }
 
 export function ReviewStep({
@@ -172,7 +174,7 @@ export function ReviewStep({
               Morning brief
             </label>
             <p className="text-sm text-muted-foreground">
-              {name} reaches out {s.brief?.on && s.brief.weekdays ? "every weekday morning" : "every morning"} with what matters today: {briefTopics(s.jobs)}. Turn
+              {name} reaches out {s.brief?.on && s.brief.weekdays ? "every weekday morning" : "every morning"} with what matters today: {briefTopics(s.jobs, s.connectors)}. Turn
               it off anytime.
             </p>
           </div>

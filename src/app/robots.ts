@@ -1,6 +1,10 @@
 import type { MetadataRoute } from "next";
 import { appUrl } from "@/lib/env";
 
+// Built per request, not at build time: the sitemap's address follows APP_URL where the site
+// runs (a build made elsewhere would bake in its own, like http://localhost:3000).
+export const dynamic = "force-dynamic";
+
 export default function robots(): MetadataRoute.Robots {
   const base = appUrl();
   return {
