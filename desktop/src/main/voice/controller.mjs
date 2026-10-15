@@ -290,7 +290,8 @@ export class VoiceTyping extends EventEmitter {
     try {
       res = await this.api.dictate(job.audio, {
         category: job.app?.category,
-        app: job.app?.name ?? null,
+        // Only a well-known app's name ("Slack"); an app we don't recognize stays on this computer.
+        app: job.app && job.app.category !== "other" ? job.app.name : null,
         lang: v.language,
         polish: v.polish,
         // A reply to the bot is for the bot, whatever it starts with.

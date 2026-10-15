@@ -6,6 +6,9 @@
   --muted: #a9a4ba;
   --line: rgba(255, 255, 255, 0.1);
   --accent: #7c5cff;
+  /* Buttons with white text: #7c5cff is only 4.35:1, these stay above 4.5:1. */
+  --button: #6a4af5;
+  --button-hover: #7656fb;
   --good: #34d399;
   --warn: #fbbf24;
   --bad: #ff8a8f;
@@ -187,8 +190,12 @@ button:focus-visible {
 }
 
 button.primary {
-  background: var(--accent);
+  background: var(--button);
   color: #fff;
+}
+
+button.primary:hover {
+  background: var(--button-hover);
 }
 
 .icon-btn {

@@ -540,6 +540,16 @@ test("hold, talk, let go: it's typed where the cursor is, in the app's style", a
   assert.deepEqual(env.v.usage, { words: 4, limit: 8000 });
 });
 
+test("an app it doesn't recognize is sent as 'other', without its name (kept only in local history)", async () => {
+  const env = setupVoice({ app: { name: "Acme Payroll Admin", category: "other" } });
+  env.hotkey.emit("start");
+  await flush();
+  env.hotkey.emit("stop");
+  await flush(20);
+  assert.ok(env.calls.includes("api.dictate:other:-:polish=true:commands=true"), env.calls.join("\n"));
+  assert.equal(env.history.list()[0].app, "Acme Payroll Admin");
+});
+
 test("letting go while the mic is still opening still sends it", async () => {
   const env = setupVoice();
   env.hotkey.emit("start");
