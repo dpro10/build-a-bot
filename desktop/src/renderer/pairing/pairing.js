@@ -87,6 +87,12 @@
           ? "This computer's key is stored without encryption (BAB_ALLOW_PLAINTEXT_TOKEN=1, for testing only)."
           : "This computer has no keychain, so its key is kept only until you quit. You'll pair again next time.";
     $("close-hint").textContent = `You can close this window. Build-a-bot keeps watching for calls from the ${s.trayWord}.`;
+    const v = s.voice;
+    $("voice-line").textContent =
+      v && v.enabled && v.hint
+        ? `On. ${v.hint}, and your words are typed where your cursor is.`
+        : "Hold a key in any app and talk. Your words are typed where your cursor is, cleaned up, spelled your way.";
+    $("voice-open").textContent = v && v.enabled ? "Voice typing settings" : "Set up voice typing";
   }
 
   function render(s) {
@@ -133,6 +139,7 @@
   });
 
   $("check-again").addEventListener("click", async () => render(await api.refresh()));
+  $("voice-open").addEventListener("click", () => api.open("voice"));
   $("done").addEventListener("click", () => api.close());
   $("unpair").addEventListener("click", async () => {
     if (!window.confirm("Unpair this computer? Your bot won't offer to take notes here until you pair it again.")) return;

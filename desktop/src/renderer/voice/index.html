@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Voice typing · Build-a-bot</title>
+    <link rel="stylesheet" href="voice.css" />
+    <script src="voice.js" defer></script>
+  </head>
+  <body>
+    <header class="top">
+      <img src="icon.png" alt="" width="40" height="40" />
+      <div class="grow">
+        <h1 class="brand">Voice typing</h1>
+        <p class="sub">Talk instead of type, in any app</p>
+      </div>
+      <label class="switch big" id="enabled-wrap" hidden>
+        <input type="checkbox" id="enabled" role="switch" />
+        <span class="track" aria-hidden="true"></span>
+        <span class="sr-only">Voice typing on</span>
+      </label>
+    </header>
+
+    <main id="loading" class="view" aria-busy="true">
+      <p class="muted">One moment…</p>
+    </main>
+
+    <main id="unpaired" class="view" hidden>
+      <h2>Pair this computer first</h2>
+      <p>Voice typing works with your Build-a-bot account: your words, your bots, your plan. Pair this computer, then come back here.</p>
+      <button type="button" class="primary" id="pair">Pair this computer</button>
+    </main>
+
+    <main id="main" class="view" hidden>
+      <section class="hero" aria-labelledby="how-heading">
+        <h2 id="how-heading" class="sr-only">How it works</h2>
+        <p class="how" id="how"></p>
+        <ul class="tips">
+          <li id="tip-handsfree"></li>
+          <li><kbd>Esc</kbd> cancels while it listens.</li>
+          <li id="tip-bot" hidden></li>
+        </ul>
+        <div id="problem" class="notice" role="status" hidden>
+          <p id="problem-text"></p>
+          <div class="row" id="problem-actions"></div>
+        </div>
+        <p id="demo" class="notice info" hidden>This server runs in demo mode: it doesn't hear you yet, it types sample sentences so you can see how it works.</p>
+      </section>
+
+      <section class="card" id="setup" aria-labelledby="setup-heading">
+        <h2 id="setup-heading">Set up</h2>
+        <ol class="steps">
+          <li id="step-mic">
+            <span class="step-dot" aria-hidden="true"></span>
+            <div class="grow">
+              <strong>Microphone</strong>
+              <p class="hint" id="step-mic-text"></p>
+            </div>
+            <button type="button" class="secondary" id="mic-allow" hidden>Allow</button>
+          </li>
+          <li id="step-access" hidden>
+            <span class="step-dot" aria-hidden="true"></span>
+            <div class="grow">
+              <strong>Accessibility</strong>
+              <p class="hint" id="step-access-text"></p>
+            </div>
+            <button type="button" class="secondary" id="access-allow" hidden>Open settings</button>
+          </li>
+          <li id="step-try">
+            <span class="step-dot" aria-hidden="true"></span>
+            <div class="grow">
+              <strong>Try it below</strong>
+              <p class="hint">Your first words: hold the shortcut and talk.</p>
+            </div>
+          </li>
+        </ol>
+      </section>
+
+      <section class="card" id="try" aria-labelledby="try-heading">
+        <h2 id="try-heading">Try it</h2>
+        <p class="hint" id="try-hint"></p>
+        <label for="try-box" class="sr-only">Try voice typing here</label>
+        <textarea id="try-box" rows="4" placeholder="Click here, then hold the shortcut and talk…"></textarea>
+        <p id="try-heard" class="heard" hidden></p>
+      </section>
+
+      <section class="stats" aria-label="Your voice typing">
+        <div><strong id="stat-week">0</strong><span>words this week</span></div>
+        <div><strong id="stat-saved">0 min</strong><span>saved vs. typing</span></div>
+        <div><strong id="stat-wpm">–</strong><span>words a minute</span></div>
+      </section>
+      <p id="plan" class="hint center"></p>
+
+      <section class="card" aria-labelledby="shortcut-heading">
+        <h2 id="shortcut-heading">Shortcut</h2>
+        <div id="shortcuts" class="options" role="radiogroup" aria-labelledby="shortcut-heading"></div>
+        <div class="row">
+          <button type="button" class="secondary" id="record">Use other keys…</button>
+          <span id="record-status" class="hint" role="status"></span>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="writes-heading">
+        <h2 id="writes-heading">How it writes</h2>
+        <div class="toggles">
+          <label class="toggle">
+            <span class="grow"><strong>Clean up my words</strong><span class="hint">Takes out ums and repeats, fixes punctuation, and keeps your corrections (“at 2, no, 3” becomes “at 3”).</span></span>
+            <span class="switch"><input type="checkbox" data-opt="polish" role="switch" /><span class="track" aria-hidden="true"></span></span>
+          </label>
+          <label class="toggle">
+            <span class="grow"><strong>Match each app's style</strong><span class="hint">Casual in chats, full sentences in email, exact in code and terminals.</span></span>
+            <span class="switch"><input type="checkbox" data-opt="styles" role="switch" /><span class="track" aria-hidden="true"></span></span>
+          </label>
+          <label class="toggle" id="commands-row">
+            <span class="grow"><strong id="commands-title">Talk to your bot</strong><span class="hint" id="commands-hint"></span></span>
+            <span class="switch"><input type="checkbox" data-opt="commands" role="switch" /><span class="track" aria-hidden="true"></span></span>
+          </label>
+          <label class="toggle">
+            <span class="grow"><strong>Sounds</strong><span class="hint">A soft chime when it starts and stops listening.</span></span>
+            <span class="switch"><input type="checkbox" data-opt="sounds" role="switch" /><span class="track" aria-hidden="true"></span></span>
+          </label>
+          <label class="toggle">
+            <span class="grow"><strong>Put my clipboard back</strong><span class="hint">After pasting, what you had copied is put back.</span></span>
+            <span class="switch"><input type="checkbox" data-opt="restoreClipboard" role="switch" /><span class="track" aria-hidden="true"></span></span>
+          </label>
+        </div>
+        <div class="fields">
+          <label for="language">Language</label>
+          <select id="language"></select>
+          <label for="mic">Microphone</label>
+          <select id="mic"></select>
+        </div>
+      </section>
+
+      <section class="card" id="dictionary" aria-labelledby="dict-heading">
+        <h2 id="dict-heading">Your words</h2>
+        <p class="hint">Names and terms it should always spell your way. Add what it gets wrong, and how it gets it wrong if you like.</p>
+        <form id="word-form" class="add-row" novalidate>
+          <label class="sr-only" for="word">Word</label>
+          <input id="word" placeholder="Word, like Prozzi" maxlength="80" autocomplete="off" />
+          <label class="sr-only" for="word-heard">It writes instead (optional)</label>
+          <input id="word-heard" placeholder="It writes instead (optional)" maxlength="80" autocomplete="off" />
+          <button type="submit" class="primary small">Add</button>
+        </form>
+        <p id="word-error" class="error" role="alert" hidden></p>
+        <ul id="words" class="chips" aria-label="Your words"></ul>
+
+        <h3>Snippets</h3>
+        <p class="hint">Say a phrase and it types something longer: your address, a link, a sign-off. Pick a phrase you wouldn't say otherwise.</p>
+        <form id="snippet-form" class="snippet-form" novalidate>
+          <label for="snippet-phrase">When I say</label>
+          <input id="snippet-phrase" placeholder="my booking link" maxlength="60" autocomplete="off" />
+          <label for="snippet-text">Type</label>
+          <textarea id="snippet-text" rows="2" placeholder="https://cal.com/you" maxlength="4000"></textarea>
+          <button type="submit" class="primary small">Add snippet</button>
+        </form>
+        <p id="snippet-error" class="error" role="alert" hidden></p>
+        <ul id="snippets" class="snippet-list" aria-label="Your snippets"></ul>
+
+        <details id="known-wrap" hidden>
+          <summary>Names it already knows from your bots</summary>
+          <p id="known" class="hint"></p>
+        </details>
+      </section>
+
+      <section class="card" id="history" aria-labelledby="history-heading">
+        <div class="row between">
+          <h2 id="history-heading">Recent</h2>
+          <label class="switch small" title="Keep a history on this computer">
+            <input type="checkbox" data-opt="history" role="switch" />
+            <span class="track" aria-hidden="true"></span>
+            <span class="sr-only">Keep a history on this computer</span>
+          </label>
+        </div>
+        <p class="hint" id="history-note"></p>
+        <ul id="history-list" class="history"></ul>
+        <button type="button" class="link danger" id="clear-history" hidden>Clear history</button>
+      </section>
+
+      <footer class="privacy">
+        <p><strong>Private by design.</strong> The microphone is on only while you hold the shortcut, and the pill shows the whole time. Your voice is turned into text and thrown away; Build-a-bot keeps a word count, never your words. Your history stays on this computer, encrypted.</p>
+        <p><button type="button" class="link" id="open-voice-page">Voice typing in Build-a-bot</button></p>
+      </footer>
+    </main>
+  </body>
+</html>

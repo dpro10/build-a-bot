@@ -25,6 +25,32 @@ export const DEFAULT_SETTINGS = Object.freeze({
   macTabs: false,
   /** Meetings whose notes we're still waiting for, or whose finish didn't reach the server. */
   pending: /** @type {Array<{ botId: string, meetingId: string, finished: boolean, at: number }>} */ ([]),
+  /** Voice typing (voice/): off until the owner sets it up. */
+  voice: Object.freeze({
+    enabled: false,
+    /** A preset id from voice/keys.mjs, or "custom" (customKeys). null: the platform's default. */
+    shortcut: /** @type {string | null} */ (null),
+    customKeys: /** @type {number[] | null} */ (null),
+    /** The AI cleanup (fillers, punctuation, corrections). Off: only the plain cleanup. */
+    polish: true,
+    /** Casual in chats, proper in email. */
+    styles: true,
+    /** "Hey {bot}, …" asks the bot instead of typing. */
+    commands: true,
+    sounds: true,
+    /** ISO 639-1, or "auto". */
+    language: "auto",
+    /** A microphone's deviceId, or "default". */
+    micId: "default",
+    /** Keep the last dictations on this computer (encrypted). */
+    history: true,
+    /** Put back what was on the clipboard after pasting. */
+    restoreClipboard: true,
+    /** The setup window has been shown once. */
+    introduced: false,
+  }),
+  /** Voice typing stats: numbers only (voice/history.mjs). */
+  voiceStats: /** @type {import('./voice/history.mjs').VoiceStats | null} */ (null),
 });
 
 /** Read JSON, or null. */
@@ -71,10 +97,17 @@ export class Settings {
     this.data = { ...DEFAULT_SETTINGS, ...pick(saved, Object.keys(DEFAULT_SETTINGS)) };
     if (!Array.isArray(this.data.neverApps)) this.data.neverApps = [];
     if (!Array.isArray(this.data.pending)) this.data.pending = [];
+    // Settings added in a later version get their defaults.
+    this.data.voice = { ...DEFAULT_SETTINGS.voice, ...pick(saved.voice, Object.keys(DEFAULT_SETTINGS.voice)) };
   }
 
   get() {
     return this.data;
+  }
+
+  /** @param {Partial<typeof DEFAULT_SETTINGS['voice']>} patch */
+  updateVoice(patch) {
+    return this.update({ voice: { ...this.data.voice, ...patch } });
   }
 
   /** @param {Partial<typeof DEFAULT_SETTINGS>} patch */

@@ -6,6 +6,9 @@
  * and only after a yes captures the mic and the call's audio (capture-window.mjs),
  * uploads it in chunks (upload-queue.mjs) and tells the owner when the notes are ready.
  *
+ * Voice typing (voice/): hold a shortcut anywhere and talk; what you meant is typed where your
+ * cursor is. Off until the owner sets it up.
+ *
  * Dev/test switches (never needed by owners):
  *   --server=<url> or BAB_SERVER        point at a local server (e.g. http://localhost:3000)
  *   BAB_USER_DATA=<dir>                 use another settings folder
@@ -18,7 +21,11 @@
  *   BAB_SYSTEM_AUDIO=off                mic only
  *   BAB_TEST_DENY_SYSTEM_AUDIO=1        act as if the OS refused system audio (tests the mic-only path)
  *   BAB_TEST=1                          expose a read-only state probe to the e2e test (no token)
+ *   BAB_VOICE_ENABLE=1                  turn voice typing on at start (tests)
+ *   BAB_VOICE_DEMO=<n>|command          which sample line a demo server "hears" (tests)
+ *   BAB_VOICE_DEMO_FILE=<path>          …re-read from this file on every dictation
  */
+import * as electron from "electron";
 import { Notification, app, clipboard, ipcMain, powerMonitor, protocol, safeStorage, screen, session, shell, systemPreferences } from "electron";
 import fs from "node:fs";
 import os from "node:os";
@@ -38,6 +45,7 @@ import { Spool } from "./spool.mjs";
 import { DEFAULT_SERVER, Settings, TokenStore, normalizeServer } from "./store.mjs";
 import { AppTray } from "./tray.mjs";
 import { UploadQueue } from "./upload-queue.mjs";
+import { setupVoice } from "./voice/index.mjs";
 
 const APP_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const NOTIFY_ICON = path.join(APP_ROOT, "assets", "icon.png");
@@ -63,7 +71,7 @@ protocol.registerSchemesAsPrivileged([{ scheme: SCHEME, privileges: { standard: 
 
 /** @type {ReturnType<typeof createLogger>} */
 let log = (m) => console.log(m);
-let settings, tokens, api, account, spool, uploads, buddy, capture, controller, pairing, detector, tray;
+let settings, tokens, api, account, spool, uploads, buddy, capture, controller, pairing, detector, tray, voice;
 const notifications = new Set();
 
 if (!app.requestSingleInstanceLock()) {
@@ -138,6 +146,25 @@ async function boot() {
     log,
   });
   pairing = new PairingWindow({ log });
+  voice = setupVoice({
+    electron,
+    settings,
+    tokens,
+    account,
+    api,
+    apiSession,
+    buddy,
+    userData,
+    openAppLink,
+    showPairing: () => void pairing.show(),
+    ensureMicAccess,
+    onChange: () => {
+      tray?.update();
+      voice?.pushState();
+    },
+    log,
+  });
+  if (env.BAB_VOICE_ENABLE === "1") settings.updateVoice({ enabled: true, introduced: true });
 
   const sustain = num(env.BAB_DETECT_SUSTAIN_MS, null);
   detector = new Detector({
@@ -167,12 +194,15 @@ async function boot() {
   account.on("change", () => {
     tray.update();
     pairing.send(pairingState());
+    voice.pushState();
   });
   account.on("signed-out", (reason) => {
     // Unsent audio from the old pairing goes too (from memory as well as the spool):
     // it must not be retried later with another pairing's token.
     uploads.dropAll();
     spool.clear();
+    // Voice typing stops, and this computer's voice history goes with the pairing.
+    voice.forget();
     // Unpaired from the web app: say so where the owner can pair again.
     if (reason) {
       notify({ title: "Build-a-bot was unpaired", body: reason, onClick: () => void pairing.show() });
@@ -183,8 +213,14 @@ async function boot() {
   setInterval(() => tray.update(), 30_000);
 
   registerIpc();
-  powerMonitor.on("lock-screen", () => controller.onPower("lock-screen"));
-  powerMonitor.on("suspend", () => controller.onPower("suspend"));
+  powerMonitor.on("lock-screen", () => {
+    controller.onPower("lock-screen");
+    void voice.interrupt();
+  });
+  powerMonitor.on("suspend", () => {
+    controller.onPower("suspend");
+    void voice.interrupt();
+  });
   for (const ev of ["display-metrics-changed", "display-added", "display-removed"]) screen.on(/** @type {any} */ (ev), () => buddy.reassert());
 
   let readyToQuit = false;
@@ -195,6 +231,8 @@ async function boot() {
     if (shuttingDown) return;
     shuttingDown = true;
     detector.stop();
+    void voice.interrupt();
+    voice.dispose();
     controller
       .shutdown()
       .catch((err) => log(`shutdown: ${err}`))
@@ -213,6 +251,7 @@ async function boot() {
   if (!account.device) await pairing.show();
   else account.once("change", () => void controller.resumeLeftovers(spool));
   detector.start();
+  await voice.apply();
 }
 
 // ---------------------------------------------------------------------------
@@ -256,6 +295,7 @@ function registerIpc() {
     const r = await account.pair(String(arg?.server ?? ""), String(arg?.code ?? ""));
     if (!r.ok) return r;
     void controller.resumeLeftovers(spool);
+    void voice.apply();
     return { ok: true, state: pairingState() };
   });
   ipcMain.handle("pairing:choose-bot", (e, id) => {
@@ -283,10 +323,13 @@ function registerIpc() {
     const what = arg?.what;
     if (what === "pair-page") openAppLink(`${normalizeServer(account.server() ?? settings.get().server) ?? DEFAULT_SERVER}/app/bridge#desktop`, { anyServer: true });
     else if (what === "bot-apps") openAppLink(controller.urlFor("apps", { botId: arg?.botId ?? null }));
+    else if (what === "voice") void voice.showSettings("setup");
     else openAppLink(controller.urlFor("app"));
     return true;
   });
   ipcMain.on("pairing:close", (e) => pairing.isSender(e) && pairing.close());
+
+  voice.registerIpc(ipcMain);
 }
 
 function pairingState() {
@@ -302,6 +345,7 @@ function pairingState() {
     bots: account.bots().map((b) => ({ id: b.id, name: b.name, color: b.color, meetingsOn: b.meetingsOn, paused: b.paused })),
     botId: account.bot()?.id ?? null,
     trayWord: process.platform === "darwin" ? "menu bar" : "tray",
+    voice: voice.trayInfo(),
   };
 }
 
@@ -326,6 +370,7 @@ function trayModel() {
     bots: account.bots(),
     botId: account.bot()?.id ?? null,
     neverApps: s.neverApps,
+    voice: voice ? voice.trayInfo() : null,
   };
 }
 
@@ -345,6 +390,8 @@ function onTrayClick(id, checked) {
   else if (id.startsWith("turn-on:")) openAppLink(controller.urlFor("apps", { botId: id.slice(8) }));
   else if (id.startsWith("ask-again:")) settings.update({ neverApps: settings.get().neverApps.filter((a) => a !== id.slice(10)) });
   else if (id === "mac-tabs") settings.update({ macTabs: Boolean(checked) });
+  else if (id === "voice-setup" || id === "voice-settings") void voice.showSettings(id === "voice-setup" ? "setup" : undefined);
+  else if (id === "voice-paste-last") void voice.voice.pasteLast();
   else if (id === "open-app") openAppLink(controller.urlFor("app"));
   else if (id === "pair" || id === "account") void pairing.show();
   else if (id === "login") setOpenAtLogin(Boolean(checked));
@@ -477,6 +524,7 @@ function exposeTestProbe() {
         uploads: uploads.stats,
         spoolFiles: spool.list().length,
         tray: trayModel().status,
+        voice: voice.probe(),
       };
     },
   };
