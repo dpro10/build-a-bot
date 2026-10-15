@@ -31,6 +31,12 @@ describe("reading keys from the environment", () => {
     expect(config.email.from).toBe("Build-a-bot <hello@build-a-bot.site>");
   });
 
+  it("a Telegram username pasted with its @ and a secret pasted as a whole line still work", async () => {
+    const config = await freshConfig({ TELEGRAM_MANAGER_BOT_USERNAME: "@my_manager_bot", TELEGRAM_MANAGER_WEBHOOK_SECRET: "TELEGRAM_MANAGER_WEBHOOK_SECRET=abc123_-XYZ" });
+    expect(config.telegram.managerUsername).toBe("my_manager_bot");
+    expect(config.telegram.managerWebhookSecret).toBe("abc123_-XYZ");
+  });
+
   it("an empty or blank value is unset", async () => {
     const config = await freshConfig({ COMPOSIO_API_KEY: "  ", TRANSCRIBE_API_KEY: "TRANSCRIBE_API_KEY=" });
     expect(config.composio.apiKey).toBeUndefined();

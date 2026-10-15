@@ -10,7 +10,7 @@ import { seenBefore } from "@/lib/channels/inbound";
 export async function POST(req: Request) {
   if (!config.telegram.managerToken) return new Response("not configured", { status: 503 });
   // Fail closed: without the secret anyone could post fake "a bot was created" updates.
-  const secret = process.env.TELEGRAM_MANAGER_WEBHOOK_SECRET;
+  const secret = config.telegram.managerWebhookSecret;
   if (!secret || !timingSafeEqualStr(req.headers.get("x-telegram-bot-api-secret-token") ?? "", secret)) {
     return new Response("forbidden", { status: 403 });
   }
