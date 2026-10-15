@@ -27,7 +27,7 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string }>) {
       return Boolean(d && !d.via.some((v) => v.kind === "builtin"));
     })
     .map(connectionName);
-  const starters = startersFor(a.bot.jobs ?? [], appKinds(connections.filter((c) => c.status !== "disabled").map((c) => c.connectorId)));
+  const starters = startersFor(a.bot.jobs ?? [], appKinds(connections.filter((c) => c.status !== "disabled").map((c) => c.connectorId)), a.bot.role);
 
   return sseResponse(async (send, signal) => {
     await runTurn({

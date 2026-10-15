@@ -144,6 +144,8 @@ export const bots = pgTable(
     /** sha256 of the bearer token for this bot's MCP endpoint (Bridge + MCP clients). */
     mcpTokenHash: text("mcp_token_hash"),
     recipeId: text("recipe_id"),
+    /** A ready-made role (src/lib/roles.ts): "tutor", "job_applier"…; null for a general assistant. */
+    role: text("role"),
     lastActiveAt: timestamp("last_active_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),

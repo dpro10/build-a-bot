@@ -52,7 +52,7 @@ export default async function BotChatPage({ params, searchParams }: { params: Pr
       : { ...meta, meetingGone: true };
   };
   // Ideas about email, a calendar and the like only show once the bot has an app for them.
-  const starters = startersFor(bot.jobs ?? [], appKinds(apps.map((a) => a.connectorId)));
+  const starters = startersFor(bot.jobs ?? [], appKinds(apps.map((a) => a.connectorId)), bot.role);
   if (!starters.length) starters.push("What can you do?", "Remind me to stretch in 20 minutes", "What's the weather this week?");
 
   return (

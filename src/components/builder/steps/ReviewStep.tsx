@@ -17,6 +17,7 @@ import { appKinds, getConnector, type ConnectorDef } from "@/lib/connectors";
 import { briefParts, type BriefPart } from "@/lib/jobs";
 import { INCLUDED_MODELS } from "@/lib/models/catalog";
 import { TRUST } from "@/lib/trust";
+import { ROLE_BY_ID } from "@/lib/roles";
 import type { RecipeData } from "@/lib/recipes";
 import { cn, joinList } from "@/lib/utils";
 import { formatDays, formatTime as formatRoutineTime } from "@/components/marketing/recipes/format";
@@ -111,6 +112,11 @@ export function ReviewStep({
           <div className="min-w-0">
             <div className="font-display text-2xl font-bold">{name}</div>
             <div className="text-sm text-muted-foreground">
+              {s.role ? (
+                <span className="font-semibold text-foreground">
+                  {ROLE_BY_ID[s.role].emoji} {ROLE_BY_ID[s.role].label} ·{" "}
+                </span>
+              ) : null}
               {a.character} the {a.species} · {COLORWAYS[s.color].name}
               {s.ownerName.trim() ? ` · calls you ${s.ownerName.trim()}` : ""}
             </div>

@@ -8,11 +8,21 @@
  */
 import type { LlmEvent, LlmMessage, LlmProvider, LlmRequest, LlmToolCall } from "./types";
 
-type Persona = { name: string; owner: string; species: string };
+type Persona = { name: string; owner: string; species: string; role: string | null };
 
 function persona(system: string): Persona {
-  const m = /You are (.+?), a personal AI assistant for (.+?)\. Your avatar is \w+ the (\w+)\./.exec(system);
-  return { name: m?.[1] ?? "your bot", owner: m?.[2] ?? "there", species: m?.[3] ?? "robot" };
+  const m = /You are (.+?), (?:a personal AI assistant|an AI ([a-z ]+?)) for (.+?)\. Your avatar is \w+ the (\w+)\./.exec(system);
+  return { name: m?.[1] ?? "your bot", role: m?.[2] ?? null, owner: m?.[3] ?? "there", species: m?.[4] ?? "robot" };
+}
+
+/** "what they want to learn" → "what you want to learn", for a role's first question. */
+function toYou(text: string): string {
+  return text
+    .replace(/\bthey're\b/g, "you're")
+    .replace(/\bthey've\b/g, "you've")
+    .replace(/\bthey\b/g, "you")
+    .replace(/\btheir\b/g, "your")
+    .replace(/\bthem\b/g, "you");
 }
 
 const FLAVOR: Record<string, { hi: string; done: string; think: string }> = {
@@ -363,6 +373,13 @@ function planFromUser(text: string, tools: Set<string>, p: Persona, system: stri
           spark: `Hey hey${name ? `, ${name}` : ""}! Let's go.`,
           octopus: `Hello${name ? `, ${name},` : ""} from all eight arms!`,
         }[p.species] ?? f.hi;
+      // A role bot asks for the basics first (see greetingDirective).
+      const firstAsk = /ask what you need to get started: (.+?)\. Ask it as one/s.exec(text)?.[1]?.trim();
+      if (p.role && firstAsk) {
+        return {
+          text: `${hello} I'm ${p.name}, your new AI ${p.role}. To get started, tell me ${toYou(firstAsk)}. (I'm running on the demo brain right now — connect a real one anytime in Settings.)`,
+        };
+      }
       const apps = /\(connected: (.+?)\)/.exec(text)?.[1]?.split(", ") ?? [];
       const appText = apps.length ? ` Thanks for trusting me with ${apps.length > 2 ? `${apps.slice(0, -1).join(", ")} and ${apps.at(-1)}` : apps.join(" and ")}.` : "";
       return {
