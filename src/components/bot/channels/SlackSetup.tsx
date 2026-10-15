@@ -6,6 +6,7 @@ import { CopyButton } from "@/components/ui/copy-button";
 import { FieldHint, Input, Label } from "@/components/ui/input";
 import { toast } from "@/components/ui/toaster";
 import { Note } from "@/components/bot/tools/Section";
+import { SITE } from "@/lib/site";
 import { str, type ChannelCtx } from "./context";
 import { isWaitingForOwner, type ChannelView } from "./model";
 import { DemoLine, InfoRow, Mono, Step, Steps } from "./parts";
@@ -16,13 +17,48 @@ export function SlackActive({ channel, ctx }: { channel: ChannelView; ctx: Chann
       <InfoRow label="Workspace">
         <Mono>{channel.address ?? "Your workspace"}</Mono>
       </InfoRow>
-      <p className="text-[13px] text-muted-foreground">Open Slack and DM {ctx.botName} like a teammate. Only you can give it commands there.</p>
+      <p className="text-[13px] text-muted-foreground">
+        {channel.via === "app"
+          ? `In Slack, open ${SITE.name} under Apps and message it like a teammate. ${ctx.botName} answers, and only you can reach it there.`
+          : `Open Slack and DM ${ctx.botName} like a teammate. Only you can give it commands there.`}
+      </p>
       {channel.simulated ? <DemoLine>In demo mode there&apos;s no real Slack app behind this yet.</DemoLine> : null}
     </div>
   );
 }
 
 export function SlackSetup({ channel, ctx }: { channel: ChannelView; ctx: ChannelCtx }) {
+  const [ownApp, setOwnApp] = React.useState(false);
+  if (ctx.slackOneClick && !ownApp && !isWaitingForOwner(channel)) return <AddToSlack ctx={ctx} onOwnApp={() => setOwnApp(true)} />;
+  return <OwnAppSetup channel={channel} ctx={ctx} onOneClick={ctx.slackOneClick ? () => setOwnApp(false) : null} />;
+}
+
+/** One click: the shared app. Slack asks which workspace, the owner clicks Allow, done. */
+function AddToSlack({ ctx, onOwnApp }: { ctx: ChannelCtx; onOwnApp: () => void }) {
+  const [busy, setBusy] = React.useState(false);
+  const add = async () => {
+    setBusy(true);
+    const data = await ctx.run("slack", "install");
+    const url = str(data?.installUrl);
+    if (url) window.location.assign(url);
+    else setBusy(false);
+  };
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-[13px] text-muted-foreground">Pick your workspace and click Allow. {ctx.botName} messages you in Slack right away.</p>
+      <Button className="w-fit" onClick={() => void add()} loading={busy}>
+        Add to Slack <ExternalLink className="opacity-70" />
+      </Button>
+      <p className="text-xs text-muted-foreground">Some work workspaces need an admin to approve new apps first.</p>
+      <button type="button" onClick={onOwnApp} className="w-fit text-[13px] font-medium text-muted-foreground hover:text-foreground hover:underline">
+        Or give {ctx.botName} its own Slack app (about 5 minutes)
+      </button>
+    </div>
+  );
+}
+
+/** The bot's own Slack app, made from a pre-filled manifest; the owner pastes two keys and sends a code. */
+function OwnAppSetup({ channel, ctx, onOneClick }: { channel: ChannelView; ctx: ChannelCtx; onOneClick: (() => void) | null }) {
   const waiting = isWaitingForOwner(channel);
   const [manifestUrl, setManifestUrl] = React.useState<string | null>(null);
   const [opened, setOpened] = React.useState(false);
@@ -177,6 +213,11 @@ export function SlackSetup({ channel, ctx }: { channel: ChannelView; ctx: Channe
         </Step>
         <Step n={3} state="upcoming" title={`DM ${ctx.botName} a code`} hint="We'll give you a short code to send it, so it knows it's you." last />
       </Steps>
+      {onOneClick ? (
+        <button type="button" onClick={onOneClick} className="w-fit text-[13px] font-medium text-muted-foreground hover:text-foreground hover:underline">
+          Back to one-click Add to Slack
+        </button>
+      ) : null}
     </div>
   );
 }

@@ -66,7 +66,7 @@ Recipes prefill it (`/build?recipe=inbox-zero`, or any shared `/r/[slug]`). The 
 
 ### Channels, several at once
 
-Web chat, phone calls and texts (Twilio), email (its own brand-free address), Telegram (a one-tap managed bot), Discord (`/ask`) and Slack (a per-bot app). WhatsApp and iMessage are on a waitlist.
+Web chat, phone calls and texts (Twilio), email (its own brand-free address), Telegram (a one-tap managed bot), Discord (`/ask`) and Slack (one click, or the bot's own app). WhatsApp and iMessage are on a waitlist.
 
 ### Meeting notes (beta)
 

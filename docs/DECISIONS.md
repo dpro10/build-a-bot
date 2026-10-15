@@ -144,7 +144,7 @@ Cost basis: Nemotron 3.5 Lightning ≈ $0.0004 a turn; Tavily $0.008 a search af
 - **Telegram:** managed bots (one tap; the bot's username comes from its name, e.g. `inky_k7x2_bot`).
 - **Texts and calls:** Twilio, US & Canada first. Needs A2P 10DLC registration before launch.
 - **Email:** every bot gets its own address on a brand-free domain (`BOT_EMAIL_DOMAIN`, still to buy).
-- **Slack:** a per-bot app from a manifest.
+- **Slack:** a per-bot app from a manifest. Since 2026-10-15 it's also one click, through a shared app (see below).
 - **Discord:** `/ask` slash commands.
 - **WhatsApp and iMessage:** waitlist (Meta's US rules; Apple's business program).
 - **Teams, Google Chat, Signal:** later.
@@ -297,6 +297,25 @@ Accounts are free and a browser cookie makes one, so per-account limits alone do
   - At the ceiling, owners are told the free brain or search is resting until midnight UTC and can switch to their own key; strangers messaging a bot get "try again later". Each hit is logged.
 - At roughly $0.0004–0.001 per turn and $0.008 per search, the ceilings cap a bad day at about $5–6.
 
+## Decision: one-click "Add to Slack" (Diego, 2026-10-15)
+
+Diego: "lets try and get a one click install for slack that sounds great. We want build a bot to be simple and convenient to set up."
+
+Built (Claude; Diego to confirm the details):
+- **One shared Slack app** (`docs/slack-app-manifest.json`), keys `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, `SLACK_SIGNING_SECRET`. The owner clicks Add to Slack, picks a workspace and clicks Allow.
+- **No link code.** The sign-in is tied to the owner's Build-a-bot session, the same way app sign-ins are, so the Slack person who clicked Allow is the owner there. A sign-in link sent to someone else doesn't work for them.
+- **Each person reaches only their own bot.** DMs to the app are routed by workspace and Slack person. Replies show the bot's own name and face (`chat:write.customize`); Slack's sidebar shows the app's name, "Build-a-bot".
+- **One bot per person in a workspace.** Adding another bot moves Slack over to it, and the app says so.
+- **Coworkers without a bot** who DM the app get one short note a day pointing to the site. Nothing they say reaches anyone's bot.
+- **Removing the app in Slack**, or revoking its token, turns Slack off for every bot in that workspace and logs it in their Activity.
+- **Scopes:** only `chat:write`, `chat:write.customize`, `im:history` and `im:write`. It reads DMs sent to it and nothing else.
+- **Each bot can still have its own Slack app** from a manifest, with its own name in Slack's sidebar, as a link under the button.
+- **Limits to know:**
+  - some company workspaces only allow apps an admin approves;
+  - the app isn't in Slack's Marketplace, so Slack may show it as not reviewed;
+  - Slack limits unlisted apps' `conversations.history`, which Build-a-bot doesn't use.
+- **Fixed on the way:** a bot's own Slack app couldn't reply, because the stored keys were sent to Slack instead of the bot token.
+
 ## Decision: 5 free messages, then sign in; beta testers free at first (Diego, 2026-10-15)
 
 Diego: "Honestly like 5 free messages before confirming email, we want people with accounts and we want to make some dough. ill let original beta testers use it for free at first."
@@ -321,7 +340,7 @@ Outside demo mode nothing is simulated. Anything without its service set up says
 - **Coming soon (about 30):** apps whose only route is a Composio toolkit without an OAuth app of Composio's: X, Spotify, Shopify, PayPal, Xero, TikTok and others. To open one, register an app with the vendor, add it in Composio and set `COMPOSIO_AUTH_CONFIG_<TOOLKIT>`.
 - **Composio's callback identity check:** built (`/api/connectors/composio/verify`); Diego switches it on in Composio. Without it, someone could send a person their own sign-in link and attach that person's account to their bot.
 
-**Slack:** each owner creates their bot's own Slack app from a pre-filled manifest link (the bot gets its own name in Slack), pastes the bot token and signing secret, and DMs the bot a code. No keys from us. A shared "Add to Slack" app (one click, our `SLACK_CLIENT_ID`/`SECRET`) is a possible later improvement; it isn't built.
+**Slack:** one click through a shared "Add to Slack" app once its keys are set (decision of 2026-10-15, below). Without them, each owner makes their bot its own Slack app from a pre-filled manifest link, pastes the bot token and signing secret, and DMs the bot a code.
 
 **Telegram and Discord set themselves up** from their keys: the cron tick sets the manager bot's webhook and registers Discord's commands.
 
@@ -413,3 +432,11 @@ A code review of the server and the desktop app. Each fix has a test that fails 
    - sign and notarize the Mac app. Diego already has an Apple Developer account (2026-10-14); what's needed is a Developer ID Application certificate and notarization credentials in CI secrets, and a Mac or macOS runner to build;
    - whether to merge the desktop app with the Bridge into one "Build-a-bot app".
 7. Meeting notes, next: transcription on the owner's own key or on-device (sherpa-onnx with Parakeet), and calendar-based meeting titles.
+8. More apps (Diego, 2026-10-15: "lets start trying to think about how we can get more apps integrated we can just think for now no need to build something new"). Options, cheapest first:
+   - **The rest of Composio's catalog.** Composio has far more toolkits with its own sign-in than the ~190 we list. A "search all apps" box could offer any of them, with a generic icon and tool list.
+   - **Apps that only need an API key** (many marketing, analytics and developer tools). Owners paste the key; it's stored encrypted like other keys.
+   - **Our own developer apps** for the "Coming soon" list. Some are quick (an app plus a redirect URL), some need the vendor's review, and a few are hard: X's API is paid, and Spotify only gives full access to large companies.
+   - **Our own Google app** instead of Composio's. Then the consent screen says Build-a-bot, but Gmail's scopes need Google's verification and a yearly paid security assessment (CASA).
+   - **Remote MCP servers from the official MCP Registry**, curated, since quality varies. Owners can already paste any MCP server's URL.
+   - **The long tail through Zapier's MCP server**, where the owner connects their own Zapier account, or a second sign-in provider for apps Composio lacks.
+   - Count clicks on "Coming soon" apps to see what testers want first.
