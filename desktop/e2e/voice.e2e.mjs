@@ -7,8 +7,9 @@
  * Real key presses (XTest, e2e/fixtures/xkey.py) hold the shortcut (Right Ctrl on Linux); the
  * app records, the demo server "hears" a sample line and cleans it up, and the app pastes it into
  * another app (e2e/fixtures/target-app.cjs) and puts the clipboard back. Then: the settings
- * window and its try-it box, a dictionary word, hands-free (two taps), Esc, "Hey Otto, …", and
- * editing by voice (select the text, hold Shift + the shortcut, "Make this friendlier.").
+ * window and its try-it box, a dictionary word, hands-free (two taps), Esc, "Hey Otto, …",
+ * editing by voice (select the text, hold Shift + the shortcut, "Make this friendlier."), and
+ * asking Otto about the selection (Shift + the shortcut, "Hey Otto, …").
  * Screenshots of the pill go to BAB_E2E_SHOTS (default: <tmp>/bab-desktop-e2e).
  */
 import { test, after } from "node:test";
@@ -246,9 +247,31 @@ test("hold a key, talk, let go: it's typed in the app you're in", { timeout: 300
   await pill.screenshot({ path: path.join(SHOTS, "voice-6-edited.png"), omitBackground: true }).catch(() => {});
   await until("the clipboard put back", () => fs.readFileSync(clipFile, "utf8") === "ORIGINAL CLIPBOARD", 10_000);
 
+  // ---- "Hey Otto, …" with text selected: Otto gets the request and the selection; nothing is typed over it
+  fs.writeFileSync(demoFile, "command");
+  await until("the pill to go", async () => (await probe())?.phase === null, 30_000);
+  const selectedText = typed();
+  await keys("tap", "ctrl+a");
+  await keys("down", "Shift_R", "down", "Control_R", "sleep", "1.5", "up", "Control_R", "up", "Shift_R");
+  const replied = await step("reply about the selection", () =>
+    until("Otto's answer about the selection", async () => {
+      const p = await probe();
+      return p?.phase === "reply" ? p : null;
+    }, 60_000),
+  );
+  assert.equal(replied.pill.selection, true);
+  assert.deepEqual(replied.pill.actions, ["copy", "reply", "chat"], "no Paste over the selection");
+  await pill.screenshot({ path: path.join(SHOTS, "voice-7-ask-selection.png"), omitBackground: true });
+  assert.equal(typed(), selectedText, "nothing typed over the selection");
+  const chat2 = await (await web.get(`/api/bots/${botId}/messages`)).json();
+  const withSel = chat2.messages.filter((m) => m.role === "user" && m.meta?.selection).at(-1);
+  assert.ok(withSel, "the request is in Otto's chat with what was selected");
+  assert.equal(withSel.meta.selection.trim(), selectedText.trim());
+  await until("the clipboard put back", () => fs.readFileSync(clipFile, "utf8") === "ORIGINAL CLIPBOARD", 10_000);
+
   // ---- what's kept: the history on this computer, a word count on the server
   const v = await probe();
-  assert.equal(v.history, 5, "3 dictations, 1 request and 1 edit");
+  assert.equal(v.history, 6, "3 dictations, 2 requests and 1 edit");
   assert.ok(v.usage.words >= 36, `words counted: ${v.usage.words}`);
   assert.equal(v.usage.limit, 8000);
   await web.dispose();

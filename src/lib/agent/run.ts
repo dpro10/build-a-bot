@@ -36,6 +36,7 @@ import { errorMessage, newId, sortableId, truncate } from "@/lib/utils";
 import { buildDynamicContext, buildStablePrompt, ownerName } from "./prompt";
 import { memoriesForTurn } from "@/lib/memory";
 import { resolveBrain } from "./brain";
+import { selectionOf, withSelection } from "./selection";
 
 export const MAX_STEPS = 8;
 
@@ -770,7 +771,9 @@ async function finish(
       ...(extra.model ? { model: extra.model } : {}),
       ...(extra.usage ? { usage: extra.usage } : {}),
       ...(extra.costMicros ? { costMicros: extra.costMicros } : {}),
-      ...(input.directive ? { proactive: true } : {}),
+      // The bot reached out on its own (a greeting, a routine): a directive with no message to answer.
+      // A request with a platform note (voice typing's "keep it short") is still an answer.
+      ...(input.directive && !input.message ? { proactive: true } : {}),
       ...(input.trigger ? { trigger: input.trigger } : {}),
     },
   });
@@ -815,7 +818,7 @@ async function loadHistory(db: Db, conversationId: string): Promise<LlmMessage[]
       const from = (m.meta as { from?: string }).from ?? "someone";
       content = `<message_from_contact from="${from.replace(/"/g, "'")}">\n${m.text}\n</message_from_contact>`;
     } else {
-      content = content.replace(/<\/?system_directive>/g, "");
+      content = withSelection(content.replace(/<\/?system_directive>/g, ""), m.meta);
     }
     budget -= content.length;
     if (budget < 0 && out.length >= 2) break;
@@ -827,7 +830,10 @@ async function loadHistory(db: Db, conversationId: string): Promise<LlmMessage[]
   return out;
 }
 
-/** Are meeting notes (posted by the platform, written from a transcript) among what this turn's model sees? */
+/**
+ * Is outside content among what this turn's model sees? Meeting notes (posted by the platform,
+ * written from a transcript), or text the owner selected on their screen and sent with a request.
+ */
 async function meetingNotesInContext(db: Db, botId: string, conversationId: string): Promise<boolean> {
   const isNotes = (m: { meta: unknown }) => (m.meta as { kind?: string } | null)?.kind === "meeting_notes";
   const here = await db
@@ -836,7 +842,8 @@ async function meetingNotesInContext(db: Db, botId: string, conversationId: stri
     .where(eq(schema.messages.conversationId, conversationId))
     .orderBy(desc(schema.messages.createdAt))
     .limit(HISTORY_MESSAGES);
-  if (here.some(isNotes)) return true;
+  // A selection travels only with its own conversation's history, so only here.
+  if (here.some((m) => isNotes(m) || selectionOf(m.meta) !== null)) return true;
   // The same rows loadRecentElsewhere puts in the system prompt.
   const elsewhere = await db
     .select({ meta: schema.messages.meta })

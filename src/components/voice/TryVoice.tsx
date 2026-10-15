@@ -74,7 +74,7 @@ export function TryVoice({
   /** Text selected in the box: the next recording is an instruction for it. */
   const [selected, setSelected] = React.useState(false);
   const [workingLabel, setWorkingLabel] = React.useState("Writing…");
-  const [reply, setReply] = React.useState<{ bot: Bot; command: string; text: string; label: string | null; done: boolean; approvals?: number } | null>(null);
+  const [reply, setReply] = React.useState<{ bot: Bot; command: string; text: string; label: string | null; done: boolean; approvals?: number; withSelection?: boolean } | null>(null);
   const [problem, setProblem] = React.useState<{ message: string; upgrade?: boolean } | null>(null);
   const [note, setNote] = React.useState<string | null>(null);
   const [usage, setUsage] = React.useState<Usage>(initialUsage);
@@ -235,9 +235,8 @@ export function TryVoice({
       styles: "1",
     });
     if (target) {
-      // An instruction: as said, and never a request for the bot.
+      // An instruction, as said ("Hey Otto, …" still asks the bot, about the selection).
       q.set("polish", "0");
-      q.set("commands", "0");
       q.set("styles", "0");
       if (simulated) {
         // The demo hears "Make this friendlier." whatever the room sounded like.
@@ -272,14 +271,14 @@ export function TryVoice({
       setNote("Didn't catch that. Try again a little closer to the mic.");
       return;
     }
-    if (target) {
-      await editSelection(target, String(body.text ?? ""));
-      return;
-    }
     if (body.kind === "command") {
       const to = bots.find((b) => b.id === (body.bot as { id: string })?.id) ?? bot;
       if (!to) return setPhase("idle");
-      await ask(to, String(body.command ?? ""));
+      await ask(to, String(body.command ?? ""), target?.text ?? null);
+      return;
+    }
+    if (target) {
+      await editSelection(target, String(body.text ?? ""));
       return;
     }
     const typed = String(body.text ?? "");
@@ -335,19 +334,24 @@ export function TryVoice({
     setPhase("idle");
   }
 
-  async function ask(target: Bot, command: string) {
+  /** "Hey Otto, …": with `selection`, the text they selected goes along with it. */
+  async function ask(target: Bot, command: string, selection: string | null = null) {
     if (!command) {
       setReply({ bot: target, command: "", text: `Hi! Say “Hey ${target.name}” and what you need, in one go.`, label: null, done: true });
       setPhase("idle");
       return;
     }
     setPhase("asking");
-    setReply({ bot: target, command, text: "", label: `${target.name} is thinking…`, done: false });
+    setReply({ bot: target, command, text: "", label: `${target.name} is thinking…`, done: false, withSelection: Boolean(selection) });
     setCompare(null);
     let full = "";
     let approvals = 0;
     try {
-      const res = await fetch("/api/voice/ask", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ botId: target.id, text: command }) });
+      const res = await fetch("/api/voice/ask", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ botId: target.id, text: command, ...(selection ? { selection: selection.slice(0, 8000) } : {}) }),
+      });
       if (!res.ok || !res.body) {
         const b = await res.json().catch(() => ({}));
         throw new Error(b.error ?? "That didn't work.");
@@ -374,7 +378,7 @@ export function TryVoice({
           else if (ev.type === "error") full = ev.message || full;
         }
       }
-      setReply({ bot: target, command, text: full || "Done.", label: null, done: true, approvals });
+      setReply({ bot: target, command, text: full || "Done.", label: null, done: true, approvals, withSelection: Boolean(selection) });
     } catch (err) {
       setReply(null);
       setProblem({ message: (err as Error).message || "That didn't work." });
@@ -470,7 +474,11 @@ export function TryVoice({
             <Avatar avatar={reply.bot.avatar} color={reply.bot.color} size={40} mood={reply.done ? "idle" : "thinking"} />
             <div className="min-w-0 flex-1 text-sm">
               <div className="font-semibold">{reply.bot.name}</div>
-              {reply.command ? <p className="text-muted-foreground italic">“{reply.command}”</p> : null}
+              {reply.command ? (
+                <p className="text-muted-foreground italic">
+                  “{reply.command}”{reply.withSelection ? <span className="not-italic"> · with the text you selected</span> : null}
+                </p>
+              ) : null}
               {reply.label ? (
                 <p className="mt-1 flex items-center gap-1.5 text-muted-foreground">
                   <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> {reply.label}

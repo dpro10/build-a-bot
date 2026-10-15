@@ -34,7 +34,7 @@ const HOW = [
   { icon: <Sparkles />, title: "Cleaned up as you go", body: "No ums or repeats, the right punctuation, and your corrections kept: “at 2, no, 3” comes out “at 3”. Casual in chats, proper in email." },
   { icon: <BookA />, title: "Spelled your way", body: "Names your bots remember and words you add are spelled right. Say a snippet's phrase and it types your link or address." },
   { icon: <Wand2 />, title: "Edit by voice", body: "Select some text, hold Shift with your key, and say what to change: “make this friendlier”, “turn it into a list”, “translate it to Spanish”." },
-  { icon: <MessageCircle />, title: "Or ask your bot", body: "Start with “Hey” and your bot's name: “Hey Otto, remind me to call Mom at 5.” It answers right there, and it's in your chat." },
+  { icon: <MessageCircle />, title: "Or ask your bot", body: "Start with “Hey” and your bot's name: “Hey Otto, remind me to call Mom at 5.” With text selected and Shift held, it gets that too: “Hey Otto, add this to my calendar.”" },
 ];
 
 const PRIVATE = [

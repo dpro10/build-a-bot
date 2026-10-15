@@ -235,9 +235,13 @@ export function createApi(o) {
         timeoutMs: 60_000,
       });
     },
-    /** "Hey {bot}, …": runs it in the bot's chat; `onEvent` gets the chat's streamed events. */
-    ask(botId, text, onEvent, opts) {
-      return sse("/api/voice/ask", { botId, text }, onEvent, opts);
+    /**
+     * "Hey {bot}, …": runs it in the bot's chat; `onEvent` gets the chat's streamed events.
+     * `opts.selection`: text the owner selected, to go with the request.
+     */
+    ask(botId, text, onEvent, opts = {}) {
+      const selection = opts.selection ? String(opts.selection).slice(0, 8000) : null;
+      return sse("/api/voice/ask", { botId, text, ...(selection ? { selection } : {}) }, onEvent, opts);
     },
     dictionary() {
       return json("GET", "/api/voice/dictionary");

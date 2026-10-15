@@ -389,8 +389,8 @@ export class VoiceTyping extends EventEmitter {
     if (!instruction) {
       let heard;
       try {
-        // The instruction as said: no AI cleanup, and "Hey Otto" isn't a command here.
-        heard = await this.api.dictate(job.audio, { category, lang: v.language, polish: false, commands: false, styles: false, demo: this.o.demoSample?.() ?? (selection ? "edit" : "write") });
+        // The instruction as said, with no AI cleanup. "Hey Otto, …" asks the bot about the selection.
+        heard = await this.api.dictate(job.audio, { category, lang: v.language, polish: false, commands: v.commands, styles: false, demo: this.o.demoSample?.() ?? (selection ? "edit" : "write") });
       } catch (err) {
         const e = /** @type {any} */ (err);
         this.log(`voice: edit instruction failed (${e?.status ?? "?"} ${e?.code ?? ""})`);
@@ -400,6 +400,14 @@ export class VoiceTyping extends EventEmitter {
         return;
       }
       if (heard.usage) this.usage = heard.usage;
+      if (heard.kind === "command") {
+        if (!heard.command) {
+          if (seq === this.seq) await this.showPill({ phase: "note", message: `Say what ${heard.bot?.name ?? "your bot"} should do, right after its name.` }, this.limits.noteMs);
+          return;
+        }
+        // "Hey Otto, add this to my calendar": the bot gets the request and what was selected.
+        return this.askBot(heard.bot, heard.command, seq, heard.text, { selection });
+      }
       instruction = heard.kind === "text" ? String(heard.text ?? "").trim() : "";
       if (!instruction) {
         if (seq === this.seq) await this.showPill({ phase: "note", message: "Didn't catch that." }, this.limits.doneMs);
@@ -454,14 +462,17 @@ export class VoiceTyping extends EventEmitter {
   /**
    * "Hey {bot}, …": ask, show progress, then the reply with its buttons.
    * @param {{ id: string, name: string }} bot @param {string} command @param {number} seq @param {string} typed  the whole dictation, for "Type it instead"
+   * @param {{ selection?: string | null }} [opts]  text the owner selected, sent with the request
    */
-  async askBot(bot, command, seq, typed) {
+  async askBot(bot, command, seq, typed, opts = {}) {
     const info = this.botInfo(bot);
+    const withSelection = Boolean(opts.selection);
     this.reply = { bot, text: "", typed, command };
     const ask = new AbortController();
     this.askAbort?.abort();
     this.askAbort = ask;
-    if (seq === this.seq) await this.showPill({ phase: "asking", bot: info, command, label: `${bot.name} is thinking…`, actions: ["type-instead"] });
+    // With a selection, "Type it instead" would type over it: no such button then.
+    if (seq === this.seq) await this.showPill({ phase: "asking", bot: info, command, selection: withSelection, label: `${bot.name} is thinking…`, actions: withSelection ? [] : ["type-instead"] });
     let text = "";
     let status = "ok";
     let approvals = 0;
@@ -479,7 +490,7 @@ export class VoiceTyping extends EventEmitter {
             status = ev.status ?? "ok";
           } else if (ev?.type === "error") text = ev.message || text;
         },
-        { signal: ask.signal },
+        { signal: ask.signal, selection: opts.selection ?? null },
       );
     } catch (err) {
       if (ask.signal.aborted) return;
@@ -494,8 +505,9 @@ export class VoiceTyping extends EventEmitter {
     this.emit("asked", { bot: bot.name, command, reply });
     if (seq !== this.seq || this.rec) return;
     this.reply = { bot, text: reply, typed, command };
-    const actions = ["paste", "copy", "reply", "chat"];
-    await this.showPill({ phase: "reply", bot: info, command, message: reply, approvals, actions }, this.limits.replyMs);
+    // About a selection, Paste would type over it: Copy instead.
+    const actions = withSelection ? ["copy", "reply", "chat"] : ["paste", "copy", "reply", "chat"];
+    await this.showPill({ phase: "reply", bot: info, command, selection: withSelection, message: reply, approvals, actions }, this.limits.replyMs);
   }
 
   // -------------------------------------------------------------------------
