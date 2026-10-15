@@ -11,6 +11,7 @@ import {
   isPhantom,
   isPromptEcho,
   matchCommand,
+  needsPolish,
   phoneticKey,
   plainText,
   properNouns,
@@ -172,6 +173,39 @@ describe("checking the AI's cleanup", () => {
   it("refuses a cleanup that lost a snippet", () => {
     expect(acceptPolish("here is ⟦1⟧ thanks", "Here is ⟦1⟧. Thanks!")).toBe("Here is ⟦1⟧. Thanks!");
     expect(acceptPolish("here is ⟦1⟧ thanks", "Here it is. Thanks!")).toBeNull();
+  });
+});
+
+describe("when the AI cleanup has nothing to do", () => {
+  const chat = { category: "chat", vocabulary: ["Prozzi", "Priya", "Otto"] };
+
+  it("skips it for short, clean messages", () => {
+    for (const t of ["Sounds good, see you then.", "Can you send me the deck?", "On my way!", "Yes, that works for me.", "Thanks for the help today, Priya."]) {
+      expect(needsPolish(t, chat), t).toBe(false);
+    }
+  });
+
+  it("keeps it for anything it might fix", () => {
+    const cases: [string, typeof chat | { category: string; vocabulary: string[]; language?: string }][] = [
+      ["Let's meet Thursday, no, Friday.", chat], // a correction
+      ["Actually, make it the blue one.", chat],
+      ["I'll be there in twenty minutes.", chat], // numbers in words
+      ["See you at five thirty.", chat],
+      ["My email is sam at gmail dot com.", chat], // an address said out loud
+      ["Put a comma after hello.", chat], // punctuation said out loud
+      ["sounds good see you then", chat], // no capital, no full stop
+      ["Sounds good, see you then", chat],
+      ["We we should go.", chat], // a word said twice
+      ["I talked to Pria about it.", chat], // sounds like one of their names
+      ["Hi Sam, thanks for the notes.", { category: "email", vocabulary: [] }], // an email's greeting goes on its own line
+      ["git status", { category: "terminal", vocabulary: [] }],
+      ["Add a null check here.", { category: "code", vocabulary: [] }],
+      ["Hola, ¿cómo estás?", chat], // not English
+      ["Hello there.", { category: "chat", vocabulary: [], language: "fr" }],
+      ["First line.\nSecond line.", chat],
+      [Array.from({ length: 45 }, () => "word").join(" ") + ".", chat], // long
+    ];
+    for (const [t, o] of cases) expect(needsPolish(t, o), t).toBe(true);
   });
 });
 

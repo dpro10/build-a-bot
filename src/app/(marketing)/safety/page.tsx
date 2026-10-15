@@ -272,6 +272,11 @@ export default function SafetyPage() {
               checks and approvals, and you can turn that off.
             </li>
             <li>
+              <strong>Editing by voice changes only what you selected,</strong> and only when you hold Shift with your key. The selected text is sent
+              once to make the change and isn&apos;t kept; your app&apos;s Undo takes it back. It never runs in a terminal, where the copy shortcut
+              would stop a program.
+            </li>
+            <li>
               <strong>Your history stays on your computer,</strong> encrypted, so you can copy or fix a recent dictation. Turn it off, or clear it,
               in the app.
             </li>

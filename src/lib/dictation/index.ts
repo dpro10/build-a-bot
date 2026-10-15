@@ -24,7 +24,8 @@ import { getPlan } from "@/lib/billing/plans";
 import { demoMode } from "@/lib/env";
 import { rateLimit } from "@/lib/safety/ratelimit";
 import { TranscriptionError, transcribe, transcriptionSetup } from "@/lib/transcribe";
-import { demoHeard, demoPolish } from "./demo";
+import { demoEdit, demoHeard, demoPolish, type DemoSample } from "./demo";
+import { editText, needsSelection } from "./edit";
 import { polishSetup, polishText, type AppCategory } from "./polish";
 import {
   applyDictionary,
@@ -32,6 +33,7 @@ import {
   isPhantom,
   isPromptEcho,
   matchCommand,
+  needsPolish,
   properNouns,
   protectSnippets,
   restoreSnippets,
@@ -132,7 +134,7 @@ export type DictateInput = {
   /** Match the app's style. */
   styles: boolean;
   /** Demo mode only: which line the demo hears ("command" for "Hey {bot}, …"). */
-  demoSample?: number | "command";
+  demoSample?: DemoSample;
 };
 
 export type DictateResult =
@@ -239,7 +241,10 @@ export async function dictate(db: Db, owner: User, input: DictateInput): Promise
   const guarded = protectSnippets(tidy, ctx.snippets);
   let text: string | null = null;
   let polished = false;
-  if (input.polish && countWords(tidy) >= 3) {
+  // Short, clean and nothing to fix: the plain cleanup is what they meant, with no wait for a model.
+  // (A snippet gets the AI's touch, for the punctuation around it.)
+  const worthIt = guarded.slots.length > 0 || needsPolish(tidy, { category: input.category, vocabulary: ctx.vocabulary, language: input.language });
+  if (input.polish && countWords(tidy) >= 3 && worthIt) {
     if (simulated) {
       text = guarded.slots.length ? null : demoPolish(heard);
     } else {
@@ -282,4 +287,66 @@ export async function getDictionaryEntry(db: Db, ownerId: string, id: string): P
     .where(and(eq(schema.dictionary.id, id), eq(schema.dictionary.ownerId, ownerId)))
     .limit(1);
   return row ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Editing by voice
+// ---------------------------------------------------------------------------
+
+export type EditByVoiceInput = {
+  /** What they said to do, as voice typing heard it (the plain cleanup, no AI). */
+  instruction: string;
+  /** What they had selected; nothing means "write it at the cursor". */
+  selection?: string | null;
+  category?: AppCategory;
+  appName?: string;
+  styles: boolean;
+};
+
+export type EditOutcome =
+  | { ok: true; kind: "replace" | "answer"; text: string; words: number; usage: DictateUsage; simulated: boolean; ms: number }
+  | { ok: false; status: number; code: string; error: string; upgrade?: "plus" | "pro" };
+
+/** Editing by voice can run: a model for it, or demo mode. */
+export function voiceEditAvailable(): boolean {
+  return Boolean(polishSetup()) || demoMode;
+}
+
+/**
+ * Change the selection the way they said, or write what they asked for (edit.ts). Same limits as a
+ * dictation; the words it types count toward the plan's words. Nothing is stored.
+ */
+export async function editByVoice(db: Db, owner: User, input: EditByVoiceInput): Promise<EditOutcome> {
+  const instruction = input.instruction.trim();
+  const selection = input.selection && input.selection.trim() ? input.selection : null;
+  if (!instruction) return { ok: false, status: 422, code: "empty", error: "Say what to change." };
+  if (!selection && needsSelection(instruction)) return { ok: false, status: 422, code: "no-selection", error: "Select the text you want to change first." };
+  const setup = polishSetup();
+  if (!setup && !demoMode) return { ok: false, status: 503, code: "unavailable", error: "Editing by voice isn't set up on this server yet." };
+
+  const limit = await checkLimit(db, owner, "dictationWords");
+  if (!limit.ok) return { ok: false, status: 402, code: "limit", error: limit.message, upgrade: limit.plan.id === "free" ? "plus" : "pro" };
+  const today = await rateLimit(db, `dictate-day:${owner.id}`, DAILY_DICTATIONS, 86_400);
+  if (!today.ok) return { ok: false, status: 429, code: "daily", error: "That's a lot of voice typing for one day. It resets tomorrow." };
+  if (!(await underDailyCeiling(db, "dictation"))) return { ok: false, status: 503, code: "busy", error: "Voice typing is very busy today. Try again in a little while." };
+
+  const t0 = Date.now();
+  let result: { kind: "replace" | "answer"; text: string };
+  let costMicros = 0;
+  if (!setup) {
+    result = demoEdit(instruction, selection);
+  } else {
+    const ctx = await loadVoiceContext(db, owner);
+    const out = await editText({ instruction, selection, category: input.category ?? "other", appName: input.appName, vocabulary: ctx.vocabulary, styles: input.styles });
+    if ("error" in out) {
+      if (out.error === "timeout") return { ok: false, status: 504, code: "timeout", error: "That took too long. Try a shorter selection." };
+      if (out.error === "unavailable") return { ok: false, status: 503, code: "unavailable", error: "Editing by voice isn't set up on this server yet." };
+      return { ok: false, status: 502, code: "failed", error: "I couldn't do that one. Try saying it another way." };
+    }
+    result = { kind: out.kind, text: out.text };
+    costMicros = out.costMicros;
+  }
+  const words = result.kind === "replace" ? countWords(result.text) : 0;
+  if (words || costMicros) await recordUsage(db, owner.id, { dictationWords: words, costMicros });
+  return { ok: true, ...result, words, usage: usageOf(owner, (await getUsage(db, owner.id)).dictationWords), simulated: !setup, ms: Date.now() - t0 };
 }

@@ -16,7 +16,9 @@ export const MAX_ENTRIES = 100;
 export const MAX_AGE_MS = 30 * 24 * 3600_000;
 
 /**
- * @typedef {{ id: string, at: number, kind: 'text' | 'command', text: string, heard?: string, app?: string | null, words?: number, polished?: boolean, pasted?: boolean, bot?: string, reply?: string }} HistoryEntry
+ * kind: 'text' typed by voice; 'command' asked a bot ("Hey Otto, …"); 'edit' a selection changed
+ * or text written by voice (`instruction` is what they said; `answer` when it answered instead).
+ * @typedef {{ id: string, at: number, kind: 'text' | 'command' | 'edit', text: string, heard?: string, app?: string | null, words?: number, polished?: boolean, pasted?: boolean, bot?: string, reply?: string, instruction?: string, answer?: boolean }} HistoryEntry
  */
 
 export class VoiceHistory {
@@ -109,7 +111,7 @@ export class VoiceHistory {
 
   /** The newest thing that was typed (for "Paste last dictation"). */
   lastText() {
-    return this.list().find((e) => e.kind === "text") ?? null;
+    return this.list().find((e) => e.kind === "text" || (e.kind === "edit" && !e.answer)) ?? null;
   }
 
   clearFile() {

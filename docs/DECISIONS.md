@@ -419,6 +419,23 @@ Built (Claude; Diego to confirm the details):
   - Rewriting selected text by voice ("make this friendlier").
   - Streaming the audio while the key is held, to cut the wait after letting go.
 
+## Build choice (Claude; Diego to confirm): editing by voice (2026-10-15)
+
+Diego asked to keep building toward beating Wispr Flow ("maximum effort and exemplary work"). Wispr's headline feature beyond dictation is Command Mode, so voice typing now has it too.
+
+- **What it does:** select text in any app, hold **Shift** with the voice typing shortcut, and say what to do with it ("make this friendlier", "turn it into a list", "translate it to Spanish"). The result replaces the selection, and the app's own Undo takes it back. With nothing selected, it writes what was asked for at the cursor. A question about the text ("is this clear?") is answered in the pill.
+  - The same on `/app/voice`: select text in the try-it box and hold the mic.
+- **Why Shift:** an explicit key, because reading the selection means pressing copy, and doing that on every dictation would be invasive. Shift types nothing on its own, works with every preset, and can come before the shortcut or while holding it. It never counts as a key combination (no cancel). A custom shortcut that includes Shift can't also edit.
+- **Never in a terminal:** copying there is Ctrl+C, which stops the running program. The pill says so.
+- **"Make this shorter" with nothing selected** is refused before any model call ("Select the text you want to change first"), so it doesn't type nonsense; "make a list of…" is writing and goes through.
+- **Privacy:** the selection is sent once and never stored; the local history keeps what was said and the result. The clipboard is put back exactly as it was (all formats) before anything is sent.
+- **Safety:** one model call, no tools. The selection is text to work on, wrapped in tags, and the worked examples include a selection that gives orders. The reply must be `<replace>` or `<answer>`; a chat-style preamble, our tags inside, or a reply far longer than the job is refused.
+- **Cost and limits:** the same model as the cleanup (Groq `openai/gpt-oss-120b`, else the included model). Words it types count toward the plan's words; answers count none. The dictation daily cap covers edits too.
+- **Demo mode:** the demo "hears" "Make this friendlier." (or "Write a short thank-you note."), and with no model at all, edits are done by simple rules, labeled *demo*.
+- **Tested:** the reply parsing and the prompt, the model call against a fake Groq (slow, cut off, broken, unusable), limits and privacy, the route; the desktop's Shift handling, reading the selection, and the whole flow; Xvfb e2e with real key presses (select all in another app, hold Right Shift + Right Ctrl, the selection is replaced); Playwright in the browser.
+- **Faster short messages:** the AI cleanup is skipped when there's nothing for it to do (`needsPolish`): a short, punctuated message with no correction ("no, Friday"), no numbers, times or punctuation said in words, no address, no name that sounds like one of theirs, not code or a terminal, in English. "Sounds good, see you then." is typed without waiting for a model, which saves about half a second on the messages people dictate most. Anything that might need it still gets it.
+- **Found on the way:** the try-it mic button could miss the release when something above it disappeared as it started (the button moved out from under the pointer, so the recording never stopped). It now captures the pointer.
+
 ## Build choice (Claude; Diego to confirm): what real testers see (2026-10-14)
 
 Outside demo mode nothing is simulated. Anything without its service set up says **"Coming soon"** and can't be picked or set up:

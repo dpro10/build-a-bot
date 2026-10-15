@@ -27,9 +27,15 @@ export function demoCommand(botName: string): string {
   return `Hey ${botName}, remind me to call Mom tomorrow at 5.`;
 }
 
+/** What the demo hears when editing by voice: a change to the selection, or something to write. */
+export const DEMO_INSTRUCTIONS = { edit: "Make this friendlier.", write: "Write a short thank-you note." } as const;
+
+export type DemoSample = number | "command" | keyof typeof DEMO_INSTRUCTIONS;
+
 /** The line a recording hears: the asked-for one, or one picked by the recording's size. */
-export function demoHeard(sample: number | "command" | undefined, audioBytes: number, botName: string | null): string {
+export function demoHeard(sample: DemoSample | undefined, audioBytes: number, botName: string | null): string {
   if (sample === "command" && botName) return demoCommand(botName);
+  if (sample === "edit" || sample === "write") return DEMO_INSTRUCTIONS[sample];
   const i = typeof sample === "number" && sample >= 0 ? sample % DEMO_DICTATIONS.length : audioBytes % DEMO_DICTATIONS.length;
   return DEMO_DICTATIONS[i].heard;
 }
@@ -37,4 +43,29 @@ export function demoHeard(sample: number | "command" | undefined, audioBytes: nu
 /** The demo's "AI" cleanup: the typed line for a line it knows, nothing otherwise. */
 export function demoPolish(heard: string): string | null {
   return DEMO_DICTATIONS.find((d) => d.heard === heard)?.typed ?? null;
+}
+
+const sentences = (text: string) => text.match(/[^.!?\n]+[.!?]*/g)?.map((t) => t.trim()).filter(Boolean) ?? [];
+const ending = (text: string) => (/[.!?]$/.test(text) ? text : `${text}.`);
+
+/**
+ * Editing by voice in demo mode, with no model: a few simple changes done by rule, so the whole flow
+ * (selection, instruction, replacing it) can be tried and tested. The pill and the page say "demo".
+ */
+export function demoEdit(instruction: string, selection: string | null): { kind: "replace" | "answer"; text: string } {
+  const ask = instruction.toLowerCase();
+  const sel = selection?.trim() ?? "";
+  if (!sel) {
+    if (/\?\s*$/.test(instruction.trim())) return { kind: "answer", text: "This is the demo: with a real model, I'd answer that here." };
+    return { kind: "replace", text: "Thank you so much for your help today. It made a real difference!" };
+  }
+  if (/\?\s*$/.test(instruction.trim()) || /^(?:is|are|does|do|what|why|how|can|should)\b/.test(ask)) {
+    return { kind: "answer", text: "It reads clearly. (This is the demo: with a real model, I'd look at your text properly.)" };
+  }
+  if (/\b(?:bullet|list)/.test(ask)) return { kind: "replace", text: sentences(sel).map((t) => `- ${ending(t)}`).join("\n") };
+  if (/\b(?:short|brief|concise|summar|trim|condense)/.test(ask)) return { kind: "replace", text: ending(sentences(sel)[0] ?? sel) };
+  if (/\b(?:upper ?case|all caps|capital)/.test(ask)) return { kind: "replace", text: sel.toUpperCase() };
+  if (/\b(?:formal|professional|polite)/.test(ask)) return { kind: "replace", text: `Hello,\n\n${ending(sel)}\n\nBest regards` };
+  // Friendlier, and anything else the demo doesn't know.
+  return { kind: "replace", text: `Hi! ${ending(sel)} Thanks so much!` };
 }

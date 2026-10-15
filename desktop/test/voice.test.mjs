@@ -199,6 +199,52 @@ test("Windows: pressing Ctrl+Win taps F24 so letting go doesn't open the Start m
   assert.deepEqual(seen, []);
 });
 
+test("Shift with the shortcut asks to edit by voice, and never counts as a key combination", async () => {
+  const hook = fakeHook();
+  let now = 0;
+  const hk = new Hotkey({ loadHook: async () => hook, shortcut: defaultShortcut("darwin"), platform: "darwin", now: () => now });
+  const seen = [];
+  hk.on("start", (o) => seen.push(`start:${o?.edit ? "edit" : "type"}`));
+  for (const ev of ["stop", "cancel", "edit"]) hk.on(ev, () => seen.push(ev));
+  await hk.enable();
+  // Shift first, then Right Option.
+  hook.press(KEY.Shift);
+  hook.press(KEY.AltRight, { shiftKey: true });
+  now = 1500;
+  hook.release(KEY.AltRight);
+  hook.release(KEY.Shift);
+  assert.deepEqual(seen, ["start:edit", "stop"]);
+  // Shift pressed right after the shortcut (inside the key-combination window) switches to editing, no cancel.
+  seen.length = 0;
+  now = 5000;
+  hook.press(KEY.AltRight);
+  now = 5100;
+  hook.press(KEY.ShiftRight, { altKey: true });
+  now = 6000;
+  hook.release(KEY.ShiftRight);
+  hook.release(KEY.AltRight);
+  assert.deepEqual(seen, ["start:type", "edit", "stop"]);
+  // Shift when nothing is recording does nothing.
+  seen.length = 0;
+  hook.press(KEY.Shift);
+  hook.release(KEY.Shift);
+  assert.deepEqual(seen, []);
+});
+
+test("a shortcut that includes Shift can't also mean edit", async () => {
+  const hook = fakeHook();
+  const shortcut = resolveShortcut({ shortcut: "custom", customKeys: [KEY.CtrlRight, KEY.ShiftRight] }, "linux");
+  const hk = new Hotkey({ loadHook: async () => hook, shortcut, platform: "linux" });
+  const seen = [];
+  hk.on("start", (o) => seen.push(`start:${o?.edit ? "edit" : "type"}`));
+  hk.on("edit", () => seen.push("edit"));
+  await hk.enable();
+  hook.press(KEY.CtrlRight);
+  hook.press(KEY.ShiftRight, { ctrlKey: true });
+  assert.deepEqual(seen, ["start:type"]);
+  assert.equal(hk.editHeld(), false);
+});
+
 test("a new shortcut is recorded from the keys pressed together", async () => {
   const hook = fakeHook();
   const hk = new Hotkey({ loadHook: async () => hook, shortcut: defaultShortcut("linux"), platform: "linux" });
@@ -340,6 +386,46 @@ test("when it can't press keys, the words stay on the clipboard", async () => {
   assert.deepEqual(await snapshotClipboard({ read: async () => Promise.reject(new Error("no clipboard")) }), []);
 });
 
+test("reading the selection: copy with a marker on the clipboard, then put the clipboard back", async () => {
+  const before = { "text/plain": "what I had copied", "image/png": "PNG" };
+  const cb = fakeClipboard(before);
+  const pressed = [];
+  // The app puts its selection on the clipboard a little after the key press.
+  const pressCopy = async (cat) => {
+    pressed.push(cat);
+    setTimeout(() => cb.set({ "text/plain": "the selected words" }), 30);
+    return true;
+  };
+  const p = new Paster({ clipboard: cb, makeItem, press: async () => true, pressCopy, canPress: () => true, copyWaitMs: 300 });
+  assert.equal(await p.copySelection("chat"), "the selected words");
+  assert.deepEqual(pressed, ["chat"]);
+  assert.deepEqual(cb.data, before, "the clipboard is as it was, the image too");
+  assert.match(cb.writes[0], /^\u2063bab-/, "a marker, so an unchanged clipboard means nothing was selected");
+});
+
+test("nothing selected, a terminal, no keys, or an editor copying a whole line: no selection", async () => {
+  const cb = fakeClipboard({ "text/plain": "old" });
+  let presses = 0;
+  const p = new Paster({ clipboard: cb, makeItem, press: async () => true, pressCopy: async () => (presses++, true), canPress: () => true, copyWaitMs: 40 });
+  // The app ignored the copy: the marker is still there.
+  assert.equal(await p.copySelection("docs"), null);
+  assert.equal(cb.data["text/plain"], "old");
+  // A terminal: Ctrl+C there would stop the running program, so no key is pressed at all.
+  presses = 0;
+  assert.equal(await p.copySelection("terminal"), null);
+  assert.equal(presses, 0);
+  // Keys can't be pressed (no Accessibility yet).
+  const noKeys = new Paster({ clipboard: cb, makeItem, press: async () => true, pressCopy: async () => true, canPress: () => false });
+  assert.equal(await noKeys.copySelection("chat"), null);
+  // Code editors copy the current line when nothing is selected.
+  const lineCopy = new Paster({ clipboard: cb, makeItem, press: async () => true, pressCopy: async () => (cb.set({ "text/plain": "const a = 1;\n" }), true), canPress: () => true, copyWaitMs: 40 });
+  assert.equal(await lineCopy.copySelection("code"), null);
+  assert.equal(cb.data["text/plain"], "old");
+  // …but a real multi-line selection in an editor is a selection.
+  const block = new Paster({ clipboard: cb, makeItem, press: async () => true, pressCopy: async () => (cb.set({ "text/plain": "a = 1\nb = 2\n" }), true), canPress: () => true, copyWaitMs: 40 });
+  assert.equal(await block.copySelection("code"), "a = 1\nb = 2\n");
+});
+
 // ---------------------------------------------------------------------------
 // Which app is in front
 // ---------------------------------------------------------------------------
@@ -477,6 +563,12 @@ function setupVoice(opts = {}) {
       if (r instanceof Error) throw r;
       return r;
     },
+    async edit(p) {
+      calls.push(`api.edit:${p.instruction}:${p.selection ?? "-"}:${p.category}:${p.app ?? "-"}`);
+      const r = (opts.editResults ?? [{ kind: "replace", text: "Hi! Let's meet at 3. Thanks so much!", words: 8, usage: { words: 12, limit: 8000 }, ms: 420 }]).shift();
+      if (r instanceof Error) throw r;
+      return r;
+    },
     async ask(botId, text, onEvent) {
       calls.push(`api.ask:${botId}:${text}`);
       if (opts.askError) throw opts.askError;
@@ -495,11 +587,15 @@ function setupVoice(opts = {}) {
     copy(text) {
       calls.push(`copy:${text}`);
     },
+    async copySelection(category) {
+      calls.push(`copySelection:${category}`);
+      return opts.selection === undefined ? "lets meet at 3" : opts.selection;
+    },
   };
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bab-voice-c-"));
   const history = new VoiceHistory({ file: path.join(dir, "h.json"), safeStorage: fakeSafe, secure: () => true });
   const bots = [{ id: "bot_1", name: "Otto", color: "grape", avatar: "otto" }];
-  const account = { device: opts.unpaired ? null : { server: "https://x" }, session: { voice: { available: true } }, appUrl: () => "https://x", refresh: async () => {}, bots: () => bots };
+  const account = { device: opts.unpaired ? null : { server: "https://x" }, session: { voice: { available: true, edit: opts.serverEdit ?? true } }, appUrl: () => "https://x", refresh: async () => {}, bots: () => bots };
   const hotkey = new EventEmitter();
   hotkey.finish = () => hotkey.emit("stop");
   hotkey.abort = () => calls.push("hotkey.abort");
@@ -684,6 +780,110 @@ test("with history off, nothing is kept; unpairing forgets it all", async () => 
   other.v.forget();
   assert.equal(other.history.list().length, 0);
   assert.equal(other.v.last, null);
+});
+
+test("Shift + shortcut: the selection is changed the way they said, and pasted over it", async () => {
+  const env = setupVoice({ results: [{ kind: "text", text: "Make it friendlier.", words: 3, usage: { words: 3, limit: 8000 } }] });
+  env.hotkey.emit("start", { edit: true });
+  await flush();
+  assert.equal(env.states[0].edit, true, "the pill shows it's an edit");
+  env.hotkey.emit("stop");
+  await flush(30);
+  assert.deepEqual(
+    env.calls.filter((c) => !c.startsWith("pill.")),
+    ["mic.start:default", "mic.stop", "copySelection:chat", "api.dictate:chat:-:polish=false:commands=false", "api.edit:Make it friendlier.:lets meet at 3:chat:Slack", "paste:chat"],
+  );
+  assert.deepEqual(env.pasted, ["Hi! Let's meet at 3. Thanks so much!"]);
+  const done = env.states.find((st) => st.phase === "done");
+  assert.equal(done.edit, true);
+  assert.equal(done.hint, "⌘Z undoes it");
+  assert.ok(env.states.some((st) => st.phase === "working" && st.label === "Changing it…"));
+  const h = env.history.list()[0];
+  assert.deepEqual([h.kind, h.instruction, h.text], ["edit", "Make it friendlier.", "Hi! Let's meet at 3. Thanks so much!"]);
+  // "Paste last dictation" pastes the edit.
+  assert.equal(env.history.lastText().text, "Hi! Let's meet at 3. Thanks so much!");
+});
+
+test("with nothing selected it writes at the cursor; a question gets an answer in the pill", async () => {
+  const write = setupVoice({ selection: null, results: [{ kind: "text", text: "Write a short thank-you note.", words: 5 }], editResults: [{ kind: "replace", text: "Thank you so much for your help!", words: 6, ms: 300 }] });
+  write.hotkey.emit("start", { edit: true });
+  await flush();
+  write.hotkey.emit("stop");
+  await flush(30);
+  assert.ok(write.calls.includes("api.edit:Write a short thank-you note.:-:chat:Slack"));
+  assert.deepEqual(write.pasted, ["Thank you so much for your help!"]);
+  assert.ok(write.states.some((st) => st.phase === "working" && st.label === "Writing…"));
+  assert.equal(write.states.find((st) => st.phase === "done").hint, null, "nothing to undo but the typing");
+
+  const ask = setupVoice({ results: [{ kind: "text", text: "Is this clear?", words: 3 }], editResults: [{ kind: "answer", text: "Yes, it's clear.", words: 0, ms: 200 }] });
+  ask.hotkey.emit("start", { edit: true });
+  await flush();
+  ask.hotkey.emit("stop");
+  await flush(30);
+  const answer = ask.states.find((st) => st.phase === "answer");
+  assert.equal(answer.message, "Yes, it's clear.");
+  // About a selection, Paste would type over it: Copy only.
+  assert.deepEqual(answer.actions, ["copy"]);
+  assert.deepEqual(ask.pasted, []);
+  await ask.v.action("copy");
+  assert.ok(ask.calls.includes("copy:Yes, it's clear."));
+});
+
+test("editing says what's wrong: nothing selected, a terminal, a failure (with Try again)", async () => {
+  const none = setupVoice({ selection: null, results: [{ kind: "text", text: "Make this shorter.", words: 3 }], editResults: [Object.assign(new Error("Select the text you want to change first."), { status: 422, code: "no-selection" })] });
+  none.hotkey.emit("start", { edit: true });
+  await flush();
+  none.hotkey.emit("stop");
+  await flush(30);
+  assert.equal(none.states.at(-1).message, "Select the text you want to change first.");
+
+  const term = setupVoice({ app: { name: "Terminal", category: "terminal" } });
+  term.hotkey.emit("start", { edit: true });
+  await flush();
+  term.hotkey.emit("stop");
+  await flush(30);
+  assert.equal(term.states.at(-1).message, "Editing by voice doesn't work in a terminal.");
+  assert.ok(!term.calls.some((c) => c.startsWith("copySelection") || c.startsWith("api.")), "no copy (Ctrl+C would stop the program), nothing sent");
+
+  const failed = setupVoice({
+    results: [{ kind: "text", text: "Make it friendlier.", words: 3 }],
+    editResults: [Object.assign(new Error("I couldn't do that one. Try saying it another way."), { status: 502, code: "failed" }), { kind: "replace", text: "Hi there!", words: 2, ms: 100 }],
+  });
+  failed.hotkey.emit("start", { edit: true });
+  await flush();
+  failed.hotkey.emit("stop");
+  await flush(30);
+  const err = failed.states.at(-1);
+  assert.equal(err.phase, "error");
+  assert.deepEqual(err.actions, ["retry"]);
+  // Try again: the same selection and instruction, without copying or listening again.
+  await failed.v.action("retry");
+  await flush(30);
+  assert.equal(failed.calls.filter((c) => c.startsWith("copySelection")).length, 1);
+  assert.equal(failed.calls.filter((c) => c.startsWith("api.dictate")).length, 1);
+  assert.equal(failed.calls.filter((c) => c.startsWith("api.edit")).length, 2);
+  assert.deepEqual(failed.pasted, ["Hi there!"]);
+});
+
+test("Shift while talking switches to editing; with editing off (or not on the server) it's plain typing", async () => {
+  const late = setupVoice({ results: [{ kind: "text", text: "Translate it to Spanish.", words: 4 }] });
+  late.hotkey.emit("start", { edit: false });
+  await flush();
+  late.hotkey.emit("edit");
+  await flush();
+  assert.equal(late.states.at(-1).edit, true);
+  late.hotkey.emit("stop");
+  await flush(30);
+  assert.ok(late.calls.some((c) => c.startsWith("api.edit:Translate it to Spanish.")));
+
+  for (const env of [setupVoice({ voice: { edit: false } }), setupVoice({ serverEdit: false })]) {
+    env.hotkey.emit("start", { edit: true });
+    await flush();
+    env.hotkey.emit("stop");
+    await flush(30);
+    assert.ok(!env.calls.some((c) => c.startsWith("copySelection") || c.startsWith("api.edit")));
+    assert.deepEqual(env.pasted, ["Let's meet at 3."]);
+  }
 });
 
 test("the pill: placed above the Dock, buttons only when it has them, plain bot replies", () => {
