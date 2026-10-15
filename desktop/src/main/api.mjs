@@ -225,6 +225,16 @@ export function createApi(o) {
       if (p.demo) q.set("demo", p.demo);
       return json("POST", `/api/voice/dictate?${q}`, { body: rec.bytes, contentType: rec.mime || "audio/webm", timeoutMs: 60_000 });
     },
+    /**
+     * Editing by voice: what they said to do with the selection (or, with none, what to write).
+     * @param {{ instruction: string, selection: string | null, category?: string, app?: string | null, styles?: boolean }} p
+     */
+    edit(p) {
+      return json("POST", "/api/voice/edit", {
+        json: { instruction: p.instruction, selection: p.selection, ...(p.category ? { category: p.category } : {}), ...(p.app ? { app: String(p.app).slice(0, 60) } : {}), styles: p.styles !== false },
+        timeoutMs: 60_000,
+      });
+    },
     /** "Hey {bot}, …": runs it in the bot's chat; `onEvent` gets the chat's streamed events. */
     ask(botId, text, onEvent, opts) {
       return sse("/api/voice/ask", { botId, text }, onEvent, opts);

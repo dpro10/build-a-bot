@@ -430,11 +430,62 @@ export function matchCommand<B extends CommandBot>(raw: string, bots: B[]): { bo
 }
 
 // ---------------------------------------------------------------------------
+// When the AI cleanup has nothing to do
+// ---------------------------------------------------------------------------
+
+/** "Thursday, no, Friday", "actually make it 3", "I mean": a correction to apply. */
+const CORRECTION = /\b(?:wait|actually|i mean|i meant|or rather|make that|let me rephrase|scratch that|strike that|correction|oops|sorry)\b|,\s*no\s*[,.]/i;
+/** Punctuation and formatting said out loud, and things written differently than they're said. */
+const SPOKEN_FORMAT =
+  /\b(?:comma|period|full stop|question mark|exclamation (?:point|mark)|colon|semicolon|dash|hyphen|quote|unquote|open (?:paren|parenthesis|bracket)|close (?:paren|parenthesis|bracket)|bullet|new line|new paragraph|next line|dot com|dot org|dot net|dot io|at sign|slash|underscore|hashtag|percent|dollars?|euros?|pounds|cents?|www|https?)\b/i;
+/** Numbers, times and dates in words ("five thirty", "twenty", "first"): written as digits after the cleanup. */
+const NUMBER_WORDS =
+  /\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|billion|first|second|third|fourth|fifth|half|quarter|o'clock|a\.?m\.?|p\.?m\.?)\b/i;
+/** "sam at gmail dot com" */
+const EMAILISH = /\b\w+ at \w+ dot \w+\b/i;
+const GREETING = /^(?:hi|hey|hello|dear|good (?:morning|afternoon|evening))\b/i;
+
+/** A word that sounds like one of their names but is spelled differently ("Priya" written "Pria"). */
+function nearMiss(text: string, vocabulary: string[]): boolean {
+  const names = vocabulary.filter((v) => !/\s/.test(v) && v.length >= 3);
+  if (!names.length) return false;
+  for (const word of text.match(/[\p{L}']+/gu) ?? []) {
+    if (word.length < 3) continue;
+    const lower = word.toLowerCase();
+    if (names.some((n) => n.toLowerCase() !== lower && soundsLike(word, n))) return true;
+  }
+  return false;
+}
+
+/**
+ * Does this need the AI cleanup, or is the plain cleanup already what they meant? Skipping it saves
+ * a model call (often half a second or more) on the short, clean messages people dictate most.
+ * Careful by design: anything that might need the AI (a correction, numbers or punctuation said in
+ * words, an address, a name that sounds like one of theirs, code, a terminal, more than a couple
+ * of sentences, missing punctuation) gets it.
+ */
+export function needsPolish(text: string, o: { category?: string; vocabulary?: string[]; language?: string }): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (o.category === "code" || o.category === "terminal") return true;
+  // The rules below read English.
+  if (o.language && o.language !== "en") return true;
+  if (/[^\x00-\x7f\u2018\u2019\u201c\u201d\u2026]/.test(t)) return true;
+  if (countWords(t) > 40 || /\n/.test(t)) return true;
+  if (!/^["“'(]?[A-Z0-9]/.test(t) || !/[.!?…]["”')]?$/.test(t)) return true;
+  if (CORRECTION.test(t) || SPOKEN_FORMAT.test(t) || NUMBER_WORDS.test(t) || EMAILISH.test(t)) return true;
+  // A word said twice that the plain cleanup left ("we we", "is is").
+  if (/\b(\w+)\s+\1\b/i.test(t)) return true;
+  if (o.category === "email" && GREETING.test(t)) return true;
+  return nearMiss(t, o.vocabulary ?? []);
+}
+
+// ---------------------------------------------------------------------------
 // Checking the AI's cleanup
 // ---------------------------------------------------------------------------
 
 /** How an assistant starts when it answers instead of cleaning up. */
-const META_START = /^(?:sure|certainly|of course|okay|ok|here(?:'s| is| are)|i(?:'m| am) sorry|sorry|as an ai|i can(?:not|'t)|the (?:cleaned|corrected|edited)|cleaned[- ]up|corrected (?:text|version)|note:)\b/i;
+export const META_START = /^(?:sure|certainly|of course|okay|ok|here(?:'s| is| are)|i(?:'m| am) sorry|sorry|as an ai|i can(?:not|'t)|the (?:cleaned|corrected|edited)|cleaned[- ]up|corrected (?:text|version)|note:)\b/i;
 
 /** How a question starts (after the plain cleanup). "What a day" starts the same way, and loses only the AI's touch. */
 const QUESTION_START = /^(?:(?:so|and|but|okay|ok|hey|hi)\s+)?(?:what|what's|who|who's|where|where's|when|why|how|how's|which|is|are|am|was|were|can|could|do|does|did|will|would|should|shall|have|has)\s/;

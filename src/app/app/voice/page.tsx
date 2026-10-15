@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { AppWindow, AudioLines, BookA, Download, Keyboard, Laptop, MessageCircle, ShieldCheck, Sparkles, Trash2 } from "lucide-react";
+import { AppWindow, AudioLines, BookA, Download, Keyboard, Laptop, MessageCircle, ShieldCheck, Sparkles, Trash2, Wand2 } from "lucide-react";
 import { getDb } from "@/lib/db";
 import { requireUser } from "@/lib/auth/session";
 import { listBots, listBridgeDevices } from "@/lib/data";
@@ -33,6 +33,7 @@ const HOW = [
   { icon: <Keyboard />, title: "Hold a key, in any app", body: "Slack, email, docs, your code editor: wherever your cursor is. Let go and it's typed there. Tap twice to keep talking hands-free." },
   { icon: <Sparkles />, title: "Cleaned up as you go", body: "No ums or repeats, the right punctuation, and your corrections kept: “at 2, no, 3” comes out “at 3”. Casual in chats, proper in email." },
   { icon: <BookA />, title: "Spelled your way", body: "Names your bots remember and words you add are spelled right. Say a snippet's phrase and it types your link or address." },
+  { icon: <Wand2 />, title: "Edit by voice", body: "Select some text, hold Shift with your key, and say what to change: “make this friendlier”, “turn it into a list”, “translate it to Spanish”." },
   { icon: <MessageCircle />, title: "Or ask your bot", body: "Start with “Hey” and your bot's name: “Hey Otto, remind me to call Mom at 5.” It answers right there, and it's in your chat." },
 ];
 
@@ -41,6 +42,7 @@ const PRIVATE = [
   { icon: <Trash2 />, text: "Your voice is turned into text and thrown away. We keep a word count, never your words." },
   { icon: <Laptop />, text: "Your history stays on your computer, encrypted, and you can turn it off." },
   { icon: <ShieldCheck />, text: "So the words fit, only the kind of app you're in (“chat”, “email”) and a well-known app's name are sent. Never what's on your screen." },
+  { icon: <Wand2 />, text: "When you edit by voice, the text you selected is sent once to change it, and never kept." },
 ];
 
 export default async function VoicePage() {

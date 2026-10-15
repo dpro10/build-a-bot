@@ -15,7 +15,7 @@ import { minutesSaved, VoiceHistory, wordsPerMinute, wordsThisWeek } from "./his
 import { Hotkey, ToggleHotkey } from "./hotkey.mjs";
 import { checkCustom, keyName, presetsFor, resolveShortcut } from "./keys.mjs";
 import { suggestWords } from "./learn.mjs";
-import { Paster, pressPaste } from "./paste.mjs";
+import { Paster, pressCopy, pressPaste } from "./paste.mjs";
 import { PillWindow } from "./pill-window.mjs";
 import { VoiceSettingsWindow } from "./settings-window.mjs";
 
@@ -83,6 +83,7 @@ export function setupVoice(o) {
     clipboard,
     makeItem: (data) => new electron.ClipboardItem(data),
     press: pressPaste({ platform, hook: () => hook?.hook ?? null, expectSynthetic: (c) => hook?.expectSynthetic(c) }),
+    pressCopy: pressCopy({ platform, hook: () => hook?.hook ?? null, expectSynthetic: (c) => hook?.expectSynthetic(c) }),
     canPress: canPaste,
     // Paste only once the shortcut's keys are let go (⌥ still down would make ⌘V into ⌥⌘V).
     waitForRelease: async () => {
@@ -272,6 +273,7 @@ export function setupVoice(o) {
         polish: v.polish,
         styles: v.styles,
         commands: v.commands,
+        edit: v.edit !== false,
         sounds: v.sounds,
         language: v.language,
         micId: v.micId,
@@ -279,7 +281,9 @@ export function setupVoice(o) {
         restoreClipboard: v.restoreClipboard,
       },
       permissions: { mic: micStatus(), accessibility: platform === "darwin" ? trusted() : null },
-      server: sessionVoice ? { available: sessionVoice.available, polish: sessionVoice.polish, simulated: sessionVoice.simulated } : null,
+      server: sessionVoice ? { available: sessionVoice.available, polish: sessionVoice.polish, edit: sessionVoice.edit === true, simulated: sessionVoice.simulated } : null,
+      /** Shift is one of the shortcut's keys (a custom one), so it can't also start editing. */
+      editKey: !shortcut.slots.some((slot) => slot.some((k) => k === 42 || k === 54)),
       usage: voice.usage ?? sessionVoice?.usage ?? null,
       stats: { week: wordsThisWeek(s), total: s?.total ?? 0, saved: minutesSaved(s?.total ?? 0, s?.spokenMs ?? 0), wpm: wordsPerMinute(s) },
       bots: account.bots().map((b) => ({ id: b.id, name: b.name })),
@@ -326,7 +330,7 @@ export function setupVoice(o) {
       fromWindow(e);
       const p = /** @type {Record<string, unknown>} */ (patch ?? {});
       const next = {};
-      for (const k of ["enabled", "polish", "styles", "commands", "sounds", "history", "restoreClipboard"]) if (typeof p[k] === "boolean") next[k] = p[k];
+      for (const k of ["enabled", "polish", "styles", "commands", "edit", "sounds", "history", "restoreClipboard"]) if (typeof p[k] === "boolean") next[k] = p[k];
       if (typeof p.language === "string" && /^(auto|[a-z]{2})$/.test(p.language)) next.language = p.language;
       if (typeof p.micId === "string" && p.micId.length <= 300) next.micId = p.micId;
       if (typeof p.shortcut === "string" && (presetsFor(platform).some((x) => x.id === p.shortcut) || (p.shortcut === "custom" && settings.get().voice.customKeys))) next.shortcut = p.shortcut;

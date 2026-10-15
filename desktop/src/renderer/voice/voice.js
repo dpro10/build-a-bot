@@ -81,6 +81,19 @@
       document.createTextNode(s.mode === "toggle" ? " and talk. Press it again, and it's typed where your cursor is." : " and talk. Let go, and it's typed where your cursor is."),
     );
     $("tip-handsfree").textContent = s.mode === "toggle" ? "It keeps listening until you press the shortcut again (up to 10 minutes)." : "Tap it twice to keep listening hands-free; tap once more to finish.";
+    // Editing by voice: Shift with the shortcut (not with the toggle shortcut, which can't read a selection).
+    const canEdit = s.mode === "hold" && s.editKey && s.server?.edit !== false;
+    const tipEdit = $("tip-edit");
+    tipEdit.hidden = !canEdit || !s.options.edit;
+    if (canEdit) {
+      tipEdit.replaceChildren(
+        document.createTextNode("Select some text and hold "),
+        kbd(`Shift + ${s.shortcut.label}`),
+        document.createTextNode(" to change it: “make this friendlier”, “turn it into a list”. Nothing selected? It writes what you ask for."),
+      );
+    }
+    $("edit-row").hidden = !canEdit;
+    $("edit-hint").textContent = `Hold Shift with ${s.shortcut.label} and say what to do with the text you selected. ${s.platform === "darwin" ? "⌘Z" : "Ctrl+Z"} undoes it. Not in terminals.`;
     const bot = s.bots[0];
     $("tip-bot").hidden = !bot || !s.options.commands;
     if (bot) $("tip-bot").textContent = `Start with “Hey ${bot.name}” to ask ${bot.name} instead of typing.`;
@@ -231,7 +244,8 @@
     meta.className = "meta";
     const where = document.createElement("span");
     where.className = "grow";
-    where.textContent = [when(e.at), e.kind === "command" ? `asked ${e.bot}` : e.app, e.words ? `${e.words} words` : null].filter(Boolean).join(" · ");
+    const did = e.kind === "command" ? `asked ${e.bot}` : e.kind === "edit" ? (e.answer ? "answered" : "edited by voice") : null;
+    where.textContent = [when(e.at), did, e.app, e.words ? `${e.words} words` : null].filter(Boolean).join(" · ");
     meta.append(where);
     if (e.kind === "text" && e.polished) meta.append(Object.assign(document.createElement("span"), { className: "badge", textContent: "cleaned up", title: "The AI cleanup ran" }));
     const actions = document.createElement("span");
@@ -255,8 +269,9 @@
     actions.append(btn("Delete", () => api.remove(e.id).then(render), "Delete from history"));
     meta.append(actions);
     li.append(meta);
+    if (e.kind === "edit" && e.instruction) li.append(Object.assign(document.createElement("p"), { className: "instruction", textContent: `“${e.instruction}”` }));
     const text = document.createElement("p");
-    text.className = "text";
+    text.className = e.kind === "edit" && e.answer ? "reply" : "text";
     text.textContent = e.text;
     li.append(text);
     if (e.reply) li.append(Object.assign(document.createElement("p"), { className: "reply", textContent: e.reply }));

@@ -1,9 +1,13 @@
 /**
  * Voice typing: hold the shortcut anywhere and talk, let go, and what you meant is typed where your
- * cursor is. "Hey {bot}, …" asks your bot instead, and its answer shows in the pill.
+ * cursor is. "Hey {bot}, …" asks your bot instead, and its answer shows in the pill. With Shift
+ * held too, what they say is an instruction for the selected text ("make this friendlier"): the
+ * answer replaces the selection, or, with nothing selected, is written at the cursor.
  *
  *   shortcut (hotkey.mjs) → record (the pill's page, mic only while held) → /api/voice/dictate
  *   → paste at the cursor (paste.mjs), or → /api/voice/ask and show the reply
+ *   Shift: copy the selection (paste.mjs) → /api/voice/dictate (the instruction) → /api/voice/edit
+ *   → paste over the selection, or show the answer
  *
  * Privacy rules kept here:
  *  - the microphone is on only between the press and the release (or the hands-free taps), and the
@@ -47,6 +51,7 @@ export function voiceError(err) {
   if (e.code === "mic-denied") return { message: "I'm not allowed to use the microphone.", actions: ["mic-settings"] };
   if (e.code === "mic-missing") return { message: "I can't find a microphone.", actions: ["settings"] };
   if (e.code === "mic-busy") return { message: "Another app is using the microphone.", actions: [] };
+  if (e.code === "edit-failed") return { message: e.message || "I couldn't do that one. Try saying it another way.", actions: ["retry"] };
   if (e.code === "unreadable" || e.status === 422 || e.status === 413) return { message: e.message || "I couldn't make out that recording.", actions: [] };
   return { message: "Something went wrong. Try again in a moment.", actions: ["retry"] };
 }
@@ -62,7 +67,7 @@ export class VoiceTyping extends EventEmitter {
    * @param {object} o
    * @param {import('../store.mjs').Settings} o.settings
    * @param {{ device: any, session: any, appUrl(): string, refresh(): Promise<any>, bots(): any[] }} o.account
-   * @param {{ dictate: Function, ask: Function }} o.api
+   * @param {{ dictate: Function, ask: Function, edit?: Function }} o.api
    * @param {{ on: Function, finish(): void, abort(): void, isRecording(): boolean }} o.hotkey  set later with setHotkey
    * @param {{ show(s: any): Promise<boolean> | boolean, update(s: any): void, hide(): void, start(o: any): Promise<any>, stop(): Promise<any>, cancel(): Promise<void> | void }} o.pill
    * @param {import('./paste.mjs').Paster} o.paster
@@ -118,9 +123,10 @@ export class VoiceTyping extends EventEmitter {
 
   /** Use this shortcut listener (the keyboard hook, or the toggle fallback). */
   setHotkey(hotkey) {
-    if (this.hotkey) for (const ev of ["start", "stop", "cancel", "handsfree"]) this.hotkey.removeAllListeners?.(ev);
+    if (this.hotkey) for (const ev of ["start", "stop", "cancel", "handsfree", "edit"]) this.hotkey.removeAllListeners?.(ev);
     this.hotkey = hotkey;
-    hotkey.on("start", () => void this.onStart());
+    hotkey.on("start", (/** @type {{ edit?: boolean } | undefined} */ opts) => void this.onStart(opts));
+    hotkey.on("edit", () => this.onEdit());
     hotkey.on("handsfree", () => this.onHandsfree());
     hotkey.on("stop", () => void this.onStop());
     hotkey.on("cancel", () => void this.onCancel());
@@ -198,7 +204,13 @@ export class VoiceTyping extends EventEmitter {
     return null;
   }
 
-  async onStart() {
+  /** Editing by voice is on (settings) and the server says it can do it (an older one can't). */
+  editAvailable() {
+    return this.voice().edit !== false && this.account.session?.voice?.edit === true && typeof this.api.edit === "function";
+  }
+
+  /** @param {{ edit?: boolean }} [opts]  Shift was held with the shortcut */
+  async onStart(opts = {}) {
     if (this.rec) return;
     const blocked = this.blocker();
     if (blocked) {
@@ -206,7 +218,8 @@ export class VoiceTyping extends EventEmitter {
       await this.showError(blocked);
       return;
     }
-    const rec = { startedAt: this.now(), stop: false, cancel: false, started: null, app: null, bot: this.replyTo, handsfree: Boolean(this.replyTo) };
+    const rec = { startedAt: this.now(), stop: false, cancel: false, started: null, app: null, bot: this.replyTo, handsfree: Boolean(this.replyTo), edit: false };
+    rec.edit = Boolean(opts?.edit) && !rec.bot && this.editAvailable();
     this.replyTo = null;
     this.rec = rec;
     this.seq++;
@@ -214,7 +227,7 @@ export class VoiceTyping extends EventEmitter {
     this.o.warmUp?.();
     rec.app = this.o.frontApp.detect(1500).catch(() => null);
     const bot = rec.bot ? this.botInfo(rec.bot) : null;
-    await this.showPill({ phase: "listening", handsfree: rec.handsfree, startedAt: rec.startedAt, maxMs: this.limits.maxMs, bot, replying: Boolean(rec.bot) });
+    await this.showPill({ phase: "listening", handsfree: rec.handsfree, startedAt: rec.startedAt, maxMs: this.limits.maxMs, bot, replying: Boolean(rec.bot), edit: rec.edit });
     if (this.o.ensureMic && !(await this.o.ensureMic())) {
       this.rec = null;
       this.hotkey?.abort();
@@ -237,6 +250,14 @@ export class VoiceTyping extends EventEmitter {
     // The owner let go (or cancelled) while the mic was still opening.
     if (rec.cancel) return this.onCancel();
     if (rec.stop) return this.onStop();
+  }
+
+  /** Shift pressed while talking: this one is an instruction for the selection. */
+  onEdit() {
+    const rec = this.rec;
+    if (!rec || rec.edit || rec.bot || !this.editAvailable()) return;
+    rec.edit = true;
+    if (this.pillState?.phase === "listening") void this.showPill({ ...this.pillState, edit: true });
   }
 
   onHandsfree() {
@@ -269,13 +290,14 @@ export class VoiceTyping extends EventEmitter {
     this.rec = null;
     clearTimeout(this.maxTimer);
     const seq = this.seq;
-    await this.showPill({ ...(this.pillState ?? {}), phase: "working", bot: rec.bot ? this.botInfo(rec.bot) : null });
+    await this.showPill({ ...(this.pillState ?? {}), phase: "working", bot: rec.bot ? this.botInfo(rec.bot) : null, label: rec.edit ? "Working on it…" : undefined });
     const audio = await this.pill.stop().catch(() => null);
     if (!audio?.bytes?.length || audio.durationMs < this.limits.minMs) {
       if (seq === this.seq) await this.showPill({ phase: "note", message: "Didn't catch that." }, this.limits.doneMs);
       return;
     }
     const app = await Promise.race([rec.app, new Promise((r) => setTimeout(() => r(null), this.limits.frontAppMs))]);
+    if (rec.edit) return this.sendEdit({ audio, app }, seq);
     await this.send({ audio, app, bot: rec.bot }, seq);
   }
 
@@ -343,6 +365,90 @@ export class VoiceTyping extends EventEmitter {
     if (seq !== this.seq || this.rec) return;
     if (out.pasted) await this.showPill({ phase: "done", text: res.text, simulated: Boolean(res.simulated) }, this.limits.doneMs);
     else await this.showPill({ phase: "note", message: copiedNote(this.platform, this.o.canPaste()), actions: this.platform === "darwin" && !this.o.canPaste() ? ["accessibility"] : [] }, this.limits.noteMs);
+  }
+
+  /**
+   * Editing by voice: read the selection (while it's still selected), hear the instruction, ask
+   * for the change, then paste it over the selection, or show the answer to a question. With
+   * nothing selected, what they asked for is written at the cursor.
+   * @param {{ audio: { bytes: Uint8Array, mime: string, durationMs: number, speechMs?: number }, app: any, selection?: string | null, instruction?: string }} job
+   *   a retry brings the selection and instruction it already has
+   * @param {number} seq
+   */
+  async sendEdit(job, seq) {
+    const v = this.voice();
+    const category = job.app?.category ?? "other";
+    if (category === "terminal") {
+      if (seq === this.seq) await this.showPill({ phase: "note", message: "Editing by voice doesn't work in a terminal." }, this.limits.noteMs);
+      return;
+    }
+    const selection = job.selection !== undefined ? job.selection : await this.paster.copySelection(category);
+    if (seq === this.seq) await this.showPill({ phase: "working", edit: true, label: selection ? "Changing it…" : "Writing…" });
+
+    let instruction = job.instruction;
+    if (!instruction) {
+      let heard;
+      try {
+        // The instruction as said: no AI cleanup, and "Hey Otto" isn't a command here.
+        heard = await this.api.dictate(job.audio, { category, lang: v.language, polish: false, commands: false, styles: false, demo: this.o.demoSample?.() ?? (selection ? "edit" : "write") });
+      } catch (err) {
+        const e = /** @type {any} */ (err);
+        this.log(`voice: edit instruction failed (${e?.status ?? "?"} ${e?.code ?? ""})`);
+        if (e?.status === 401) this.account.refresh?.();
+        if (voiceError(e).actions.includes("retry")) this.failed = { ...job, selection, edit: true, seq };
+        await this.showError(e, seq);
+        return;
+      }
+      if (heard.usage) this.usage = heard.usage;
+      instruction = heard.kind === "text" ? String(heard.text ?? "").trim() : "";
+      if (!instruction) {
+        if (seq === this.seq) await this.showPill({ phase: "note", message: "Didn't catch that." }, this.limits.doneMs);
+        return;
+      }
+    }
+
+    let out;
+    try {
+      out = await /** @type {Function} */ (this.api.edit)({ instruction, selection, category, app: job.app && category !== "other" ? job.app.name : null, styles: v.styles });
+    } catch (err) {
+      const e = /** @type {any} */ (err);
+      this.log(`voice: edit failed (${e?.status ?? "?"} ${e?.code ?? ""})`);
+      if (e?.code === "no-selection") {
+        if (seq === this.seq) await this.showPill({ phase: "note", message: "Select the text you want to change first." }, this.limits.noteMs);
+        return;
+      }
+      if (e?.status === 401) this.account.refresh?.();
+      if (voiceError(e).actions.includes("retry") || e?.status === 502 || e?.status === 504) this.failed = { ...job, selection, instruction, edit: true, seq };
+      await this.showError(e?.status === 502 || e?.status === 504 ? { ...e, code: "edit-failed" } : e, seq);
+      return;
+    }
+    if (out.usage) this.usage = out.usage;
+    // What happened, never what was said or selected.
+    this.log(`voice: edit (${out.kind}, ${selection ? "a selection" : "nothing selected"}${out.words ? `, ${out.words} words` : ""}) in ${out.ms ?? "?"} ms`);
+
+    if (out.kind === "answer") {
+      if (v.history !== false) this.history.add({ kind: "edit", text: out.text, instruction, answer: true, app: job.app?.name ?? null });
+      this.last = { kind: "answer", text: out.text, at: this.now() };
+      if (seq !== this.seq || this.rec) return;
+      this.reply = { bot: null, text: out.text, typed: null, command: instruction };
+      // About a selection, Paste would type over it: only Copy then.
+      await this.showPill({ phase: "answer", command: instruction, message: out.text, actions: selection ? ["copy"] : ["paste", "copy"], simulated: Boolean(out.simulated) }, this.limits.replyMs);
+      return;
+    }
+
+    const restore = v.restoreClipboard !== false;
+    const pasted = await this.paster.insert(out.text, { category, restore });
+    if (!pasted.pasted) this.log("voice: couldn't paste the edit; it's on the clipboard");
+    if (v.history !== false) this.history.add({ kind: "edit", text: out.text, instruction, app: job.app?.name ?? null, words: out.words, pasted: pasted.pasted });
+    this.last = { kind: "text", text: out.text, at: this.now(), pasted: pasted.pasted };
+    this.emit("dictated", { text: out.text, pasted: pasted.pasted, words: out.words, edit: true });
+    if (seq !== this.seq || this.rec) return;
+    if (pasted.pasted) {
+      const undo = selection ? `${this.platform === "darwin" ? "⌘Z" : "Ctrl+Z"} undoes it` : null;
+      await this.showPill({ phase: "done", text: out.text, edit: true, hint: undo, simulated: Boolean(out.simulated) }, this.limits.doneMs + (undo ? 1200 : 0));
+    } else {
+      await this.showPill({ phase: "note", message: copiedNote(this.platform, this.o.canPaste()), actions: this.platform === "darwin" && !this.o.canPaste() ? ["accessibility"] : [] }, this.limits.noteMs);
+    }
   }
 
   /**
@@ -454,6 +560,10 @@ export class VoiceTyping extends EventEmitter {
     if (!job) return this.hidePill();
     this.failed = null;
     const seq = ++this.seq;
+    if (job.edit) {
+      await this.showPill({ phase: "working", edit: true, label: job.selection ? "Changing it…" : "Writing…" });
+      return this.sendEdit(job, seq);
+    }
     await this.showPill({ phase: "working", bot: job.bot ? this.botInfo(job.bot) : null });
     await this.send(job, seq);
   }

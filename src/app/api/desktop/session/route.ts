@@ -6,7 +6,7 @@ import { getPlan } from "@/lib/billing/plans";
 import { getUsage } from "@/lib/billing/usage";
 import { appUrl, demoMode } from "@/lib/env";
 import { CHUNK_MS, MEETINGS_CONNECTOR } from "@/lib/meetings";
-import { dictationUsage, voicePolishAvailable, voiceTypingAvailable } from "@/lib/dictation";
+import { dictationUsage, voiceEditAvailable, voicePolishAvailable, voiceTypingAvailable } from "@/lib/dictation";
 import { transcriptionAvailable, transcriptionSetup } from "@/lib/transcribe";
 
 /** The desktop app's view of the account: which bots can take notes, minutes left, and voice typing. */
@@ -45,6 +45,8 @@ export async function GET(req: Request) {
       available: voiceTypingAvailable(),
       /** The AI cleanup (fillers out, punctuation, corrections); without it, the plain cleanup. */
       polish: voicePolishAvailable(),
+      /** Editing by voice (Shift with the shortcut): a model for it, or demo mode. */
+      edit: voiceEditAvailable(),
       /** Demo mode without a speech-to-text key: it "hears" sample lines. */
       simulated: !transcriptionSetup(),
       usage: await dictationUsage(db, owner),
