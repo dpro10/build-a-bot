@@ -145,4 +145,14 @@ test("the site tells people about it", async ({ page }) => {
   await page.goto("/pricing");
   await expect(page.getByText("Unlimited voice typing").first()).toBeVisible();
   await expect(page.getByText("8,000 words of voice typing a month").first()).toBeVisible();
+
+  // Signed out, "Try voice typing" goes to sign-in, which then comes back to the Voice typing page.
+  await page.goto("/");
+  await page.getByRole("link", { name: "Try voice typing" }).click();
+  await expect(page).toHaveURL(/\/login\?next=%2Fapp%2Fvoice$/);
+  await page.getByLabel("Email").fill(`voice-${Date.now()}@example.com`);
+  await page.getByRole("button", { name: "Email me a magic link" }).click();
+  await page.getByRole("link", { name: "Open the sign-in link" }).click();
+  await expect(page).toHaveURL(/\/app\/voice$/);
+  await expect(page.getByRole("heading", { name: "Voice typing", level: 1 })).toBeVisible();
 });
