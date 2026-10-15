@@ -15,7 +15,7 @@ export async function selfSetup(db: Db) {
 
 async function telegramManagerWebhook(db: Db) {
   const token = config.telegram.managerToken;
-  const secret = process.env.TELEGRAM_MANAGER_WEBHOOK_SECRET;
+  const secret = config.telegram.managerWebhookSecret;
   if (!token || !secret) return;
   if (!(await rateLimit(db, "setup:telegram-manager-webhook", 1, 30 * 60)).ok) return;
   // Setting it again is harmless, and it picks up a new domain or secret.
