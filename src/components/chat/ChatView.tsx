@@ -489,6 +489,13 @@ function MessageRow({
       <div className="flex justify-end animate-fade-up">
         <div className="max-w-[85%] rounded-3xl rounded-br-lg bg-bubble-owner px-4 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap text-bubble-owner-foreground shadow-[0_6px_18px_-8px_rgb(109_77_255/0.55)]">
           {m.text}
+          {m.selection ? (
+            // Sent by voice with text they had selected on their screen.
+            <figure className="mt-2 border-l-2 border-current/40 pl-3 text-[13px] opacity-90">
+              <figcaption className="text-[11px] font-semibold tracking-wide uppercase">With the text you selected</figcaption>
+              <blockquote className="mt-0.5 line-clamp-4 break-words">{m.selection}</blockquote>
+            </figure>
+          ) : null}
         </div>
       </div>
     );

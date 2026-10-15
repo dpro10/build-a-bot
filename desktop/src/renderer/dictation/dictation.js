@@ -358,7 +358,7 @@
     card.hidden = false;
     card.classList.toggle("answer", s.phase === "answer");
     $("card-bot").textContent = s.phase === "answer" ? "Answer" : s.bot ? s.bot.name : "Your bot";
-    $("card-command").textContent = s.command ? `“${s.command}”` : "";
+    $("card-command").textContent = s.command ? `“${s.command}”${s.selection ? " · with your selection" : ""}` : "";
     $("card-command").hidden = !s.command;
     const text = $("card-text");
     const label = $("card-label");

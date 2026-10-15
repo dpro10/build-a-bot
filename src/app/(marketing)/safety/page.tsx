@@ -269,7 +269,9 @@ export default function SafetyPage() {
             <li>
               <strong>Your bot only acts when you ask it by name.</strong> Dictated text is just text: it&apos;s cleaned up, never followed as an
               instruction. Only something that starts with your bot&apos;s name (&ldquo;Hey Otto, &hellip;&rdquo;) goes to your bot, with the usual
-              checks and approvals, and you can turn that off.
+              checks and approvals, and you can turn that off. Text you select and send along (&ldquo;Hey Otto, add this to my
+              calendar&rdquo;) is treated as outside content, like an email it reads: your bot asks before sending anything to someone new
+              because of it.
             </li>
             <li>
               <strong>Editing by voice changes only what you selected,</strong> and only when you hold Shift with your key. The selected text is sent

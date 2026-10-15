@@ -569,8 +569,9 @@ function setupVoice(opts = {}) {
       if (r instanceof Error) throw r;
       return r;
     },
-    async ask(botId, text, onEvent) {
+    async ask(botId, text, onEvent, o) {
       calls.push(`api.ask:${botId}:${text}`);
+      if (o?.selection) calls.push(`api.ask.selection:${o.selection}`);
       if (opts.askError) throw opts.askError;
       onEvent({ type: "tool", state: "running", title: "Setting a reminder" });
       onEvent({ type: "text", delta: "**Done!** I'll remind you" });
@@ -791,7 +792,7 @@ test("Shift + shortcut: the selection is changed the way they said, and pasted o
   await flush(30);
   assert.deepEqual(
     env.calls.filter((c) => !c.startsWith("pill.")),
-    ["mic.start:default", "mic.stop", "copySelection:chat", "api.dictate:chat:-:polish=false:commands=false", "api.edit:Make it friendlier.:lets meet at 3:chat:Slack", "paste:chat"],
+    ["mic.start:default", "mic.stop", "copySelection:chat", "api.dictate:chat:-:polish=false:commands=true", "api.edit:Make it friendlier.:lets meet at 3:chat:Slack", "paste:chat"],
   );
   assert.deepEqual(env.pasted, ["Hi! Let's meet at 3. Thanks so much!"]);
   const done = env.states.find((st) => st.phase === "done");
@@ -863,6 +864,28 @@ test("editing says what's wrong: nothing selected, a terminal, a failure (with T
   assert.equal(failed.calls.filter((c) => c.startsWith("api.dictate")).length, 1);
   assert.equal(failed.calls.filter((c) => c.startsWith("api.edit")).length, 2);
   assert.deepEqual(failed.pasted, ["Hi there!"]);
+});
+
+test("Shift + \"Hey Otto, …\": the bot gets the request with the selected text, and nothing is typed over it", async () => {
+  const env = setupVoice({
+    selection: "Lunch with Sam, Friday 12:30 at Tartine",
+    results: [{ kind: "command", bot: { id: "bot_1", name: "Otto", paused: false }, command: "Add this to my calendar.", text: "Hey Otto, add this to my calendar." }],
+  });
+  env.hotkey.emit("start", { edit: true });
+  await flush();
+  env.hotkey.emit("stop");
+  await flush(30);
+  assert.ok(env.calls.includes("api.dictate:chat:-:polish=false:commands=true"), "commands are heard in edit mode");
+  assert.ok(env.calls.includes("api.ask:bot_1:Add this to my calendar."));
+  assert.ok(env.calls.includes("api.ask.selection:Lunch with Sam, Friday 12:30 at Tartine"));
+  assert.ok(!env.calls.some((c) => c.startsWith("api.edit")), "a request for the bot isn't an edit");
+  const asking = env.states.find((st) => st.phase === "asking");
+  assert.equal(asking.selection, true);
+  assert.deepEqual(asking.actions, [], "no Type it instead over the selection");
+  const reply = env.states.find((st) => st.phase === "reply");
+  assert.equal(reply.selection, true);
+  assert.deepEqual(reply.actions, ["copy", "reply", "chat"], "no Paste over the selection");
+  assert.deepEqual(env.pasted, []);
 });
 
 test("Shift while talking switches to editing; with editing off (or not on the server) it's plain typing", async () => {
