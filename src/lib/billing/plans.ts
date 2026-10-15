@@ -64,7 +64,7 @@ export const PLANS: Record<PlanId, Plan> = {
       "1 bot",
       "300 messages/month on open models",
       "2,000 messages/month on your own key or subscription",
-      "Web, email, Telegram, Discord, Slack",
+      "Web, Telegram, Discord, Slack",
       "3 app connections",
       "2 hours of meeting notes",
     ],

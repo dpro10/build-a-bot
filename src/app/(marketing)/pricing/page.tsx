@@ -7,7 +7,7 @@ import { FinalCta } from "@/components/marketing/landing/FinalCta";
 import { Container, Section, SectionHeader } from "@/components/marketing/ui";
 import { getViewer } from "@/components/marketing/viewer";
 import { PLANS } from "@/lib/billing/plans";
-import { paidPlansOpen } from "@/lib/env";
+import { demoMode, live, paidPlansOpen } from "@/lib/env";
 import { contactLink, pageMetadata } from "@/lib/site";
 
 export const metadata = pageMetadata({
@@ -138,7 +138,7 @@ export default async function PricingPage() {
             <CompareTable />
           </div>
           <p className="mt-4 text-center text-xs text-muted-foreground">
-            Calls and texts use US &amp; Canada numbers to start. WhatsApp and iMessage are on the waitlist.
+            {live.twilio || demoMode ? "Calls and texts use US & Canada numbers to start." : "Calls, texts and email are coming soon."} WhatsApp and iMessage are on the waitlist.
           </p>
         </Container>
       </Section>

@@ -226,7 +226,7 @@ export function ChannelsView({ bot, channels: initial, planId, demo, plansOnSale
               it never pretends to be you or a person.
             </p>
             <p>
-              Only your verified accounts can give it instructions. Say <span className="font-mono text-foreground">stop</span> on any channel (or text{" "}
+              Only your verified accounts can give it instructions. Say <span className="font-mono text-foreground">stop</span> on any channel (or send{" "}
               <span className="font-mono text-foreground">PAUSE</span>) and it stops everything right away.
             </p>
           </div>
