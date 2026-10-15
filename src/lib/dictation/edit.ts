@@ -180,7 +180,8 @@ export function parseEdit(output: string, selection: string | null | undefined):
     kind = "replace";
     text = out;
   }
-  text = text.replace(/^\n+|\n+$/g, "");
+  // Markdown's line breaks (two spaces before a newline) are invisible clutter in plain text.
+  text = text.replace(/^\n+|\n+$/g, "").replace(/[ \t]+\n/g, "\n");
   if (/<\/?(?:selection|instruction|replace|answer)>/i.test(text)) return null;
 
   if (kind === "answer") {

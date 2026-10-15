@@ -507,7 +507,10 @@ function novelShare(a: string, b: string, known: Set<string>): number {
  * snippet marker.
  */
 export function acceptPolish(input: string, output: string, vocabulary: string[] = []): string | null {
-  let out = output.replace(/^\s*<dictation>\s*|\s*<\/dictation>\s*$/g, "").trim();
+  let out = output
+    .replace(/^\s*<dictation>\s*|\s*<\/dictation>\s*$/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .trim();
   // A whole reply in quotes, when the dictation wasn't.
   if (/^["“].*["”]$/s.test(out) && !/^["“]/.test(input.trim())) out = out.slice(1, -1).trim();
   if (!out) return null;

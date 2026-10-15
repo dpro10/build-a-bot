@@ -161,6 +161,7 @@ describe("checking the AI's cleanup", () => {
     expect(acceptPolish("i talked to pro zee", "I talked to Prozzi.", ["Prozzi"])).toBe("I talked to Prozzi.");
     expect(acceptPolish("sure i can do that tomorrow", "Sure, I can do that tomorrow.")).toBe("Sure, I can do that tomorrow.");
     expect(acceptPolish("hello there", "<dictation>Hello there.</dictation>")).toBe("Hello there.");
+    expect(acceptPolish("hi sam new line thanks", "Hi Sam,  \nThanks!")).toBe("Hi Sam,\nThanks!");
   });
 
   it("refuses an answer instead of a cleanup", () => {

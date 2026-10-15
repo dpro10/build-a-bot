@@ -84,8 +84,9 @@ describe("reading the model's reply", () => {
 
   it("keeps the selection's own line breaks around the new text", () => {
     expect(parseEdit("<replace>New line of text.</replace>", "  old line of text\n")).toEqual({ kind: "replace", text: "  New line of text.\n" });
-    // Inside, the model's line breaks are kept (a list stays a list).
+    // Inside, the model's line breaks are kept (a list stays a list), without markdown's trailing spaces.
     expect(parseEdit("<replace>- one\n- two</replace>", "one. two.")?.text).toBe("- one\n- two");
+    expect(parseEdit("<replace>- one.  \n- two.  \n\nThanks,  \nDana</replace>", "one. two. thanks dana")?.text).toBe("- one.\n- two.\n\nThanks,\nDana");
   });
 
   it("takes off quotes and code fences it added, but not ones the selection had", () => {
