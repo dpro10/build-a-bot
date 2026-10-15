@@ -203,7 +203,11 @@ describe("Add to Slack", () => {
     const hello = calls.find((c) => c.method === "chat.postMessage")!;
     expect(hello.auth).toBe("Bearer xoxb-T1-token");
     expect(hello.body).toMatchObject({ channel: "D-U_DANA", username: "Pip", icon_url: "https://build-a-bot.site/avatars/blip-grape.jpg" });
-    expect(String(hello.body.text)).toMatch(/^Hi! It's Pip/);
+    expect(String(hello.body.text)).toMatch(/^Hi! It's Pip, your AI assistant/);
+    // The hello said it's an AI, so the first reply doesn't repeat it.
+    const [conversation] = await db.select().from(schema.conversations).where(eq(schema.conversations.botId, bot.id));
+    expect(conversation).toMatchObject({ channelKind: "slack", externalId: "U_DANA" });
+    expect(conversation.lastDisclosureAt).toBeTruthy();
   });
 
   it("a DM goes to the sender's own bot, which answers as itself", async () => {

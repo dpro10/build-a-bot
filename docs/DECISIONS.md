@@ -297,6 +297,14 @@ Accounts are free and a browser cookie makes one, so per-account limits alone do
   - At the ceiling, owners are told the free brain or search is resting until midnight UTC and can switch to their own key; strangers messaging a bot get "try again later". Each hit is logged.
 - At roughly $0.0004–0.001 per turn and $0.008 per search, the ceilings cap a bad day at about $5–6.
 
+## Decision: a lighter AI notice for the owner on chat apps (Diego, 2026-10-15)
+
+Diego, on "(BotTest is an AI assistant, not a person.)" under his bot's Slack reply: "i feel like there is no reason to say this". The notice is there for chatbot disclosure laws (California SB 243, New York's AI-companion law; see `docs/research-2026-10-13.md`). Diego picked the lighter of three options (`needsDisclosure` in `src/lib/safety`):
+- **Everyone** hears it at first contact. The web app says it in its UI.
+- **The owner on Slack, Telegram and Discord** hears it once, because those apps tag the bot as an app on every message. The Slack hello already says "your AI assistant", so the first reply doesn't repeat it.
+- **Other people, and texts, calls and email,** still hear it every 3 hours.
+- A lawyer should confirm this reading when the legal pages are reviewed.
+
 ## Decision: one-click "Add to Slack" (Diego, 2026-10-15)
 
 Diego: "lets try and get a one click install for slack that sounds great. We want build a bot to be simple and convenient to set up."

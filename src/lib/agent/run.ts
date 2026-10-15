@@ -743,8 +743,9 @@ async function finish(
   const { db, bot, conversation } = input;
   let finalText = text;
 
-  // AI disclosure on channels at first contact and every 3 hours (web shows it in the UI).
-  if (input.channelKind !== "web" && needsDisclosure(conversation.lastDisclosureAt)) {
+  // Say it's an AI: at first contact, then every 3 hours (see needsDisclosure for the exceptions).
+  // Proactive runs (no message) go to the owner.
+  if (needsDisclosure(conversation.lastDisclosureAt, { channel: input.channelKind, owner: input.message?.author !== "contact" })) {
     finalText = `${finalText}\n\n${disclosureLine(bot.name)}`;
     await db.update(schema.conversations).set({ lastDisclosureAt: new Date() }).where(eq(schema.conversations.id, conversation.id));
     conversation.lastDisclosureAt = new Date();
