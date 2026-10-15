@@ -69,8 +69,15 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string; connecti
     }
     // Its own sign-in didn't work out (some only let in apps they've approved): Composio's, if it has one.
     if (live.composio && toolkit && composioCanConnect(toolkit)) return await startComposio(toolkit);
-    return apiError(409, started.message);
+    return apiError(409, readable(started.message, def?.name));
   } catch (err) {
-    return apiError(502, (err as Error).message.slice(0, 300));
+    return apiError(502, readable((err as Error).message, def?.name));
   }
+}
+
+/** A network failure reads as one, naming the app (not "fetch failed" or "that MCP server"). */
+function readable(message: string, app = "the app"): string {
+  return /^Couldn't reach|fetch failed|ECONNREFUSED|ECONNRESET|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|socket hang up|network/i.test(message)
+    ? `Couldn't reach ${app}. Try again in a moment.`
+    : message.slice(0, 300);
 }

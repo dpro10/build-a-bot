@@ -1,5 +1,6 @@
 import { PLANS, PLAN_ORDER, type Plan } from "@/lib/billing/plans";
-import { CHANNEL_BY_KIND, type ChannelKind } from "@/lib/channels/catalog";
+import { CHANNEL_BY_KIND, channelAvailability, type ChannelKind } from "@/lib/channels/catalog";
+import { demoMode, live } from "@/lib/env";
 import { INCLUDED_MODELS, PROVIDERS } from "@/lib/models/catalog";
 import { TRUST, TRUST_LEVELS } from "@/lib/trust";
 import { cn } from "@/lib/utils";
@@ -43,6 +44,7 @@ function groups(): Group[] {
       title: "Talk to it",
       rows: CHANNEL_ROWS.map((kind) => {
         const def = CHANNEL_BY_KIND[kind];
+        if (channelAvailability(def, demoMode, live) === "soon") return { label: def.name, hint: "coming soon", cells: per((p) => p.channels.includes(kind)) };
         if (kind === "sms") return { label: def.name, hint: "per month; a long text can count as two or more", cells: per((p) => (p.channels.includes(kind) ? `${n(p.limits.smsSegments)}` : false)) };
         if (kind === "voice") return { label: def.name, hint: "minutes per month", cells: per((p) => (p.channels.includes(kind) ? `${n(p.limits.voiceMinutes)}` : false)) };
         return { label: def.name, cells: per((p) => p.channels.includes(kind)) };

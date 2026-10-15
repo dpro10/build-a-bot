@@ -26,7 +26,7 @@ export function planBullets(p: Plan): string[] {
   const out = [`${n(L.bots)} bot${L.bots === 1 ? "" : "s"}`, `${n(L.includedMessages)} messages a month on included models`];
   if (p.includedModels.includes("smart")) out.push("Our smartest open models");
   else if (p.includedModels.includes("balanced")) out.push("Bigger, smarter open models");
-  out.push(L.voiceMinutes || L.smsSegments ? `${n(L.voiceMinutes)} call minutes and ${n(L.smsSegments)} texts` : "Web, email, Telegram, Discord and Slack");
+  out.push(L.voiceMinutes || L.smsSegments ? `${n(L.voiceMinutes)} call minutes and ${n(L.smsSegments)} texts` : "Web, Telegram, Discord and Slack");
   out.push(p.trust.includes("full") ? `${TRUST.full.name} mode` : `Trust levels up to ${TRUST.trusted.name}`);
   out.push(`${n(L.connectors)} apps per bot`);
   out.push(`${n(L.byoMessages)} messages a month on your own key or plan`);

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, count, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { schema } from "@/lib/db";
 import { apiError, authedBot, json, parseJson, sameOrigin, type RouteCtx } from "@/lib/api";
 import { getConnector, isBuiltinConnector } from "@/lib/connectors";
@@ -34,8 +34,13 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string }>) {
 
   const plan = getPlan(a.user.plan);
   if (def && !isBuiltinConnector(def) && !demoMode) {
-    const [{ n }] = await a.db.select({ n: count() }).from(schema.connections).where(eq(schema.connections.botId, botId));
-    if (n >= plan.limits.connectors + 12) {
+    // Apps and your own servers count toward the plan; built-ins don't, nor a switched-off one, nor this one again.
+    const rows = await a.db.select({ connectorId: schema.connections.connectorId, status: schema.connections.status }).from(schema.connections).where(eq(schema.connections.botId, botId));
+    const apps = rows.filter((r) => {
+      const other = getConnector(r.connectorId);
+      return r.connectorId !== connectorId && r.status !== "disabled" && !(other && isBuiltinConnector(other));
+    }).length;
+    if (apps >= plan.limits.connectors) {
       return apiError(402, `The ${plan.name} plan connects ${plan.limits.connectors} apps. ${paidPlansOpen ? "Upgrade to add more." : PAID_PLANS_SOON}`, { upgrade: "plus" });
     }
   }
