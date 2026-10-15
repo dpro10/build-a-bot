@@ -48,7 +48,7 @@ test("dashboard pages", async ({ page }) => {
   });
   const { id } = await res.json();
   for (const tab of ["", "/meetings", "/tools", "/channels", "/routines", "/activity", "/memory", "/settings"]) await scan(page, `/app/bots/${id}${tab}`);
-  for (const path of ["/app/approvals", "/app/billing", "/app/bridge", "/app/account"]) await scan(page, path);
+  for (const path of ["/app/approvals", "/app/billing", "/app/voice", "/app/bridge", "/app/account"]) await scan(page, path);
 });
 
 test("meeting notes pages", async ({ page }) => {

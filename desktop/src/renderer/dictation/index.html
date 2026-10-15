@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Voice typing</title>
+    <link rel="stylesheet" href="dictation.css" />
+    <script src="dictation.js" defer></script>
+  </head>
+  <body>
+    <div id="stage">
+      <section id="card" class="card" hidden aria-live="polite">
+        <header class="card-head">
+          <span class="dot" id="card-dot" aria-hidden="true"></span>
+          <strong id="card-bot"></strong>
+          <span id="card-label" class="muted"></span>
+          <button type="button" class="icon-btn close" id="card-close" aria-label="Close">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+          </button>
+        </header>
+        <p id="card-command" class="command"></p>
+        <div id="card-text" class="reply"></div>
+        <div id="card-actions" class="actions"></div>
+      </section>
+
+      <div id="pill" class="pill" hidden>
+        <span id="icon" class="icon" aria-hidden="true"></span>
+        <canvas id="wave" width="132" height="28" aria-hidden="true"></canvas>
+        <span id="label" class="label" role="status" aria-live="polite"></span>
+        <span id="badge" class="badge" hidden>demo</span>
+        <span id="timer" class="timer"></span>
+        <span id="actions" class="actions"></span>
+      </div>
+    </div>
+  </body>
+</html>

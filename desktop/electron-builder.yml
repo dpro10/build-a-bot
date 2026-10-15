@@ -11,6 +11,11 @@ files:
   - assets/**/*
   - "!**/*.map"
 asar: true
+# Voice typing's keyboard hook is native code (N-API, prebuilt for every platform): it must sit
+# outside the asar archive, and it needs no rebuild for Electron.
+asarUnpack:
+  - node_modules/uiohook-napi/**
+npmRebuild: false
 
 mac:
   category: public.app-category.productivity
@@ -26,7 +31,7 @@ mac:
   extendInfo:
     # A menu-bar app: no Dock icon.
     LSUIElement: true
-    NSMicrophoneUsageDescription: "Your bot listens to your microphone only after you say yes to taking notes, and only while it's on your screen."
+    NSMicrophoneUsageDescription: "Build-a-bot uses your microphone only after you say yes to taking notes, or while you hold the voice typing shortcut, and only while it shows on your screen."
     NSAudioCaptureUsageDescription: "Your bot hears the call's audio (the other people) only after you say yes to taking notes, so the notes include everyone."
     NSAppleEventsUsageDescription: "Only if you turn it on: Build-a-bot reads your browser tabs' addresses to recognize Google Meet and Teams calls. It never reads what's on the page."
   # The Swift helper (bash native/macos/build.sh) for per-app call detection.

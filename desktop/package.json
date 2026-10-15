@@ -11,7 +11,7 @@
     "start": "electron .",
     "dev": "electron . --server=http://localhost:3000",
     "test": "node --test \"test/*.test.mjs\"",
-    "test:e2e": "xvfb-run -a --server-args=\"-screen 0 1440x900x24\" node --test --test-timeout=300000 \"e2e/*.e2e.mjs\"",
+    "test:e2e": "xvfb-run -a --server-args=\"-screen 0 1440x900x24\" node --test --test-concurrency=1 --test-timeout=300000 \"e2e/*.e2e.mjs\"",
     "icons": "node scripts/render-icons.mjs",
     "build:mac-helper": "bash native/macos/build.sh",
     "dist": "npx --yes electron-builder@26 --config electron-builder.yml"
@@ -21,5 +21,8 @@
   },
   "engines": {
     "node": ">=22"
+  },
+  "dependencies": {
+    "uiohook-napi": "1.5.5"
   }
 }

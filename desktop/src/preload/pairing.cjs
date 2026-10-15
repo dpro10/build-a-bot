@@ -4,7 +4,7 @@
  */
 const { contextBridge, ipcRenderer } = require("electron");
 
-const OPEN = new Set(["pair-page", "bot-apps", "app"]);
+const OPEN = new Set(["pair-page", "bot-apps", "app", "voice"]);
 
 contextBridge.exposeInMainWorld(
   "babPairing",
