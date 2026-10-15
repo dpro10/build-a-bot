@@ -59,7 +59,8 @@ export function WaitlistJoin({
           void join(email.trim());
         }}
       >
-        <Input type="email" autoComplete="email" autoFocus placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} className="h-10 sm:w-64" aria-label={`Email for the ${name} waitlist`} />
+        {/* min-w-0: in a narrow card the field gives way, so Join stays inside it. */}
+        <Input type="email" autoComplete="email" autoFocus placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} className="h-10 min-w-0 sm:w-64" aria-label={`Email for the ${name} waitlist`} />
         <Button type="submit" loading={busy} className="shrink-0">
           Join
         </Button>

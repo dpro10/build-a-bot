@@ -30,6 +30,7 @@ export function ConnectorBrowser({
   onToggle,
   jobs = [],
   added = [],
+  comingSoon,
   onCustomMcp,
   className,
   autoFocus,
@@ -41,6 +42,8 @@ export function ConnectorBrowser({
   jobs?: string[];
   /** Already connected (dashboard): shown as "Added", not toggleable. */
   added?: string[];
+  /** Built-ins this server can't run yet: shown as "Coming soon", not pickable. */
+  comingSoon?: string[];
   /** Called when "Any MCP server" is picked. */
   onCustomMcp?: () => void;
   className?: string;
@@ -49,7 +52,8 @@ export function ConnectorBrowser({
   maxHeight?: string;
 }) {
   const [query, setQuery] = React.useState("");
-  const suggestions = React.useMemo(() => suggestedFor(jobs, 18), [jobs]);
+  const soon = React.useMemo(() => new Set(comingSoon), [comingSoon]);
+  const suggestions = React.useMemo(() => suggestedFor(jobs, 18, soon), [jobs, soon]);
   const [filter, setFilter] = React.useState<Filter>(suggestions.length ? "suggested" : "popular");
   const inputRef = React.useRef<HTMLInputElement>(null);
   const selectedSet = React.useMemo(() => new Set(selected), [selected]);
@@ -83,19 +87,19 @@ export function ConnectorBrowser({
       return visible
         .map((c) => ({ c, s: matchScore(c, query) }))
         .filter((x) => x.s > 0)
-        .sort((a, b) => Number(isAvailable(b.c)) - Number(isAvailable(a.c)) || b.s - a.s || Number(!!b.c.popular) - Number(!!a.c.popular) || a.c.name.localeCompare(b.c.name))
+        .sort((a, b) => Number(isAvailable(b.c, soon)) - Number(isAvailable(a.c, soon)) || b.s - a.s || Number(!!b.c.popular) - Number(!!a.c.popular) || a.c.name.localeCompare(b.c.name))
         .map((x) => x.c);
     }
     let list: ConnectorDef[];
-    if (filter === "suggested") list = suggestions;
+    if (filter === "suggested") list = [...suggestions].sort((a, b) => Number(isAvailable(b, soon)) - Number(isAvailable(a, soon)));
     else if (filter === "popular") list = visible.filter((c) => c.popular);
     else if (filter === "all") list = visible;
     else list = visible.filter((c) => c.category === filter);
     if (filter !== "suggested") {
-      list = [...list].sort((a, b) => Number(isAvailable(b)) - Number(isAvailable(a)) || Number(!!b.popular) - Number(!!a.popular) || a.name.localeCompare(b.name));
+      list = [...list].sort((a, b) => Number(isAvailable(b, soon)) - Number(isAvailable(a, soon)) || Number(!!b.popular) - Number(!!a.popular) || a.name.localeCompare(b.name));
     }
     return list;
-  }, [query, filter, suggestions]);
+  }, [query, filter, suggestions, soon]);
 
   const selectedDefs = selected.map((id) => ALL_CONNECTORS.find((c) => c.id === id)).filter((c): c is ConnectorDef => Boolean(c) && !ALWAYS_ON.has(c!.id));
 
@@ -107,7 +111,7 @@ export function ConnectorBrowser({
   ];
 
   const pick = (def: ConnectorDef) => {
-    if (!isAvailable(def) || addedSet.has(def.id)) return;
+    if (!isAvailable(def, soon) || addedSet.has(def.id)) return;
     if (def.id === "custom_mcp" && onCustomMcp && !selectedSet.has(def.id)) {
       onCustomMcp();
       return;
@@ -192,7 +196,7 @@ export function ConnectorBrowser({
           <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {results.map((def) => (
               <li key={def.id}>
-                <ConnectorCard def={def} selected={selectedSet.has(def.id)} added={addedSet.has(def.id)} onPick={() => pick(def)} />
+                <ConnectorCard def={def} available={isAvailable(def, soon)} selected={selectedSet.has(def.id)} added={addedSet.has(def.id)} onPick={() => pick(def)} />
               </li>
             ))}
           </ul>
@@ -212,8 +216,7 @@ export function ConnectorBrowser({
   );
 }
 
-function ConnectorCard({ def, selected, added, onPick }: { def: ConnectorDef; selected: boolean; added: boolean; onPick: () => void }) {
-  const available = isAvailable(def);
+function ConnectorCard({ def, available, selected, added, onPick }: { def: ConnectorDef; available: boolean; selected: boolean; added: boolean; onPick: () => void }) {
   const effects = effectsOf(def);
   return (
     <button
@@ -241,7 +244,7 @@ function ConnectorCard({ def, selected, added, onPick }: { def: ConnectorDef; se
               </span>
             </Tooltip>
           ) : null}
-          {!available ? <Badge tone="neutral" className="px-1.5 py-0 text-[10px]">Soon</Badge> : def.status === "beta" ? <Badge tone="warning" className="px-1.5 py-0 text-[10px]">Beta</Badge> : null}
+          {!available ? <Badge tone="neutral" className="px-1.5 py-0 text-[10px]">Coming soon</Badge> : def.status === "beta" ? <Badge tone="warning" className="px-1.5 py-0 text-[10px]">Beta</Badge> : null}
           {isBuiltin(def) && available ? <Badge tone="success" className="px-1.5 py-0 text-[10px]">No sign-in</Badge> : null}
         </span>
         <span className="mt-0.5 line-clamp-2 block text-[13px] leading-snug text-muted-foreground">{def.description}</span>

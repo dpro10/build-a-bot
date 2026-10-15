@@ -19,7 +19,7 @@ export type PromptContext = {
   connectedApps: { name: string; summary: string }[];
   memories: string[];
   recentElsewhere: { channel: string; role: string; text: string }[];
-  botEmail: string;
+  botEmail: string | null;
   now: Date;
   speakingWith: "owner" | "contact";
   contactLabel?: string;
@@ -43,7 +43,7 @@ export function ownerName(owner: Pick<User, "name" | "email">): string {
   return owner.name?.trim() || owner.email?.split("@")[0] || "your owner";
 }
 
-export function buildStablePrompt(bot: Bot, owner: User, channelKind: string, botEmail: string): string {
+export function buildStablePrompt(bot: Bot, owner: User, channelKind: string, botEmail: string | null): string {
   const avatar = isAvatarId(bot.avatar) ? AVATARS[bot.avatar] : AVATARS.blip;
   const trust = isTrustLevel(bot.trust) ? TRUST[bot.trust] : TRUST.ask;
   const jobs = (bot.jobs ?? []).filter(isJobId).map((j) => JOB_BY_ID[j]);
@@ -79,7 +79,7 @@ export function buildStablePrompt(bot: Bot, owner: User, channelKind: string, bo
       "- Money: you can't spend money unless the owner set a spending cap.",
       "- For medical, legal or financial questions, give helpful general information and suggest a professional for decisions.",
     ].join("\n"),
-    `Your own email address is ${botEmail} (the owner can forward things to it).`,
+    botEmail ? `Your own email address is ${botEmail} (the owner can forward things to it).` : "",
     `Channel: ${isChannelKind(channelKind) ? CHANNEL_BY_KIND[channelKind].name : channelKind}. ${channelStyle(channelKind)}`,
   ]
     .filter(Boolean)

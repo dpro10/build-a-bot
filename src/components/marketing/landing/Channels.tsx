@@ -1,7 +1,8 @@
 import { Avatar } from "@/components/avatar";
 import { BrandTile } from "@/components/brand/icons";
-import { CHANNELS, type ChannelDef } from "@/lib/channels/catalog";
-import { cn } from "@/lib/utils";
+import { CHANNELS, channelAvailability, comingSoonLine, talkChannels, type ChannelDef } from "@/lib/channels/catalog";
+import { demoMode, live } from "@/lib/env";
+import { cn, joinList } from "@/lib/utils";
 import { Container, Section, SectionHeader } from "../ui";
 import { channelIcon } from "../icons";
 
@@ -44,15 +45,20 @@ function Orbit({ items }: { items: ChannelDef[] }) {
 }
 
 export function Channels() {
+  // Channels this server can't run yet count as coming soon, like the ones we haven't built.
+  const availability = (def: ChannelDef) => channelAvailability(def, demoMode, live);
   const web = CHANNELS.find((c) => c.kind === "web");
-  const listed = CHANNELS.filter((c) => c.kind !== "web" && (c.availability === "available" || c.availability === "beta" || c.availability === "waitlist"));
-  const later = CHANNELS.filter((c) => c.availability === "soon");
+  const listed = CHANNELS.filter((c) => c.kind !== "web" && availability(c) !== "soon");
+  const later = CHANNELS.filter((c) => availability(c) === "soon");
+  const words = talkChannels(demoMode, live);
 
   return (
     <Section id="channels" aria-labelledby="channels-title" className="bg-background">
       <Container>
         <SectionHeader id="channels-title" eyebrow="Channels" title="Talk to it anywhere.">
-          Web chat is always on. Add calls, texts, email and the chat apps you already live in. Same bot, same memory, everywhere.
+          {words.soon.length
+            ? `Web chat is always on. Add ${joinList(words.ready)}. ${comingSoonLine(words.soon)} Same bot, same memory, everywhere.`
+            : "Web chat is always on. Add calls, texts, email and the chat apps you already live in. Same bot, same memory, everywhere."}
         </SectionHeader>
 
         <div className="mt-14 grid items-center gap-10 lg:grid-cols-[0.8fr_1.2fr] lg:gap-14">
@@ -86,9 +92,7 @@ export function Channels() {
                 </li>
               ))}
             </ul>
-            {later.length ? (
-              <p className="px-1 text-sm text-muted-foreground">Coming later: {later.map((c) => c.name).join(", ")}.</p>
-            ) : null}
+            {later.length ? <p className="px-1 text-sm text-muted-foreground">Coming soon: {later.map((c) => c.name).join(", ")}.</p> : null}
           </div>
         </div>
       </Container>

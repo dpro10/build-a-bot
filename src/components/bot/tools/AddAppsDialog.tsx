@@ -37,6 +37,8 @@ export function AddAppsDialog({
   trust,
   spendCapUsd,
   composioLive,
+  paidPlans,
+  comingSoon,
   onAdded,
   onConnect,
   startInCustom,
@@ -51,6 +53,10 @@ export function AddAppsDialog({
   trust: TrustLevel;
   spendCapUsd: number | undefined;
   composioLive: boolean;
+  /** Paid plans can be bought here; otherwise the app limit says they're coming soon, with no link. */
+  paidPlans: boolean;
+  /** Built-ins this server can't run yet. */
+  comingSoon: string[];
   onAdded: (conn: ConnectionView) => void;
   /** Starts sign-in; resolves with what happened. */
   onConnect: (conn: ConnectionView, plan: ConnectPlan, opts?: { fromDialog?: boolean }) => Promise<ConnectOutcome>;
@@ -136,6 +142,7 @@ export function AddAppsDialog({
                 onToggle={(d) => void add(d)}
                 jobs={jobs}
                 added={added}
+                comingSoon={comingSoon}
                 onCustomMcp={() => setView("custom")}
                 autoFocus
                 maxHeight="calc(var(--sheet-h) - 234px)"
@@ -170,7 +177,15 @@ export function AddAppsDialog({
                 </div>
               ) : null}
               <DialogTitle className="text-center">
-                {upgrade ? `Add ${name} with Plus` : !conn ? `Adding ${name}…` : connected || conn.status === "connected" ? `${name} is connected` : `${name} is added`}
+                {upgrade
+                  ? paidPlans
+                    ? `Add ${name} with Plus`
+                    : "More apps are part of Plus"
+                  : !conn
+                    ? `Adding ${name}…`
+                    : connected || conn.status === "connected"
+                      ? `${name} is connected`
+                      : `${name} is added`}
               </DialogTitle>
               <DialogDescription className="max-w-sm text-center">
                 {upgrade
@@ -187,7 +202,7 @@ export function AddAppsDialog({
                           ? `Paste an access token so ${botName} can use it.`
                           : plan
                             ? `Sign in to ${name} so ${botName} can use it.`
-                            : `${name} can't be connected on this server yet.`}
+                            : `${name} is coming soon.`}
               </DialogDescription>
             </DialogHeader>
             <DialogBody className="sm:px-10">
@@ -201,7 +216,11 @@ export function AddAppsDialog({
                   <span className="flex size-11 items-center justify-center rounded-2xl bg-primary-soft text-primary">
                     <Rocket className="size-5" />
                   </span>
-                  <p className="max-w-sm text-center text-sm text-muted-foreground">Plus connects as many apps as you like, plus phone calls, texts and Full faith.</p>
+                  <p className="max-w-sm text-center text-sm text-muted-foreground">
+                    {paidPlans
+                      ? "Plus connects as many apps as you like, plus phone calls, texts and Full faith."
+                      : `To add ${name} now, remove one of ${botName}'s apps first.`}
+                  </p>
                 </div>
               ) : null}
               {conn && def ? (
@@ -225,9 +244,13 @@ export function AddAppsDialog({
                   <Button variant="ghost" onClick={() => setView("browse")}>
                     <ArrowLeft /> Back
                   </Button>
-                  <Button asChild>
-                    <Link href="/app/billing">See Plus</Link>
-                  </Button>
+                  {paidPlans ? (
+                    <Button asChild>
+                      <Link href="/app/billing">See Plus</Link>
+                    </Button>
+                  ) : (
+                    <Button onClick={() => onOpenChange(false)}>Done</Button>
+                  )}
                 </>
               ) : conn ? (
                 <>

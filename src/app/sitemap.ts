@@ -3,6 +3,10 @@ import { appUrl } from "@/lib/env";
 import { FEATURED_RECIPES } from "@/lib/recipes";
 import { SITE } from "@/lib/site";
 
+// Built per request, not at build time: the URLs follow APP_URL where the site runs
+// (a build made elsewhere would bake in its own, like http://localhost:3000).
+export const dynamic = "force-dynamic";
+
 export default function sitemap(): MetadataRoute.Sitemap {
   const base = appUrl();
   const updated = new Date(`${SITE.legalUpdatedISO}T00:00:00Z`);

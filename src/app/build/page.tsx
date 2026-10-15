@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
-import { count, eq } from "drizzle-orm";
+import { asc, count, eq } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
-import { getUser } from "@/lib/auth/session";
+import { getUser, isAnonymous } from "@/lib/auth/session";
 import { getPlan } from "@/lib/billing/plans";
-import { demoMode, live } from "@/lib/env";
+import { comingSoonConnectors } from "@/lib/connectors/availability";
+import { demoMode, live, paidPlansOpen } from "@/lib/env";
 import { findFeatured, recipeSchema } from "@/lib/recipes";
 import { Builder, type BuilderProps } from "@/components/builder/Builder";
+import { BotLimit } from "@/components/builder/BotLimit";
+import type { AvatarId, ColorwayId } from "@/lib/avatars";
 
 export const metadata: Metadata = {
   title: "Build your bot",
@@ -26,20 +29,41 @@ async function loadRecipe(slug: string | undefined): Promise<BuilderProps["recip
 export default async function BuildPage({ searchParams }: { searchParams: Promise<{ recipe?: string }> }) {
   const { recipe: slug } = await searchParams;
   const user = await getUser();
+  const plan = getPlan(user?.plan);
   let botCount = 0;
   if (user) {
     const db = await getDb();
     [{ n: botCount }] = await db.select({ n: count() }).from(schema.bots).where(eq(schema.bots.ownerId, user.id));
+    // No room for another bot and no way to upgrade yet: say so now, not after all seven steps.
+    if (botCount >= plan.limits.bots && !paidPlansOpen) {
+      const bots = await db
+        .select({ id: schema.bots.id, name: schema.bots.name, avatar: schema.bots.avatar, color: schema.bots.color })
+        .from(schema.bots)
+        .where(eq(schema.bots.ownerId, user.id))
+        .orderBy(asc(schema.bots.createdAt))
+        .limit(3);
+      return (
+        <BotLimit
+          plan={plan}
+          bots={bots.map((b) => ({ ...b, avatar: b.avatar as AvatarId, color: b.color as ColorwayId }))}
+          total={botCount}
+          email={isAnonymous(user) ? null : user.email}
+        />
+      );
+    }
   }
   const recipe = await loadRecipe(slug?.slice(0, 80));
   return (
     <Builder
-      plan={getPlan(user?.plan).id}
+      plan={plan.id}
       demo={demoMode}
-      live={{ twilio: live.twilio, email: live.email, discord: live.discord, telegramManaged: live.telegramManaged, slackOAuth: live.slackOAuth }}
+      paidPlans={paidPlansOpen}
+      live={{ twilio: live.twilio, botEmail: live.botEmail, discord: live.discord, telegramManaged: live.telegramManaged, slackOAuth: live.slackOAuth, stripe: live.stripe }}
+      comingSoon={comingSoonConnectors()}
       recipe={recipe}
       botCount={botCount}
       signedIn={Boolean(user?.email)}
+      ownerEmail={user?.email ?? null}
     />
   );
 }

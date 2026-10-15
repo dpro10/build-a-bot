@@ -16,7 +16,8 @@ export type ChatMessage = {
   createdAt: string;
   tools: ToolView[];
   approvals: string[];
-  notices: { tone: "info" | "warn" | "danger"; text: string }[];
+  /** `href`: a page in the app the notice links to (e.g. the Bridge, to pair a computer). */
+  notices: { tone: "info" | "warn" | "danger"; text: string; href?: string }[];
   pending?: boolean;
   proactive?: boolean;
   via?: string;

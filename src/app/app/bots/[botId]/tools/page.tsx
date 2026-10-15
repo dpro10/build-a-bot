@@ -4,7 +4,8 @@ import { getDb } from "@/lib/db";
 import { requireUser } from "@/lib/auth/session";
 import { getBotSetup, getOwnedBot } from "@/lib/data";
 import { getPlan, planAllowsTrust } from "@/lib/billing/plans";
-import { demoMode, live } from "@/lib/env";
+import { comingSoonConnectors } from "@/lib/connectors/availability";
+import { demoMode, live, paidPlansOpen } from "@/lib/env";
 import { isTrustLevel, type TrustLevel } from "@/lib/trust";
 import { AppsTrustView } from "@/components/bot/tools/AppsTrustView";
 import { toConnectionView } from "@/components/bot/tools/model";
@@ -42,7 +43,9 @@ export default async function ToolsPage({
       }}
       connections={connections.map(toConnectionView)}
       planBadges={planBadges}
+      paidPlans={paidPlansOpen}
       composioLive={live.composio}
+      comingSoon={comingSoonConnectors()}
       timezone={user.timezone || "UTC"}
       flash={{ connected: first(sp.connected) === "1", error: errorParam ? errorParam.slice(0, 300) : null }}
     />

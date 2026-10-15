@@ -6,7 +6,7 @@ export async function POST(req: Request) {
   if (!sameOrigin(req)) return apiError(403, "Bad origin");
   const a = await authed();
   if (!a.ok) return a.res;
-  if (!live.stripe) return apiError(503, "Payments aren't set up on this server.");
+  if (!live.stripe) return apiError(503, "Paid plans are coming soon.");
   try {
     return json({ url: await createPortal(a.db, a.user) });
   } catch (err) {

@@ -3,8 +3,9 @@ import { ArrowUpRight } from "lucide-react";
 import { Avatar } from "@/components/avatar";
 import { BrandTile } from "@/components/brand/icons";
 import { COLORWAYS, isColorwayId } from "@/lib/avatars";
-import { CHANNEL_BY_KIND, isChannelKind } from "@/lib/channels/catalog";
+import { CHANNEL_BY_KIND, channelUsable, isChannelKind } from "@/lib/channels/catalog";
 import { getConnector } from "@/lib/connectors";
+import { demoMode, live } from "@/lib/env";
 import type { FeaturedRecipe } from "@/lib/recipes";
 import { TRUST } from "@/lib/trust";
 import { cn } from "@/lib/utils";
@@ -20,7 +21,11 @@ export function colorwayWash(color: string) {
 export function RecipeCard({ recipe, className, compact }: { recipe: FeaturedRecipe; className?: string; compact?: boolean }) {
   const trust = TRUST[recipe.trust];
   const apps = recipe.connectors.map((id) => getConnector(id)).filter((c) => c !== undefined);
-  const channels = recipe.channels.filter(isChannelKind).map((k) => CHANNEL_BY_KIND[k]);
+  // Only channels people can use here: a card is a promise.
+  const channels = recipe.channels
+    .filter(isChannelKind)
+    .map((k) => CHANNEL_BY_KIND[k])
+    .filter((c) => channelUsable(c, demoMode, live));
   const title = recipeTitle(recipe.slug);
 
   return (
@@ -73,14 +78,18 @@ export function RecipeCard({ recipe, className, compact }: { recipe: FeaturedRec
               </span>
             ))}
           </div>
-          <span className="h-5 w-px bg-border" aria-hidden="true" />
-          <div className="flex items-center gap-1.5">
-            {channels.map((c) => (
-              <span key={c.kind} title={c.name}>
-                <BrandTile icon={channelIcon(c)} size={22} label={c.name} />
-              </span>
-            ))}
-          </div>
+          {channels.length ? (
+            <>
+              <span className="h-5 w-px bg-border" aria-hidden="true" />
+              <div className="flex items-center gap-1.5">
+                {channels.map((c) => (
+                  <span key={c.kind} title={c.name}>
+                    <BrandTile icon={channelIcon(c)} size={22} label={c.name} />
+                  </span>
+                ))}
+              </div>
+            </>
+          ) : null}
         </div>
       </div>
     </Link>

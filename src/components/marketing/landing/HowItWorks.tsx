@@ -4,10 +4,11 @@ import { Avatar } from "@/components/avatar";
 import { BrandTile } from "@/components/brand/icons";
 import { Button } from "@/components/ui/button";
 import { AVATAR_IDS } from "@/lib/avatars";
-import { CHANNEL_BY_KIND } from "@/lib/channels/catalog";
+import { CHANNEL_BY_KIND, channelUsable, comingSoonLine, talkChannels } from "@/lib/channels/catalog";
 import { getConnector } from "@/lib/connectors";
+import { demoMode, live } from "@/lib/env";
 import { TRUST, TRUST_LEVELS } from "@/lib/trust";
-import { cn } from "@/lib/utils";
+import { cn, joinList } from "@/lib/utils";
 import { Container, Section, SectionHeader } from "../ui";
 import { channelIcon } from "../icons";
 
@@ -106,26 +107,31 @@ function TalkVisual() {
     <Frame>
       <div className="grid grid-cols-3 gap-2">
         {kinds.map((k) => (
-          <BrandTile key={k} icon={channelIcon(CHANNEL_BY_KIND[k])} size={36} />
+          // The ones that aren't offered here yet stay greyed out.
+          <BrandTile key={k} icon={channelIcon(CHANNEL_BY_KIND[k])} size={36} className={channelUsable(CHANNEL_BY_KIND[k], demoMode, live) ? undefined : "opacity-60 grayscale"} />
         ))}
       </div>
     </Frame>
   );
 }
 
-const STEPS = [
-  { title: "Pick a face", body: "Five original characters, each with its own personality. Pick a colorway too.", visual: <FaceVisual /> },
-  { title: "Name it", body: "Anything you like. Stuck? Tap Surprise me.", visual: <NameVisual /> },
-  {
-    title: "Give it a brain",
-    body: "Free open models, your own API key, or the Claude or ChatGPT plan you already pay for.",
-    visual: <BrainVisual />,
-  },
-  { title: "Apps & trust", body: "Connect the apps it can use, then decide how much it may do on its own.", visual: <AppsVisual /> },
-  { title: "Talk anywhere", body: "Web chat is always on. Add calls, texts, email, Telegram, Discord or Slack.", visual: <TalkVisual /> },
-];
+function talkBody(): string {
+  const words = talkChannels(demoMode, live);
+  return `Web chat is always on. Add ${joinList(words.ready, "or")}. ${comingSoonLine(words.soon)}`.trim();
+}
 
 export function HowItWorks() {
+  const steps = [
+    { title: "Pick a face", body: "Five original characters, each with its own personality. Pick a colorway too.", visual: <FaceVisual /> },
+    { title: "Name it", body: "Anything you like. Stuck? Tap Surprise me.", visual: <NameVisual /> },
+    {
+      title: "Give it a brain",
+      body: "Free open models, your own API key, or the Claude or ChatGPT plan you already pay for.",
+      visual: <BrainVisual />,
+    },
+    { title: "Apps & trust", body: "Connect the apps it can use, then decide how much it may do on its own.", visual: <AppsVisual /> },
+    { title: "Talk anywhere", body: talkBody(), visual: <TalkVisual /> },
+  ];
   return (
     <Section id="how" aria-labelledby="how-title" className="bg-background">
       <Container>
@@ -135,8 +141,8 @@ export function HowItWorks() {
 
         <ol className="relative mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-5 lg:gap-3">
           <div aria-hidden="true" className="absolute top-[22px] right-[10%] left-[10%] hidden border-t-2 border-dashed border-border lg:block" />
-          {STEPS.map((step, i) => (
-            <li key={step.title} className={cn("relative flex flex-col", i === STEPS.length - 1 && "sm:col-span-2 lg:col-span-1")}>
+          {steps.map((step, i) => (
+            <li key={step.title} className={cn("relative flex flex-col", i === steps.length - 1 && "sm:col-span-2 lg:col-span-1")}>
               <div className="relative z-10 mx-auto mb-4 hidden size-11 items-center justify-center rounded-full border-4 border-background bg-primary font-display text-base font-bold text-primary-foreground shadow-glow lg:flex">
                 {i + 1}
               </div>

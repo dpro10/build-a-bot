@@ -12,11 +12,12 @@ import { colorwayWash } from "@/components/marketing/recipes/RecipeCard";
 import { formatDays, formatTime } from "@/components/marketing/recipes/format";
 import { loadRecipe } from "@/components/marketing/recipes/load";
 import { AVATARS } from "@/lib/avatars";
-import { CHANNEL_BY_KIND, isChannelKind } from "@/lib/channels/catalog";
+import { CHANNEL_BY_KIND, channelAvailability, isChannelKind } from "@/lib/channels/catalog";
 import { getConnector } from "@/lib/connectors";
+import { demoMode, live } from "@/lib/env";
 import { JOB_BY_ID, isJobId } from "@/lib/jobs";
 import { TRUST } from "@/lib/trust";
-import { truncate } from "@/lib/utils";
+import { cn, truncate } from "@/lib/utils";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
@@ -179,12 +180,27 @@ export default async function RecipePage({ params }: { params: Promise<{ slug: s
               <li className="inline-flex items-center gap-2 rounded-full border border-border py-1 pr-3.5 pl-1 text-sm font-medium">
                 <BrandTile icon={channelIcon(CHANNEL_BY_KIND.web)} size={26} /> Web &amp; app
               </li>
-              {channels.map((c) => (
-                <li key={c.kind} className="inline-flex items-center gap-2 rounded-full border border-border py-1 pr-3.5 pl-1 text-sm font-medium">
-                  <BrandTile icon={channelIcon(c)} size={26} /> {c.name}
-                  {c.minPlan !== "free" ? <span className="rounded-full bg-primary-soft px-1.5 py-px text-[10px] font-bold text-primary">{c.minPlan === "plus" ? "Plus" : "Pro"}</span> : null}
-                </li>
-              ))}
+              {channels.map((c) => {
+                // Not offered here yet: still listed, but marked as such.
+                const availability = channelAvailability(c, demoMode, live);
+                const later = availability === "soon" || availability === "waitlist";
+                return (
+                  <li
+                    key={c.kind}
+                    className={cn(
+                      "inline-flex items-center gap-2 rounded-full border border-border py-1 pr-3.5 pl-1 text-sm font-medium",
+                      later && "border-dashed text-muted-foreground",
+                    )}
+                  >
+                    <BrandTile icon={channelIcon(c)} size={26} className={later ? "opacity-60 grayscale" : undefined} /> {c.name}
+                    {later ? (
+                      <span className="rounded-full bg-muted px-1.5 py-px text-[10px] font-bold">{availability === "waitlist" ? "Waitlist" : "Coming soon"}</span>
+                    ) : c.minPlan !== "free" ? (
+                      <span className="rounded-full bg-primary-soft px-1.5 py-px text-[10px] font-bold text-primary">{c.minPlan === "plus" ? "Plus" : "Pro"}</span>
+                    ) : null}
+                  </li>
+                );
+              })}
             </ul>
           </Block>
 

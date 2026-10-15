@@ -3,6 +3,8 @@
  * one-tap templates. Pure functions, safe for the browser.
  */
 import type { Schedule } from "@/lib/db/schema";
+import type { AppKind } from "@/lib/connectors/types";
+import { joinList } from "@/lib/utils";
 import { dayKey, zonedParts, zonedToUtc, whenLabel } from "@/components/bot/activity/time";
 
 export type ScheduleView = {
@@ -210,12 +212,18 @@ export type Template = {
   kind: "routine" | "reminder";
 };
 
-export const TEMPLATES: Template[] = [
+/** A template whose instruction can depend on what the bot's apps see (null: it doesn't fit this bot). */
+type TemplateSource = Omit<Template, "prompt"> & { prompt: string | ((apps: ReadonlySet<AppKind>) => string | null) };
+
+const TEMPLATE_SOURCES: TemplateSource[] = [
   {
     id: "morning-brief",
     emoji: "☀️",
     title: "Morning brief",
-    prompt: "Give me a short morning brief: today's weather, what's on my calendar, anything urgent in my inbox, and one thing I shouldn't forget.",
+    prompt: (apps) => {
+      const parts = ["today's weather", apps.has("calendar") ? "what's on my calendar" : null, apps.has("email") ? "anything urgent in my inbox" : null, "one thing I shouldn't forget"];
+      return `Give me a short morning brief: ${joinList(parts.filter((p): p is string => Boolean(p)))}.`;
+    },
     schedule: { type: "daily", time: "08:00", days: WEEKDAYS },
     kind: "routine",
   },
@@ -223,7 +231,8 @@ export const TEMPLATES: Template[] = [
     id: "inbox-sweep",
     emoji: "📬",
     title: "Inbox sweep",
-    prompt: "Go through today's email. List what needs a reply from me, draft quick replies for the easy ones, and flag anything urgent. Don't send anything.",
+    prompt: (apps) =>
+      apps.has("email") ? "Go through today's email. List what needs a reply from me, draft quick replies for the easy ones, and flag anything urgent. Don't send anything." : null,
     schedule: { type: "daily", time: "16:30", days: WEEKDAYS },
     kind: "routine",
   },
@@ -247,7 +256,10 @@ export const TEMPLATES: Template[] = [
     id: "bill-check",
     emoji: "💸",
     title: "Bill check",
-    prompt: "Look for bills and subscriptions due this month in my email and calendar. List each with the amount and due date. Never pay anything.",
+    prompt: (apps) => {
+      const where = [apps.has("email") ? "email" : null, apps.has("calendar") ? "calendar" : null].filter((w): w is string => Boolean(w));
+      return where.length ? `Look for bills and subscriptions due this month in my ${joinList(where)}. List each with the amount and due date. Never pay anything.` : null;
+    },
     schedule: { type: "cron", expr: "0 9 1 * *" },
     kind: "routine",
   },
@@ -260,6 +272,14 @@ export const TEMPLATES: Template[] = [
     kind: "routine",
   },
 ];
+
+/** The one-tap templates that fit a bot: nothing about an inbox or a calendar it can't see. */
+export function templatesFor(apps: ReadonlySet<AppKind>): Template[] {
+  return TEMPLATE_SOURCES.flatMap((t) => {
+    const prompt = typeof t.prompt === "string" ? t.prompt : t.prompt(apps);
+    return prompt ? [{ ...t, prompt }] : [];
+  });
+}
 
 export function todayKey(now: Date, tz: string) {
   return dayKey(now, tz);

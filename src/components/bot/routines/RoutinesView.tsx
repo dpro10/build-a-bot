@@ -15,8 +15,10 @@ import { api, ApiError } from "@/lib/client/api";
 import { cn } from "@/lib/utils";
 import { ago, useNow, whenLabel } from "@/components/bot/activity/time";
 import { RoutineDialog, blankForm, formFrom, type DeliverOption, type RoutineForm } from "./RoutineDialog";
-import { TEMPLATES, describeSchedule, isFinished, routineEmoji, type ScheduleView, type Template } from "./schedule";
-import { PLANS } from "@/lib/billing/plans";
+import { describeSchedule, isFinished, routineEmoji, templatesFor, type ScheduleView, type Template } from "./schedule";
+import { PAID_PLANS_SOON, PLANS } from "@/lib/billing/plans";
+import type { ScheduleOutcome } from "@/lib/scheduler/tick";
+import type { AppKind } from "@/lib/connectors/types";
 
 type DialogState = { open: boolean; initial: RoutineForm; editing: ScheduleView | null };
 
@@ -66,8 +68,10 @@ export function RoutinesView({
   serverNow,
   initial,
   plan,
+  paidPlans,
   deliverOptions,
   autoHint,
+  apps,
 }: {
   botId: string;
   botName: string;
@@ -76,12 +80,17 @@ export function RoutinesView({
   serverNow: string;
   initial: ScheduleView[];
   plan: { id: string; name: string; limit: number };
+  /** Paid plans can be bought here; otherwise the routine limit says they're coming soon, with no link. */
+  paidPlans: boolean;
   deliverOptions: DeliverOption[];
   autoHint: string;
+  /** What the bot's apps can see, so templates only mention those. */
+  apps: AppKind[];
 }) {
   const router = useRouter();
   const live = useBotLive();
   const now = useNow(serverNow);
+  const templates = React.useMemo(() => templatesFor(new Set(apps)), [apps]);
   const [items, setItems] = React.useState<ScheduleView[]>(initial);
   const [dialog, setDialog] = React.useState<DialogState>(() => ({ open: false, initial: blankForm("routine", timezone), editing: null }));
   const [confirm, setConfirm] = React.useState<ScheduleView | null>(null);
@@ -144,14 +153,24 @@ export function RoutinesView({
   const runNow = async (s: ScheduleView) => {
     setRunning(s.id);
     try {
-      const res = await api<{ ok: boolean; ran: number }>(`/api/bots/${botId}/schedules/${s.id}/run`, { method: "POST" });
+      const res = await api<{ ok: boolean; ran: number; outcome?: ScheduleOutcome | null }>(`/api/bots/${botId}/schedules/${s.id}/run`, { method: "POST" });
       await refresh();
-      if (live.paused) toast(`${botName} is paused`, { description: "Resume it to run routines." });
+      const reminder = s.kind === "reminder";
+      const openChat = { label: "Open chat", onClick: () => router.push(`/app/bots/${botId}`) };
+      const seeActivity = { label: "See activity", onClick: () => router.push(`/app/bots/${botId}/activity`) };
+      if (live.paused || res.outcome === "paused") toast(`${botName} is paused`, { description: "Resume it to run routines." });
+      else if (res.outcome === "failed")
+        toast.error(reminder ? "Couldn't send the reminder" : `“${s.title}” didn't finish`, {
+          description: reminder ? "It's in your chat, but sending it elsewhere failed. Activity shows why." : `${botName}'s brain had a problem. Your chat says what happened.`,
+          action: reminder ? seeActivity : openChat,
+        });
+      else if (res.outcome === "skipped") toast(`“${s.title}” didn't run`, { description: `${botName} has done all the routine runs it can today. Try again tomorrow.` });
+      else if (res.outcome === "queued") toast.success(`Sent “${s.title}” to your computer`, { description: "The result lands in your chat when it's done.", action: openChat });
       else if (!res.ran) toast("Nothing ran", { description: "It may already have run a moment ago. Check Activity." });
       else
-        toast.success(s.kind === "reminder" ? "Reminder sent" : `Ran “${s.title}”`, {
-          description: s.kind === "reminder" ? "It went to the place you picked." : "The result is in your chat.",
-          action: { label: s.kind === "reminder" ? "See activity" : "Open chat", onClick: () => router.push(s.kind === "reminder" ? `/app/bots/${botId}/activity` : `/app/bots/${botId}`) },
+        toast.success(reminder ? "Reminder sent" : `Ran “${s.title}”`, {
+          description: reminder ? "It went to the place you picked." : "The result is in your chat.",
+          action: reminder ? seeActivity : openChat,
         });
       router.refresh();
     } catch (err) {
@@ -201,8 +220,9 @@ export function RoutinesView({
         </div>
       ) : null}
 
-      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <div className="flex items-center gap-4 rounded-3xl border border-border bg-card p-4 shadow-soft">
+      {/* grid-cols-1 and min-w-0: a long routine name truncates instead of pushing the cards off a phone screen. */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <div className="flex min-w-0 items-center gap-4 rounded-3xl border border-border bg-card p-4 shadow-soft">
           <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary-soft text-primary">
             <CalendarClock className="size-5" aria-hidden />
           </span>
@@ -218,14 +238,14 @@ export function RoutinesView({
             <div className="truncate text-xs text-muted-foreground">Times are in {tzName}</div>
           </div>
         </div>
-        <div className="flex flex-col justify-center gap-2 rounded-3xl border border-border bg-card p-4 shadow-soft">
+        <div className="flex min-w-0 flex-col justify-center gap-2 rounded-3xl border border-border bg-card p-4 shadow-soft">
           <div className="flex items-center justify-between gap-3 text-sm">
-            <span className="font-semibold">
+            <span className="min-w-0 font-semibold">
               {overLimit ? `${activeRoutines} routines on · ${plan.name} includes ${plan.limit}` : `${activeRoutines} of ${plan.limit} routines on`}
             </span>
-            <span className="flex items-center gap-2">
+            <span className="flex shrink-0 items-center gap-2">
               <Badge tone="primary">{plan.name}</Badge>
-              {plan.id !== "pro" ? (
+              {plan.id !== "pro" && paidPlans ? (
                 <Link href="/app/billing" className="text-xs font-semibold text-primary hover:underline">
                   {atLimit ? "Get more" : "Plans"}
                 </Link>
@@ -241,13 +261,17 @@ export function RoutinesView({
         <div className="flex flex-col gap-3 rounded-3xl border border-primary/20 bg-primary-soft/60 p-4 sm:flex-row sm:items-center">
           <Sparkles className="size-5 shrink-0 text-primary" aria-hidden />
           <p className="min-w-0 flex-1 text-sm">
-            {overLimit
-              ? `You have ${activeRoutines} routines on, and ${plan.name} includes ${plan.limit}. ${nextPlan.name} gives you up to ${nextPlan.limits.routines}, or turn some off.`
-              : `You're using all ${plan.limit} routines on ${plan.name}. ${nextPlan.name} gives you up to ${nextPlan.limits.routines}, or turn one off to make room.`}
+            {!paidPlans
+              ? `${overLimit ? `You have ${activeRoutines} routines on, and ${plan.name} includes ${plan.limit}. Turn some off` : `You're using all ${plan.limit} routines on ${plan.name}. Turn one off`} to make room. ${PAID_PLANS_SOON}`
+              : overLimit
+                ? `You have ${activeRoutines} routines on, and ${plan.name} includes ${plan.limit}. ${nextPlan.name} gives you up to ${nextPlan.limits.routines}, or turn some off.`
+                : `You're using all ${plan.limit} routines on ${plan.name}. ${nextPlan.name} gives you up to ${nextPlan.limits.routines}, or turn one off to make room.`}
           </p>
-          <Button asChild size="sm">
-            <Link href="/app/billing">See plans</Link>
-          </Button>
+          {paidPlans ? (
+            <Button asChild size="sm">
+              <Link href="/app/billing">See plans</Link>
+            </Button>
+          ) : null}
         </div>
       ) : null}
 
@@ -259,7 +283,7 @@ export function RoutinesView({
           <p className="text-sm text-muted-foreground">One tap fills everything in. Change anything before you save.</p>
         </div>
         <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-3">
-          {TEMPLATES.map((t) => {
+          {templates.map((t) => {
             const added = takenTitles.has(t.title.toLowerCase());
             return (
               <button
@@ -313,7 +337,7 @@ export function RoutinesView({
             icon={<Repeat className="size-8" />}
             title="No routines yet"
             action={
-              <Button variant="soft" onClick={() => openTemplate(TEMPLATES[0])}>
+              <Button variant="soft" onClick={() => openTemplate(templates[0])}>
                 <Sparkles /> Try a morning brief
               </Button>
             }
@@ -376,6 +400,7 @@ export function RoutinesView({
         initial={dialog.initial}
         editing={dialog.editing}
         planName={plan.name}
+        paidPlans={paidPlans}
         onSaved={onSaved}
       />
 

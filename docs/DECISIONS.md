@@ -297,6 +297,27 @@ Accounts are free and a browser cookie makes one, so per-account limits alone do
   - At the ceiling, owners are told the free brain or search is resting until midnight UTC and can switch to their own key; strangers messaging a bot get "try again later". Each hit is logged.
 - At roughly $0.0004–0.001 per turn and $0.008 per search, the ceilings cap a bad day at about $5–6.
 
+## Build choice (Claude; Diego to confirm): what real testers see (2026-10-14)
+
+Outside demo mode nothing is simulated. Anything without its service set up says **"Coming soon"** and can't be picked or set up:
+
+- **Channels:** texts and calls until Twilio is set up; the email channel and the bot's own inbox until there's a brand-free mail domain (`BOT_EMAIL_DOMAIN`) with an inbound provider. The Resend key for sign-in no longer turns bot email on. The working channels are web, Telegram, Discord and Slack.
+- **Paid plans:** until Stripe is set up. Plus and Pro show "Coming soon" with a waitlist, `plan:plus` and `plan:pro` on `/admin`. At the Free bot limit, the builder says so before step 1.
+- **Desktop meeting-notes app:** until there's a signed download (`NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL`). The browser recorder takes notes meanwhile.
+- **Web actions:** until Browser Use is set up. The same goes for web search, news and meeting notes without their keys.
+- **Copy and recipes:** the home page, metadata and recipes only promise what works. Recipes drop channels that aren't available, so all ten featured ones can be made.
+
+**How sign-in to apps works** (details in `docs/DEPLOY.md` §4):
+- **Composio (about 70 apps):** one click, with Composio's own OAuth apps. Covers Google, Microsoft, Slack, GitHub, Dropbox, HubSpot, Zoom and others. Consent screens say "Composio".
+- **The app's own MCP sign-in (about 35):** Notion, Linear, Todoist, Calendly, Airtable, Stripe, Sentry, Zapier and others. Build-a-bot registers itself through a Client ID Metadata Document or dynamic registration. If that sign-in fails, Composio's is used where it exists.
+- **GitHub:** Composio's one click instead of pasting a token.
+- **Coming soon (about 30):** apps whose only route is a Composio toolkit without an OAuth app of Composio's: X, Spotify, Shopify, PayPal, Xero, TikTok and others. To open one, register an app with the vendor, add it in Composio and set `COMPOSIO_AUTH_CONFIG_<TOOLKIT>`.
+- **Composio's callback identity check:** built (`/api/connectors/composio/verify`); Diego switches it on in Composio. Without it, someone could send a person their own sign-in link and attach that person's account to their bot.
+
+**Slack:** each owner creates their bot's own Slack app from a pre-filled manifest link (the bot gets its own name in Slack), pastes the bot token and signing secret, and DMs the bot a code. No keys from us. A shared "Add to Slack" app (one click, our `SLACK_CLIENT_ID`/`SECRET`) is a possible later improvement; it isn't built.
+
+**Telegram and Discord set themselves up** from their keys: the cron tick sets the manager bot's webhook and registers Discord's commands.
+
 ## Live: https://build-a-bot-blue.vercel.app (2026-10-14)
 
 - **Vercel:** project `build-a-bot` in Diego's Pro team, built from `main`. Functions run in iad1.
@@ -368,6 +389,9 @@ A code review of the server and the desktop app. Each fix has a test that fails 
   - Migrations run in one transaction under `pg_advisory_xact_lock`, since a session lock doesn't survive a transaction pooler.
   - A failed start is retried on the next request instead of breaking that server.
   - Chat errors go to the server log; the chat shows a plain sentence, never SQL.
+- **The Resend key for sign-in links made bots' email look live** (2026-10-14). Any email key turned the Email channel and "Its own inbox" on, so the live site offered them and tried to send codes from `<handle>@botmail.dev`. Resend refused, and the page got a 500.
+  - Bots' email now has its own flag (`live.botEmail`): `BOT_EMAIL_DOMAIN`, plus AgentMail or Resend with its webhook secret. Until then both show as Coming soon, and there's no fallback domain.
+  - Outside demo mode, any channel whose service isn't set up shows as Coming soon, and recipes and saved drafts leave it out.
 
 ## Open questions (updated 2026-10-14)
 

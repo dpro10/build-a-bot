@@ -18,7 +18,9 @@ export async function routeInboundEmail(
   db: Db,
   input: { to: string[]; from: string; subject: string; text: string; messageId?: string },
 ) {
-  const domain = config.email.botDomain.toLowerCase();
+  // Without a domain, bots have no addresses to deliver to.
+  const domain = config.email.botDomain?.toLowerCase();
+  if (!domain) return;
   const handles = input.to.map(extractAddress).filter((a) => a.endsWith(`@${domain}`)).map((a) => a.split("@")[0]);
   for (const handle of new Set(handles)) {
     const [bot] = await db.select().from(schema.bots).where(eq(schema.bots.handle, handle)).limit(1);

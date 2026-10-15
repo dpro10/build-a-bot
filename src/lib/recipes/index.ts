@@ -103,7 +103,7 @@ export const FEATURED_RECIPES: FeaturedRecipe[] = [
     connectors: ["google_calendar", "notion"],
     channels: ["telegram", "sms"],
     routines: [{ title: "Evening study check-in", instruction: "Ask what I studied today and what's due this week. Suggest one 25-minute focus block for tomorrow.", time: "20:30" }],
-    highlights: ["Quizzes on anything", "Evening study check-ins", "Deadline reminders by text"],
+    highlights: ["Quizzes on anything", "Evening study check-ins", "Deadline reminders on Telegram"],
   },
   {
     version: 1,
@@ -134,7 +134,7 @@ export const FEATURED_RECIPES: FeaturedRecipe[] = [
     trust: "trusted",
     connectors: ["google_maps", "todoist"],
     channels: ["sms", "voice"],
-    highlights: ["Shared grocery list", "Route-optimized errands", "Call it hands-free in the car"],
+    highlights: ["Shared grocery list", "Route-optimized errands", "Checks what's open before you go"],
   },
   {
     version: 1,
@@ -181,7 +181,7 @@ export const FEATURED_RECIPES: FeaturedRecipe[] = [
     connectors: ["google_calendar", "exist", "notes"],
     channels: ["sms", "telegram"],
     routines: [{ title: "Evening habit check-in", instruction: "Ask how today's habits went (water, walk, reading). Update the Habits note and cheer the streak.", time: "21:00" }],
-    highlights: ["Daily check-ins by text", "Streak tracking in a note", "Encouraging, never preachy"],
+    highlights: ["Daily check-ins on Telegram", "Streak tracking in a note", "Encouraging, never preachy"],
   },
   {
     version: 1,

@@ -4,8 +4,8 @@ import { and, eq, like, or } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { requireUser } from "@/lib/auth/session";
 import { getBotSetup, getOwnedBot } from "@/lib/data";
-import { CHANNELS, isChannelKind, type ChannelKind } from "@/lib/channels/catalog";
-import { available, demoMode } from "@/lib/env";
+import { CHANNELS, channelUsable, isChannelKind, type ChannelKind } from "@/lib/channels/catalog";
+import { demoMode, live } from "@/lib/env";
 import { botEmailAddress } from "@/lib/tools/builtin/inbox";
 import { ChannelsView } from "@/components/bot/channels/ChannelsView";
 import { toChannelView, type ChannelView } from "@/components/bot/channels/model";
@@ -33,9 +33,7 @@ export default async function ChannelsPage({ params }: { params: Promise<{ botId
 
   // Usable on this server: the integration is configured, or simulated in demo mode.
   const availability: Partial<Record<ChannelKind, boolean>> = {};
-  for (const def of CHANNELS) {
-    availability[def.kind] = def.availability !== "waitlist" && def.availability !== "soon" && (!def.requires || available(def.requires));
-  }
+  for (const def of CHANNELS) availability[def.kind] = channelUsable(def, demoMode, live);
   const joined = waitlisted.map((w) => w.feature.replace(/^channel:/, "")).filter(isChannelKind);
 
   return (
@@ -44,6 +42,7 @@ export default async function ChannelsPage({ params }: { params: Promise<{ botId
       channels={channels.map(toChannelView).filter((c): c is ChannelView => Boolean(c))}
       planId={user.plan}
       demo={demoMode}
+      plansOnSale={live.stripe || demoMode}
       ownerEmail={user.email ?? null}
       botEmail={botEmailAddress(bot)}
       availability={availability}

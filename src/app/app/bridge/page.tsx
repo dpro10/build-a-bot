@@ -4,6 +4,7 @@ import { getDb } from "@/lib/db";
 import { requireUser } from "@/lib/auth/session";
 import { listBots, listBridgeDevices } from "@/lib/data";
 import { DEVICE_ONLINE_MS } from "@/lib/bridge/jobs";
+import { desktopApp } from "@/lib/meetings";
 import { SUBSCRIPTIONS } from "@/lib/models/catalog";
 import { Avatar } from "@/components/avatar";
 import { BrandTile } from "@/components/brand/icons";
@@ -48,6 +49,7 @@ export default async function BridgePage() {
   const desktopApps = devices
     .filter((d) => !d.revokedAt && isDesktopApp(d.platform))
     .map((d) => ({ id: d.id, name: d.name, online: Boolean(d.lastSeenAt && now - d.lastSeenAt.getTime() < DEVICE_ONLINE_MS) }));
+  const desktop = desktopApp();
 
   return (
     <PageContainer>
@@ -55,11 +57,14 @@ export default async function BridgePage() {
         title="Bridge"
         description="Let your bots think with the Claude or ChatGPT plan you already pay for — through your own Claude Code or Codex, on your own computer."
         actions={
-          <Button asChild variant="soft" size="sm">
-            <a href="#desktop">
-              Meeting notes app <ArrowDown />
-            </a>
-          </Button>
+          // Not promoted while it's coming soon (its section below says so).
+          desktop.status === "soon" ? undefined : (
+            <Button asChild variant="soft" size="sm">
+              <a href="#desktop">
+                Meeting notes app <ArrowDown />
+              </a>
+            </Button>
+          )
         }
       />
 
@@ -129,7 +134,7 @@ export default async function BridgePage() {
       />
 
       <div className="mt-12">
-        <DesktopAppSection devices={desktopApps} bot={star ? { name: star.name, avatar: star.avatar, color: star.color } : undefined} />
+        <DesktopAppSection app={desktop} devices={desktopApps} bot={star ? { id: star.id, name: star.name, avatar: star.avatar, color: star.color } : undefined} />
       </div>
     </PageContainer>
   );

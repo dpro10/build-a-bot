@@ -130,7 +130,7 @@ export function cleanSegments(raw: VerboseSegment[], durationMs: number): Transc
 export async function transcribe(input: TranscribeInput): Promise<Transcription> {
   const primary = resolveSetup(config.transcribe);
   if (!primary) {
-    if (!demoMode) throw new TranscriptionError("Meeting notes aren't set up on this server yet.", false);
+    if (!demoMode) throw new TranscriptionError("Meeting notes are coming soon.", false);
     return { segments: demoTranscription(input.track, input.chunk, input.durationMs), provider: "demo", model: "demo", simulated: true };
   }
   try {

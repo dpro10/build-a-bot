@@ -14,13 +14,15 @@ const POINTS = [
 
 const APPS = ["zoom", "meet", "teams", "webex", "slack", "discord"] as const;
 
-export function MeetingNotes() {
+/** `desktopApp`: the desktop app (which notices calls) can be had; otherwise notes start in the browser and it's "coming soon". */
+export function MeetingNotes({ desktopApp }: { desktopApp: boolean }) {
   return (
     <Section id="meetings" aria-labelledby="meetings-title" className="overflow-hidden bg-gradient-to-b from-background via-primary-soft/30 to-background-2">
       <Container>
         <SectionHeader id="meetings-title" eyebrow="Meeting notes" icon={<AudioLines />} title="It takes notes in your calls. When you say yes.">
-          When a call starts, your bot peeks up from the bottom of your screen and asks. Say yes, and it stays right there while it listens, then sends
-          you the notes.
+          {desktopApp
+            ? "When a call starts, your bot peeks up from the bottom of your screen and asks. Say yes, and it stays right there while it listens, then sends you the notes."
+            : "Start notes from your browser when a call begins. Your bot stays on your screen the whole time it listens, then sends you the notes."}
         </SectionHeader>
 
         <div className="mt-14 grid gap-8 lg:grid-cols-2 lg:gap-10">
@@ -65,7 +67,9 @@ export function MeetingNotes() {
             ))}
           </div>
           <p className="max-w-xl text-sm text-muted-foreground">
-            Works with Zoom, Google Meet, Teams, Webex, Slack and more, through the desktop app or any call in a Chrome or Edge tab.{" "}
+            {desktopApp
+              ? "Works with Zoom, Google Meet, Teams, Webex, Slack and more, through the desktop app or any call in a Chrome or Edge tab."
+              : "Works with any call in a Chrome or Edge tab, like Google Meet, Zoom or Teams on the web. A desktop app that notices calls is coming soon."}{" "}
             <Link href="/safety#recording" className="inline-flex items-center gap-1 font-semibold text-primary hover:underline">
               How recording stays fair <ArrowRight className="size-3.5" aria-hidden="true" />
             </Link>
