@@ -289,13 +289,20 @@ Diego: "I want build-a-bot up and running soon. Not just simulated. We need to m
 
 Accounts are free and a browser cookie makes one, so per-account limits alone don't bound the cost of the included brain and web search.
 
-- **Before an email is confirmed:** 30 included-brain messages. Then the bot asks the person to sign in by email (free) to keep going.
+- **Before an email is confirmed:** 5 included-brain messages (Diego's call, 2026-10-15; it was 30). Then the bot asks the person to sign in by email (free) to keep going.
 - **Monthly searches per plan** (50 on Free) are now enforced. Before, they were counted but never checked.
 - **Daily ceilings for the whole site**, per UTC day:
   - 3,000 included-brain turns (`INCLUDED_DAILY_LIMIT`);
   - 300 paid web lookups (`SEARCH_DAILY_LIMIT`), counting searches, news and page reading.
   - At the ceiling, owners are told the free brain or search is resting until midnight UTC and can switch to their own key; strangers messaging a bot get "try again later". Each hit is logged.
 - At roughly $0.0004–0.001 per turn and $0.008 per search, the ceilings cap a bad day at about $5–6.
+
+## Decision: 5 free messages, then sign in; beta testers free at first (Diego, 2026-10-15)
+
+Diego: "Honestly like 5 free messages before confirming email, we want people with accounts and we want to make some dough. ill let original beta testers use it for free at first."
+
+- Someone without a confirmed email gets **5** included-brain messages (`ANONYMOUS_INCLUDED_MESSAGES`), then the bot asks them to sign in by email to keep going.
+- The first beta testers stay on the Free plan. Paid plans open when Stripe is set up; until then Plus and Pro show "Coming soon" with a waitlist.
 
 ## Build choice (Claude; Diego to confirm): what real testers see (2026-10-14)
 
