@@ -280,6 +280,28 @@ button:disabled {
   font-size: 13px;
 }
 
+.voice-card {
+  margin-top: 20px;
+  padding: 14px 16px;
+  background: var(--primary-soft);
+  border-radius: 16px;
+}
+
+.voice-card h2 {
+  margin: 0 0 4px;
+  color: var(--primary-ink);
+}
+
+.voice-card p {
+  font-size: 14px;
+  margin: 0;
+}
+
+.voice-card .secondary {
+  margin-top: 10px;
+  background: var(--card);
+}
+
 .sr-only {
   position: absolute;
   width: 1px;

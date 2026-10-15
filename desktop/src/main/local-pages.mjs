@@ -1,5 +1,5 @@
 /**
- * The app's own pages (pairing, the hidden capture page) are served from a private
+ * The app's own pages (pairing, the hidden capture page, voice typing's pill and settings) are served from a private
  * scheme, bab-app://<page>/…, instead of file://, so each gets a real origin, a strict
  * Content-Security-Policy and nothing else on disk is reachable.
  */
@@ -13,6 +13,8 @@ const ROOT = fileURLToPath(new URL("../renderer/", import.meta.url));
 const CSP = {
   pairing: "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; form-action 'none'; frame-ancestors 'none'; base-uri 'none'",
   capture: "default-src 'none'; script-src 'self'; worker-src 'self'; media-src 'self' blob: mediastream:; connect-src 'none'; frame-ancestors 'none'; base-uri 'none'",
+  dictation: "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob: mediastream:; connect-src 'none'; frame-ancestors 'none'; base-uri 'none'",
+  voice: "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; form-action 'none'; frame-ancestors 'none'; base-uri 'none'",
 };
 
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png" };
