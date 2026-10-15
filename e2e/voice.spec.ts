@@ -134,6 +134,17 @@ test("select text and say what to change: it's changed in place", async ({ page,
   await expect(page.getByText("Make this friendlier.")).toBeVisible();
 });
 
+test("asking the bot about selected text: the chat shows it with the request", async ({ page }) => {
+  const id = await newBot(page, "Otto");
+  const res = await page.request.post("/api/voice/ask", { data: { botId: id, text: "Remind me about this tomorrow at 9.", selection: "Team lunch Friday at 12:30 at Tartine." } });
+  expect(res.ok()).toBeTruthy();
+  await res.text();
+  await page.goto(`/app/bots/${id}`);
+  await expect(page.getByText("Remind me about this tomorrow at 9.")).toBeVisible();
+  await expect(page.getByText("With the text you selected")).toBeVisible();
+  await expect(page.getByText("Team lunch Friday at 12:30 at Tartine.")).toBeVisible();
+});
+
 test("your words: add one with how it's misheard, and it's used", async ({ page }) => {
   await newBot(page, "Blip");
   await page.goto("/app/voice#dictionary");

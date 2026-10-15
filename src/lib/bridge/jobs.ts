@@ -17,6 +17,7 @@ import type { Bot, BridgeJob, User } from "@/lib/db/schema";
 import { appUrl } from "@/lib/env";
 import { signToken, verifyToken } from "@/lib/crypto";
 import { newId, sortableId, truncate } from "@/lib/utils";
+import { withSelection } from "@/lib/agent/selection";
 import { botEmailAddress } from "@/lib/tools/builtin";
 import { buildDynamicContext, buildStablePrompt } from "@/lib/agent/prompt";
 import type { RunInput, RunResult } from "@/lib/agent/run";
@@ -95,7 +96,7 @@ export async function runViaBridge(
   }
 
   const history = await db
-    .select({ role: schema.messages.role, author: schema.messages.author, text: schema.messages.text })
+    .select({ role: schema.messages.role, author: schema.messages.author, text: schema.messages.text, meta: schema.messages.meta })
     .from(schema.messages)
     .where(eq(schema.messages.conversationId, conversation.id))
     .orderBy(desc(schema.messages.createdAt))
@@ -125,7 +126,12 @@ export async function runViaBridge(
 
   const transcript = history
     .reverse()
-    .map((m) => `${m.role === "user" ? (m.author === "contact" ? "Contact" : "Owner") : "You"}: ${truncate(m.text, 2000)}`)
+    .map((m) => {
+      const who = m.role === "user" ? (m.author === "contact" ? "Contact" : "Owner") : "You";
+      // What the owner selected on their screen goes with their message, as outside content.
+      const text = m.role === "user" && m.author !== "contact" ? withSelection(truncate(m.text, 2000), m.meta, 4000) : truncate(m.text, 2000);
+      return `${who}: ${text}`;
+    })
     .join("\n\n");
 
   const jobId = newId("job");

@@ -112,7 +112,9 @@ export default function PrivacyPage() {
             it, never what&apos;s on your screen. To spell your names right, the names your bots remember are used as hints. The desktop app keeps your recent dictations
             on your own computer, encrypted, and you can turn that off or clear it. A request that starts with your bot&apos;s name (&ldquo;Hey
             Otto, &hellip;&rdquo;) goes to your bot like a typed message, and is kept in your chat with it. When you edit by voice, the text you
-            selected is sent along with what you said, used once to make the change, and not stored.
+            selected is sent along with what you said, used once to make the change, and not stored. If you ask your bot about text you
+            selected (&ldquo;Hey Otto, add this to my calendar&rdquo;), that text goes to your bot with your request and is kept in your chat with
+            it.
           </p>
           <h3>Connection tokens and keys</h3>
           <p>

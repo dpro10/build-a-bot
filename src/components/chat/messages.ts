@@ -21,6 +21,8 @@ export type ChatMessage = {
   pending?: boolean;
   proactive?: boolean;
   via?: string;
+  /** Text the owner selected on their screen and sent with a request by voice. */
+  selection?: string;
   /** Notes from a meeting (shown with a header and a link to the meeting page). */
   meeting?: { id: string; app?: string; inPerson?: boolean; gone?: boolean };
 };
@@ -91,6 +93,7 @@ export function toChatMessage(m: {
     // Routines and reminders "reach out"; greetings and replies to an approval don't need a label.
     proactive: Boolean(m.meta?.proactive) && m.role === "assistant" && m.meta?.trigger !== "greeting" && m.meta?.trigger !== "approval",
     via: typeof m.meta?.via === "string" ? (m.meta.via as string) : undefined,
+    selection: m.role === "user" && typeof m.meta?.selection === "string" && m.meta.selection.trim() ? (m.meta.selection as string) : undefined,
     ...(m.meta?.kind === "meeting_notes" && typeof m.meta.meetingId === "string"
       ? {
           meeting: {
