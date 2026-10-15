@@ -1,12 +1,13 @@
 /**
- * Slack: the bot joins the owner's workspace (via our app's OAuth, or a one-click
- * app manifest the owner installs themselves) and chats in DMs.
+ * Slack: the bot joins the owner's workspace and chats in DMs, either through the shared
+ * "Add to Slack" app (slack-app.ts) or through its own app made from a manifest.
  */
 import crypto from "node:crypto";
 import type { Channel } from "@/lib/db/schema";
 import { UnreachableError } from "@/lib/utils";
 import type { ChannelAdapter, OutboundButton } from "./outbound";
 import { channelSecret } from "./secrets";
+import { avatarImageUrl } from "./telegram";
 
 export async function slackCall<T = Record<string, unknown>>(token: string, method: string, body: Record<string, unknown>): Promise<T> {
   const res = await fetch(`https://slack.com/api/${method}`, {
@@ -44,12 +45,28 @@ export function slackBlocks(text: string, buttons?: OutboundButton[]) {
   return blocks;
 }
 
+/** The bot token in a stored Slack credential ({"botToken": "xoxb-…", …}; a bare token also works). */
+export function slackBotToken(secret: string | null): string | null {
+  if (!secret) return null;
+  try {
+    const parsed = JSON.parse(secret) as { botToken?: unknown };
+    return typeof parsed.botToken === "string" && parsed.botToken ? parsed.botToken : null;
+  } catch {
+    return secret.startsWith("xox") ? secret : null;
+  }
+}
+
+/** The channel runs on the shared "Add to Slack" app (not the bot's own Slack app). */
+export function isSlackAppChannel(channel: Pick<Channel, "config"> | null): boolean {
+  return (channel?.config as { via?: unknown } | undefined)?.via === "app";
+}
+
 export const slackAdapter: ChannelAdapter = {
   isLive(channel: Channel | null) {
     return Boolean(channel?.credentialId);
   },
-  async send({ db, channel }, msg) {
-    const token = await channelSecret(db, channel);
+  async send({ db, bot, channel }, msg) {
+    const token = slackBotToken(await channelSecret(db, channel));
     if (!token) return { status: "failed", error: "Slack token missing" };
     // msg.to is a Slack user id: open (or reuse) the DM, then post.
     const open = await slackCall<{ channel: { id: string } }>(token, "conversations.open", { users: msg.to });
@@ -57,6 +74,8 @@ export const slackAdapter: ChannelAdapter = {
       channel: open.channel.id,
       text: msg.text.slice(0, 3000),
       blocks: slackBlocks(msg.text, msg.buttons),
+      // On the shared app, every message carries this bot's own name and face.
+      ...(isSlackAppChannel(channel) ? { username: bot.name, icon_url: avatarImageUrl(bot) } : {}),
     });
     return { status: "sent", providerId: sent.ts };
   },

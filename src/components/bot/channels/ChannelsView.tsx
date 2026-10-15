@@ -30,12 +30,16 @@ export type ChannelsProps = {
   availability: Partial<Record<ChannelKind, boolean>>;
   /** Channel kinds the owner already joined the waitlist for. */
   joined: ChannelKind[];
+  /** The shared "Add to Slack" app is set up here. */
+  slackOneClick: boolean;
+  /** Back from Slack's "Allow" page: ?slack=added (&moved=…) or ?channel_error=… */
+  flash: { slackAdded: boolean; movedFrom: string | null; error: string | null };
 };
 
 const POLL_MS = 4000;
 const EXPECT_MS = 4 * 60_000;
 
-export function ChannelsView({ bot, channels: initial, planId, demo, plansOnSale, ownerEmail, botEmail, availability, joined: initialJoined }: ChannelsProps) {
+export function ChannelsView({ bot, channels: initial, planId, demo, plansOnSale, ownerEmail, botEmail, availability, joined: initialJoined, slackOneClick, flash }: ChannelsProps) {
   const router = useRouter();
   const [channels, setChannels] = React.useState<ChannelView[]>(() => sortChannels(initial));
   const [joined, setJoined] = React.useState<Set<ChannelKind>>(() => new Set(initialJoined));
@@ -107,9 +111,31 @@ export function ChannelsView({ bot, channels: initial, planId, demo, plansOnSale
   }, [waiting, refresh]);
 
   const ctx: ChannelCtx = React.useMemo(
-    () => ({ botId: bot.id, botName: bot.name, demo, plansOnSale, ownerEmail, botEmail, run, refresh, expect }),
-    [bot.id, bot.name, demo, plansOnSale, ownerEmail, botEmail, run, refresh, expect],
+    () => ({ botId: bot.id, botName: bot.name, demo, plansOnSale, ownerEmail, botEmail, slackOneClick, run, refresh, expect }),
+    [bot.id, bot.name, demo, plansOnSale, ownerEmail, botEmail, slackOneClick, run, refresh, expect],
   );
+
+  // Back from Slack (once, even when effects run twice in development).
+  const flashHandled = React.useRef(false);
+  React.useEffect(() => {
+    if (flashHandled.current || (!flash.slackAdded && !flash.error)) return;
+    flashHandled.current = true;
+    if (flash.slackAdded) {
+      toast.success(
+        flash.movedFrom
+          ? `${bot.name} is in Slack now, instead of ${flash.movedFrom}: one bot per person in a workspace.`
+          : `${bot.name} is in Slack! It just sent you a message there.`,
+      );
+    } else if (flash.error) {
+      toast.error(flash.error);
+    }
+    const url = new URL(window.location.href);
+    for (const key of ["slack", "moved", "channel_error"]) url.searchParams.delete(key);
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+    setTimeout(() => focus("slack", { block: "start" }), 200);
+    // Only on first load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const join = async (kind: ChannelKind, email?: string) => {
     const data = await run(kind, "waitlist", email ? { email } : undefined);

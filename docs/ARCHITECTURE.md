@@ -100,11 +100,11 @@ Tools from MCP/Composio are classified by name into effects and risks (`effects.
 | Telegram | Managed bots (one tap creates the owner's own named bot from our manager bot), or a pasted BotFather token; webhook secret header |
 | SMS & phone calls | Twilio; voice uses speech `<Gather>` turns with a short async poll so slow brains don't time out; signatures verified |
 | Email | AgentMail or Resend inbound; each bot gets its own brand-free address; Svix signatures |
-| Slack | A per-bot Slack app created from a manifest link; v0 signatures; "link CODE" pairs the owner |
+| Slack | One click: a shared app (OAuth v2). DMs are routed by workspace and Slack person to that person's own bot, and replies carry the bot's name and face. Or the bot's own app from a manifest link, where "link CODE" pairs the owner. v0 signatures |
 | Discord | HTTP interactions (`/ask`, `/link`), Ed25519 verification, deferred replies |
 | WhatsApp, iMessage | Waitlist (platform rules) |
 
-Owners prove each channel is theirs (codes for phone/email, link codes for Slack/Discord, the managed-bot flow for Telegram); only the verified owner can drive the bot. Other people who message it get a disclosed AI assistant that can't use the owner's tools.
+Owners prove each channel is theirs (codes for phone/email, the Slack sign-in that adds the app or a link code, link codes for Discord, the managed-bot flow for Telegram); only the verified owner can drive the bot. Other people who message it get a disclosed AI assistant that can't use the owner's tools.
 
 ## Subscriptions: the Bridge
 
