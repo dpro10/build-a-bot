@@ -14,12 +14,13 @@ export async function GET(_req: Request, ctx: RouteCtx<{ botId: string }>) {
 
 /** The non-secret bits of a channel's config the app shows (never tokens or webhook secrets). */
 function publicChannelConfig(config: unknown) {
-  const c = (config ?? {}) as { simulated?: boolean; locked?: boolean; pendingOwnerAddress?: string | null; username?: string };
+  const c = (config ?? {}) as { simulated?: boolean; locked?: boolean; pendingOwnerAddress?: string | null; username?: string; via?: string };
   return {
     simulated: c.simulated ?? false,
     locked: c.locked ?? false,
     pendingOwnerAddress: typeof c.pendingOwnerAddress === "string" ? c.pendingOwnerAddress : null,
     username: typeof c.username === "string" ? c.username : null,
+    via: c.via === "app" || c.via === "own" ? c.via : null,
   };
 }
 

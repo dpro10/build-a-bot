@@ -24,6 +24,8 @@ export type ChannelView = {
   /** What the owner typed in the builder (their phone or email), to prefill verification. */
   pendingOwnerAddress: string | null;
   username: string | null;
+  /** Slack: "app" on the shared Add to Slack app, "own" on the bot's own Slack app. */
+  via: "app" | "own" | null;
 };
 
 const STATUSES: ChannelStatus[] = ["active", "pending", "needs_setup", "disabled", "error", "waitlist"];
@@ -40,7 +42,7 @@ export function toChannelView(row: {
   config?: unknown;
 }): ChannelView | null {
   if (!isChannelKind(row.kind)) return null;
-  const c = (row.config ?? {}) as { simulated?: boolean; locked?: boolean; pendingOwnerAddress?: unknown; username?: unknown };
+  const c = (row.config ?? {}) as { simulated?: boolean; locked?: boolean; pendingOwnerAddress?: unknown; username?: unknown; via?: unknown };
   return {
     id: row.id,
     kind: row.kind,
@@ -54,6 +56,7 @@ export function toChannelView(row: {
     locked: Boolean(c.locked),
     pendingOwnerAddress: typeof c.pendingOwnerAddress === "string" ? c.pendingOwnerAddress : null,
     username: typeof c.username === "string" ? c.username : null,
+    via: c.via === "app" || c.via === "own" ? c.via : null,
   };
 }
 

@@ -15,6 +15,7 @@ import { CHANNEL_BY_KIND, channelUsable, comingSoonNote, type ChannelKind } from
 import { deliver } from "./outbound";
 import { storeCredential } from "./secrets";
 import { slackCall } from "./slack";
+import { startSlackInstall } from "./slack-app";
 import { sendSms } from "./twilio";
 import { sendEmailRaw } from "./email";
 import { connectTelegramToken, startManagedTelegram } from "./telegram-setup";
@@ -296,6 +297,11 @@ export async function channelAction(
       break;
     }
     case "slack": {
+      if (action === "install") {
+        // One click: the shared Build-a-bot app (slack-app.ts).
+        if (!live.slackOAuth) return { ok: false, error: "One-click Slack is coming soon. Give it its own Slack app instead." };
+        return { ok: true, data: { installUrl: await startSlackInstall(db, owner, bot, channel) } };
+      }
       if (action === "manifest") {
         const manifest = {
           display_information: { name: bot.name, description: `${bot.name}, your AI assistant`, background_color: "#2a1b75" },
@@ -328,7 +334,12 @@ export async function channelAction(
           }
         }
         const credentialId = await storeCredential(db, { ownerId: owner.id, kind: "bot_token", provider: "slack", secret: JSON.stringify({ botToken, signingSecret }), label: team });
-        await db.update(schema.channels).set({ credentialId, address: team, status: "pending", updatedAt: new Date() }).where(eq(schema.channels.id, channel.id));
+        if (channel.credentialId) await db.delete(schema.credentials).where(eq(schema.credentials.id, channel.credentialId));
+        // Its own app now (not the shared one): the owner proves it's them with "link CODE".
+        await db
+          .update(schema.channels)
+          .set({ credentialId, address: team, status: "pending", ownerAddress: null, ownerVerifiedAt: null, config: { via: "own" }, updatedAt: new Date() })
+          .where(eq(schema.channels.id, channel.id));
         const code = await saveCode(db, owner, bot, channel, "slack_owner", "slk");
         return { ok: true, data: { code, instructions: `In Slack, open a DM with ${bot.name} and send: link ${code}` } };
       }
