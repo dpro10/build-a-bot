@@ -25,6 +25,7 @@ The tray menu has: status, Take notes now, Stop, Pause call detection for 1 hour
 - **Never shares your token.** It lives in the main process only: encrypted at rest, never logged (logs scrub it as a backstop), never put in a URL, never given to a web page. The bot at the bottom of the screen is a web page from the server, but it only gets four functions (`onState`, `act`, `setInteractive`, `copy`). It can't navigate elsewhere, open windows or use the mic.
 - **Never listens for voice typing unless you hold the key.** The keyboard hook sees key presses only to spot your shortcut; nothing about other keys is kept or logged. The mic opens when you press the shortcut and closes when you let go (or tap it again, hands-free), and the pill on screen shows it the whole time.
 - **Never keeps your words on the server.** A dictation's audio is sent once, turned into text, cleaned up and thrown away; the server counts words for your plan, nothing else. Your history of dictations stays on this computer, encrypted with the system keychain (memory only if there's none), 100 at most for 30 days, and you can turn it off or clear it.
+- **Never keeps what you select.** Editing by voice sends the selected text once, to make the change you asked for; the server doesn't store it, and the local history keeps only what you said and the result.
 - **Never reads your screen.** To fit the words to the app (casual in chats, proper in email), only its kind (`chat`, `email`, `code`…) and, for apps on the built-in list, its name (`Slack`) are sent, worked out on this computer from the front app and, in a browser, the tab's title. Never the window's text, the title itself, what's around your cursor, or the name of an app that isn't on the list.
 - **No analytics.** Logs stay on this computer (`<userData>/logs/main.log`). A dictation logs one line with its kind, size and timings (`voice: text (12 words, cleaned up) in 410 + 380 ms, 4.2 s recorded`), never what was said.
 - **No FaceTime or phone calls** in this version: macOS doesn't let apps record FaceTime, and phone calls bring stricter consent laws (research §3.2, §5.5).
@@ -36,7 +37,8 @@ Turn it on from the tray (**Set up voice typing…**); it needs a paired compute
 1. **Hold the shortcut and talk.** A small pill appears at the bottom-center of the screen with a waveform and a timer (above the meeting bot if that's showing). A soft chime marks start and stop (*Sounds* in settings).
 2. **Let go.** The audio goes to `/api/voice/dictate`, and the clean text is pasted at your cursor; the pill shows what it typed for a moment. Missed where it went? **Paste last dictation** in the tray.
 3. **Tap twice** to keep talking hands-free; tap once more (or click *Done* on the pill) to finish. **Esc** while it's listening cancels, and nothing is sent. A recording stops by itself at 10 minutes.
-4. **"Hey Otto, …"** (your bot's name, after hey/hi/hello/okay) asks that bot instead of typing. The pill shows what it's doing (*Otto is thinking…*, then each tool it uses), with *Type it instead* in case you meant to dictate, then its answer with **Paste**, **Copy**, **Reply** (talk again to answer it) and **Open chat**. The exchange is in that bot's chat on the web too.
+4. **Edit by voice:** select text in any app, hold **Shift** with the shortcut (before it or while holding it), and say what to do: "make this friendlier", "turn it into a list", "translate it to Spanish". The pill turns pink; let go and the selection is replaced (the app's own Undo takes it back, and the pill says so). With nothing selected, it writes what you ask for at the cursor ("write a short thank-you to Sam"). A question about the selection ("is this clear?") is answered in the pill instead. Not in terminals: copying there is Ctrl+C, which stops the running program.
+5. **"Hey Otto, …"** (your bot's name, after hey/hi/hello/okay) asks that bot instead of typing. The pill shows what it's doing (*Otto is thinking…*, then each tool it uses), with *Type it instead* in case you meant to dictate, then its answer with **Paste**, **Copy**, **Reply** (talk again to answer it) and **Open chat**. The exchange is in that bot's chat on the web too.
 
 Holding for less than 250 ms is a tap, not a dictation; a shortcut pressed together with other keys (⌥ + a letter, say) is left to the app you're in. Paste waits until you've let go of the shortcut's keys, so ⌥ still down doesn't turn ⌘V into ⌥⌘V.
 
@@ -48,11 +50,13 @@ Holding for less than 250 ms is a tap, not a dictation; a shortcut pressed toget
 
 What was on the clipboard is put back 450 ms after pasting (all its formats, not just text), unless something else changed it in the meantime (*Put my clipboard back* in settings). If it can't paste (no permission yet, or Wayland), the text is left on the clipboard and the pill says so.
 
+**Reading the selection** (`Paster.copySelection`): it puts a marker on the clipboard, presses copy (⌘C, Ctrl+C; XTest on Linux), and reads what replaced the marker; the marker still there means nothing was selected. Then the clipboard goes back exactly as it was, before anything is sent. Code editors copy the whole line when nothing is selected, so there a single line ending in a newline doesn't count as a selection.
+
 **If the hook can't run** (macOS without Accessibility, or a system where the hook fails to start) it falls back to a toggle: press **⌘ Shift Space** (Ctrl + Shift + Space elsewhere) to start and again to stop, and paste yourself. The settings window says why and, on a Mac, opens the Accessibility pane; the app notices the switch and moves to holding without a restart.
 
 ### What the server does
 
-`src/lib/dictation`: speech-to-text (Groq `whisper-large-v3-turbo`, with your words and your bots' names as a hint), then guards against the model's known failures (silence that becomes "Thank you.", the hint echoed back), then the plain cleanup (fillers, stutters, "new line", "scratch that"), then the AI cleanup (`openai/gpt-oss-120b` on Groq with a strict prompt, rejected if it answers instead of transcribing, invents words or loses a snippet), then your dictionary. In demo mode (no speech-to-text key) it "hears" sample lines and the pill says *demo*. Free plans get 8,000 words a month; Plus and Pro have no monthly limit.
+`src/lib/dictation`: speech-to-text (Groq `whisper-large-v3-turbo`, with your words and your bots' names as a hint), then guards against the model's known failures (silence that becomes "Thank you.", the hint echoed back), then the plain cleanup (fillers, stutters, "new line", "scratch that"), then the AI cleanup (`openai/gpt-oss-120b` on Groq with a strict prompt, rejected if it answers instead of transcribing, invents words or loses a snippet; skipped for short, clean messages it has nothing to fix, which saves the model's half second), then your dictionary. Editing by voice goes to `/api/voice/edit` (`edit.ts`): the instruction is dictated with the AI cleanup and "Hey {bot}" off, then one call to the same model gets the selection as text to work on (inside tags, never instructions) and must answer in the expected shape (`<replace>` or `<answer>`), or nothing is typed. In demo mode (no speech-to-text key) it "hears" sample lines, and with no model at all, edits are done by simple rules; the pill says *demo*. Free plans get 8,000 words a month; Plus and Pro have no monthly limit.
 
 ### Your words
 
@@ -60,7 +64,7 @@ Shared with the web page (`/app/voice` → *Your words*): names and terms spelle
 
 ### Settings
 
-A try-it box; the shortcut (presets, or record your own); *Clean up my words*, *Match each app's style*, *Talk to your bot*, *Sounds*, *Put my clipboard back*; language (detect it, or one of 33) and microphone; your words and snippets; *Recent* (keep a history or not, fix, clear); and this week's words, minutes saved and words a minute. Stats are numbers only.
+A try-it box; the shortcut (presets, or record your own); *Clean up my words*, *Match each app's style*, *Edit by voice*, *Talk to your bot*, *Sounds*, *Put my clipboard back*; language (detect it, or one of 33) and microphone; your words and snippets; *Recent* (keep a history or not, fix, clear); and this week's words, minutes saved and words a minute. Stats are numbers only.
 
 ## Permissions, per OS
 
@@ -137,14 +141,15 @@ Running as root (CI containers) needs `--no-sandbox`: `npx electron --no-sandbox
 ```sh
 npm test             # unit tests (node --test): detectors per OS, the call state machine,
                      # the controller's safety rules, the upload queue, placement, token storage, tray menu,
-                     # and voice typing: shortcut presets, the hold/tap/hands-free machine, paste and
-                     # clipboard restore, front-app categories, history, learning from fixes, the controller
+                     # and voice typing: shortcut presets, the hold/tap/hands-free machine, Shift for editing,
+                     # paste and clipboard restore, reading the selection, front-app categories, history,
+                     # learning from fixes, the controller (typing, editing, answers, errors, Try again)
 npm run test:e2e     # end to end under Xvfb with Playwright's Electron driver (one file at a time)
 ```
 
 The e2e test needs the web app's dev server running in demo mode at http://localhost:3000 (`BAB_E2E_SERVER` to change it), `xvfb-run`, and Playwright (it uses the web app's `node_modules/playwright`; outside this repo, `npm i -D playwright`). It creates a demo owner and bot, turns on Meeting notes, gets a pairing code, pairs through the pairing window, fakes calls and the mic, then clicks through the bot: ask → copy the heads-up → Take notes → live captions → pause → resume → stop → notes ready (checked through the API), then *Stop and delete* (the meeting is gone from the server), *Not now*, a call that ends on its own, and a second launch where system audio is refused (mic-only, with the message). Screenshots of each phase go to `BAB_E2E_SHOTS` (default `<tmp>/bab-desktop-e2e`), plus a `sheet.png` of the bot over a fake call.
 
-`e2e/voice.e2e.mjs` tests voice typing the same way: it presses and holds Right Ctrl with real X key events (XTest, `e2e/fixtures/xkey.py`) while a second app (`e2e/fixtures/target-app.cjs`) has focus, feeds Chromium's fake mic a voice-like tone, and checks that the demo server's cleaned-up line is pasted into that app and the clipboard is put back. Then the settings window and its try-it box, adding a dictionary word (and seeing it spelled that way), hands-free with two taps, Esc, and "Hey Otto, …" with its reply and *Paste*. Pill screenshots go to the same folder.
+`e2e/voice.e2e.mjs` tests voice typing the same way: it presses and holds Right Ctrl with real X key events (XTest, `e2e/fixtures/xkey.py`) while a second app (`e2e/fixtures/target-app.cjs`) has focus, feeds Chromium's fake mic a voice-like tone, and checks that the demo server's cleaned-up line is pasted into that app and the clipboard is put back. Then the settings window and its try-it box, adding a dictionary word (and seeing it spelled that way), hands-free with two taps, Esc, "Hey Otto, …" with its reply and *Paste*, and editing by voice: select everything in the other app, hold Right Shift + Right Ctrl, and the demo's "Make this friendlier." replaces the selection (not next to it), with the clipboard put back. Pill screenshots go to the same folder.
 
 Not testable here: real call detection on macOS and Windows (the parsers are unit-tested on captured-style output), the Swift helper (it needs a Mac to build), real system-audio permissions, notifications and tray clicks; for voice typing, the macOS Accessibility prompt and Windows key presses (the hook's paste path is unit-tested), and real speech-to-text (the server's tests cover it against a fake Groq).
 

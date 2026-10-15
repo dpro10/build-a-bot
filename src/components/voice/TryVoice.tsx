@@ -2,12 +2,13 @@
 /**
  * Voice typing, right on the Voice typing page: hold the mic button (or click it to keep
  * listening, and click again to finish), talk, and what you meant is typed into the box at your
- * cursor. "Hey {bot}, …" asks your bot instead. The same cleanup and dictionary as the desktop app,
- * so you can see what it does before installing anything.
+ * cursor. "Hey {bot}, …" asks your bot instead. With text selected, what you say changes it ("make
+ * it friendlier"), like Shift with the shortcut in the desktop app. The same cleanup and dictionary
+ * as the desktop app, so you can see what it does before installing anything.
  */
 import * as React from "react";
 import Link from "next/link";
-import { AlertCircle, Loader2, Mic, Sparkles, Square } from "lucide-react";
+import { AlertCircle, Loader2, Mic, Sparkles, Square, Wand2 } from "lucide-react";
 import { Avatar } from "@/components/avatar";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -67,7 +68,12 @@ export function TryVoice({
   const [elapsed, setElapsed] = React.useState(0);
   const [levels, setLevels] = React.useState<number[]>(() => new Array(18).fill(0));
   const [text, setText] = React.useState("");
-  const [compare, setCompare] = React.useState<{ heard: string; typed: string; polished: boolean } | null>(null);
+  const [compare, setCompare] = React.useState<{ heard: string; typed: string; polished: boolean; edit?: boolean } | null>(null);
+  /** The answer to a question about the selected text ("is this clear?"). */
+  const [answer, setAnswer] = React.useState<{ instruction: string; text: string } | null>(null);
+  /** Text selected in the box: the next recording is an instruction for it. */
+  const [selected, setSelected] = React.useState(false);
+  const [workingLabel, setWorkingLabel] = React.useState("Writing…");
   const [reply, setReply] = React.useState<{ bot: Bot; command: string; text: string; label: string | null; done: boolean; approvals?: number } | null>(null);
   const [problem, setProblem] = React.useState<{ message: string; upgrade?: boolean } | null>(null);
   const [note, setNote] = React.useState<string | null>(null);
@@ -78,6 +84,8 @@ export function TryVoice({
   const press = React.useRef<{ at: number; stopWhenReady: boolean } | null>(null);
   const box = React.useRef<HTMLTextAreaElement>(null);
   const demoCommand = React.useRef(false);
+  /** The selection this recording is about (editing by voice), taken when the mic was pressed. */
+  const editing = React.useRef<{ start: number; end: number; text: string } | null>(null);
   const bot = bots[0] ?? null;
 
   const release = React.useCallback((r: Recording) => {
@@ -93,6 +101,28 @@ export function TryVoice({
     },
     [release],
   );
+
+  // Whether text is selected in the box, however it got selected (mouse, keys, select all).
+  React.useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const update = () => setSelected(el.selectionEnd > el.selectionStart && Boolean(el.value.slice(el.selectionStart, el.selectionEnd).trim()));
+    const events = ["select", "keyup", "mouseup", "input", "focus"] as const;
+    for (const ev of events) el.addEventListener(ev, update);
+    document.addEventListener("selectionchange", update);
+    return () => {
+      for (const ev of events) el.removeEventListener(ev, update);
+      document.removeEventListener("selectionchange", update);
+    };
+  }, []);
+
+  /** What's selected in the box right now, if anything. */
+  function selection(): { start: number; end: number; text: string } | null {
+    const el = box.current;
+    if (!el || el.selectionEnd <= el.selectionStart) return null;
+    const value = el.value.slice(el.selectionStart, el.selectionEnd);
+    return value.trim() ? { start: el.selectionStart, end: el.selectionEnd, text: value } : null;
+  }
 
   function insertAtCursor(words: string) {
     const el = box.current;
@@ -116,6 +146,7 @@ export function TryVoice({
     if (rec.current || phase === "starting" || phase === "working") return;
     setProblem(null);
     setNote(null);
+    setAnswer(null);
     setReply((r) => (r?.done ? null : r));
     setPhase("starting");
     let stream: MediaStream;
@@ -191,6 +222,9 @@ export function TryVoice({
       setNote("Didn't catch that. Hold the button while you talk.");
       return;
     }
+    const target = editing.current;
+    editing.current = null;
+    setWorkingLabel(target ? "Changing it…" : "Writing…");
     setPhase("working");
     const q = new URLSearchParams({
       durationMs: String(durationMs),
@@ -200,7 +234,17 @@ export function TryVoice({
       commands: commands ? "1" : "0",
       styles: "1",
     });
-    if (simulated && demoCommand.current) {
+    if (target) {
+      // An instruction: as said, and never a request for the bot.
+      q.set("polish", "0");
+      q.set("commands", "0");
+      q.set("styles", "0");
+      if (simulated) {
+        // The demo hears "Make this friendlier." whatever the room sounded like.
+        q.set("demo", "edit");
+        q.delete("speechMs");
+      }
+    } else if (simulated && demoCommand.current) {
       // The demo hears "Hey {bot}, …" whatever the room sounded like.
       q.set("demo", "command");
       q.delete("speechMs");
@@ -228,15 +272,66 @@ export function TryVoice({
       setNote("Didn't catch that. Try again a little closer to the mic.");
       return;
     }
+    if (target) {
+      await editSelection(target, String(body.text ?? ""));
+      return;
+    }
     if (body.kind === "command") {
-      const target = bots.find((b) => b.id === (body.bot as { id: string })?.id) ?? bot;
-      if (!target) return setPhase("idle");
-      await ask(target, String(body.command ?? ""));
+      const to = bots.find((b) => b.id === (body.bot as { id: string })?.id) ?? bot;
+      if (!to) return setPhase("idle");
+      await ask(to, String(body.command ?? ""));
       return;
     }
     const typed = String(body.text ?? "");
     insertAtCursor(typed);
     setCompare({ heard: String(body.heard ?? ""), typed, polished: Boolean(body.polished) });
+    setPhase("idle");
+  }
+
+  /** Editing by voice: change the selected text the way they said (or answer a question about it). */
+  async function editSelection(target: { start: number; end: number; text: string }, instruction: string) {
+    if (!instruction.trim()) {
+      setPhase("idle");
+      setNote("Didn't catch that. Try again a little closer to the mic.");
+      return;
+    }
+    let res: Response;
+    let b: { kind?: string; text?: string; error?: string; code?: string; usage?: Usage } = {};
+    try {
+      res = await fetch("/api/voice/edit", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ instruction, selection: target.text, category: "other" }) });
+      b = await res.json().catch(() => ({}));
+    } catch {
+      setPhase("idle");
+      setProblem({ message: "I can't reach Build-a-bot. Check your internet and try again." });
+      return;
+    }
+    if (!res.ok) {
+      setPhase("idle");
+      setProblem({ message: String(b.error ?? "That didn't work. Try again."), upgrade: b.code === "limit" });
+      return;
+    }
+    if (b.usage) setUsage(b.usage);
+    if (b.kind === "answer") {
+      setAnswer({ instruction, text: String(b.text ?? "") });
+      setCompare(null);
+      setPhase("idle");
+      return;
+    }
+    const replacement = String(b.text ?? "");
+    const el = box.current;
+    const current = el?.value ?? text;
+    // Over the selection, if it's still there; otherwise at the end.
+    const still = current.slice(target.start, target.end) === target.text;
+    const from = still ? target.start : current.length;
+    const to = still ? target.end : current.length;
+    setText(current.slice(0, from) + replacement + current.slice(to));
+    // The new text stays selected, so "now make it shorter" works next.
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(from, from + replacement.length);
+      setSelected(true);
+    });
+    setCompare({ heard: instruction, typed: replacement, polished: true, edit: true });
     setPhase("idle");
   }
 
@@ -295,6 +390,7 @@ export function TryVoice({
     }
     if (phase !== "idle") return;
     press.current = { at: performance.now(), stopWhenReady: false };
+    editing.current = selection();
     void start();
   }
 
@@ -346,11 +442,27 @@ export function TryVoice({
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-1 text-xs font-semibold tracking-wide text-primary uppercase">
-                <Sparkles className="size-3" aria-hidden="true" /> It typed
+                {compare.edit ? <Wand2 className="size-3" aria-hidden="true" /> : <Sparkles className="size-3" aria-hidden="true" />} {compare.edit ? "It changed it to" : "It typed"}
               </div>
-              <p className="mt-0.5">{compare.typed}</p>
+              <p className="mt-0.5 whitespace-pre-wrap">{compare.typed}</p>
             </div>
           </div>
+        ) : null}
+
+        {answer ? (
+          <div className="mt-3 rounded-2xl border border-border bg-background-2 p-3 text-sm" aria-live="polite">
+            <p className="text-muted-foreground italic">“{answer.instruction}”</p>
+            <p className="mt-1">{answer.text}</p>
+          </div>
+        ) : null}
+
+        {selected ? (
+          <p className="mt-3 flex items-start gap-2 text-sm text-muted-foreground" role="status">
+            <Wand2 className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+            <span>
+              Text selected: hold the mic and say what to change, like “make it friendlier” or “turn it into a list”. In the desktop app, hold <span className="font-medium text-foreground">Shift</span> with your shortcut.
+            </span>
+          </p>
         ) : null}
 
         {reply ? (
@@ -400,7 +512,15 @@ export function TryVoice({
           <button
             type="button"
             onPointerDown={(e) => {
-              if (e.button === 0) onDown();
+              if (e.button !== 0) return;
+              // Things above the button can come and go as it starts (a hint, an old answer), moving
+              // it out from under the pointer: capture, so letting go always reaches it.
+              try {
+                e.currentTarget.setPointerCapture(e.pointerId);
+              } catch {
+                /* not a real pointer (tests, assistive tech) */
+              }
+              onDown();
             }}
             onPointerUp={onUp}
             onPointerLeave={() => {
@@ -420,7 +540,7 @@ export function TryVoice({
             }}
             disabled={busy}
             aria-pressed={listening}
-            aria-label={listening ? (handsfree ? "Finish and type it" : "Let go to type it") : "Hold to talk, or click to keep listening"}
+            aria-label={listening ? (handsfree ? "Finish and type it" : "Let go to type it") : selected ? "Hold and say what to change in the selected text" : "Hold to talk, or click to keep listening"}
             className={cn(
               "relative flex size-14 shrink-0 touch-none items-center justify-center rounded-full text-white shadow-glow transition select-none focus-visible:ring-4 focus-visible:ring-primary/30 focus-visible:outline-none",
               listening ? "bg-danger" : "bg-primary hover:bg-primary-hover",
@@ -445,12 +565,16 @@ export function TryVoice({
               {phase === "listening"
                 ? handsfree
                   ? "Listening. Click to finish."
-                  : "Listening. Let go to type it."
+                  : selected
+                    ? "Listening. Let go to change it."
+                    : "Listening. Let go to type it."
                 : phase === "working"
-                  ? "Writing…"
+                  ? workingLabel
                   : phase === "asking"
                     ? `Asking ${reply?.bot.name ?? "your bot"}…`
-                    : "Hold to talk"}
+                    : selected
+                      ? "Hold to change the selected text"
+                      : "Hold to talk"}
             </p>
             {phase === "idle" ? <p className="text-xs text-muted-foreground">Or click once to keep listening, and click again when you're done.</p> : null}
           </div>
@@ -485,6 +609,7 @@ export function TryVoice({
                 disabled={busy || listening}
                 onClick={() => {
                   demoCommand.current = true;
+                  editing.current = null;
                   press.current = { at: performance.now() - HOLD_MS, stopWhenReady: false };
                   void start().then(() => window.setTimeout(() => void stop(), 1200));
                 }}

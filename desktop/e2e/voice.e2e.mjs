@@ -7,7 +7,8 @@
  * Real key presses (XTest, e2e/fixtures/xkey.py) hold the shortcut (Right Ctrl on Linux); the
  * app records, the demo server "hears" a sample line and cleans it up, and the app pastes it into
  * another app (e2e/fixtures/target-app.cjs) and puts the clipboard back. Then: the settings
- * window and its try-it box, a dictionary word, hands-free (two taps), Esc, and "Hey Otto, …".
+ * window and its try-it box, a dictionary word, hands-free (two taps), Esc, "Hey Otto, …", and
+ * editing by voice (select the text, hold Shift + the shortcut, "Make this friendlier.").
  * Screenshots of the pill go to BAB_E2E_SHOTS (default: <tmp>/bab-desktop-e2e).
  */
 import { test, after } from "node:test";
@@ -219,9 +220,35 @@ test("hold a key, talk, let go: it's typed in the app you're in", { timeout: 300
   await pill.click("button:has-text('Paste')");
   await step("reply pasted", () => until("the answer typed", () => typed().length > before.length, 15_000));
 
+  // ---- editing by voice: select the text, hold Shift with the shortcut, say what to change
+  fs.writeFileSync(demoFile, "edit");
+  await until("the pill to go", async () => (await probe())?.phase === null, 30_000);
+  const original = typed();
+  await keys("tap", "ctrl+a");
+  await keys("down", "Shift_R", "down", "Control_R");
+  await step("edit listening", () =>
+    until("listening for an edit", async () => {
+      const p = await probe();
+      return p?.phase === "listening" && p.pill?.edit === true;
+    }, 10_000),
+  );
+  await sleep(700);
+  await pill.screenshot({ path: path.join(SHOTS, "voice-5-edit.png"), omitBackground: true });
+  await sleep(700);
+  await keys("up", "Control_R", "up", "Shift_R");
+  // The demo's "friendlier": the whole selection, kept, with a greeting and a thank-you around it.
+  await step("edited", () => until("the selection changed in the other app", () => typed().startsWith("Hi! ") && typed().trimEnd().endsWith("Thanks so much!"), 30_000));
+  assert.ok(typed().includes(original.trim()), "everything that was selected is still there");
+  assert.equal(count("Hi! "), 1, "pasted over the selection, not next to it");
+  const edited = await until("done", async () => ((await probe())?.phase === "done" ? probe() : null), 10_000);
+  assert.equal(edited.pill.edit, true);
+  assert.equal(edited.pill.hint, "Ctrl+Z undoes it");
+  await pill.screenshot({ path: path.join(SHOTS, "voice-6-edited.png"), omitBackground: true }).catch(() => {});
+  await until("the clipboard put back", () => fs.readFileSync(clipFile, "utf8") === "ORIGINAL CLIPBOARD", 10_000);
+
   // ---- what's kept: the history on this computer, a word count on the server
   const v = await probe();
-  assert.equal(v.history, 4, "3 dictations and 1 request");
+  assert.equal(v.history, 5, "3 dictations, 1 request and 1 edit");
   assert.ok(v.usage.words >= 36, `words counted: ${v.usage.words}`);
   assert.equal(v.usage.limit, 8000);
   await web.dispose();

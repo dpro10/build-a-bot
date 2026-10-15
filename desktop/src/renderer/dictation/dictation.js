@@ -198,6 +198,8 @@
     info: '<svg viewBox="0 0 16 16"><path d="M8 7v5M8 4.3v.1"/></svg>',
     close: '<svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg>',
     stop: '<svg viewBox="0 0 16 16"><rect x="4" y="4" width="8" height="8" rx="1.5"/></svg>',
+    // Editing by voice: a wand with a spark.
+    wand: '<svg viewBox="0 0 16 16"><path d="M3 13l7-7M9.5 3.5l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6zM12.5 8.5l.4.9.9.4-.9.4-.4.9-.4-.9-.9-.4.9-.4z"/></svg>',
   };
 
   const LABELS = {
@@ -249,7 +251,8 @@
     }
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, 132, 28);
-    const color = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#7c5cff";
+    // Editing by voice draws in its own color, so it's clear this one changes the selection.
+    const color = getComputedStyle(document.documentElement).getPropertyValue(state?.edit ? "--edit" : "--accent").trim() || "#7c5cff";
     const w = 132 / BARS;
     for (let i = 0; i < BARS; i++) {
       // Quiet still shows a gentle ripple, so it's clear it's listening.
@@ -307,6 +310,7 @@
     $("card").hidden = true;
     actions.replaceChildren();
     $("badge").hidden = true;
+    $("hint").hidden = true;
     label.classList.remove("wrap");
     icon.className = "icon";
     wave.hidden = true;
@@ -314,10 +318,11 @@
     label.hidden = false;
 
     if (s.phase === "listening") {
-      icon.innerHTML = ICONS.mic;
+      icon.innerHTML = s.edit ? ICONS.wand : ICONS.mic;
+      if (s.edit) icon.classList.add("edit");
       wave.hidden = false;
       timer.hidden = false;
-      label.textContent = s.replying && s.bot ? `To ${s.bot.name}` : "";
+      label.textContent = s.replying && s.bot ? `To ${s.bot.name}` : s.edit ? "Say what to change" : "";
       label.hidden = !label.textContent;
       if (s.handsfree) {
         actions.append(button("done", { icon: "stop", label: "Done", className: "stop" }), button("cancel", { icon: "close", label: "Cancel" }));
@@ -326,12 +331,15 @@
     } else if (s.phase === "working") {
       icon.innerHTML = '<span class="dots"><i></i><i></i><i></i></span>';
       icon.classList.add("info");
-      label.textContent = s.bot ? `Sending to ${s.bot.name}…` : "Writing…";
+      label.textContent = s.label || (s.bot ? `Sending to ${s.bot.name}…` : "Writing…");
     } else if (s.phase === "done") {
-      icon.innerHTML = ICONS.check;
+      icon.innerHTML = s.edit ? ICONS.wand : ICONS.check;
       icon.classList.add("good");
       const text = String(s.text || "").replace(/\s+/g, " ").trim();
       label.textContent = text.length > 48 ? `${text.slice(0, 47)}…` : text || "Typed";
+      // Edits: how to take it back (the app's own undo).
+      $("hint").textContent = s.hint || "";
+      $("hint").hidden = !s.hint;
       // Demo mode: it didn't hear you, it typed a sample line.
       $("badge").hidden = !s.simulated;
     } else if (s.phase === "note" || s.phase === "error") {
@@ -348,7 +356,8 @@
     $("pill").hidden = true;
     const card = $("card");
     card.hidden = false;
-    $("card-bot").textContent = s.bot ? s.bot.name : "Your bot";
+    card.classList.toggle("answer", s.phase === "answer");
+    $("card-bot").textContent = s.phase === "answer" ? "Answer" : s.bot ? s.bot.name : "Your bot";
     $("card-command").textContent = s.command ? `“${s.command}”` : "";
     $("card-command").hidden = !s.command;
     const text = $("card-text");
@@ -380,7 +389,7 @@
     }
     document.body.dataset.phase = state.phase;
     setAccent(state.bot ? state.bot.color : "grape");
-    if (state.phase === "asking" || state.phase === "reply") renderCard(state);
+    if (state.phase === "asking" || state.phase === "reply" || state.phase === "answer") renderCard(state);
     else renderPill(state);
     report();
   }

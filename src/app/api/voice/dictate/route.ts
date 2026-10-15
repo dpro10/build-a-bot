@@ -43,7 +43,7 @@ export async function POST(req: Request) {
   if (!audio) return apiError(413, "That recording is too large.");
 
   const d = q.data;
-  const sample = demoMode && d.demo ? (d.demo === "command" ? "command" : Number.isInteger(Number(d.demo)) ? Number(d.demo) : undefined) : undefined;
+  const sample = demoMode && d.demo ? (["command", "edit", "write"].includes(d.demo) ? (d.demo as "command" | "edit" | "write") : Number.isInteger(Number(d.demo)) ? Number(d.demo) : undefined) : undefined;
   const out = await dictate(a.db, a.owner, {
     audio,
     mime,

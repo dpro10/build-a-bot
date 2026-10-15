@@ -201,7 +201,9 @@ POST /api/voice/dictate  (raw audio body; device token or session)
    4. "Hey Otto, …" → { kind: "command" } → the caller asks POST /api/voice/ask (SSE, runTurn)
    5. plain cleanup (always): fillers, stutters, "new line", "scratch that"
    6. AI cleanup: one strict prompt per app style; the answer is checked and thrown out if it
-      answered the words instead of cleaning them, added words, or lost a snippet marker
+      answered the words instead of cleaning them, added words, or lost a snippet marker.
+      Skipped when there's nothing for it to do (needsPolish: short, punctuated, no correction,
+      no numbers or punctuation said in words, no name that sounds like one of theirs)
    7. the dictionary: spellings, then snippets → { kind: "text", text, heard, words }
 audio is never stored; the server keeps a word count, never the words
 ```
@@ -209,6 +211,7 @@ audio is never stored; the server keeps a word count, never the words
 - **Files:** `src/lib/dictation/text.ts` (pure text rules: tidy, snippets, commands, the guards, the checks on the AI's answer), `polish.ts` (the prompt, its examples and where it runs), `index.ts` (the pipeline, limits, the owner's vocabulary), `dictionary.ts` (add/edit/delete), `demo.ts` (sample dictations for demo mode). Routes under `src/app/api/voice/`.
 - **The AI cleanup** runs on Groq (`openai/gpt-oss-120b`, low reasoning) with the speech-to-text key, so the words go to one provider; else on the included model; or not at all (`DICTATION_POLISH`). It has a few seconds: when it's slow, fails or its answer fails the checks, the plain cleanup is typed instead, so a dictation never waits long or comes back wrong.
 - **The dictionary** (`dictionary` table: `kind` word | snippet, `text`, `heard` = what speech-to-text writes instead or the phrase that types a snippet, `source` manual | correction). Words are fed to speech-to-text as a hint and fixed afterwards; names the owner's bots remember (`memories`) are used too, without being copied. Snippets are swapped for markers before the AI cleanup so it can't rewrite them.
+- **Editing by voice** (`src/lib/dictation/edit.ts`, `POST /api/voice/edit`): Shift with the shortcut makes the recording an instruction. The desktop app copies the selection (a marker on the clipboard, then copy, then the clipboard put back; never in a terminal), dictates the instruction with the AI cleanup and commands off, and sends both. One model call, no tools: the selection is wrapped in tags as text to work on, after worked examples that include a selection giving orders; the reply must be `<replace>` (typed over the selection) or `<answer>` (shown in the pill), and a chat-style preamble, our own tags or a reply far longer than the job is refused. "Make this shorter" with nothing selected is refused before any model call. Typed words count like dictation; the selection is never stored.
 - **"Hey {bot}"** goes into the bot's web conversation like a typed message (`meta.via = "voice"`), with a directive to answer briefly, so it runs through `runTurn`, the policy engine and approvals like everything else, and shows up in the chat later.
 - **Auth:** the desktop app's device token (the same pairing as the Bridge) or the web session (same-origin checked for writes): `src/lib/dictation/auth.ts`.
 - **Limits:** `usage.dictationWords` (Free 8,000 words a month; Plus and Pro unlimited), counted when text is typed, never for commands or nothing heard. The per-owner daily cap and the site ceiling (`DICTATION_DAILY_LIMIT`) keep "unlimited" from being a blank check.
@@ -244,7 +247,7 @@ Every flow in the product can be tried with zero keys, and nothing real is sent 
   - Bring my memories: paste, untick, save, pin;
   - a ready-made tutor: one tap in the builder, its first question, then back to a general assistant in Settings;
   - meeting notes in the browser with a fake microphone: consent, the floating window, the transcript, the notes, deleting;
-  - voice typing in the browser with a fake microphone: hold to type, hands-free, "Hey Otto" and its reply, a dictionary word that's then used;
+  - voice typing in the browser with a fake microphone: hold to type, hands-free, "Hey Otto" and its reply, editing selected text by voice, a dictionary word that's then used;
   - every page loads;
   - axe accessibility scans in light and dark.
 - **On real Postgres.** Supabase runs the server through postgres.js and a transaction pooler, which are stricter than the in-memory database the tests use. Check database changes on a real one too: a local Postgres with pgbouncer in front in `pool_mode = transaction` on port 6543, like Supabase's pooler (port 6543 also makes the client skip prepared statements).

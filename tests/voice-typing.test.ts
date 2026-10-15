@@ -149,6 +149,14 @@ describe("voice typing, end to end", () => {
     expect(out.ok && out.result).toMatchObject({ kind: "text", text: "I'll be there in ten minutes.", polished: false });
   });
 
+  it("types a short, clean message without waiting for the AI", async () => {
+    fakeGroq([{ text: "Sounds good, see you then." }], []);
+    const out = await dictate(db, owner, { ...base, audio: audio(), category: "chat" });
+    expect(out.ok && out.result).toMatchObject({ kind: "text", text: "Sounds good, see you then.", polished: false, words: 5 });
+    expect(calls.llm).toHaveLength(0);
+    expect(out.ok && out.ms.polish).toBeLessThan(50);
+  });
+
   it("types a snippet exactly, wherever it's said", async () => {
     fakeGroq([{ text: "Sure, book a time here, my booking link. Thanks!" }], [{ text: "Sure, book a time here: ⟦1⟧. Thanks!" }]);
     const out = await dictate(db, owner, { ...base, audio: audio() });
