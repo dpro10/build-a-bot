@@ -115,6 +115,7 @@
   --animate-pulse-ring: pulse-ring 1.8s ease-out infinite;
   --animate-peek: peek 0.7s cubic-bezier(0.2, 0.9, 0.25, 1.15) both;
   --animate-bubble: bubble 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+  --animate-voice-wave: voice-wave 1.1s ease-in-out infinite;
 
   @keyframes float {
     0%,
@@ -170,6 +171,16 @@
     100% {
       transform: translateY(0) scale(1);
       opacity: 1;
+    }
+  }
+  /* Voice typing's waveform bars. */
+  @keyframes voice-wave {
+    0%,
+    100% {
+      transform: scaleY(0.3);
+    }
+    50% {
+      transform: scaleY(1);
     }
   }
   @keyframes pulse-ring {

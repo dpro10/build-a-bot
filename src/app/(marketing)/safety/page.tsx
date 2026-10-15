@@ -1,24 +1,5 @@
 import Link from "next/link";
-import {
-  ArrowRight,
-  AudioLines,
-  Ban,
-  BellOff,
-  Bot,
-  Code2,
-  DatabaseZap,
-  HandCoins,
-  HeartHandshake,
-  Lock,
-  Megaphone,
-  OctagonX,
-  Receipt,
-  ShieldAlert,
-  ShieldCheck,
-  Siren,
-  UserCheck,
-  Wallet,
-} from "lucide-react";
+import { ArrowRight, AudioLines, Ban, BellOff, Bot, Code2, DatabaseZap, HandCoins, HeartHandshake, Lock, Megaphone, Mic, OctagonX, Receipt, ShieldAlert, ShieldCheck, Siren, UserCheck, Wallet } from "lucide-react";
 import { Avatar } from "@/components/avatar";
 import { BrandTile } from "@/components/brand/icons";
 import { DocLayout, DocSection, type TocEntry } from "@/components/marketing/DocLayout";
@@ -47,6 +28,7 @@ const TOC: TocEntry[] = [
   { id: "money", title: "Money" },
   { id: "sensitive", title: "Sensitive apps" },
   { id: "recording", title: "Meeting notes" },
+  { id: "voice", title: "Voice typing" },
   { id: "ai-disclosure", title: "Always an AI" },
   { id: "adults", title: "Adults only" },
   { id: "crisis", title: "Crisis protocol" },
@@ -267,6 +249,33 @@ export default function SafetyPage() {
             gives you a heads-up to paste in the call&apos;s chat: &ldquo;Heads-up: I&apos;m using my AI assistant to take notes on this call (a
             transcript and a summary). Let me know if you&apos;d rather I didn&apos;t.&rdquo;
           </Callout>
+        </DocSection>
+
+        <DocSection id="voice" title="Voice typing: only while you hold the key" icon={<Mic />}>
+          <p>
+            With the desktop app, you can hold a key in any app and talk, and what you meant is typed where your cursor is. It listens only
+            while you hold the key (or between two taps and the next one), and a small bar at the bottom of your screen shows it the whole time.
+          </p>
+          <ul>
+            <li>
+              <strong>Nothing you say is kept.</strong> The audio is turned into text and thrown away, and the text goes back to your computer
+              without being stored. We keep a count of the words for your plan, that&apos;s all.
+            </li>
+            <li>
+              <strong>It doesn&apos;t look at your screen.</strong> To match the app&apos;s style, it sends the kind of app you&apos;re typing in
+              (&ldquo;chat&rdquo;, &ldquo;email&rdquo;) and, for well-known apps like Slack, its name. Never what&apos;s on your screen or in
+              the window.
+            </li>
+            <li>
+              <strong>Your bot only acts when you ask it by name.</strong> Dictated text is just text: it&apos;s cleaned up, never followed as an
+              instruction. Only something that starts with your bot&apos;s name (&ldquo;Hey Otto, &hellip;&rdquo;) goes to your bot, with the usual
+              checks and approvals, and you can turn that off.
+            </li>
+            <li>
+              <strong>Your history stays on your computer,</strong> encrypted, so you can copy or fix a recent dictation. Turn it off, or clear it,
+              in the app.
+            </li>
+          </ul>
         </DocSection>
 
         <DocSection id="ai-disclosure" title="Always an AI, on every channel" icon={<Bot />}>

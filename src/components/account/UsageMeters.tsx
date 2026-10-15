@@ -2,7 +2,7 @@
  * This month's usage against the plan's limits. Server-component safe.
  */
 import * as React from "react";
-import { AudioLines, Bot, KeyRound, MessageCircle, MessageSquareText, Phone, Search } from "lucide-react";
+import { AudioLines, Bot, KeyRound, MessageCircle, MessageSquareText, Mic, Phone, Search } from "lucide-react";
 import { Progress } from "@/components/ui/misc";
 import { PAID_PLANS_SOON, type Plan } from "@/lib/billing/plans";
 import { cn } from "@/lib/utils";
@@ -14,6 +14,7 @@ export type UsageNumbers = {
   voiceMinutes: number;
   smsSegments: number;
   meetingMinutes: number;
+  dictationWords: number;
   bots: number;
 };
 
@@ -63,6 +64,13 @@ const METERS: MeterDef[] = [
     icon: <AudioLines className="size-4" />,
   },
   {
+    key: "dictationWords",
+    label: "Voice typing",
+    hint: "Words you typed by voice.",
+    locked: "Voice typing isn't on this plan.",
+    icon: <Mic className="size-4" />,
+  },
+  {
     key: "bots",
     label: "Bots",
     hint: "Bots you have right now.",
@@ -106,6 +114,23 @@ export function UsageMeters({
       {meters.map((m) => {
         const limit = limitFor(plan, m.key);
         const value = used[m.key];
+        // No monthly limit (voice typing on Plus and Pro): the count, without a bar.
+        if (!Number.isFinite(limit)) {
+          return (
+            <div key={m.key} className="relative flex flex-col rounded-2xl border border-border bg-card p-4">
+              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                <span className="flex size-7 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary">{m.icon}</span>
+                <span className="min-w-0">{m.label}</span>
+              </div>
+              <div className="mt-3 flex items-baseline gap-1.5 tabular-nums">
+                <span className="font-display text-2xl font-bold text-foreground">{fmt(value)}</span>
+                <span className="text-sm text-muted-foreground">words</span>
+              </div>
+              <div className="mt-3 h-2 rounded-full bg-primary-soft" aria-hidden />
+              <p className="mt-2 text-xs text-muted-foreground">No monthly limit on {plan.name}.</p>
+            </div>
+          );
+        }
         // A full set of bots isn't "running out" — keep that one calm.
         const tone = m.key === "bots" ? "primary" : meterTone(value, limit);
         const left = Math.max(0, limit - value);

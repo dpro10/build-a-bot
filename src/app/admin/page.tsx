@@ -115,6 +115,7 @@ export default async function AdminPage() {
               <Kv k="Searches" v={fmt.format(m.usage.searches)} />
               <Kv k="Voice minutes" v={fmt.format(m.usage.voiceMinutes)} />
               <Kv k="Meeting minutes" v={fmt.format(m.usage.meetingMinutes)} />
+              <Kv k="Voice typing words" v={fmt.format(m.usage.dictationWords)} />
               <Kv k="Text segments" v={fmt.format(m.usage.smsSegments)} />
             </dl>
           </Panel>

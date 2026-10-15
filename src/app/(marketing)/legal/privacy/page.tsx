@@ -32,10 +32,10 @@ const title = (id: string) => `${n(id)}. ${SECTIONS[n(id) - 1].title}`;
 const SUBPROCESSORS: { name: string; purpose: string; data: string }[] = [
   { name: "Vercel", purpose: "Hosting and running the app", data: "Everything passing through the app while it's processed" },
   { name: "Our managed Postgres host", purpose: "Storing your account and bots", data: "Account, bots, messages, receipts (secrets stay encrypted)" },
-  { name: "Nebius Token Factory", purpose: "The included open models", data: "Messages and context, when your bot uses an included model" },
+  { name: "Nebius Token Factory", purpose: "The included open models", data: "Messages and context, when your bot uses an included model (and dictated text, when voice typing's cleanup runs there)" },
   { name: "Your chosen AI provider", purpose: "Your own API key, if you add one", data: "Messages and context, sent to that provider only" },
   { name: "Tavily", purpose: "Web search", data: "Search queries" },
-  { name: "Groq, with Together AI as a backup", purpose: "Turning meeting audio into text", data: "Meeting audio, only while it's turned into text" },
+  { name: "Groq, with Together AI as a backup", purpose: "Turning meeting audio and voice typing into text, and cleaning up what you dictate", data: "Audio, only while it's turned into text; dictated text, only while it's cleaned up" },
   { name: "Composio", purpose: "Sign-in and actions for many apps", data: "App tokens and the actions your bot takes in those apps" },
   { name: "Twilio", purpose: "Phone calls and texts", data: "Phone numbers, texts, call speech and transcripts" },
   { name: "AgentMail and Resend", purpose: "Your bot's email address and sign-in emails", data: "Email addresses and email content" },
@@ -72,6 +72,7 @@ export default function PrivacyPage() {
             <li>API keys and app logins are encrypted at rest and never shown again.</li>
             <li>Your Claude or ChatGPT login never leaves your computer.</li>
             <li>Meeting notes only listen after you say yes. The audio becomes text and isn&apos;t kept.</li>
+            <li>Voice typing only listens while you hold its key. Neither the audio nor what you dictate is kept on our servers: we count the words, that&apos;s all.</li>
             <li>
               You can export everything or delete your account from your <Link href="/app/account">Account page</Link>.
             </li>
@@ -103,6 +104,15 @@ export default function PrivacyPage() {
             never by recognizing voices. The audio is turned into text as it arrives and isn&apos;t stored on our servers. If an upload fails, the desktop
             app keeps that bit of audio on your own computer until it&apos;s sent, then deletes it.
           </p>
+          <h3>Voice typing</h3>
+          <p>
+            If you use voice typing: the words and snippets you add to your dictionary, and a monthly count of the words you typed by voice. What
+            you say is turned into text, cleaned up and sent back to you; neither the audio nor the text is stored on our servers. The kind of app
+            you&apos;re typing in (like &ldquo;chat&rdquo; or &ldquo;email&rdquo;) and, for well-known apps, its name are sent along so the text fits
+            it, never what&apos;s on your screen. To spell your names right, the names your bots remember are used as hints. The desktop app keeps your recent dictations
+            on your own computer, encrypted, and you can turn that off or clear it. A request that starts with your bot&apos;s name (&ldquo;Hey
+            Otto, &hellip;&rdquo;) goes to your bot like a typed message, and is kept in your chat with it.
+          </p>
           <h3>Connection tokens and keys</h3>
           <p>
             Tokens that let your bot use the apps you connect, your channel tokens and any API keys you add. These are encrypted as soon as they
@@ -111,7 +121,7 @@ export default function PrivacyPage() {
           <h3>Technical details</h3>
           <p>
             Your browser&apos;s user agent for each signed-in session, the computers you pair with the Bridge, and monthly usage counts (messages,
-            searches, minutes, texts) for your plan.
+            searches, minutes, texts, words typed by voice) for your plan.
           </p>
         </DocSection>
 
