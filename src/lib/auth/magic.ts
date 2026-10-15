@@ -24,8 +24,12 @@ export async function createLoginLink(
   return `${appUrl()}/auth/verify?token=${encodeURIComponent(token)}`;
 }
 
+/**
+ * Where to go after signing in: a path on this site, else /app. Browsers read "//host" and "/\host"
+ * (and either with tabs or newlines in between, which they drop) as another site.
+ */
 export function safeNext(next: string | null | undefined): string {
-  if (!next || !next.startsWith("/") || next.startsWith("//")) return "/app";
+  if (!next || !next.startsWith("/") || next.startsWith("//") || /[\\\x00-\x1f\x7f]/.test(next)) return "/app";
   return next;
 }
 
