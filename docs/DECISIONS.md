@@ -426,6 +426,17 @@ Outside demo mode nothing is simulated. Anything without its service set up says
 - **The Vercel connector** can read projects, deployments and logs. It can't create projects or list environment variables (403), so Diego does those in the dashboard.
 - **Log noise:** each cold start logs Postgres NOTICEs from the migrator ("already exists, skipping"). They're harmless.
 
+### Channels on the live site (2026-10-15)
+
+- **Web** is always on.
+- **Slack** is on: one click, through the shared app.
+- **Discord** is on since 2026-10-15. The "Build-a-bot" app allows user and server installs, and its interactions endpoint is set. Diego: "i dont really use discord so this wont be my method of communication but im glad we got that sorted."
+  - **For Discord verification later** (needed past about 75 servers): a developer team, two-factor sign-in, and the terms and privacy links. The links are already set.
+- **Telegram is on hold.** Diego: "Im honestly going to leave telegram for now." Without the manager bot, owners can still paste a BotFather token.
+- **Not yet:**
+  - texts and calls (Twilio);
+  - bot email (needs a brand-free mail domain).
+
 ## Security review before Diego's walkthrough (2026-10-14)
 
 A code review of the server and the desktop app. Each fix has a test that fails on the old code.
