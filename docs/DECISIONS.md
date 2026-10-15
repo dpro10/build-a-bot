@@ -392,6 +392,33 @@ Built (Claude; Diego to confirm the details):
   - A money coach.
   - A custom role written by the owner.
 
+## Decision: voice typing, built to beat Wispr Flow (Diego, 2026-10-15)
+
+Diego: "yes, lets start on the voice typing. I like how you said we can beat wispr. Could you build towards that, use as many tokens as possible I need maximum effort and exemplary work. This must be an outstanding product."
+
+Built (Claude; Diego to confirm the details):
+- **What it does:** hold a key in any app and talk; let go, and what you meant is typed where the cursor is. Tap twice for hands-free, tap again to finish; Esc cancels.
+  - In the desktop app (`desktop/src/main/voice/`), and on a new Voice typing page in the web app (`/app/voice`), which has a try-it box that works in the browser.
+  - The shortcut: Right Option on a Mac, Ctrl + Windows on Windows, Right Ctrl on Linux, or keys the owner picks.
+- **How it beats Wispr Flow:**
+  - **Your bot is in it.** "Hey Otto, remind me to call Mom at 5" asks the bot instead of typing. The answer shows in the pill with Paste, Copy, Reply and Open chat, and it's in the chat later. "Type it instead" covers the times it wasn't meant for the bot.
+  - **It knows your world.** Speech-to-text and the cleanup get the owner's dictionary, their name, their bots' names and the names their bots remember (Ana, Austin…), so names come out right without setup.
+  - **Private by design.** The mic is on only while the key is held, and the pill shows the whole time. Neither the audio nor the text is stored on the server; only a word count. The history stays on the computer, encrypted. Only the kind of app ("chat") and, for apps on the built-in list, its name ("Slack") are sent; an app it doesn't recognize stays nameless. Never screenshots or window contents (Wispr's screenshots drew criticism).
+  - **Included in the plans:** 8,000 words a month on Free (about Wispr's free 2,000 a week), unlimited on Plus and Pro. Wispr charges about $12–15 a month for dictation alone.
+- **The cleanup** (`src/lib/dictation/`):
+  - A plain pass always runs: fillers, stutters, spoken "new line" and "new paragraph", and "scratch that".
+  - Then an AI pass on Groq's `openai/gpt-oss-120b` with low reasoning (same Groq key and provider as speech-to-text, Zero Data Retention), falling back to our Token Factory model. `DICTATION_POLISH` and `DICTATION_POLISH_MODEL` change it.
+  - It is told never to answer what it's given ("Can you write me a poem?" stays a question), with worked examples. Its answer is used only if it still says what was said: checks for answering, adding words, dropping too much, a question turned into an answer, and lost snippet markers. Otherwise the plain cleanup is typed.
+  - Each app gets its style: casual in chats, proper in email, exact in code and terminals.
+- **The dictionary:** words (with "it writes instead"), and snippets (say a phrase, it types a link or an address). Shared by the web and the desktop app. Fixing a dictation in the desktop history suggests the misheard names to add.
+- **Limits and cost:** about $0.0003 a dictation. Free: 8,000 words a month. Every plan: at most 3,000 dictations a day and 60 a minute. The whole site: 20,000 dictations a day (`DICTATION_DAILY_LIMIT`).
+- **Tested:** unit tests for the rules, the pipeline against a fake Groq, the routes, and the desktop's timing, keys, paste and controller. An e2e under Xvfb holds a real key, records, and pastes into another app.
+- **Not tested yet: macOS and Windows.** Diego, please try it on your Mac (`cd desktop && npm install && npm start`, then "Set up voice typing" in the menu bar). In development, macOS lists the app as "Electron" under Accessibility.
+- **Later:**
+  - The Fn (Globe) key, Wispr's default, through the Swift helper. The keyboard hook can't see Fn on a Mac.
+  - Rewriting selected text by voice ("make this friendlier").
+  - Streaming the audio while the key is held, to cut the wait after letting go.
+
 ## Build choice (Claude; Diego to confirm): what real testers see (2026-10-14)
 
 Outside demo mode nothing is simulated. Anything without its service set up says **"Coming soon"** and can't be picked or set up:
@@ -495,6 +522,13 @@ A code review of the server and the desktop app. Each fix has a test that fails 
   - Migrations run in one transaction under `pg_advisory_xact_lock`, since a session lock doesn't survive a transaction pooler.
   - A failed start is retried on the next request instead of breaking that server.
   - Chat errors go to the server log; the chat shows a plain sentence, never SQL.
+- **Voice typing** (2026-10-15):
+  - Electron 44's clipboard is async and browser-like (`read()` gives every format as `ClipboardItem`s, `write()` takes them back). The old `clipboard.write({ text })` throws. The desktop app reads every format before pasting and puts them all back.
+  - On Linux, uiohook's prebuilt key taps are synthetic `XSendEvent`s, which many apps ignore. Pasting there uses XTest instead (xdotool, else python3 with libXtst, which the hook needs anyway).
+  - Chromium's fake microphone only beeps once a second, too little "speech" for a short hold. The e2e tests feed it a steady tone (`--use-file-for-fake-audio-capture`).
+  - `node --test` runs test files in parallel. The desktop e2e files share one X display, so `test:e2e` runs them one at a time.
+  - Pairing is limited to 10 tries per 10 minutes per address. Running the desktop e2e suite many times in a row hits it; wait 10 minutes.
+  - The brand's lighter purple `#7c5cff` with white text is only 4.35:1, under the 4.5:1 that small text needs. Buttons with white text use `#6a4af5` (5.4:1), on the site and in the pill.
 - **The Resend key for sign-in links made bots' email look live** (2026-10-14). Any email key turned the Email channel and "Its own inbox" on, so the live site offered them and tried to send codes from `<handle>@botmail.dev`. Resend refused, and the page got a 500.
   - Bots' email now has its own flag (`live.botEmail`): `BOT_EMAIL_DOMAIN`, plus AgentMail or Resend with its webhook secret. Until then both show as Coming soon, and there's no fallback domain.
   - Outside demo mode, any channel whose service isn't set up shows as Coming soon, and recipes and saved drafts leave it out.
@@ -533,3 +567,4 @@ Diego: "I really like that front desk for businesses idea. Lets hold on to it." 
    - **Remote MCP servers from the official MCP Registry**, curated, since quality varies. Owners can already paste any MCP server's URL.
    - **The long tail through Zapier's MCP server**, where the owner connects their own Zapier account, or a second sign-in provider for apps Composio lacks.
    - Count clicks on "Coming soon" apps to see what testers want first.
+9. Voice typing before launch: Diego tests it on his Mac; the Groq key (`TRANSCRIBE_API_KEY`) turns it on for real; the signed Mac and Windows apps ship it to everyone.

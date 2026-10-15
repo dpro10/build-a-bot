@@ -6,9 +6,10 @@ import { getPlan } from "@/lib/billing/plans";
 import { getUsage } from "@/lib/billing/usage";
 import { appUrl, demoMode } from "@/lib/env";
 import { CHUNK_MS, MEETINGS_CONNECTOR } from "@/lib/meetings";
-import { transcriptionAvailable } from "@/lib/transcribe";
+import { dictationUsage, voicePolishAvailable, voiceTypingAvailable } from "@/lib/dictation";
+import { transcriptionAvailable, transcriptionSetup } from "@/lib/transcribe";
 
-/** The desktop app's view of the account: which bots can take notes, and how many minutes are left. */
+/** The desktop app's view of the account: which bots can take notes, minutes left, and voice typing. */
 export async function GET(req: Request) {
   const auth = await authDevice(req);
   if (!auth) return apiError(401, "This computer was unpaired. Pair it again from the app.");
@@ -39,6 +40,14 @@ export async function GET(req: Request) {
       available: transcriptionAvailable(),
       minutesLeft: Math.max(0, plan.limits.meetingMinutes - Math.floor(usage.meetingSeconds / 60)),
       chunkMs: CHUNK_MS,
+    },
+    voice: {
+      available: voiceTypingAvailable(),
+      /** The AI cleanup (fillers out, punctuation, corrections); without it, the plain cleanup. */
+      polish: voicePolishAvailable(),
+      /** Demo mode without a speech-to-text key: it "hears" sample lines. */
+      simulated: !transcriptionSetup(),
+      usage: await dictationUsage(db, owner),
     },
     appUrl: appUrl(),
     demo: demoMode,

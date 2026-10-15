@@ -19,6 +19,7 @@ import { appShortName } from "./apps.mjs";
  * @property {Array<{ id: string, name: string, meetingsOn: boolean, paused: boolean }>} bots
  * @property {string | null} botId
  * @property {string[]} neverApps
+ * @property {{ enabled: boolean, mode: 'hold'|'toggle'|'off', hint: string | null, canPasteLast: boolean } | null} [voice]  voice typing
  */
 
 /** @param {TrayModel} m */
@@ -49,6 +50,18 @@ export function trayItems(m) {
     if (m.phase === "asking") items.push({ id: "copy-heads-up", label: "Copy a heads-up for the call" });
   }
   items.push({ type: "separator" });
+
+  // Voice typing.
+  if (m.signedIn && m.voice) {
+    if (m.voice.enabled) {
+      items.push({ id: "voice-status", label: m.voice.hint ? `Voice typing: ${m.voice.hint}` : "Voice typing is starting…", enabled: false });
+      items.push({ id: "voice-paste-last", label: "Paste last dictation", enabled: m.voice.canPasteLast });
+      items.push({ id: "voice-settings", label: "Voice typing settings…" });
+    } else {
+      items.push({ id: "voice-setup", label: "Set up voice typing…" });
+    }
+    items.push({ type: "separator" });
+  }
 
   if (m.signedIn) {
     items.push(m.detectionPaused ? { id: "detect-resume", label: "Resume call detection" } : { id: "detect-pause", label: "Pause call detection for 1 hour" });

@@ -60,6 +60,15 @@ export const config = {
       model: v("TRANSCRIBE_FALLBACK_MODEL"),
     },
   },
+  /**
+   * Voice typing's cleanup (fillers out, punctuation, corrections). DICTATION_POLISH picks where it
+   * runs: "groq" (with the speech-to-text key, so the words go to one provider), "included" (our
+   * Token Factory models) or "off". Unset: Groq when speech-to-text runs on Groq, else included.
+   */
+  dictation: {
+    polish: v("DICTATION_POLISH"),
+    model: v("DICTATION_POLISH_MODEL"),
+  },
   telegram: {
     /** Our "manager" bot that creates each user's own bot (Managed Bots, Bot API 9.6). */
     managerToken: v("TELEGRAM_MANAGER_BOT_TOKEN"),

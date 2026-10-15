@@ -26,6 +26,7 @@ Open http://localhost:3000.
 | Sign-in emails | The magic link appears on screen | An email provider |
 | Payments | Plans switch without paying | Stripe keys |
 | Meeting transcripts | A scripted meeting plays, whatever is said | `TRANSCRIBE_API_KEY` (a Groq key) |
+| Voice typing | It types sample sentences, whatever is said (marked *Demo*) | `TRANSCRIBE_API_KEY` (the same Groq key also runs the AI cleanup) |
 | Web actions | Simulated sites | `BROWSER_USE_API_KEY` |
 
 Weather, Wikipedia and exchange rates are live when your computer can reach them; otherwise you get labeled placeholders.
@@ -34,7 +35,7 @@ To start over, stop the server and delete the `.data/` folder (the local databas
 
 ## 1. The public site (5 min)
 
-- **`/`, the landing page:** the five characters, how it works, the brains, apps, trust levels, channels, meeting notes and safety. Try the light/dark toggle, and a phone-width window.
+- **`/`, the landing page:** the five characters, how it works, the brains, apps, trust levels, channels, meeting notes, voice typing and safety. Try the light/dark toggle, and a phone-width window.
 - **`/pricing`:** Free, Plus ($12) and Pro ($39), monthly or yearly.
 - **`/safety`:** the trust levels and the hard limits, including the meeting-notes rule.
 - **`/explore`:** recipes, which are ready-made bots. "Make this bot" opens the builder prefilled.
@@ -151,7 +152,29 @@ npm run dev
 - **Windows:** Settings › Privacy › Microphone › "Let desktop apps access your microphone" must be on.
 - **Linux:** needs PulseAudio or PipeWire (`pactl`).
 
-## 6. The rest of the dashboard (5 min)
+## 6. Voice typing (5 min)
+
+Hold a key in any app and talk; what you meant is typed at your cursor, cleaned up. Saying "Hey" and your bot's name asks the bot instead.
+
+**In the browser:** open **Voice typing** in the left sidebar.
+
+1. Under **Try it**, hold the mic button for a few seconds (say anything; demo mode doesn't hear you yet) and let go.
+2. **Expect:** one of four sample sentences, with its ums, repeats and "no wait" taken out, typed into the box at the cursor, like "I was thinking we could move the team meeting to Friday at 3." **You said** / **It typed** shows the before and after. Hold again: the next one lands where the cursor is.
+3. Click the button once instead of holding: it keeps listening (hands-free) until you click again.
+4. Press **Try "Hey …"** (next to *Demo*): your bot is asked "Remind me to call Mom tomorrow at 5." and answers right there, with a link to its chat, where the exchange is kept.
+5. Under **Your words**, add a name it should spell your way, and what it writes instead if you've seen it get it wrong (try `Friday`, instead of `Thursday`). Add a snippet ("my booking link" → a URL) the same way. The desktop app uses the same list.
+
+**In the desktop app** (paired as in step 5):
+
+1. In the tray menu, choose **Set up voice typing…** and turn it on. On a Mac, allow **Accessibility** when asked (in a dev run it's listed as **Electron**), so it can hear the key in any app and paste for you.
+2. Click into any text field (Notes, Slack, a browser), then hold **Right Option** (Mac), **Ctrl + Windows** (Windows) or **Right Ctrl** (Linux) and talk.
+3. **Expect:** a small pill at the bottom of the screen with a waveform while you hold; let go and the sentence is typed where your cursor is, and your clipboard is put back as it was.
+4. Tap the key twice for hands-free, and press **Esc** while it listens to cancel.
+5. **Voice typing settings…** (tray) has the try-it box, your shortcut, the cleanup switches, your words, and **Recent**: *Fix* a dictation and it offers to learn the names it got wrong.
+
+Without Accessibility on a Mac it still works: press **⌘ Shift Space** to start and stop, and paste with ⌘V.
+
+## 7. The rest of the dashboard (5 min)
 
 - **Apps & trust:**
   - per-app switches (allow / ask / off);
@@ -165,7 +188,7 @@ npm run dev
   - its brain;
   - **Share as a recipe** (a public `/r/…` link, never with your data);
   - **Other AI apps** (use the bot's apps from Claude Desktop or Claude Code, under the same rules).
-- **Plan & usage:** switch plans (free in demo mode) and watch the meters, meeting minutes included.
+- **Plan & usage:** switch plans (free in demo mode) and watch the meters, meeting minutes and voice typing words included.
 - **Bridge (your computer):** pairing for the Bridge (subscription brains) and the desktop app.
 - **Account:**
   - **Add your email** saves the account (in demo mode the magic link appears on screen instead of in your inbox);
@@ -173,10 +196,10 @@ npm run dev
   - **Delete my account** removes it all.
 - **`/admin`:** the operator dashboard with revenue, growth, usage and costs, as aggregates. In demo mode any signed-in user can see it; in production only `ADMIN_EMAILS`.
 
-## 7. What's simulated or not done yet
+## 8. What's simulated or not done yet
 
 **Not live yet:**
-- Nothing is deployed, so build-a-bot.site isn't live yet.
+- build-a-bot.site is live, but in demo mode until the last keys are in.
 - **Real channels** need accounts: a Telegram manager bot, a Twilio number (plus A2P registration for texts), a brand-free email domain, and Slack and Discord apps.
 - **The demo brain** only knows everyday requests. Anything else gets an honest "I'm on the demo brain" answer. With a Token Factory key, the real models answer.
 - **Subscriptions (the Bridge):** it runs on a computer that has the `claude` or `codex` CLI installed and signed in.
@@ -190,6 +213,11 @@ npm run dev
 - On Windows, detection uses the privacy registry; a small audio-session helper would be sturdier.
 - In a browser, the floating window can't be placed at the bottom of the screen (browsers don't allow it). The desktop app can.
 
+**Voice typing:**
+- Real speech-to-text needs `TRANSCRIBE_API_KEY`; in demo mode it types sample sentences.
+- Tested end to end on Linux (real key presses, pasting into another app). Not yet on a Mac or Windows.
+- Later: the Fn (Globe) key on a Mac, and rewriting selected text by voice.
+
 **Web actions:** they need `BROWSER_USE_API_KEY`, and haven't been tried on real forms yet.
 
 **Legal pages** are drafts.
@@ -202,6 +230,7 @@ npm run dev
 npm run typecheck && npm test   # types and unit tests
 npm run build && npm run test:e2e   # the production build, then Playwright on a phone and a desktop (with axe)
 cd desktop && npm test          # the desktop app's unit tests
+cd desktop && npm run test:e2e  # the real app under Xvfb (Linux), against `npm run dev`
 ```
 
 Desktop logs are in the app's settings folder, under `logs/main.log`. On a Mac that's `~/Library/Application Support/Build-a-bot/logs/main.log`.

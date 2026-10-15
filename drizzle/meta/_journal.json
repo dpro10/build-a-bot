@@ -36,6 +36,13 @@
       "when": 1792079325208,
       "tag": "0004_bot_roles",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792086803821,
+      "tag": "0005_voice_typing",
+      "breakpoints": true
     }
   ]
 }

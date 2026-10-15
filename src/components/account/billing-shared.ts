@@ -43,6 +43,7 @@ export async function usageNumbers(db: Db, userId: string): Promise<{ used: Usag
       voiceMinutes: Math.ceil(usage.voiceSeconds / 60),
       smsSegments: usage.smsSegments,
       meetingMinutes: Math.floor(usage.meetingSeconds / 60),
+      dictationWords: usage.dictationWords,
       bots: Number(bots?.n ?? 0),
     },
   };

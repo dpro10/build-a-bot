@@ -8,6 +8,7 @@ import { TrustSection } from "@/components/marketing/landing/TrustSection";
 import { InjectionSection } from "@/components/marketing/landing/InjectionSection";
 import { Channels } from "@/components/marketing/landing/Channels";
 import { MeetingNotes } from "@/components/marketing/landing/MeetingNotes";
+import { VoiceTyping } from "@/components/marketing/landing/VoiceTyping";
 import { Recipes } from "@/components/marketing/landing/Recipes";
 import { Promises } from "@/components/marketing/landing/Promises";
 import { PricingTeaser } from "@/components/marketing/landing/PricingTeaser";
@@ -43,6 +44,12 @@ const FAQ: { q: string; text: string }[] = [
     text: desktopApp
       ? "Yes, when you say yes. The desktop app notices when a call starts in Zoom, Meet, Teams and others, and your bot asks before it listens. You can also start notes from your browser. While it listens, it stays on your screen with a red dot. The audio is turned into text and thrown away, and you get a summary, decisions and action items. Recording laws differ by place, so let everyone on the call know."
       : "Yes, when you say yes. Start notes from Chrome or Edge on a computer, for a call in another tab or a meeting in the room. While it listens, it stays on your screen with a red dot. The audio is turned into text and thrown away, and you get a summary, decisions and action items. A desktop app that notices when a call starts is coming soon. Recording laws differ by place, so let everyone on the call know.",
+  },
+  {
+    q: "What is voice typing?",
+    text: desktopApp
+      ? "Hold a key in any app and talk. What you meant is typed where your cursor is: no ums, the right punctuation, your corrections kept, and the names your bot knows spelled right. Start with “Hey” and your bot's name to ask it instead. Your voice is turned into text and thrown away; we keep a word count, never your words. Free includes 8,000 words a month, and Plus and Pro have no monthly limit."
+      : "Hold a key in any app and talk. What you meant is typed where your cursor is: no ums, the right punctuation, your corrections kept, and the names your bot knows spelled right. It comes with the desktop app (coming soon); you can try it in your browser today. Your voice is turned into text and thrown away; we keep a word count, never your words. Free includes 8,000 words a month, and Plus and Pro have no monthly limit.",
   },
   {
     q: "What if it makes a mistake?",
@@ -103,6 +110,7 @@ export default function LandingPage() {
       <InjectionSection />
       <Channels />
       <MeetingNotes desktopApp={desktopApp} />
+      <VoiceTyping desktopApp={desktopApp} />
       <Recipes />
       <Promises />
       <PricingTeaser />

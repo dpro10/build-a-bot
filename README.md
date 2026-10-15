@@ -1,9 +1,9 @@
 # Build-a-bot
 
-Anyone makes their own AI agent in about a minute: pick a face, give it a name, choose a brain (or connect the AI subscription they already pay for), give it their apps, decide how much it can do on its own, and talk to it anywhere — calls, texts, email, Telegram, Discord, Slack. It can also sit in on their calls and take the notes.
+Anyone makes their own AI agent in about a minute: pick a face, give it a name, choose a brain (or connect the AI subscription they already pay for), give it their apps, decide how much it can do on its own, and talk to it anywhere — calls, texts, email, Telegram, Discord, Slack. It can also sit in on their calls and take the notes, and type for them by voice in any app.
 
-- **Site:** build-a-bot.site. The domain is owned (registered 2026-10-13 at Name.com, DNS on Vercel); nothing is deployed yet.
-- **Status (2026-10-14):** the whole product is built (the website, the dashboard and a desktop app for meeting notes) and runs locally in demo mode with zero keys. Not deployed yet: `docs/DEPLOY.md` lists what each integration needs.
+- **Site:** [build-a-bot.site](https://build-a-bot.site), live on Vercel + Supabase since 2026-10-14, still in demo mode until the last keys are in (`docs/DECISIONS.md` → *Live*).
+- **Status (2026-10-15):** the whole product is built (the website, the dashboard, and a desktop app for meeting notes and voice typing) and runs locally in demo mode with zero keys. `docs/DEPLOY.md` lists what each integration needs.
 - **Reviewing it?** Start with [`docs/TRY-IT.md`](docs/TRY-IT.md): how to run both apps, what to click, and what's simulated.
 
 ## Try it
@@ -79,6 +79,15 @@ Web chat, phone calls and texts (Twilio), email (its own brand-free address), Te
 - Until signed downloads are published (`NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL`), a real server shows the desktop app as "Coming soon"; demo mode shows how to run it from this repo.
 - It never records without a yes, only listens while it's on screen, and throws the audio away once it's text. Transcripts are kept 90 days by default; notes stay until deleted.
 
+### Voice typing (beta)
+
+- **Hold a key in any app and talk** (desktop app: Right Option on a Mac, Ctrl + Windows on Windows, Right Ctrl on Linux). Let go, and what you meant is typed where your cursor is. Tap twice to keep talking hands-free.
+- **Cleaned up:** no ums or repeats, the right punctuation, your corrections kept ("at 2, no, 3" → "at 3"), "new line" and "scratch that". Casual in chats, proper in email, exact in code.
+- **Your words:** names and terms spelled your way, what speech-to-text writes instead, snippets ("my booking link" types the link), and the names your bots already remember. Fix a dictation and it learns.
+- **"Hey Otto, …"** asks your bot instead of typing; it answers in a small bubble with Paste, Copy, Reply and Open chat.
+- **Private:** the mic is on only while you hold the key, with a pill on screen the whole time; the audio is turned into text and thrown away, and the server keeps a word count, not the words. History stays on your computer, encrypted.
+- The **Voice typing** page (`/app/voice`) does it in the browser, and holds your words and snippets. Free: 8,000 words a month; Plus and Pro: unlimited.
+
 ### Web actions (beta)
 
 It browses sites and fills in forms in a cloud browser (Browser Use Cloud). Before anything is sent, the owner sees every field it filled and a picture of the form, and taps to send. Payment pages, card details, passwords and logins are refused in code.
@@ -96,7 +105,7 @@ An optional morning brief (on by default), routines and reminders, on any channe
 ### The dashboard (`/app`)
 
 - **For each bot:** Chat with inline approvals, Meetings, Activity (receipts), Apps & trust, Channels, Routines, Memory, Settings (look, personality, brain, recipes, MCP access).
-- **For the account:** Approvals inbox, Bridge (your computer, including the desktop app), Plan & usage, Account (export, delete).
+- **For the account:** Approvals inbox, Voice typing, Bridge (your computer, including the desktop app), Plan & usage, Account (export, delete).
 
 ### The business side
 

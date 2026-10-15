@@ -34,6 +34,7 @@ Build-a-bot is one Next.js 16 app (App Router, TypeScript) with Postgres behind 
 | `src/lib/channels` | Inbound/outbound for every channel, setup flows, webhook verification |
 | `src/lib/bridge`, `bridge/` | Subscription brains on the owner's computer (server side + the CLI) |
 | `src/lib/meetings`, `src/lib/transcribe`, `desktop/` | Meeting notes: recording, speech-to-text, notes, and the desktop app that notices calls |
+| `src/lib/dictation`, `src/components/voice`, `desktop/src/main/voice` | Voice typing: the dictation pipeline, the personal dictionary, the `/app/voice` page and the desktop app's hold-to-talk |
 | `src/app/desktop` | Pages the desktop app shows (the buddy at the bottom of the screen) |
 | `src/lib/mcp-server` | The bot's tools as an MCP server |
 | `src/lib/scheduler` | Reminders and routines (time zones, next-run math, the tick) |
@@ -45,7 +46,7 @@ Build-a-bot is one Next.js 16 app (App Router, TypeScript) with Postgres behind 
 
 Postgres via Drizzle (`src/lib/db/schema.ts`). Locally and in tests it's PGlite (embedded Postgres), so `npm run dev` needs nothing installed. Migrations run on first use behind an advisory lock.
 
-Main tables: `users`, `sessions`, `bots`, `connections` (a bot's apps + per-capability permissions), `channels`, `conversations`, `messages`, `approvals`, `receipts`, `contacts`, `memories`, `notes`, `schedules`, `usage`, `credentials` (encrypted secrets), `bridge_devices`, `bridge_jobs`, `recipes`.
+Main tables: `users`, `sessions`, `bots`, `connections` (a bot's apps + per-capability permissions), `channels`, `conversations`, `messages`, `approvals`, `receipts`, `contacts`, `memories`, `notes`, `schedules`, `usage`, `credentials` (encrypted secrets), `bridge_devices`, `bridge_jobs`, `recipes`, `meetings`, `meeting_segments`, `dictionary` (voice typing's words and snippets).
 
 - **Receipts are append-only.** A trigger rejects updates and deletes (`drizzle/0001_safety.sql`); only account/bot deletion may remove them, inside a transaction that sets `app.allow_receipt_delete`.
 - **Row-level security is on** for every table with no policies, so the database's public API roles (e.g. Supabase's) see nothing; the app connects as the owner role.
@@ -183,6 +184,36 @@ POST …/finish  →  the bot writes notes  →  web chat + the owner's best cha
 - **Consent:** never before the owner says yes, no auto-record, and only while the bot is visible (the desktop window or the browser's picture-in-picture window). Each meeting records who said yes, when, and whether the heads-up was copied for the call.
 - **The buddy** (`src/components/meetings/Buddy.tsx`): the same component on three surfaces. `/desktop/buddy` is what the desktop app shows in its transparent, always-on-top window; its contract is `src/components/meetings/desktop-api.ts`.
 
+## Voice typing
+
+Hold a key in any app and talk; what the owner meant is typed at the cursor. Starting with "Hey" and a bot's name asks that bot instead. The desktop app does it everywhere; `/app/voice` does it in the browser with the same pipeline.
+
+```
+desktop app (desktop/src/main/voice)          browser (/app/voice, TryVoice)
+  hold the shortcut → the pill + the mic         hold the button (click: hands-free)
+  let go → one recording                          let go → one recording
+            │  + the kind of app in front (chat, email, code…), language, the owner's switches
+            ▼
+POST /api/voice/dictate  (raw audio body; device token or session)
+   1. limits: words a month per plan, 3,000 dictations a day, 60 a minute, the site's daily ceiling
+   2. speech-to-text (Groq whisper-large-v3-turbo), prompted with the owner's words and bots' names
+   3. guards: too little speech → nothing; silence turned into "Thank you." or the prompt echoed → nothing
+   4. "Hey Otto, …" → { kind: "command" } → the caller asks POST /api/voice/ask (SSE, runTurn)
+   5. plain cleanup (always): fillers, stutters, "new line", "scratch that"
+   6. AI cleanup: one strict prompt per app style; the answer is checked and thrown out if it
+      answered the words instead of cleaning them, added words, or lost a snippet marker
+   7. the dictionary: spellings, then snippets → { kind: "text", text, heard, words }
+audio is never stored; the server keeps a word count, never the words
+```
+
+- **Files:** `src/lib/dictation/text.ts` (pure text rules: tidy, snippets, commands, the guards, the checks on the AI's answer), `polish.ts` (the prompt, its examples and where it runs), `index.ts` (the pipeline, limits, the owner's vocabulary), `dictionary.ts` (add/edit/delete), `demo.ts` (sample dictations for demo mode). Routes under `src/app/api/voice/`.
+- **The AI cleanup** runs on Groq (`openai/gpt-oss-120b`, low reasoning) with the speech-to-text key, so the words go to one provider; else on the included model; or not at all (`DICTATION_POLISH`). It has a few seconds: when it's slow, fails or its answer fails the checks, the plain cleanup is typed instead, so a dictation never waits long or comes back wrong.
+- **The dictionary** (`dictionary` table: `kind` word | snippet, `text`, `heard` = what speech-to-text writes instead or the phrase that types a snippet, `source` manual | correction). Words are fed to speech-to-text as a hint and fixed afterwards; names the owner's bots remember (`memories`) are used too, without being copied. Snippets are swapped for markers before the AI cleanup so it can't rewrite them.
+- **"Hey {bot}"** goes into the bot's web conversation like a typed message (`meta.via = "voice"`), with a directive to answer briefly, so it runs through `runTurn`, the policy engine and approvals like everything else, and shows up in the chat later.
+- **Auth:** the desktop app's device token (the same pairing as the Bridge) or the web session (same-origin checked for writes): `src/lib/dictation/auth.ts`.
+- **Limits:** `usage.dictationWords` (Free 8,000 words a month; Plus and Pro unlimited), counted when text is typed, never for commands or nothing heard. The per-owner daily cap and the site ceiling (`DICTATION_DAILY_LIMIT`) keep "unlimited" from being a blank check.
+- **The desktop half:** a keyboard hook (`uiohook-napi`) hears the shortcut anywhere (a pure state machine: hold, tap, double tap for hands-free, chords left alone); the pill is a small focus-less window; the text is pasted with the clipboard (snapshot → paste → put back) and real key presses. It works out the app's kind locally and sends only that. History is encrypted on the computer. See `desktop/README.md`.
+
 ## The bot as an MCP server
 
 `/api/mcp/[botId]` serves the bot's tools over Streamable HTTP (stateless, JSON responses; legacy `initialize` and modern `server/discover` clients). Owners can mint a token in Settings and use their bot's apps from Claude Desktop, Claude Code or any MCP client, under the same rules.
@@ -200,23 +231,24 @@ Plans live in `src/lib/billing/plans.ts`; limits are enforced in code. Stripe Ch
 `DEMO_MODE=1` (default outside production) simulates whatever isn't configured:
 - **A scripted brain** (`src/lib/llm/demo.ts`) that calls the real tools, so the policy engine, approvals and receipts all run for real. It answers every job's starter ideas, and does its time math on the owner's clock.
 - **Simulated apps and channels** with sample data: an inbox with a phishing email, a week of calendar, a few PRs.
-- **A scripted meeting** for transcription.
+- **A scripted meeting** for transcription, and **sample dictations** for voice typing (the pill and the page say *demo*).
 - **Instant plan switching.**
 
 Every flow in the product can be tried with zero keys, and nothing real is sent or charged. `docs/TRY-IT.md` walks through it.
 
 ## Testing
 
-- `npm test`: the policy engine, scheduler math, the receipts trigger, and the full agent pipeline on in-memory Postgres (greeting, STOP/START, reminders, phishing detection, the injection guard under Full faith, approvals, Look only, strangers can't drive the bot, append-only receipts), and meeting notes end to end (chunks → transcript → notes → tools, device tokens, plan limits, stale recordings, notes on the owner's computer, a transcript that tries to make the bot email a stranger), and memory (which memories each brain size gets in a real turn, Bring my memories against a stand-in model and line by line, remember/recall/forget, the pin cap).
+- `npm test`: the policy engine, scheduler math, the receipts trigger, and the full agent pipeline on in-memory Postgres (greeting, STOP/START, reminders, phishing detection, the injection guard under Full faith, approvals, Look only, strangers can't drive the bot, append-only receipts), and meeting notes end to end (chunks → transcript → notes → tools, device tokens, plan limits, stale recordings, notes on the owner's computer, a transcript that tries to make the bot email a stranger), and memory (which memories each brain size gets in a real turn, Bring my memories against a stand-in model and line by line, remember/recall/forget, the pin cap), and voice typing (the text rules on real-world transcripts, the pipeline against a fake Groq: prompts, guards, the AI cleanup's checks and timeouts, snippets, commands, limits; the routes and the dictionary).
 - `npm run test:e2e` (after `npm run build`; it starts `next start` on port 3100 with its own database), on a phone and a desktop:
   - the builder to a live chat, an approval and STOP;
   - Bring my memories: paste, untick, save, pin;
   - a ready-made tutor: one tap in the builder, its first question, then back to a general assistant in Settings;
   - meeting notes in the browser with a fake microphone: consent, the floating window, the transcript, the notes, deleting;
+  - voice typing in the browser with a fake microphone: hold to type, hands-free, "Hey Otto" and its reply, a dictionary word that's then used;
   - every page loads;
   - axe accessibility scans in light and dark.
 - **On real Postgres.** Supabase runs the server through postgres.js and a transaction pooler, which are stricter than the in-memory database the tests use. Check database changes on a real one too: a local Postgres with pgbouncer in front in `pool_mode = transaction` on port 6543, like Supabase's pooler (port 6543 also makes the client skip prepared statements).
   - `TEST_DATABASE_URL=postgres://postgres@127.0.0.1:6543/bab_test npx vitest run tests/postgres.test.ts` wipes that database and covers sign-in, rate limits, the admin numbers and the cron tick.
   - `DATABASE_URL=postgres://postgres@127.0.0.1:6543/bab_e2e ENCRYPTION_KEY=$(openssl rand -base64 32) npm run test:e2e` runs the whole e2e suite there.
-- `cd desktop && npm test`: call detection on each OS (parsers on captured-style output), the call state machine, the controller's safety rules, the upload queue, placement, token storage.
-- `cd desktop && npm run test:e2e`: the real Electron app under Xvfb against a running dev server: pair, a fake call, ask, take notes, pause, stop, notes ready, stop and delete, and the mic-only path.
+- `cd desktop && npm test`: call detection on each OS (parsers on captured-style output), the call state machine, the controller's safety rules, the upload queue, placement, token storage, and voice typing's shortcut machine, paste and clipboard restore, app categories, history and controller.
+- `cd desktop && npm run test:e2e`: the real Electron app under Xvfb against a running dev server: pair, a fake call, ask, take notes, pause, stop, notes ready, stop and delete, and the mic-only path; then voice typing with real X key presses: hold, talk, the cleaned-up text pasted into another app with the clipboard put back, hands-free, Esc, and "Hey Otto".
