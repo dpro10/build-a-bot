@@ -122,6 +122,7 @@ export async function adminMetrics(db: Db) {
       searches: sql<number>`coalesce(sum(${schema.usage.searches}), 0)`,
       voiceSeconds: sql<number>`coalesce(sum(${schema.usage.voiceSeconds}), 0)`,
       meetingSeconds: sql<number>`coalesce(sum(${schema.usage.meetingSeconds}), 0)`,
+      dictationWords: sql<number>`coalesce(sum(${schema.usage.dictationWords}), 0)`,
       smsSegments: sql<number>`coalesce(sum(${schema.usage.smsSegments}), 0)`,
       includedMessages: sql<number>`coalesce(sum(${schema.usage.includedMessages}), 0)`,
     })
@@ -169,6 +170,7 @@ export async function adminMetrics(db: Db) {
       searches: n(usage.searches),
       voiceMinutes: Math.round(n(usage.voiceSeconds) / 60),
       meetingMinutes: Math.round(n(usage.meetingSeconds) / 60),
+      dictationWords: n(usage.dictationWords),
       smsSegments: n(usage.smsSegments),
       includedMessages: n(usage.includedMessages),
     },

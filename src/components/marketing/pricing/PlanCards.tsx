@@ -32,6 +32,7 @@ export function planBullets(p: Plan): string[] {
   out.push(`${n(L.byoMessages)} messages a month on your own key or plan`);
   out.push(`${n(L.routines)} routines, like a morning brief`);
   if (L.meetingMinutes) out.push(`${meetingHours(L.meetingMinutes)} of meeting notes a month`);
+  out.push(Number.isFinite(L.dictationWords) ? `${n(L.dictationWords)} words of voice typing a month` : "Unlimited voice typing");
   out.push(`${n(L.searches)} web searches a month`);
   return out;
 }
