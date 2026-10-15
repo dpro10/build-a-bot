@@ -85,6 +85,12 @@ It browses sites and fills in forms in a cloud browser (Browser Use Cloud). Befo
 
 An optional morning brief (on by default), routines and reminders, on any channel. Its face follows it: Telegram profile photo, HTML emails.
 
+### It remembers
+
+- It keeps up to 2,000 facts about you and uses only the ones that matter for each message, so small, fast brains work as well as big ones. Pin the basics to keep them always on its mind.
+- **Bring my memories:** copy one message into ChatGPT, Claude or Gemini, paste the answer back, untick anything private, save. It knows you from day one.
+- Ask it to forget something and it does. You can see, edit and delete everything in the Memory tab.
+
 ### The dashboard (`/app`)
 
 - **For each bot:** Chat with inline approvals, Meetings, Activity (receipts), Apps & trust, Channels, Routines, Memory, Settings (look, personality, brain, recipes, MCP access).

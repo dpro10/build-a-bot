@@ -34,6 +34,7 @@ import {
 } from "@/lib/safety";
 import { errorMessage, newId, sortableId, truncate } from "@/lib/utils";
 import { buildDynamicContext, buildStablePrompt, ownerName } from "./prompt";
+import { memoriesForTurn } from "@/lib/memory";
 import { resolveBrain } from "./brain";
 
 export const MAX_STEPS = 8;
@@ -235,15 +236,15 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
   }
   if (input.noTools) toolset = { ...toolset, tools: [], byName: new Map() };
 
-  const [memories, recentElsewhere, history] = await Promise.all([
-    db
-      .select({ text: schema.memories.text })
-      .from(schema.memories)
-      .where(eq(schema.memories.botId, bot.id))
-      .orderBy(desc(schema.memories.createdAt))
-      .limit(40),
+  const [recentElsewhere, history] = await Promise.all([
     speakingWith === "owner" ? loadRecentElsewhere(db, bot.id, conversation.id) : Promise.resolve([]),
     loadHistory(db, conversation.id),
+  ]);
+  // Only the memories that matter for this message, sized to the brain (src/lib/memory).
+  const memory = await memoriesForTurn(db, bot, [
+    { text: input.message?.text, weight: 1 },
+    { text: input.directive, weight: 0.6 },
+    ...history.slice(-4, -1).map((m) => ({ text: m.content, weight: 0.4 })),
   ]);
 
   const system = [
@@ -254,7 +255,8 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
       owner,
       channelKind: input.channelKind,
       connectedApps: toolset.apps,
-      memories: memories.map((m) => m.text).reverse(),
+      memories: memory.lines,
+      memoriesTotal: memory.total,
       recentElsewhere,
       botEmail: botEmailAddress(bot),
       now,

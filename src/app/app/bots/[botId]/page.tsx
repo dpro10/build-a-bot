@@ -20,13 +20,15 @@ export default async function BotChatPage({ params, searchParams }: { params: Pr
   const bot = await getOwnedBot(db, user.id, botId);
   if (!bot) notFound();
   const conversation = await ensureConversation(db, botId, "web", "owner");
-  const [messages, approvals, apps] = await Promise.all([
+  const [messages, approvals, apps, known] = await Promise.all([
     listMessages(db, conversation.id, { limit: 80 }),
     listApprovals(db, user.id, { botId, limit: 100 }),
     db
       .select({ connectorId: schema.connections.connectorId })
       .from(schema.connections)
       .where(and(eq(schema.connections.botId, botId), ne(schema.connections.status, "disabled"))),
+    // Up to 5 is all it takes to know whether the bot barely knows its owner.
+    db.select({ source: schema.memories.source }).from(schema.memories).where(eq(schema.memories.botId, botId)).limit(5),
   ]);
   const visible = messages.filter((m) => m.role === "user" || m.role === "assistant");
   // Meeting notes in the chat show the meeting's app (and whether it was deleted since).
@@ -74,6 +76,7 @@ export default async function BotChatPage({ params, searchParams }: { params: Pr
           args: a.args,
         }))}
         starters={starters}
+        memoryInvite={known.length < 5 && !known.some((m) => m.source === "import")}
         needsGreeting={visible.length === 0}
         brainLabel={brainLabel(bot.brain)}
         initialInput={typeof ask === "string" && ask.trim() ? ask.slice(0, 500) : undefined}

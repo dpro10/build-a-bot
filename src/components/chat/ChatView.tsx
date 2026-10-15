@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { ArrowUp, Mic, MicOff, Sparkles, Square } from "lucide-react";
+import { ArrowUp, Brain, Mic, MicOff, Sparkles, Square } from "lucide-react";
 import { Avatar } from "@/components/avatar";
 import { useBotLive } from "@/components/app/live-state";
 import { ApprovalCard, type ApprovalView } from "./ApprovalCard";
@@ -71,6 +71,7 @@ export function ChatView({
   initialMessages,
   initialApprovals,
   starters,
+  memoryInvite = false,
   needsGreeting,
   brainLabel,
   initialInput,
@@ -83,6 +84,8 @@ export function ChatView({
   initialMessages: ChatMessage[];
   initialApprovals: ApprovalView[];
   starters: string[];
+  /** The bot barely knows its owner yet: offer "Bring my memories" with the starters. */
+  memoryInvite?: boolean;
   needsGreeting: boolean;
   brainLabel: string;
   /** Prefilled message (e.g. "Ask Inky about this meeting" links), not sent until the owner says so. */
@@ -422,6 +425,15 @@ export function ChatView({
         <div className="mx-auto w-full max-w-3xl px-3 pt-3 pb-3 sm:px-6">
           {showStarters ? (
             <div className="no-scrollbar -mx-1 mb-2.5 flex gap-2 overflow-x-auto px-1 sm:flex-wrap">
+              {memoryInvite ? (
+                <Link
+                  href={`/app/bots/${botId}/memory?import=1`}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-primary/30 bg-primary-soft/60 px-3.5 py-1.5 text-sm font-medium text-primary shadow-soft transition hover:border-primary/50"
+                >
+                  <Brain className="size-3.5" aria-hidden />
+                  Bring my memories from ChatGPT
+                </Link>
+              ) : null}
               {starters.slice(0, 5).map((s) => (
                 <button
                   key={s}

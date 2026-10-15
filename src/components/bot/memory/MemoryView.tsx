@@ -21,6 +21,7 @@ export function MemoryView({
   trust,
   serverNow,
   initialTab,
+  initialImport = false,
   initial,
 }: {
   botId: string;
@@ -30,10 +31,13 @@ export function MemoryView({
   trust: string;
   serverNow: string;
   initialTab: Tab;
+  /** Opened from a "Bring my memories" link (?import=1). */
+  initialImport?: boolean;
   initial: { memories: MemoryItem[]; notes: NoteItem[]; contacts: ContactItem[] };
 }) {
   const now = useNow(serverNow);
-  const [tab, setTab] = React.useState<Tab>(initialTab);
+  const [tab, setTab] = React.useState<Tab>(initialImport ? "memories" : initialTab);
+  const [importOpen, setImportOpen] = React.useState(initialImport);
   const [query, setQuery] = React.useState("");
   const [memories, setMemories] = React.useState(initial.memories);
   const [notes, setNotes] = React.useState(initial.notes);
@@ -120,7 +124,26 @@ export function MemoryView({
           </div>
         </div>
         <TabsContent value="memories" forceMount className="data-[state=inactive]:hidden">
-          <MemoriesPanel botId={botId} botName={botName} avatar={avatar} color={color} items={memories} setItems={setMemories} query={q} now={now} />
+          <MemoriesPanel
+            botId={botId}
+            botName={botName}
+            avatar={avatar}
+            color={color}
+            items={memories}
+            setItems={setMemories}
+            query={q}
+            now={now}
+            importOpen={importOpen}
+            setImportOpen={(open) => {
+              setImportOpen(open);
+              // Closing it drops ?import=1, so a reload doesn't reopen it.
+              if (!open && new URL(window.location.href).searchParams.has("import")) {
+                const url = new URL(window.location.href);
+                url.searchParams.delete("import");
+                window.history.replaceState(window.history.state, "", url);
+              }
+            }}
+          />
         </TabsContent>
         <TabsContent value="notes" forceMount className="data-[state=inactive]:hidden">
           <NotesPanel botId={botId} botName={botName} items={notes} setItems={setNotes} query={q} now={now} />
