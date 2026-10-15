@@ -106,7 +106,7 @@ export async function listSchedules(db: Db, botId: string) {
 }
 
 export async function listMemories(db: Db, botId: string) {
-  return db.select().from(schema.memories).where(eq(schema.memories.botId, botId)).orderBy(desc(schema.memories.createdAt));
+  return db.select().from(schema.memories).where(eq(schema.memories.botId, botId)).orderBy(desc(schema.memories.pinned), desc(schema.memories.createdAt));
 }
 
 export async function listNotes(db: Db, botId: string) {

@@ -3,7 +3,7 @@ import { newsHeadlines, readWebpage, webSearch, wikipediaLookup } from "./web";
 import { getWeather } from "./weather";
 import { calculateTool, convertCurrency } from "./money";
 import { cancelReminder, createReminder, listReminders, scheduleRoutine } from "./reminders";
-import { recall, remember } from "./memory";
+import { forget, recall, remember } from "./memory";
 import { listNotes, readNote, writeNote } from "./notes";
 import { readInbox, sendEmail } from "./inbox";
 import { messageOwnerTool } from "./owner";
@@ -19,7 +19,7 @@ export const BUILTIN_TOOLS: Record<string, AnyToolSpec[]> = {
   weather: [getWeather],
   currency: [convertCurrency, calculateTool],
   reminders: [createReminder, scheduleRoutine, listReminders, cancelReminder],
-  memory: [remember, recall, messageOwnerTool],
+  memory: [remember, recall, forget, messageOwnerTool],
   notes: [listNotes, readNote, writeNote],
   bot_inbox: [readInbox, sendEmail],
   browser: browserTools,
