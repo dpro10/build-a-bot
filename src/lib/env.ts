@@ -8,8 +8,11 @@
  */
 
 const v = (name: string) => {
-  const value = process.env[name];
-  return value && value.trim() !== "" ? value.trim() : undefined;
+  let value = process.env[name]?.trim() ?? "";
+  // A whole .env line pasted as the value (`NAME=value`, maybe quoted): keep just the value.
+  if (value.startsWith(`${name}=`)) value = value.slice(name.length + 1).trim();
+  if (/^(["']).+\1$/s.test(value)) value = value.slice(1, -1).trim();
+  return value !== "" ? value : undefined;
 };
 
 export const isProduction = process.env.NODE_ENV === "production";
