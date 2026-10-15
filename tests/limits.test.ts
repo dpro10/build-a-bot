@@ -64,12 +64,15 @@ afterAll(async () => {
 });
 
 describe("limits when anyone can sign up", () => {
-  it("an account without a confirmed email gets a small allowance, then is asked to sign in", async () => {
+  it("an account without a confirmed email gets 5 messages, then is asked to sign in", async () => {
+    expect(ANONYMOUS_INCLUDED_MESSAGES).toBe(5);
     const anon = await person("usr_anon", false);
-    await recordUsage(db, anon.id, { messages: ANONYMOUS_INCLUDED_MESSAGES, includedMessages: ANONYMOUS_INCLUDED_MESSAGES });
-    const res = await say(await botFor(anon), anon, "hi");
+    const bot = await botFor(anon);
+    await recordUsage(db, anon.id, { messages: 4, includedMessages: 4 });
+    expect((await say(bot, anon, "hi")).status).not.toBe("limited");
+    const res = await say(bot, anon, "hi again");
     expect(res.status).toBe("limited");
-    expect(res.text).toMatch(/Sign in with your email/);
+    expect(res.text).toBe("You've used the 5 free messages you get before signing in. Sign in with your email (it's free) to keep going.");
 
     const confirmed = await person("usr_confirmed", true);
     await recordUsage(db, confirmed.id, { messages: ANONYMOUS_INCLUDED_MESSAGES, includedMessages: ANONYMOUS_INCLUDED_MESSAGES });

@@ -90,7 +90,7 @@ export type LimitCheck =
   | { ok: false; plan: Plan; kind: LimitKind; used: number; limit: number; message: string; /** Over the allowance for accounts without a confirmed email. */ signIn?: boolean };
 
 /** Included-brain messages an account gets before it confirms an email (accounts are free to make). */
-export const ANONYMOUS_INCLUDED_MESSAGES = 30;
+export const ANONYMOUS_INCLUDED_MESSAGES = 5;
 
 export async function checkLimit(db: Db, owner: Pick<User, "id" | "plan" | "emailVerifiedAt">, kind: LimitKind): Promise<LimitCheck> {
   const plan = getPlan(owner.plan);
