@@ -22,6 +22,7 @@ import { buildDynamicContext, buildStablePrompt } from "@/lib/agent/prompt";
 import type { RunInput, RunResult } from "@/lib/agent/run";
 import { deliver } from "@/lib/channels/outbound";
 import type { ChannelKind } from "@/lib/channels/catalog";
+import { memoriesForTurn } from "@/lib/memory";
 
 export const DEVICE_ONLINE_MS = 90_000;
 const JOB_TTL_MS = 12 * 60 * 60 * 1000;
@@ -99,7 +100,11 @@ export async function runViaBridge(
     .where(eq(schema.messages.conversationId, conversation.id))
     .orderBy(desc(schema.messages.createdAt))
     .limit(24);
-  const memories = await db.select({ text: schema.memories.text }).from(schema.memories).where(eq(schema.memories.botId, bot.id)).limit(40);
+  const memory = await memoriesForTurn(db, bot, [
+    { text: input.message?.text, weight: 1 },
+    { text: input.directive, weight: 0.6 },
+    ...history.slice(0, 3).map((m) => ({ text: m.text, weight: 0.4 })),
+  ]);
 
   const system = [
     buildStablePrompt(bot, owner, input.channelKind, botEmailAddress(bot)),
@@ -108,7 +113,8 @@ export async function runViaBridge(
       owner,
       channelKind: input.channelKind,
       connectedApps: [],
-      memories: memories.map((m) => m.text),
+      memories: memory.lines,
+      memoriesTotal: memory.total,
       recentElsewhere: [],
       botEmail: botEmailAddress(bot),
       now: new Date(),

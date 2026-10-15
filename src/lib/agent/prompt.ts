@@ -18,6 +18,8 @@ export type PromptContext = {
   channelKind: string;
   connectedApps: { name: string; summary: string }[];
   memories: string[];
+  /** How many memories the bot has in all (only the ones that matter now are in `memories`). */
+  memoriesTotal?: number;
   recentElsewhere: { channel: string; role: string; text: string }[];
   botEmail: string | null;
   now: Date;
@@ -74,7 +76,8 @@ export function buildStablePrompt(bot: Bot, owner: User, channelKind: string, bo
       "- The system enforces approvals in code. When a tool returns status pending_approval, tell the owner what you're waiting on in one sentence (they'll see an approval button). When it returns blocked, explain briefly and offer an alternative. Don't retry blocked actions.",
       "- Never ask for or repeat passwords, API keys or one-time codes.",
       "- Use tools when they help; don't invent facts, prices, schedules or links. Say when you're unsure.",
-      "- When you learn a durable fact about the owner (preferences, people, routines), save it with the remember tool.",
+      "- When you learn a durable fact about the owner (preferences, people, routines), save it with the remember tool. When something you remembered changes (they moved, changed jobs), save the new fact with `replaces` set to the old one's words; when they ask you to forget something, use the forget tool.",
+      "- If the owner wants you to know what ChatGPT, Claude or Gemini already knows about them, tell them to open Memory and tap \"Bring my memories\": it takes a minute.",
       "- For reminders and routines, convert times to the owner's local time and confirm what you set.",
       "- Money: you can't spend money unless the owner set a spending cap.",
       "- For medical, legal or financial questions, give helpful general information and suggest a professional for decisions.",
@@ -84,6 +87,14 @@ export function buildStablePrompt(bot: Bot, owner: User, channelKind: string, bo
   ]
     .filter(Boolean)
     .join("\n\n");
+}
+
+function memoryHeading(ctx: PromptContext): string {
+  const total = ctx.memoriesTotal ?? ctx.memories.length;
+  const base = `What you remember about ${ownerName(ctx.owner)}`;
+  return total > ctx.memories.length
+    ? `${base} (the ${ctx.memories.length} that matter most right now, of ${total}; use the recall tool to look up the rest):`
+    : `${base}:`;
 }
 
 export function buildDynamicContext(ctx: PromptContext): string {
@@ -96,7 +107,7 @@ export function buildDynamicContext(ctx: PromptContext): string {
     ctx.connectedApps.length
       ? `Connected apps:\n${ctx.connectedApps.map((a) => `- ${a.name}: ${a.summary}`).join("\n")}`
       : "No third-party apps are connected yet. If a request needs one (email, calendar, GitHub...), say the owner can connect it in the app.",
-    ctx.memories.length ? `What you remember about ${ownerName(ctx.owner)}:\n${ctx.memories.map((m) => `- ${m}`).join("\n")}` : "",
+    ctx.memories.length ? `${memoryHeading(ctx)}\n${ctx.memories.map((m) => `- ${m}`).join("\n")}` : "",
     ctx.recentElsewhere.length
       ? `Recent messages on your other channels (for continuity):\n${ctx.recentElsewhere
           .map((m) => `- [${m.channel}] ${m.role}: ${m.text}`)

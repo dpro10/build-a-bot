@@ -8,9 +8,9 @@ import type { AvatarId, ColorwayId } from "@/lib/avatars";
 
 export const metadata: Metadata = { title: "Memory" };
 
-export default async function MemoryPage({ params, searchParams }: { params: Promise<{ botId: string }>; searchParams: Promise<{ tab?: string }> }) {
+export default async function MemoryPage({ params, searchParams }: { params: Promise<{ botId: string }>; searchParams: Promise<{ tab?: string; import?: string }> }) {
   const { botId } = await params;
-  const { tab } = await searchParams;
+  const { tab, import: openImport } = await searchParams;
   const user = await requireUser(`/app/bots/${botId}/memory`);
   const db = await getDb();
   const bot = await getOwnedBot(db, user.id, botId);
@@ -28,8 +28,9 @@ export default async function MemoryPage({ params, searchParams }: { params: Pro
           trust={bot.trust}
           serverNow={new Date().toISOString()}
           initialTab={tab === "notes" || tab === "people" ? tab : "memories"}
+          initialImport={openImport === "1"}
           initial={{
-            memories: memories.map((m) => ({ id: m.id, text: m.text, source: m.source, createdAt: m.createdAt.toISOString(), updatedAt: m.updatedAt.toISOString() })),
+            memories: memories.map((m) => ({ id: m.id, text: m.text, source: m.source, pinned: m.pinned, createdAt: m.createdAt.toISOString(), updatedAt: m.updatedAt.toISOString() })),
             notes: notes.map((n) => ({ id: n.id, title: n.title, body: n.body, createdAt: n.createdAt.toISOString(), updatedAt: n.updatedAt.toISOString() })),
             contacts: contacts.map((c) => ({
               id: c.id,

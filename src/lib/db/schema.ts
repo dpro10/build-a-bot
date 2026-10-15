@@ -386,7 +386,9 @@ export const memories = pgTable(
       .notNull()
       .references(() => bots.id, { onDelete: "cascade" }),
     text: text("text").notNull(),
-    source: text("source").notNull().default("bot"), // owner | bot
+    source: text("source").notNull().default("bot"), // owner | bot | import
+    /** Always sent to the model, whatever the conversation is about (the owner's basics). */
+    pinned: boolean("pinned").notNull().default(false),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
