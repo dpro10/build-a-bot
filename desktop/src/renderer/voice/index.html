@@ -38,6 +38,7 @@
         <ul class="tips">
           <li id="tip-handsfree"></li>
           <li><kbd>Esc</kbd> cancels while it listens.</li>
+          <li id="tip-edit" hidden></li>
           <li id="tip-bot" hidden></li>
         </ul>
         <div id="problem" class="notice" role="status" hidden>
@@ -110,6 +111,10 @@
           <label class="toggle">
             <span class="grow"><strong>Match each app's style</strong><span class="hint">Casual in chats, full sentences in email, exact in code and terminals.</span></span>
             <span class="switch"><input type="checkbox" data-opt="styles" role="switch" /><span class="track" aria-hidden="true"></span></span>
+          </label>
+          <label class="toggle" id="edit-row">
+            <span class="grow"><strong>Edit by voice</strong><span class="hint" id="edit-hint"></span></span>
+            <span class="switch"><input type="checkbox" data-opt="edit" role="switch" /><span class="track" aria-hidden="true"></span></span>
           </label>
           <label class="toggle" id="commands-row">
             <span class="grow"><strong id="commands-title">Talk to your bot</strong><span class="hint" id="commands-hint"></span></span>

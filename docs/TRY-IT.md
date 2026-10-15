@@ -162,7 +162,8 @@ Hold a key in any app and talk; what you meant is typed at your cursor, cleaned 
 2. **Expect:** one of four sample sentences, with its ums, repeats and "no wait" taken out, typed into the box at the cursor, like "I was thinking we could move the team meeting to Friday at 3." **You said** / **It typed** shows the before and after. Hold again: the next one lands where the cursor is.
 3. Click the button once instead of holding: it keeps listening (hands-free) until you click again.
 4. Press **Try "Hey …"** (next to *Demo*): your bot is asked "Remind me to call Mom tomorrow at 5." and answers right there, with a link to its chat, where the exchange is kept.
-5. Under **Your words**, add a name it should spell your way, and what it writes instead if you've seen it get it wrong (try `Friday`, instead of `Thursday`). Add a snippet ("my booking link" → a URL) the same way. The desktop app uses the same list.
+5. Select some text in the box and hold the mic: the demo hears "Make this friendlier." and changes the selection in place (**It changed it to** shows the result). The new text stays selected, so you can change it again.
+6. Under **Your words**, add a name it should spell your way, and what it writes instead if you've seen it get it wrong (try `Friday`, instead of `Thursday`). Add a snippet ("my booking link" → a URL) the same way. The desktop app uses the same list.
 
 **In the desktop app** (paired as in step 5):
 
@@ -170,7 +171,8 @@ Hold a key in any app and talk; what you meant is typed at your cursor, cleaned 
 2. Click into any text field (Notes, Slack, a browser), then hold **Right Option** (Mac), **Ctrl + Windows** (Windows) or **Right Ctrl** (Linux) and talk.
 3. **Expect:** a small pill at the bottom of the screen with a waveform while you hold; let go and the sentence is typed where your cursor is, and your clipboard is put back as it was.
 4. Tap the key twice for hands-free, and press **Esc** while it listens to cancel.
-5. **Voice typing settings…** (tray) has the try-it box, your shortcut, the cleanup switches, your words, and **Recent**: *Fix* a dictation and it offers to learn the names it got wrong.
+5. Select some text, then hold **Shift** with your key: the pill turns pink ("Say what to change"). Let go and the selection is replaced; your app's Undo takes it back. With nothing selected, it writes what you asked for.
+6. **Voice typing settings…** (tray) has the try-it box, your shortcut, the cleanup switches, your words, and **Recent**: *Fix* a dictation and it offers to learn the names it got wrong.
 
 Without Accessibility on a Mac it still works: press **⌘ Shift Space** to start and stop, and paste with ⌘V.
 

@@ -5,6 +5,7 @@
  * - The desktop app with its device token; the page with a signed-in session (same site only).
  * - /api/voice/dictate types the demo's line cleaned up, or hands "Hey {bot}, …" back as a command.
  * - /api/voice/ask runs the request in the bot's chat and streams the reply.
+ * - /api/voice/edit changes the selected text the way they said (demo: by rule), or writes it.
  * - /api/voice/dictionary keeps each person's words to themselves.
  * - /api/desktop/session says whether voice typing works and how many words are left.
  */
@@ -25,9 +26,10 @@ vi.mock("@/lib/auth/session", async (importOriginal) => ({
 const { getDb, resetDbForTests, schema } = await import("@/lib/db");
 const { createBot } = await import("@/lib/bots/create");
 const { sha256 } = await import("@/lib/crypto");
-const { DEMO_DICTATIONS } = await import("@/lib/dictation/demo");
+const { DEMO_DICTATIONS, DEMO_INSTRUCTIONS } = await import("@/lib/dictation/demo");
 const dictateRoute = await import("@/app/api/voice/dictate/route");
 const askRoute = await import("@/app/api/voice/ask/route");
+const editRoute = await import("@/app/api/voice/edit/route");
 const dictionaryRoute = await import("@/app/api/voice/dictionary/route");
 const entryRoute = await import("@/app/api/voice/dictionary/[entryId]/route");
 const sessionRoute = await import("@/app/api/desktop/session/route");
@@ -122,6 +124,45 @@ describe("dictating", () => {
   });
 });
 
+describe("editing by voice", () => {
+  it("hears an instruction (demo), then changes the selection with it", async () => {
+    // The instruction is dictated with the cleanup and commands off, so "Hey Otto" can't hijack it.
+    const heard = await (await dictateRoute.POST(dictateReq("durationMs=2000&speechMs=1500&polish=0&commands=0&demo=edit"))).json();
+    expect(heard).toMatchObject({ kind: "text", text: DEMO_INSTRUCTIONS.edit });
+
+    const res = await editRoute.POST(jsonReq("POST", "http://localhost/api/voice/edit", { instruction: heard.text, selection: "Can you send me the slides from yesterday's call?", category: "chat", app: "Slack" }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toMatchObject({ kind: "replace", text: "Hi! Can you send me the slides from yesterday's call? Thanks so much!", simulated: true, usage: { limit: 8000 } });
+    expect(body.words).toBe(13);
+  });
+
+  it("writes at the cursor when nothing is selected, and asks for a selection when it needs one", async () => {
+    const wrote = await (await editRoute.POST(jsonReq("POST", "http://localhost/api/voice/edit", { instruction: DEMO_INSTRUCTIONS.write, selection: null }))).json();
+    expect(wrote).toMatchObject({ kind: "replace", simulated: true });
+    expect(wrote.text.length).toBeGreaterThan(10);
+
+    const none = await editRoute.POST(jsonReq("POST", "http://localhost/api/voice/edit", { instruction: "Make this shorter.", selection: "" }));
+    expect(none.status).toBe(422);
+    expect(await none.json()).toMatchObject({ code: "no-selection", error: "Select the text you want to change first." });
+  });
+
+  it("checks who's asking and what it's sent", async () => {
+    session.user = null;
+    expect((await editRoute.POST(jsonReq("POST", "http://localhost/api/voice/edit", { instruction: "shorter", selection: "x" }, {}))).status).toBe(401);
+    expect((await editRoute.POST(jsonReq("POST", "http://localhost/api/voice/edit", { instruction: "", selection: "x" }))).status).toBe(422);
+    expect((await editRoute.POST(jsonReq("POST", "http://localhost/api/voice/edit", { instruction: "shorter", selection: "x".repeat(20_001) }))).status).toBe(422);
+    expect((await editRoute.POST(jsonReq("POST", "http://localhost/api/voice/edit", { instruction: "shorter", selection: "x", category: "spaceship" }))).status).toBe(422);
+    // From the Voice typing page: the same site only.
+    session.user = owner;
+    const cross = await editRoute.POST(jsonReq("POST", "http://localhost/api/voice/edit", { instruction: "shorter", selection: "One. Two." }, { origin: "https://evil.example", host: "localhost" }));
+    expect(cross.status).toBe(403);
+    const ok = await editRoute.POST(jsonReq("POST", "http://localhost/api/voice/edit", { instruction: "make it shorter", selection: "One. Two." }, { origin: "http://localhost", host: "localhost" }));
+    expect(await ok.json()).toMatchObject({ kind: "replace", text: "One." });
+    session.user = null;
+  });
+});
+
 describe("asking the bot", () => {
   it("runs the request in the bot's chat and streams the reply", async () => {
     const res = await askRoute.POST(jsonReq("POST", "http://localhost/api/voice/ask", { botId: bot.id, text: "Remind me to call Mom tomorrow at 5." }));
@@ -202,7 +243,7 @@ describe("the desktop session", () => {
   it("says voice typing works (simulated) and how many words are left", async () => {
     const res = await sessionRoute.GET(new Request("http://localhost/api/desktop/session", { headers: device }));
     const body = await res.json();
-    expect(body.voice).toMatchObject({ available: true, polish: true, simulated: true, usage: { limit: 8000 } });
+    expect(body.voice).toMatchObject({ available: true, polish: true, edit: true, simulated: true, usage: { limit: 8000 } });
     expect(body.voice.usage.words).toBeGreaterThan(0);
     expect(body.bots.map((b: { name: string }) => b.name)).toEqual(["Otto"]);
   });

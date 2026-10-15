@@ -1,8 +1,8 @@
 /**
  * Voice typing on the web, end to end in demo mode (no speech-to-text key: the demo "hears"
  * sample sentences): the Voice typing page, holding the mic to talk with Chromium's fake
- * microphone, clicking for hands-free, "Hey Otto" asking the bot, the dictionary, and the
- * landing and pricing pages telling people about it.
+ * microphone, clicking for hands-free, "Hey Otto" asking the bot, editing selected text by voice,
+ * the dictionary, and the landing and pricing pages telling people about it.
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -111,6 +111,27 @@ test("talk in the browser: hold to type, click for hands-free, and ask your bot"
   await expect(page.getByRole("link", { name: /It's in your chat with Otto/ })).toBeVisible({ timeout: 30_000 });
   const chat = await (await page.request.get(`/api/bots/${id}/messages`)).json();
   expect(chat.messages.some((m: { role: string; text: string; meta?: { via?: string } }) => m.role === "user" && m.meta?.via === "voice")).toBe(true);
+});
+
+test("select text and say what to change: it's changed in place", async ({ page, context }) => {
+  test.setTimeout(90_000);
+  await context.grantPermissions(["microphone"]);
+  await newBot(page, "Otto");
+  await page.goto("/app/voice");
+  const box = page.getByLabel("Try it here");
+  await box.fill("Can you send me the slides from yesterday's call?");
+  await box.selectText();
+  await expect(page.getByText("Text selected: hold the mic and say what to change")).toBeVisible();
+  const mic = page.getByRole("button", { name: "Hold and say what to change in the selected text" });
+  await mic.hover();
+  await page.mouse.down();
+  await expect(page.getByText("Listening. Let go to change it.")).toBeVisible();
+  await page.waitForTimeout(1200);
+  await page.mouse.up();
+  // The demo hears "Make this friendlier." and makes it friendlier by rule.
+  await expect(box).toHaveValue("Hi! Can you send me the slides from yesterday's call? Thanks so much!", { timeout: 20_000 });
+  await expect(page.getByText("It changed it to")).toBeVisible();
+  await expect(page.getByText("Make this friendlier.")).toBeVisible();
 });
 
 test("your words: add one with how it's misheard, and it's used", async ({ page }) => {

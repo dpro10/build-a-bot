@@ -10,6 +10,8 @@
   --button: #6a4af5;
   --button-hover: #7656fb;
   --good: #34d399;
+  /* Editing by voice: white on it is 4.6:1, and it stands out on the pill (4:1). */
+  --edit: #db2777;
   --warn: #fbbf24;
   --bad: #ff8a8f;
   --btn: rgba(255, 255, 255, 0.1);
@@ -115,6 +117,27 @@ body[data-phase="listening"] .icon {
 
 .icon.info {
   background: rgba(255, 255, 255, 0.16);
+}
+
+.icon.edit {
+  background: var(--edit);
+}
+
+body[data-phase="listening"] .icon.edit {
+  animation-name: breathe-edit;
+}
+
+@keyframes breathe-edit {
+  50% {
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--edit) 30%, transparent);
+  }
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+  flex: none;
 }
 
 #wave {
@@ -290,6 +313,10 @@ button.primary:hover {
   border-radius: 50%;
   background: var(--accent);
   flex: none;
+}
+
+.card.answer .dot {
+  background: var(--edit);
 }
 
 .muted {

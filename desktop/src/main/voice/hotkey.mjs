@@ -2,6 +2,10 @@
  * Listens for the voice typing shortcut anywhere on the computer and turns key presses into
  * "start", "stop", "cancel" and "handsfree" (hotkey-machine.mjs decides which).
  *
+ * Shift held with the shortcut (before it, or while it's held) asks to edit the selected text by
+ * voice instead of typing: "start" says so, and "edit" when Shift comes later. Shift never counts as
+ * another key pressed with the shortcut, so it doesn't cancel.
+ *
  * The keyboard hook (uiohook-napi) sees key presses system-wide, like any app with a global
  * shortcut. Only key codes are looked at, to match the shortcut and Esc; keys are never stored,
  * logged or sent anywhere. macOS asks for Accessibility before the hook can run.
@@ -17,6 +21,8 @@ import { KEY, MODIFIERS, inShortcut, shortcutDown } from "./keys.mjs";
  * The part of uiohook-napi used here (a fake in tests).
  * @typedef {{ on(ev: 'keydown'|'keyup', cb: (e: { keycode: number, altKey?: boolean, ctrlKey?: boolean, metaKey?: boolean, shiftKey?: boolean }) => void): any, removeAllListeners(ev?: string): any, start(): void, stop(): void, keyTap(key: number, modifiers?: number[]): void }} HookLike
  */
+
+const SHIFT = [KEY.Shift, KEY.ShiftRight];
 
 const GROUPS = [
   { flag: "ctrlKey", keys: [KEY.Ctrl, KEY.CtrlRight] },
@@ -125,6 +131,16 @@ export class Hotkey extends EventEmitter {
     this.dispatch({ type: "abort", at: this.now() });
   }
 
+  /** Shift is one of the shortcut's own keys (a custom one), so it can't also mean "edit". */
+  shiftInShortcut() {
+    return SHIFT.some((k) => inShortcut(this.shortcut, k));
+  }
+
+  /** Shift held with the shortcut: edit the selected text by voice. */
+  editHeld() {
+    return !this.shiftInShortcut() && SHIFT.some((k) => this.pressed.has(k));
+  }
+
   /** Any modifier still held (a paste sent now would pick it up: ⌥⌘V instead of ⌘V). */
   modifiersHeld() {
     return [...this.pressed].some((k) => MODIFIERS.has(k));
@@ -209,6 +225,11 @@ export class Hotkey extends EventEmitter {
         if (!wasDown && shortcutDown(this.shortcut, this.pressed)) this.dispatch({ type: "down", at });
         return;
       }
+      if (SHIFT.includes(code)) {
+        // Editing by voice, asked for while talking.
+        if (recording(this.state)) this.emit("edit");
+        return;
+      }
       if (code === KEY.Escape) this.dispatch({ type: "escape", at });
       else this.dispatch({ type: "other", at, modifier: MODIFIERS.has(code) });
     } else {
@@ -227,7 +248,7 @@ export class Hotkey extends EventEmitter {
     if (state.deadline !== null) {
       this.timer = setTimeout(() => this.dispatch({ type: "tick", at: this.now() }), Math.max(0, state.deadline - this.now()) + 5);
     }
-    for (const fx of effects) this.emit(fx);
+    for (const fx of effects) this.emit(fx, fx === "start" ? { edit: this.editHeld() } : undefined);
     // Windows opens the Start menu when the Windows key is let go with nothing pressed in between.
     // A tap of an unused key (F24) while it's down tells Windows it was part of a combination.
     if (ev.type === "down" && effects.length && this.platform === "win32" && [KEY.Meta, KEY.MetaRight].some((k) => this.pressed.has(k))) {

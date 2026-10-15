@@ -37,6 +37,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
     styles: true,
     /** "Hey {bot}, …" asks the bot instead of typing. */
     commands: true,
+    /** Shift with the shortcut: change the selected text by voice (or write something new). */
+    edit: true,
     sounds: true,
     /** ISO 639-1, or "auto". */
     language: "auto",

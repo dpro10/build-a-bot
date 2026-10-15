@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, BookA, Keyboard, MessageCircle, Mic, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowRight, BookA, Keyboard, MessageCircle, Mic, ShieldCheck, Sparkles, Wand2 } from "lucide-react";
 import { Avatar } from "@/components/avatar";
 import { VoicePillMock } from "@/components/voice/VoicePillMock";
 import { Container, Section, SectionHeader } from "../ui";
@@ -8,6 +8,7 @@ const POINTS = [
   { icon: <Keyboard />, title: "Any app", body: "Hold a key in Slack, email, docs or your code editor. Let go, and it's typed where your cursor is." },
   { icon: <Sparkles />, title: "Cleaned up", body: "No ums, the right punctuation, your corrections kept. Casual in chats, proper in email." },
   { icon: <BookA />, title: "Your words", body: "Names your bot remembers and words you add are spelled right, every time." },
+  { icon: <Wand2 />, title: "Edit by voice", body: "Select text, hold Shift too, and say “make it friendlier” or “translate it to Spanish”." },
   { icon: <ShieldCheck />, title: "Private", body: "Your voice becomes text and is thrown away. We count words, never keep them." },
 ];
 
@@ -83,7 +84,7 @@ export function VoiceTyping({ desktopApp }: { desktopApp: boolean }) {
           </figure>
         </div>
 
-        <ul className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <ul className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           {POINTS.map((p) => (
             <li key={p.title} className="rounded-3xl border border-border bg-card p-5 shadow-soft">
               <span className="flex size-10 items-center justify-center rounded-2xl bg-primary-soft text-primary [&_svg]:size-5" aria-hidden="true">
