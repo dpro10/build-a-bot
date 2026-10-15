@@ -171,7 +171,7 @@ Hold a key in any app and talk; what you meant is typed at your cursor, cleaned 
 2. Click into any text field (Notes, Slack, a browser), then hold **Right Option** (Mac), **Ctrl + Windows** (Windows) or **Right Ctrl** (Linux) and talk.
 3. **Expect:** a small pill at the bottom of the screen with a waveform while you hold; let go and the sentence is typed where your cursor is, and your clipboard is put back as it was.
 4. Tap the key twice for hands-free, and press **Esc** while it listens to cancel.
-5. Select some text, then hold **Shift** with your key: the pill turns pink ("Say what to change"). Let go and the selection is replaced; your app's Undo takes it back. With nothing selected, it writes what you asked for.
+5. Select some text, then hold **Shift** with your key: the pill turns pink ("Say what to change"). Let go and the selection is replaced; your app's Undo takes it back. With nothing selected, it writes what you asked for. Starting with "Hey Otto" instead sends Otto the request with what you selected ("Hey Otto, remind me about this tomorrow"); open its chat to see both.
 6. **Voice typing settings…** (tray) has the try-it box, your shortcut, the cleanup switches, your words, and **Recent**: *Fix* a dictation and it offers to learn the names it got wrong.
 
 Without Accessibility on a Mac it still works: press **⌘ Shift Space** to start and stop, and paste with ⌘V.

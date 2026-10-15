@@ -47,6 +47,8 @@ test("dashboard pages", async ({ page }) => {
     },
   });
   const { id } = await res.json();
+  // A request by voice with text the owner selected, so the chat shows one.
+  await (await page.request.post("/api/voice/ask", { data: { botId: id, text: "Remind me about this tomorrow at 9.", selection: "Team lunch Friday at 12:30." } })).text();
   for (const tab of ["", "/meetings", "/tools", "/channels", "/routines", "/activity", "/memory", "/settings"]) await scan(page, `/app/bots/${id}${tab}`);
   for (const path of ["/app/approvals", "/app/billing", "/app/voice", "/app/bridge", "/app/account"]) await scan(page, path);
 });
@@ -101,6 +103,8 @@ test("dark mode", async ({ page }) => {
     },
   });
   const { id } = await res.json();
+  // A request by voice with selected text: the quote in the owner's bubble is checked in dark too.
+  await (await page.request.post("/api/voice/ask", { data: { botId: id, text: "Remind me about this tomorrow at 9.", selection: "Team lunch Friday at 12:30." } })).text();
   for (const path of ["/", "/pricing", "/safety", "/build", `/app/bots/${id}`, `/app/bots/${id}/meetings`, `/app/bots/${id}/tools`, `/app/bots/${id}/channels`, `/app/bots/${id}/settings`, "/app/billing", "/app/bridge"]) {
     await scan(page, path);
   }

@@ -177,7 +177,25 @@ describe("asking the bot", () => {
     const messages = await db.select().from(schema.messages).where(eq(schema.messages.botId, bot.id));
     const asked = messages.find((m) => m.role === "user" && m.text === "Remind me to call Mom tomorrow at 5.");
     expect(asked?.meta).toMatchObject({ via: "voice" });
-    expect(messages.some((m) => m.role === "assistant")).toBe(true);
+    const answer = messages.find((m) => m.role === "assistant");
+    expect(answer).toBeTruthy();
+    // An answer to the owner, not the bot reaching out on its own.
+    expect((answer?.meta as { proactive?: boolean }).proactive).toBeUndefined();
+  });
+
+  it("sends what they selected along with the request, kept with it in the chat", async () => {
+    const selection = "Team lunch Friday at 12:30 at Tartine. Bring the Q3 slides.";
+    const res = await askRoute.POST(jsonReq("POST", "http://localhost/api/voice/ask", { botId: bot.id, text: "Remind me about this tomorrow at 9.", selection }));
+    await res.text();
+    const messages = await db.select().from(schema.messages).where(eq(schema.messages.botId, bot.id));
+    const asked = messages.find((m) => m.role === "user" && m.text === "Remind me about this tomorrow at 9.");
+    expect(asked?.meta).toMatchObject({ via: "voice", selection });
+    // A blank selection is no selection; one too long is refused.
+    const blank = await askRoute.POST(jsonReq("POST", "http://localhost/api/voice/ask", { botId: bot.id, text: "Hi there.", selection: "   " }));
+    await blank.text();
+    const hi = (await db.select().from(schema.messages).where(eq(schema.messages.botId, bot.id))).find((m) => m.text === "Hi there.");
+    expect(hi?.meta).toEqual({ via: "voice" });
+    expect((await askRoute.POST(jsonReq("POST", "http://localhost/api/voice/ask", { botId: bot.id, text: "Hi", selection: "x".repeat(8001) }))).status).toBe(422);
   });
 
   it("only for the owner's own bots", async () => {
