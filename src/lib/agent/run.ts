@@ -329,7 +329,8 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
       break;
     }
 
-    if (stepText.trim()) finalText = finalText ? `${finalText}\n\n${stepText.trim()}` : stepText.trim();
+    const said = withoutAppNotes(stepText);
+    if (said) finalText = finalText ? `${finalText}\n\n${said}` : said;
 
     if (stopReason === "refusal") {
       if (!stepText.trim()) finalText = finalText || "I can't help with that one.";
@@ -376,7 +377,8 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
           usage.outputTokens += ev.usage.outputTokens;
         }
       }
-      if (wrap.trim()) finalText = finalText ? `${finalText}\n\n${wrap.trim()}` : wrap.trim();
+      const said = withoutAppNotes(wrap);
+      if (said) finalText = finalText ? `${finalText}\n\n${said}` : said;
     } catch {
       /* best effort */
     }
@@ -778,6 +780,17 @@ async function finish(
   emit({ type: "status", state: extra.approvals?.length ? "waiting" : "done" });
   emit({ type: "done", messageId, text: finalText, status });
   return { status, text: finalText, messageId, approvals: extra.approvals ?? [], usage: extra.usage };
+}
+
+/**
+ * The history marks what a reply did ("[tools used: recall: ok]") so the model knows what
+ * happened. Small models sometimes copy that note into their own reply: it never reaches the owner.
+ */
+function withoutAppNotes(text: string): string {
+  return text
+    .replace(/^[ \t]*\[tools used:[^\]\n]*\][ \t]*$/gim, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 /** Chronological, budgeted history for this conversation, as provider-neutral messages. */
