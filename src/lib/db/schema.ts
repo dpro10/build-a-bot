@@ -397,6 +397,32 @@ export const memories = pgTable(
   (t) => [index("memories_bot_idx").on(t.botId)],
 );
 
+/**
+ * Voice typing's personal dictionary: the owner's own words, so speech-to-text spells them
+ * right, and snippets they can say to type something longer. It belongs to the person, not a
+ * bot: voice typing works in every app. Never holds what they dictated (that isn't kept).
+ */
+export const dictionary = pgTable(
+  "dictionary",
+  {
+    id: text("id").primaryKey(),
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** word: a name or term to spell right; snippet: something to type when they say its phrase. */
+    kind: text("kind").notNull().default("word"),
+    /** The word as written ("Prozzi", "GitHub"), or what the snippet types. */
+    text: text("text").notNull(),
+    /** word: what speech-to-text writes instead ("pro zee"); snippet: the phrases that type it. */
+    heard: jsonb("heard").$type<string[]>().notNull().default([]),
+    /** manual (added by the owner) | correction (from fixing a dictation) */
+    source: text("source").notNull().default("manual"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("dictionary_owner_idx").on(t.ownerId)],
+);
+
 export const notes = pgTable(
   "notes",
   {
@@ -523,6 +549,8 @@ export const usage = pgTable(
     voiceSeconds: integer("voice_seconds").notNull().default(0),
     /** Seconds of meeting audio transcribed (meeting notes). */
     meetingSeconds: integer("meeting_seconds").notNull().default(0),
+    /** Words typed by voice (voice typing in the desktop app and on the Voice typing page). */
+    dictationWords: integer("dictation_words").notNull().default(0),
     smsSegments: integer("sms_segments").notNull().default(0),
     emailsSent: integer("emails_sent").notNull().default(0),
     costMicros: bigint("cost_micros", { mode: "number" }).notNull().default(0),
@@ -680,6 +708,7 @@ export type Message = typeof messages.$inferSelect;
 export type Approval = typeof approvals.$inferSelect;
 export type Receipt = typeof receipts.$inferSelect;
 export type Memory = typeof memories.$inferSelect;
+export type DictionaryEntry = typeof dictionary.$inferSelect;
 export type Note = typeof notes.$inferSelect;
 export type ScheduleRow = typeof schedules.$inferSelect;
 export type Usage = typeof usage.$inferSelect;

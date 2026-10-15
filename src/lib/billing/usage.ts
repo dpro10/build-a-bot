@@ -16,6 +16,7 @@ export type UsageDelta = Partial<{
   actions: number;
   voiceSeconds: number;
   meetingSeconds: number;
+  dictationWords: number;
   smsSegments: number;
   emailsSent: number;
   costMicros: number;
@@ -33,6 +34,7 @@ export async function recordUsage(db: Db, userId: string, delta: UsageDelta, whe
     actions: delta.actions ?? 0,
     voiceSeconds: delta.voiceSeconds ?? 0,
     meetingSeconds: delta.meetingSeconds ?? 0,
+    dictationWords: delta.dictationWords ?? 0,
     smsSegments: delta.smsSegments ?? 0,
     emailsSent: delta.emailsSent ?? 0,
     costMicros: Math.round(delta.costMicros ?? 0),
@@ -51,6 +53,7 @@ export async function recordUsage(db: Db, userId: string, delta: UsageDelta, whe
         actions: sql`${schema.usage.actions} + ${d.actions}`,
         voiceSeconds: sql`${schema.usage.voiceSeconds} + ${d.voiceSeconds}`,
         meetingSeconds: sql`${schema.usage.meetingSeconds} + ${d.meetingSeconds}`,
+        dictationWords: sql`${schema.usage.dictationWords} + ${d.dictationWords}`,
         smsSegments: sql`${schema.usage.smsSegments} + ${d.smsSegments}`,
         emailsSent: sql`${schema.usage.emailsSent} + ${d.emailsSent}`,
         costMicros: sql`${schema.usage.costMicros} + ${d.costMicros}`,
@@ -75,6 +78,7 @@ export async function getUsage(db: Db, userId: string, when = new Date()) {
       actions: 0,
       voiceSeconds: 0,
       meetingSeconds: 0,
+      dictationWords: 0,
       smsSegments: 0,
       emailsSent: 0,
       costMicros: 0,
@@ -83,7 +87,7 @@ export async function getUsage(db: Db, userId: string, when = new Date()) {
   );
 }
 
-export type LimitKind = "includedMessages" | "byoMessages" | "searches" | "voiceMinutes" | "smsSegments" | "meetingMinutes";
+export type LimitKind = "includedMessages" | "byoMessages" | "searches" | "voiceMinutes" | "smsSegments" | "meetingMinutes" | "dictationWords";
 
 export type LimitCheck =
   | { ok: true; plan: Plan }
@@ -106,7 +110,9 @@ export async function checkLimit(db: Db, owner: Pick<User, "id" | "plan" | "emai
             ? Math.ceil(u.voiceSeconds / 60)
             : kind === "meetingMinutes"
               ? Math.floor(u.meetingSeconds / 60)
-              : u.smsSegments;
+              : kind === "dictationWords"
+                ? u.dictationWords
+                : u.smsSegments;
   const signIn = kind === "includedMessages" && !owner.emailVerifiedAt;
   const limit = signIn ? Math.min(plan.limits[kind], ANONYMOUS_INCLUDED_MESSAGES) : plan.limits[kind];
   if (used < limit) return { ok: true, plan };
@@ -120,6 +126,7 @@ export async function checkLimit(db: Db, owner: Pick<User, "id" | "plan" | "emai
     voiceMinutes: "call minutes",
     smsSegments: "texts",
     meetingMinutes: "minutes of meeting notes",
+    dictationWords: "words of voice typing",
   };
   return {
     ok: false,
