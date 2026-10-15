@@ -29,6 +29,13 @@
       "when": 1792075229729,
       "tag": "0003_memory_pins",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792079325208,
+      "tag": "0004_bot_roles",
+      "breakpoints": true
     }
   ]
 }

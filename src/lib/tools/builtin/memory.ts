@@ -2,7 +2,7 @@ import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import { schema } from "@/lib/db";
 import { newId } from "@/lib/utils";
-import { MAX_MEMORIES, findMemory, findSameFact, loadMemories, memoryQuery, rankMemories } from "@/lib/memory";
+import { MAX_MEMORIES, MAX_PINNED, findMemory, findSameFact, loadMemories, memoryQuery, rankMemories } from "@/lib/memory";
 import { defineTool } from "../types";
 
 export const remember = defineTool({
@@ -13,6 +13,7 @@ export const remember = defineTool({
   input: z.object({
     fact: z.string().min(3).max(300).describe("e.g. 'Diego's sister is Ana; her birthday is May 3'"),
     replaces: z.string().max(300).optional().describe("Words from an older fact this one replaces, e.g. 'lives in Dallas'"),
+    pin: z.boolean().optional().describe("true only for a basic you should always keep in mind (what they're learning, an allergy). Use it rarely."),
   }),
   connectorId: "memory",
   capabilityId: "remember",
@@ -24,10 +25,12 @@ export const remember = defineTool({
   summarize: (a) => `Remember: “${a.fact}”`,
   async run(args, ctx) {
     const rows = await loadMemories(ctx.db, ctx.bot.id);
+    // Pins stay few (the owner can pin up to MAX_PINNED in the Memory tab too).
+    const pin = args.pin === true && rows.filter((r) => r.pinned).length < MAX_PINNED;
     const update = async (id: string, before: string) => {
       await ctx.db
         .update(schema.memories)
-        .set({ text: args.fact, updatedAt: new Date() })
+        .set({ text: args.fact, updatedAt: new Date(), ...(pin ? { pinned: true } : {}) })
         .where(and(eq(schema.memories.id, id), eq(schema.memories.botId, ctx.bot.id)));
       return { ok: true as const, content: `Updated memory: “${before}” is now “${args.fact}”`, summary: "Updated" };
     };
@@ -35,9 +38,12 @@ export const remember = defineTool({
     if (old) return update(old.id, old.text);
     const same = findSameFact(rows, args.fact);
     if (same?.relation === "more") return update(same.row.id, same.row.text);
-    if (same) return { ok: true, content: "Already remembered.", summary: "Already known" };
+    if (same) {
+      if (pin && !same.row.pinned) await ctx.db.update(schema.memories).set({ pinned: true }).where(and(eq(schema.memories.id, same.row.id), eq(schema.memories.botId, ctx.bot.id)));
+      return { ok: true, content: "Already remembered.", summary: "Already known" };
+    }
     if (rows.length >= MAX_MEMORIES) return { ok: false, error: "Memory is full. Ask the owner to tidy it in the Memory tab." };
-    await ctx.db.insert(schema.memories).values({ id: newId("mem"), botId: ctx.bot.id, text: args.fact, source: "bot" });
+    await ctx.db.insert(schema.memories).values({ id: newId("mem"), botId: ctx.bot.id, text: args.fact, source: "bot", pinned: pin });
     return { ok: true, content: `Saved to memory: ${args.fact}`, summary: "Saved" };
   },
 });

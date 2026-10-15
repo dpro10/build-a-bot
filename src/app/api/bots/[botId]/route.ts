@@ -5,6 +5,7 @@ import { schema } from "@/lib/db";
 import { apiError, authedBot, json, parseJson, sameOrigin, type RouteCtx } from "@/lib/api";
 import { AVATAR_IDS, COLORWAY_IDS } from "@/lib/avatars";
 import { TRUST_LEVELS } from "@/lib/trust";
+import { ROLE_IDS } from "@/lib/roles";
 import { getPlan, planAllowsTrust } from "@/lib/billing/plans";
 import { demoMode } from "@/lib/env";
 import { readCredential, storeCredential } from "@/lib/channels/secrets";
@@ -45,6 +46,8 @@ const patchSchema = z.object({
   color: z.enum(COLORWAY_IDS).optional(),
   instructions: z.string().max(4000).optional(),
   jobs: z.array(z.string()).max(12).optional(),
+  /** A ready-made role, or null to make it a general assistant again. */
+  role: z.enum(ROLE_IDS).nullable().optional(),
   trust: z.enum(TRUST_LEVELS).optional(),
   vibe: z
     .object({ verbosity: z.enum(["brief", "balanced", "detailed"]).optional(), emoji: z.boolean().optional(), tone: z.string().max(80).optional() })
@@ -86,6 +89,7 @@ export async function PATCH(req: Request, ctx: RouteCtx<{ botId: string }>) {
   if (p.color) updates.color = p.color;
   if (p.instructions !== undefined) updates.instructions = p.instructions;
   if (p.jobs) updates.jobs = p.jobs;
+  if (p.role !== undefined) updates.role = p.role;
   if (p.vibe) updates.vibe = { ...a.bot.vibe, ...p.vibe };
   if (p.limits) updates.limits = { ...a.bot.limits, ...p.limits };
   if (p.trust) {

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toaster";
 import { useBotLive } from "./live-state";
 import { TRUST, isTrustLevel } from "@/lib/trust";
+import { roleBadge } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import type { AvatarId, ColorwayId } from "@/lib/avatars";
 
@@ -27,7 +28,7 @@ export function BotHeader({
   bot,
   brain,
 }: {
-  bot: { id: string; name: string; avatar: string; color: string; trust: string; status: string };
+  bot: { id: string; name: string; avatar: string; color: string; trust: string; status: string; role?: string | null };
   brain: string;
 }) {
   const live = useBotLive();
@@ -80,7 +81,7 @@ export function BotHeader({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="truncate font-display text-xl font-bold">{bot.name}</h1>
-            <Badge tone="outline" className="hidden sm:inline-flex">AI assistant</Badge>
+            <Badge tone="outline" className="hidden sm:inline-flex">{roleBadge(bot.role)}</Badge>
           </div>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
             <span className="inline-flex items-center gap-1.5">

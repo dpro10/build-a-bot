@@ -11,6 +11,7 @@ import { getConnector } from "@/lib/connectors";
 import { INCLUDED_MODELS, PROVIDER_BY_ID, type ProviderId } from "@/lib/models/catalog";
 import { isJobId, JOB_BY_ID } from "@/lib/jobs";
 import type { RecipeData } from "@/lib/recipes";
+import { isRoleId, type RoleId } from "@/lib/roles";
 import { ALWAYS_ON, countsTowardLimit } from "@/components/catalog/connector-meta";
 
 export const STEPS = [
@@ -47,6 +48,8 @@ export type BuilderState = {
   instructions: string;
   ageConfirmed: boolean;
   recipeSlug: string | null;
+  /** A ready-made role from the recipe (a tutor, a job applier…); null for a general assistant. */
+  role: RoleId | null;
   /** Daily brief the bot sends on its own. */
   brief: { on: boolean; time: string; weekdays: boolean };
 };
@@ -112,6 +115,7 @@ export function initialState(recipe: (RecipeData & { slug?: string }) | null | u
     instructions: "",
     ageConfirmed: false,
     recipeSlug: null,
+    role: null,
     brief: { on: true, time: "08:00", weekdays: false },
   };
   if (!recipe) return base;
@@ -129,6 +133,7 @@ export function initialState(recipe: (RecipeData & { slug?: string }) | null | u
     channels: usableChannels(recipe.channels, ctx),
     instructions: recipe.instructions,
     recipeSlug: recipe.slug ?? null,
+    role: isRoleId(recipe.role) ? recipe.role : null,
     // The recipe brings its own routines.
     brief: { ...base.brief, on: !recipe.routines?.length },
   };
@@ -148,6 +153,7 @@ export function withDraft(base: BuilderState, draft: Partial<BuilderState>, ctx:
     ...draft,
     brain: brain.kind === "included" && modelLocked(brain.model, ctx.plan, ctx.demo) ? { ...brain, model: DEFAULT_MODEL } : brain,
     brief: draft.brief ?? base.brief,
+    role: isRoleId(draft.role) ? draft.role : base.role,
     ageConfirmed: false,
     channels: usableChannels(draft.channels ?? base.channels, ctx),
     connectors: usableApps(draft.connectors ?? base.connectors, ctx),

@@ -39,6 +39,8 @@ Seven steps, with a live preview that assembles the bot as you go:
 
 Recipes prefill it (`/build?recipe=inbox-zero`, or any shared `/r/[slug]`). The account comes later: a bot works right away, and "Save your account" (a magic link) keeps it.
 
+**Or start with a ready-made bot:** a Tutor, a Job applier, a Language partner, a Fitness coach or a Meal planner. One tap fills in every step. Each one works the way its role should, and its first message asks what it needs to know: what you're learning and why, or the job you want and your résumé.
+
 ### Brains
 
 - **Included open models** on Nebius Token Factory: Nemotron 3.5 Lightning by default, plus Qwen, gpt-oss, DeepSeek, GLM, MiniMax, Kimi and Hermes by plan.

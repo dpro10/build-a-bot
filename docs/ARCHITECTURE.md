@@ -81,6 +81,26 @@ What a bot knows about its owner lives in `memories`: up to 2,000 per bot, of wh
   - Both paths drop secrets, lines that steer an assistant, chatter, repeats and facts the bot already knows. Nothing is saved yet.
   - `save`: the facts the owner kept are checked again and inserted as `source = "import"`, with a receipt.
 
+## Roles
+
+A role makes a bot a specialist: a tutor, a job applier, a language partner, a fitness coach or a meal planner (`src/lib/roles.ts`, stored in `bots.role`).
+
+- **Prompt:**
+  - The bot is "an AI tutor" instead of "a personal AI assistant".
+  - It gets the role's method as short lines that small models follow too.
+  - It's told to pin the basics with `remember` (`pin: true`, capped at 15 pins), and to stay in its lane softly.
+  - The bot's jobs come after the role as extras.
+- **First message:** `greetingDirective` asks the role's `firstAsk` instead of offering ideas. The chat's starter chips list the role's ideas first.
+- **Recipes:**
+  - Each role has a featured recipe (`FEATURED_RECIPES`, with `role`): face, built-ins, routines, Free-plan sized.
+  - `createBot` takes the builder's `role`, or the recipe's when none is sent.
+  - `botToRecipe` keeps the role when a bot is shared.
+- **UI:**
+  - The builder's first step links to each role's recipe ("Or start with a ready-made bot").
+  - The review shows the role.
+  - Settings → What it helps with has a Role picker (`PATCH /api/bots/[botId]` with `role`, or `null` for a general assistant).
+  - The header badge reads "AI tutor".
+
 ## The policy engine
 
 `evaluate()` in `src/lib/policy/engine.ts` is a pure function with its own tests. Inputs: trust level, effect (read/write/send/delete/spend/admin), risk, recipients, whether the run has read outside content ("tainted"), owner rules per app capability, caps, quiet hours. Output: allow, ask or deny, with reasons.
@@ -191,6 +211,7 @@ Every flow in the product can be tried with zero keys, and nothing real is sent 
 - `npm run test:e2e` (after `npm run build`; it starts `next start` on port 3100 with its own database), on a phone and a desktop:
   - the builder to a live chat, an approval and STOP;
   - Bring my memories: paste, untick, save, pin;
+  - a ready-made tutor: one tap in the builder, its first question, then back to a general assistant in Settings;
   - meeting notes in the browser with a fake microphone: consent, the floating window, the transcript, the notes, deleting;
   - every page loads;
   - axe accessibility scans in light and dark.

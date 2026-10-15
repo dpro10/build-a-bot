@@ -4,6 +4,7 @@
  * abandon personal agents is not knowing what to use them for (research, 10-13).
  */
 import type { AppKind, JobId } from "@/lib/connectors/types";
+import { isRoleId, ROLE_BY_ID } from "@/lib/roles";
 
 /** A starter idea. One that looks at the owner's email, calendar, code or home says which kind of app it needs. */
 export type Starter = string | { text: string; needs: AppKind };
@@ -178,11 +179,12 @@ export function isJobId(value: unknown): value is JobId {
   return typeof value === "string" && value in JOB_BY_ID;
 }
 
-/** The jobs' starter ideas that fit a bot: ones about an app it doesn't have are left out. */
-export function startersFor(jobs: string[], apps: ReadonlySet<AppKind>): string[] {
+/** Starter ideas that fit a bot, its role's first: ones about an app it doesn't have are left out. */
+export function startersFor(jobs: string[], apps: ReadonlySet<AppKind>, role?: string | null): string[] {
   const out: string[] = [];
-  for (const id of jobs) {
-    for (const s of JOB_BY_ID[id as JobId]?.starters ?? []) {
+  const lists = [...(isRoleId(role) ? [ROLE_BY_ID[role].starters] : []), ...jobs.map((id) => JOB_BY_ID[id as JobId]?.starters ?? [])];
+  for (const list of lists) {
+    for (const s of list) {
       const text = typeof s === "string" ? s : apps.has(s.needs) ? s.text : null;
       if (text && !out.includes(text)) out.push(text);
     }
