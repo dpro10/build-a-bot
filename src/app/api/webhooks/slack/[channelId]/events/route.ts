@@ -24,7 +24,9 @@ export async function POST(req: Request, ctx: RouteCtx<{ channelId: string }>) {
   if (!channel || channel.kind !== "slack") return new Response("not found", { status: 404 });
 
   const secretJson = await channelSecret(db, channel);
-  const creds = secretJson ? (JSON.parse(secretJson) as SlackCreds) : null;
+  const parsed = secretJson ? (JSON.parse(secretJson) as Partial<SlackCreds>) : null;
+  // A bot on the shared "Add to Slack" app has no signing secret of its own: its events come to /api/webhooks/slack/events.
+  const creds = parsed?.botToken && parsed.signingSecret ? (parsed as SlackCreds) : null;
 
   // Slack checks the URL before the owner has pasted the signing secret: echo the challenge.
   if (body.type === "url_verification") {

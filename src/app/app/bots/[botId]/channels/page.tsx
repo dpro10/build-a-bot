@@ -12,8 +12,16 @@ import { toChannelView, type ChannelView } from "@/components/bot/channels/model
 
 export const metadata: Metadata = { title: "Channels" };
 
-export default async function ChannelsPage({ params }: { params: Promise<{ botId: string }> }) {
+export default async function ChannelsPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ botId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { botId } = await params;
+  const sp = await searchParams;
+  const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? null;
   const user = await requireUser(`/app/bots/${botId}/channels`);
   const db = await getDb();
   const bot = await getOwnedBot(db, user.id, botId);
@@ -47,6 +55,8 @@ export default async function ChannelsPage({ params }: { params: Promise<{ botId
       botEmail={botEmailAddress(bot)}
       availability={availability}
       joined={joined}
+      slackOneClick={live.slackOAuth}
+      flash={{ slackAdded: first(sp.slack) === "added", movedFrom: first(sp.moved), error: first(sp.channel_error) }}
     />
   );
 }
