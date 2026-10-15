@@ -5,13 +5,20 @@ import { newId } from "@/lib/utils";
 import { MAX_MEMORIES, MAX_PINNED, findMemory, findSameFact, loadMemories, memoryQuery, rankMemories } from "@/lib/memory";
 import { defineTool } from "../types";
 
+/** "User wants…", "The owner's sister…" → "Dana wants…", "Dana's sister…": memories name the owner. */
+export function byName(fact: string, name: string | null | undefined): string {
+  const who = name?.trim();
+  const text = fact.trim();
+  return who ? text.replace(/^(?:the\s+)?(?:user|owner)(?=['’]s\b|\s)/i, who) : text;
+}
+
 export const remember = defineTool({
   name: "remember",
   title: "Remember this",
   description:
     "Save a durable fact about the owner (preferences, people, routines, goals) so you remember it in future chats. One short fact per call. If it changes something you remembered before (they moved, changed jobs), put the old fact's words in `replaces`. Never store passwords or secrets.",
   input: z.object({
-    fact: z.string().min(3).max(300).describe("e.g. 'Diego's sister is Ana; her birthday is May 3'"),
+    fact: z.string().min(3).max(300).describe("One fact about them, by name: e.g. 'Sam's sister is Ana; her birthday is May 3' when their name is Sam"),
     replaces: z.string().max(300).optional().describe("Words from an older fact this one replaces, e.g. 'lives in Dallas'"),
     pin: z.boolean().optional().describe("true only for a basic you should always keep in mind (what they're learning, an allergy). Use it rarely."),
   }),
@@ -23,7 +30,8 @@ export const remember = defineTool({
   ownerOnly: true,
   outboundText: (a) => a.fact,
   summarize: (a) => `Remember: “${a.fact}”`,
-  async run(args, ctx) {
+  async run(input, ctx) {
+    const args = { ...input, fact: byName(input.fact, ctx.owner.name) };
     const rows = await loadMemories(ctx.db, ctx.bot.id);
     // Pins stay few (the owner can pin up to MAX_PINNED in the Memory tab too).
     const pin = args.pin === true && rows.filter((r) => r.pinned).length < MAX_PINNED;

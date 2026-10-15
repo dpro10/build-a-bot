@@ -384,6 +384,13 @@ describe("the bot keeps its memory accurate", () => {
 
     const gone = await forget.run({ fact: "vegetarian" }, ctx);
     expect(gone.ok && gone.content).toBe("Forgot: Dana is vegetarian");
+    // Small models sometimes write "User…" or "The owner's…": memories name the owner.
+    await remember.run({ fact: "User wants to learn Spanish for a trip" }, ctx);
+    await remember.run({ fact: "The owner's dog is named Biscuit" }, ctx);
+    expect(await texts(ctx.bot.id)).toEqual(expect.arrayContaining(["Dana wants to learn Spanish for a trip", "Dana's dog is named Biscuit"]));
+    await forget.run({ fact: "learn Spanish" }, ctx);
+    await forget.run({ fact: "dog Biscuit" }, ctx);
+
     const missing = await forget.run({ fact: "plays the cello" }, ctx);
     expect(missing.ok && missing.content).toMatch(/Couldn't find that/);
     expect(await texts(ctx.bot.id)).toEqual(["Dana has a sister named Ana", "Dana lives in Austin now"]);
