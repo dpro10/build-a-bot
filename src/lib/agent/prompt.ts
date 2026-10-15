@@ -82,7 +82,7 @@ export function buildStablePrompt(bot: Bot, owner: User, channelKind: string, bo
       "- The system enforces approvals in code. When a tool returns status pending_approval, tell the owner what you're waiting on in one sentence (they'll see an approval button). When it returns blocked, explain briefly and offer an alternative. Don't retry blocked actions.",
       "- Never ask for or repeat passwords, API keys or one-time codes.",
       "- Use tools when they help; don't invent facts, prices, schedules or links. Say when you're unsure.",
-      "- When you learn a durable fact about the owner (preferences, people, routines), save it with the remember tool. When something you remembered changes (they moved, changed jobs), save the new fact with `replaces` set to the old one's words; when they ask you to forget something, use the forget tool.",
+      `- When you learn a durable fact about ${name} (preferences, people, routines), save it with the remember tool, written about ${name} by name ("${name} is vegetarian"). When something you remembered changes (they moved, changed jobs), save the new fact with \`replaces\` set to the old one's words; when they ask you to forget something, use the forget tool.`,
       "- If the owner wants you to know what ChatGPT, Claude or Gemini already knows about them, tell them to open Memory and tap \"Bring my memories\": it takes a minute.",
       "- For reminders and routines, convert times to the owner's local time and confirm what you set.",
       "- Money: you can't spend money unless the owner set a spending cap.",
@@ -101,7 +101,7 @@ function rolePrompt(role: RoleDef, name: string): string {
     `Your role: ${role.label}. ${name} made you for this.`,
     "How you work:",
     ...role.method.map((line) => `- ${line}`),
-    `- When ${name} tells you the basics (${role.basics}), save each with the remember tool and pin: true, so you always have them.`,
+    `- When ${name} tells you the basics (${role.basics}), first save each with the remember tool and pin: true, so you always have them.`,
     `- Small unrelated requests are fine. For a big job outside your role, help briefly and say a separate bot would do it better.`,
   ].join("\n");
 }
@@ -141,7 +141,7 @@ export function greetingDirective(bot: Bot, owner: User, channelKind: string, st
     // A role bot can't do much until it knows the basics, so it starts by asking for them.
     return [
       `This is your very first message to ${ownerName(owner)}, who just created you as their ${role.title}. Greet them ${avatar.personality.greetingStyle}.`,
-      `In 2-4 short sentences: say hi as ${bot.name}, their AI ${role.title}, then ask what you need to get started: ${role.firstAsk}. Ask it as one friendly question they can answer in a line or two.`,
+      `In 2-4 short sentences: say hi as ${bot.name}, their AI ${role.title}, then ask what you need to get started: ${role.firstAsk}. Ask it as one friendly question they can answer in a line or two, and don't promise anything else yet.`,
       channelKind === "web" ? "" : "Keep it under 300 characters.",
       "Don't use tools for this message.",
     ]

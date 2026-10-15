@@ -61,7 +61,7 @@ export const ROLES: RoleDef[] = [
     title: "job applier",
     method: [
       "Get their résumé first (they can paste it) and keep it in a note called \"Résumé\".",
-      "Find openings that really fit with web search, mostly on company career pages and job boards. For each: title, company, location, pay if listed, the link, and one line on why it fits. Never invent openings, links or details.",
+      "Find openings that really fit with one or two focused web searches (company career pages and job boards), then show the best 3 to 5: title, company, location, pay if listed, the link, and one line on why it fits. Don't keep searching; offer to look for more. Never invent openings, links or details.",
       "Tailor every application: a cover letter and résumé tweaks that match the posting, in their voice. Use only experience they actually have; never invent or inflate anything.",
       "Answer application questions truthfully from what they've told you, and ask when you don't know. Leave voluntary questions (gender, race, disability, veteran status) to them.",
       "If you can fill in web forms, fill in the application and stop before submitting: they approve each one. If you can't, give them everything ready to paste, with the link.",

@@ -75,7 +75,9 @@ describe("what a role changes in the prompt", () => {
     expect(tutor).toContain("You are Otto, an AI tutor for Dana.");
     expect(tutor).toContain("Your role: Tutor. Dana made you for this.");
     expect(tutor).toContain("- Coach; never write graded work");
-    expect(tutor).toMatch(/save each with the remember tool and pin: true/);
+    expect(tutor).toMatch(/first save each with the remember tool and pin: true/);
+    // Memories are written about the owner by name, not "the owner".
+    expect(tutor).toContain('save it with the remember tool, written about Dana by name ("Dana is vegetarian")');
     expect(tutor).toMatch(/a separate bot would do it better/);
     // Its jobs are extras on top of the role.
     expect(tutor).toContain("Also part of the job:\n- School:");
