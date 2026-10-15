@@ -11,6 +11,7 @@ import { brainLabel } from "@/lib/bots/labels";
 import { SettingsNav } from "@/components/bot/settings/SettingsNav";
 import { LookSection } from "@/components/bot/settings/LookSection";
 import { JobsSection } from "@/components/bot/settings/JobsSection";
+import { roleBadge } from "@/lib/roles";
 import { BrainSection } from "@/components/bot/settings/BrainSection";
 import { RecipeSection } from "@/components/bot/settings/RecipeSection";
 import { McpSection } from "@/components/bot/settings/McpSection";
@@ -56,6 +57,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ botId
           <div className="flex min-w-0 flex-col gap-6">
             <LookSection
               botId={botId}
+              badge={roleBadge(bot.role)}
               initial={{
                 name: bot.name,
                 avatar: isAvatarId(bot.avatar) ? bot.avatar : "blip",
@@ -66,7 +68,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ botId
                 tone: vibe.tone ?? "",
               }}
             />
-            <JobsSection botId={botId} botName={bot.name} initial={bot.jobs ?? []} />
+            <JobsSection botId={botId} botName={bot.name} initial={bot.jobs ?? []} initialRole={bot.role} />
             <BrainSection
               botId={botId}
               botName={bot.name}

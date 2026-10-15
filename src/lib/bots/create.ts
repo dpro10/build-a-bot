@@ -19,6 +19,7 @@ import { storeCredential } from "@/lib/channels/secrets";
 import { computeNextRun, isValidTimeZone } from "@/lib/scheduler/time";
 import { canonicalResource } from "@/lib/connectors/mcp/oauth";
 import { findFeatured, recipeSchema, type RecipeData } from "@/lib/recipes";
+import { ROLE_IDS } from "@/lib/roles";
 import { isEmail, joinList, newId, normalizePhone, shortCode, slugify, sortableId } from "@/lib/utils";
 
 const brainSchema = z.discriminatedUnion("kind", [
@@ -82,6 +83,8 @@ export const createBotSchema = z.object({
   timezone: z.string().max(80).optional(),
   ageConfirmed: z.literal(true),
   recipeId: z.string().max(60).optional(),
+  /** A ready-made role ("tutor"…); null for a general assistant. Left out: the recipe's role, if any. */
+  role: z.enum(ROLE_IDS).nullable().optional(),
   /** A daily brief the bot sends on its own (the habit that keeps people coming back). */
   morningBrief: z
     .object({ time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), days: z.array(z.number().int().min(0).max(6)).max(7).optional() })
@@ -175,6 +178,8 @@ export async function createBot(db: Db, owner: User, input: CreateBotInput): Pro
   const id = newId("bot");
   const handle = `${slugify(input.name, 16) || "bot"}-${shortCode()}`;
   const jobs = input.jobs.filter((j) => j in JOB_BY_ID);
+  const recipe = input.recipeId ? await loadRecipe(db, input.recipeId) : null;
+  const role = input.role !== undefined ? input.role : (recipe?.role ?? null);
 
   const [bot] = await db
     .insert(schema.bots)
@@ -190,6 +195,7 @@ export async function createBot(db: Db, owner: User, input: CreateBotInput): Pro
       trust,
       handle,
       recipeId: input.recipeId ?? null,
+      role,
       limits: {},
     })
     .returning();
@@ -263,7 +269,6 @@ export async function createBot(db: Db, owner: User, input: CreateBotInput): Pro
   }
 
   // Routines from the recipe this bot was made from.
-  const recipe = input.recipeId ? await loadRecipe(db, input.recipeId) : null;
   if (recipe?.routines?.length) {
     const tz = input.timezone && isValidTimeZone(input.timezone) ? input.timezone : owner.timezone || "UTC";
     let made = 0;

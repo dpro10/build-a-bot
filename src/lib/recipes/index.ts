@@ -7,6 +7,7 @@ import { z } from "zod";
 import type { Bot, Connection, Channel, ScheduleRow } from "@/lib/db/schema";
 import { AVATAR_IDS, COLORWAY_IDS, type AvatarId, type ColorwayId } from "@/lib/avatars";
 import { TRUST_LEVELS, type TrustLevel } from "@/lib/trust";
+import { ROLE_IDS, isRoleId } from "@/lib/roles";
 
 export const recipeSchema = z.object({
   version: z.literal(1),
@@ -14,6 +15,8 @@ export const recipeSchema = z.object({
   avatar: z.enum(AVATAR_IDS),
   color: z.enum(COLORWAY_IDS),
   tagline: z.string().max(140).optional(),
+  /** A ready-made role (src/lib/roles.ts); left out for a general assistant. */
+  role: z.enum(ROLE_IDS).optional(),
   jobs: z.array(z.string()).max(12),
   instructions: z.string().max(4000),
   trust: z.enum(TRUST_LEVELS),
@@ -34,6 +37,7 @@ export function botToRecipe(bot: Bot, connections: Connection[], channels: Chann
     name: bot.name,
     avatar: bot.avatar as AvatarId,
     color: bot.color as ColorwayId,
+    ...(isRoleId(bot.role) ? { role: bot.role } : {}),
     jobs: bot.jobs ?? [],
     instructions: bot.instructions ?? "",
     trust: bot.trust as TrustLevel,
@@ -51,6 +55,60 @@ export type FeaturedRecipe = RecipeData & { slug: string; tagline: string; who: 
 export const FEATURED_RECIPES: FeaturedRecipe[] = [
   {
     version: 1,
+    slug: "tutor",
+    name: "Otto",
+    avatar: "otto",
+    color: "midnight",
+    role: "tutor",
+    tagline: "Learn anything step by step, with quizzes and daily review.",
+    who: "Anyone learning something new",
+    jobs: ["school", "reminders"],
+    instructions: "",
+    trust: "ask",
+    connectors: ["web_search", "wikipedia", "notes"],
+    channels: ["telegram", "slack"],
+    routines: [
+      {
+        title: "Daily review",
+        instruction: "Give me a short review quiz on what we covered recently, starting with my weak spots from the Learning log. One question at a time.",
+        time: "19:00",
+      },
+    ],
+    highlights: ["Asks what you're learning first", "One question at a time", "Daily review of what you missed"],
+  },
+  {
+    version: 1,
+    slug: "job-applier",
+    name: "Blip",
+    avatar: "blip",
+    color: "sunny",
+    role: "job_applier",
+    tagline: "Finds jobs that fit, tailors every application, tracks follow-ups.",
+    who: "Job seekers",
+    jobs: ["work", "reminders"],
+    instructions: "",
+    trust: "trusted",
+    // Web actions join once they're live: a simulated application must never pass for a real one.
+    connectors: ["web_search", "web_reader", "notes", "gmail"],
+    channels: ["telegram", "slack"],
+    routines: [
+      {
+        title: "Morning job finds",
+        instruction: "Search for new openings that fit my targets, posted in the last few days. Skip ones already in my Applications note. Send me the best 3 to 5, each with the link and one line on why it fits.",
+        time: "08:30",
+        days: [1, 2, 3, 4, 5],
+      },
+      {
+        title: "Friday follow-ups",
+        instruction: "Check my Applications note for ones over a week old with no reply, and offer to draft a short follow-up for each.",
+        time: "16:00",
+        days: [5],
+      },
+    ],
+    highlights: ["Daily matches with links", "Tailored cover letters, nothing made up", "Asks before anything is sent"],
+  },
+  {
+    version: 1,
     slug: "inbox-zero",
     name: "Nimbus",
     avatar: "nimbus",
@@ -64,6 +122,29 @@ export const FEATURED_RECIPES: FeaturedRecipe[] = [
     channels: ["telegram", "email"],
     routines: [{ title: "Morning inbox brief", instruction: "Summarize what came in overnight: what needs a reply today, what can wait, and anything urgent.", time: "08:00", days: [1, 2, 3, 4, 5] }],
     highlights: ["Morning inbox brief on weekdays", "Drafts replies in your voice", "Asks before sending anything"],
+  },
+  {
+    version: 1,
+    slug: "language-partner",
+    name: "Nimbus",
+    avatar: "nimbus",
+    color: "mint",
+    role: "language_partner",
+    tagline: "Practice a new language in everyday chats, with gentle corrections.",
+    who: "Language learners",
+    jobs: ["school"],
+    instructions: "",
+    trust: "ask",
+    connectors: ["notes"],
+    channels: ["telegram", "voice", "slack"],
+    routines: [
+      {
+        title: "Daily chat",
+        instruction: "Start a short, friendly conversation in the language I'm learning, at my level, using a few words from my Words note.",
+        time: "19:30",
+      },
+    ],
+    highlights: ["Chats at your level", "Corrects what matters", "A new chat every evening"],
   },
   {
     version: 1,
@@ -91,10 +172,59 @@ export const FEATURED_RECIPES: FeaturedRecipe[] = [
   },
   {
     version: 1,
+    slug: "meal-planner",
+    name: "Sprout",
+    avatar: "sprout",
+    color: "coral",
+    role: "meal_planner",
+    tagline: "Plans the week's meals around how you eat, and writes the grocery list.",
+    who: "Anyone tired of deciding what's for dinner",
+    jobs: ["errands"],
+    instructions: "",
+    trust: "ask",
+    connectors: ["web_search", "notes"],
+    channels: ["telegram", "sms", "slack"],
+    routines: [
+      {
+        title: "Sunday meal plan",
+        instruction: "Plan my dinners for the week ahead and put the shopping list in my Groceries note, grouped by store section.",
+        time: "17:00",
+        days: [0],
+      },
+    ],
+    highlights: ["Never forgets an allergy", "One plan, one grocery list", "Uses up what you bought"],
+  },
+  {
+    version: 1,
+    slug: "fitness-coach",
+    name: "Ember",
+    avatar: "ember",
+    color: "midnight",
+    role: "fitness_coach",
+    tagline: "Workouts that fit your goal, your time and your gear.",
+    who: "Anyone getting fitter",
+    jobs: ["health"],
+    instructions: "",
+    trust: "ask",
+    connectors: ["notes"],
+    channels: ["telegram", "sms", "slack"],
+    routines: [
+      {
+        title: "Today's workout",
+        instruction: "Send today's workout from my plan, adjusted for how the last one went. Keep it short.",
+        time: "07:00",
+        days: [1, 3, 5],
+      },
+    ],
+    highlights: ["A plan built around you", "Gets harder as you get stronger", "Check-ins without guilt"],
+  },
+  {
+    version: 1,
     slug: "study-buddy",
     name: "Sprout",
     avatar: "sprout",
     color: "mint",
+    role: "tutor",
     tagline: "Quizzes you, plans your week, keeps deadlines in sight.",
     who: "Students",
     jobs: ["school", "reminders", "research"],
@@ -185,21 +315,6 @@ export const FEATURED_RECIPES: FeaturedRecipe[] = [
   },
   {
     version: 1,
-    slug: "job-hunt",
-    name: "Ember",
-    avatar: "ember",
-    color: "sunny",
-    tagline: "Finds roles, tailors cover letters, tracks applications.",
-    who: "Job seekers",
-    jobs: ["research", "work", "reminders"],
-    instructions: "Track every application in a note called Applications with company, role, date and next step.",
-    trust: "ask",
-    connectors: ["gmail", "linkedin", "google_docs"],
-    channels: ["email", "telegram"],
-    highlights: ["Application tracker", "Tailored cover letters", "Follow-up reminders"],
-  },
-  {
-    version: 1,
     slug: "travel-planner",
     name: "Otto",
     avatar: "otto",
@@ -215,6 +330,10 @@ export const FEATURED_RECIPES: FeaturedRecipe[] = [
   },
 ];
 
+/** Old links to recipes that were renamed. */
+const RENAMED: Record<string, string> = { "job-hunt": "job-applier" };
+
 export function findFeatured(slug: string) {
-  return FEATURED_RECIPES.find((r) => r.slug === slug);
+  const want = RENAMED[slug] ?? slug;
+  return FEATURED_RECIPES.find((r) => r.slug === want);
 }

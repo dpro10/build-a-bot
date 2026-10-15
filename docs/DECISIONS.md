@@ -358,6 +358,40 @@ Built (Claude; Diego to confirm the details):
   - A new `forget` tool handles "forget that".
 - **Later:** a nightly tidy-up that merges and retires old facts, showing which memories a reply used, and learning from what the owner corrects. Training a custom model stays an idea for later (Diego: "it could be something to look into eventually").
 
+## Decision: ready-made roles (Diego, 2026-10-15)
+
+Diego: "A couple scoped personalities I'm thinking, tutors, job applier, a few more would be good to" (the message ends there).
+
+Built (Claude; Diego to confirm the details):
+- **Five ready-made roles** (`src/lib/roles.ts`):
+  - **Tutor** and **Job applier**, the two Diego named.
+  - **Language partner**, **Fitness coach** and **Meal planner**, picked because they work today with no sign-ins, and the language partner can take phone calls once Twilio is live.
+- **What a role changes:**
+  - The bot introduces itself as "an AI tutor" (and the app's header says so).
+  - It works the way the role says: a tutor teaches one idea at a time and quizzes; a job applier never invents experience and stops before submitting.
+  - Its first message asks for the basics (what you're learning and why; the job you want and your résumé), and it pins them in memory.
+  - It stays in its lane softly: small unrelated requests are fine, and for big ones it says a separate bot would do it better.
+- **Where people find them:**
+  - The builder's first screen has "Or start with a ready-made bot". One tap fills in every step, and anything can still change.
+  - The landing page and Explore now lead with the tutor and the job applier.
+  - Settings → What it helps with → Role switches roles, or goes back to a general assistant.
+- **Each role's recipe fits the Free plan:** at most 2 routines and 3 apps, and no sign-ins needed except the job applier's optional Gmail.
+- **What the job applier can't do yet:**
+  - It finds jobs, tailors cover letters, tracks applications in a note, reminds you to follow up, and runs mock interviews.
+  - Filling in application forms uses web actions, which aren't live yet (no Browser Use key). Until then it hands over everything ready to paste, with the link.
+  - Web actions stay out of its recipe until they're live, so nobody mistakes a simulated application for a real one.
+  - Web actions can't upload a résumé file yet either.
+  - It never pays application fees or shares Social Security or bank numbers, and flags requests for them as a possible scam.
+- **Changes to existing recipes:**
+  - Study buddy is now a tutor for students.
+  - The old job hunt recipe became the job applier; `/build?recipe=job-hunt` still opens it.
+- **Tutors are for adults.** The product is 18+.
+- **Ideas for later:**
+  - A front desk for small businesses that answers customers' calls and texts.
+  - Phone mock interviews.
+  - A money coach.
+  - A custom role written by the owner.
+
 ## Build choice (Claude; Diego to confirm): what real testers see (2026-10-14)
 
 Outside demo mode nothing is simulated. Anything without its service set up says **"Coming soon"** and can't be picked or set up:
