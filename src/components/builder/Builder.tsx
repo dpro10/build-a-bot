@@ -18,8 +18,10 @@ import { AVATARS } from "@/lib/avatars";
 import { PLANS, type PlanId } from "@/lib/billing/plans";
 import type { LiveFlags } from "@/lib/channels/catalog";
 import type { RecipeData } from "@/lib/recipes";
+import { isRoleId, ROLE_BY_ID } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import { BotPreview, BotPreviewStrip } from "./BotPreview";
+import { ReadyMade } from "./ReadyMade";
 import { clearDraft, initialState, loadDraft, saveDraft, STEPS, stepError, withDraft, type BuilderContext, type BuilderState, type StepId } from "./state";
 import { AppsStep } from "./steps/AppsStep";
 import { BrainStep, type KeyStatus } from "./steps/BrainStep";
@@ -300,6 +302,7 @@ export function Builder({ plan, demo, paidPlans, live, comingSoon, recipe, botCo
           timezone,
           ageConfirmed: true,
           ...(state.recipeSlug ? { recipeId: state.recipeSlug } : {}),
+          role: state.role,
           morningBrief: state.brief?.on ? { time: state.brief.time, ...(state.brief.weekdays ? { days: [1, 2, 3, 4, 5] } : {}) } : null,
         },
       });
@@ -399,8 +402,9 @@ export function Builder({ plan, demo, paidPlans, live, comingSoon, recipe, botCo
         {recipe ? (
           <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-primary/20 bg-primary-soft/70 px-4 py-2.5 text-sm">
             <Avatar avatar={recipe.avatar} color={recipe.color} size={36} animated={false} />
-            <span className="min-w-0 flex-1">
-              Making your own <span className="font-semibold">{recipe.name}</span>
+            {/* Wide enough to wrap the button below it on a phone instead of squeezing the text. */}
+            <span className="min-w-[min(100%,14rem)] flex-1">
+              Making your own <span className="font-semibold">{isRoleId(recipe.role) ? ROLE_BY_ID[recipe.role].label.toLowerCase() : recipe.name}</span>
               {recipe.tagline ? <span className="text-muted-foreground"> — {recipe.tagline.trim().replace(/[.!]+$/, "")}</span> : null}. Everything&apos;s filled in;
               change anything you like.
             </span>
@@ -411,6 +415,7 @@ export function Builder({ plan, demo, paidPlans, live, comingSoon, recipe, botCo
             ) : null}
           </div>
         ) : null}
+        {!recipe && step === "face" ? <ReadyMade /> : null}
         {atBotLimit && step === "face" ? (
           <div className="mt-4 rounded-2xl border border-warning/30 bg-warning-soft px-4 py-2.5 text-sm text-warning">
             Your {PLANS[plan].name} plan includes {PLANS[plan].limits.bots} bot{PLANS[plan].limits.bots === 1 ? "" : "s"} and you&apos;ve made {PLANS[plan].limits.bots === 1 ? "it" : "them all"}.{" "}

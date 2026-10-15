@@ -9,6 +9,7 @@ const SETTING_NAMES: Record<string, string> = {
   color: "colors",
   instructions: "custom instructions",
   jobs: "what it helps with",
+  role: "role",
   trust: "trust level",
   vibe: "personality",
   brain: "brain",

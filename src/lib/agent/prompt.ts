@@ -8,6 +8,7 @@
 import { AVATARS, isAvatarId } from "@/lib/avatars";
 import type { Bot, User } from "@/lib/db/schema";
 import { JOB_BY_ID, isJobId } from "@/lib/jobs";
+import { roleOf, type RoleDef } from "@/lib/roles";
 import { TRUST, isTrustLevel } from "@/lib/trust";
 import { CHANNEL_BY_KIND, isChannelKind } from "@/lib/channels/catalog";
 import { formatNow } from "@/lib/scheduler/time";
@@ -59,13 +60,16 @@ export function buildStablePrompt(bot: Bot, owner: User, channelKind: string, bo
         ? "Be thorough when it helps; the owner likes detail."
         : "Be concise by default; expand when the task needs it.";
 
+  const role = roleOf(bot);
+
   return [
-    `You are ${bot.name}, a personal AI assistant for ${name}. Your avatar is ${avatar.character} the ${avatar.species}.`,
+    `You are ${bot.name}, ${role ? `an AI ${role.title}` : "a personal AI assistant"} for ${name}. Your avatar is ${avatar.character} the ${avatar.species}.`,
     `Personality: ${avatar.personality.prompt} ${verbosity}${vibe.emoji === false ? " Don't use emoji." : vibe.emoji ? " A little emoji is welcome." : ""}`,
     // The owner's own words for the tone win over the character's default.
     vibe.tone?.trim() ? `Tone the owner asked for: ${vibe.tone.trim().slice(0, 80)}. Let it shape how you write, within the rules above and below.` : "",
+    role ? rolePrompt(role, name) : "",
     jobs.length
-      ? `What ${name} wants help with:\n${jobs.map((j) => `- ${j.label}${j.prompt ? `: ${j.prompt}` : ""}`).join("\n")}`
+      ? `${role ? `Also part of the job` : `What ${name} wants help with`}:\n${jobs.map((j) => `- ${j.label}${j.prompt ? `: ${j.prompt}` : ""}`).join("\n")}`
       : "",
     bot.instructions?.trim() ? `${name}'s own instructions for you (follow these):\n${bot.instructions.trim()}` : "",
     `Your trust level is "${trust.name}": ${trust.long}`,
@@ -87,6 +91,17 @@ export function buildStablePrompt(bot: Bot, owner: User, channelKind: string, bo
   ]
     .filter(Boolean)
     .join("\n\n");
+}
+
+/** What a role bot is for and how it works (src/lib/roles.ts). */
+function rolePrompt(role: RoleDef, name: string): string {
+  return [
+    `Your role: ${role.label}. ${name} made you for this.`,
+    "How you work:",
+    ...role.method.map((line) => `- ${line}`),
+    `- When ${name} tells you the basics (${role.basics}), save each with the remember tool and pin: true, so you always have them.`,
+    `- Small unrelated requests are fine. For a big job outside your role, help briefly and say a separate bot would do it better.`,
+  ].join("\n");
 }
 
 function memoryHeading(ctx: PromptContext): string {
@@ -119,6 +134,18 @@ export function buildDynamicContext(ctx: PromptContext): string {
 
 export function greetingDirective(bot: Bot, owner: User, channelKind: string, starters: string[], appNames: string[]): string {
   const avatar = isAvatarId(bot.avatar) ? AVATARS[bot.avatar] : AVATARS.blip;
+  const role = roleOf(bot);
+  if (role) {
+    // A role bot can't do much until it knows the basics, so it starts by asking for them.
+    return [
+      `This is your very first message to ${ownerName(owner)}, who just created you as their ${role.title}. Greet them ${avatar.personality.greetingStyle}.`,
+      `In 2-4 short sentences: say hi as ${bot.name}, their AI ${role.title}, then ask what you need to get started: ${role.firstAsk}. Ask it as one friendly question they can answer in a line or two.`,
+      channelKind === "web" ? "" : "Keep it under 300 characters.",
+      "Don't use tools for this message.",
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
   return [
     `This is your very first message to ${ownerName(owner)}, who just created you. Greet them ${avatar.personality.greetingStyle}.`,
     `In 2-4 short sentences: say hi as ${bot.name}, mention you're their AI assistant, and offer 2-3 concrete things you can do right now based on what they picked${appNames.length ? ` (connected: ${appNames.join(", ")})` : ""}. End with one easy question.`,

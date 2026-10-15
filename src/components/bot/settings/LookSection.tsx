@@ -35,7 +35,7 @@ const EXAMPLES = [
   "I'm vegetarian and I live in Austin, TX.",
 ];
 
-export function LookSection({ botId, initial }: { botId: string; initial: LookValues }) {
+export function LookSection({ botId, initial, badge = "AI assistant" }: { botId: string; initial: LookValues; badge?: string }) {
   const router = useRouter();
   const onError = useApiErrorToast();
   const [saved, setSaved] = React.useState(initial);
@@ -114,7 +114,7 @@ export function LookSection({ botId, initial }: { botId: string; initial: LookVa
             <Avatar avatar={v.avatar} color={v.color} size={124} mood="happy" />
             <span className="max-w-full truncate font-display text-lg font-bold">{v.name.trim() || def.character}</span>
             <Badge tone="outline" className="bg-card/80">
-              AI assistant
+              {badge}
             </Badge>
           </div>
           <div className="flex min-w-0 flex-1 flex-col gap-5">

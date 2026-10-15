@@ -92,7 +92,7 @@ export async function POST(req: Request, ctx: RouteCtx<{ channelId: string }>) {
         .select({ connectorId: schema.connections.connectorId })
         .from(schema.connections)
         .where(and(eq(schema.connections.botId, bot.id), ne(schema.connections.status, "disabled")));
-      const starters = startersFor(bot.jobs ?? [], appKinds(apps.map((c) => c.connectorId)));
+      const starters = startersFor(bot.jobs ?? [], appKinds(apps.map((c) => c.connectorId)), bot.role);
       const result = await runTurn({
         db, bot, owner, conversation, channelKind: "telegram", message: null, noTools: true,
         directive: greetingDirective(bot, owner, "telegram", starters, []),
