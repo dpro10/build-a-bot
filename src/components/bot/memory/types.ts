@@ -1,4 +1,4 @@
-export type MemoryItem = { id: string; text: string; source: string; createdAt: string; updatedAt: string };
+export type MemoryItem = { id: string; text: string; source: string; pinned: boolean; createdAt: string; updatedAt: string };
 export type NoteItem = { id: string; title: string; body: string; createdAt: string; updatedAt: string };
 export type ContactItem = { id: string; kind: string; address: string; name: string | null; approvedAt: string | null; createdAt: string };
 

@@ -62,6 +62,25 @@ Main tables: `users`, `sessions`, `bots`, `connections` (a bot's apps + per-capa
 5. **Every tool call goes through the policy engine** and gets a receipt. "Ask" creates an approval (24-hour expiry) the owner can tap from the web or any channel; approving runs the exact stored call.
 6. **Replies to other people** carry an AI disclosure; crisis language adds resources (988 in the US) and the bot does not act as a therapist.
 
+## Memory
+
+What a bot knows about its owner lives in `memories`: up to 2,000 per bot, of which up to 15 can be pinned (`src/lib/memory`). Only the ones that matter go into each turn, so small models aren't buried.
+
+- **Choosing them:** `memoriesForTurn` ranks memories against the new message, and at lower weight the directive and the last few messages. It uses BM25 over lightly stemmed words, plus a few groups of related words (family, food, work, travel, health…). Pinned memories go first, then the best matches, then the newest, within a budget set by the brain's tier:
+
+  | Tier | Memories | Characters |
+  |---|---|---|
+  | Fast models | 24 | 2,400 |
+  | Balanced models | 40 | 4,500 |
+  | Smart models and subscriptions | 80 | 9,000 |
+
+  The prompt says how many there are in all; the bot finds the rest with `recall`, which uses the same ranking.
+- **Keeping it clean:** `remember` skips a fact it already has and updates one when the new fact adds a little detail (`compareFacts`), or when the model names the fact it `replaces`. `forget` deletes on request. The owner edits, pins and deletes in the Memory tab.
+- **Bring my memories** (`import.ts`, `POST /api/bots/[botId]/memories/import`):
+  - `read`: the owner pastes another assistant's answer to `IMPORT_PROMPT`. A big included model (`TIDY_MODEL`, one call) tidies it into third-person facts and marks a few pins. Without it, a line-by-line reader rewrites "you"/"I" lines about the owner.
+  - Both paths drop secrets, lines that steer an assistant, chatter, repeats and facts the bot already knows. Nothing is saved yet.
+  - `save`: the facts the owner kept are checked again and inserted as `source = "import"`, with a receipt.
+
 ## The policy engine
 
 `evaluate()` in `src/lib/policy/engine.ts` is a pure function with its own tests. Inputs: trust level, effect (read/write/send/delete/spend/admin), risk, recipients, whether the run has read outside content ("tainted"), owner rules per app capability, caps, quiet hours. Output: allow, ask or deny, with reasons.
@@ -168,9 +187,10 @@ Every flow in the product can be tried with zero keys, and nothing real is sent 
 
 ## Testing
 
-- `npm test`: the policy engine, scheduler math, the receipts trigger, and the full agent pipeline on in-memory Postgres (greeting, STOP/START, reminders, phishing detection, the injection guard under Full faith, approvals, Look only, strangers can't drive the bot, append-only receipts), and meeting notes end to end (chunks → transcript → notes → tools, device tokens, plan limits, stale recordings, notes on the owner's computer, a transcript that tries to make the bot email a stranger).
+- `npm test`: the policy engine, scheduler math, the receipts trigger, and the full agent pipeline on in-memory Postgres (greeting, STOP/START, reminders, phishing detection, the injection guard under Full faith, approvals, Look only, strangers can't drive the bot, append-only receipts), and meeting notes end to end (chunks → transcript → notes → tools, device tokens, plan limits, stale recordings, notes on the owner's computer, a transcript that tries to make the bot email a stranger), and memory (which memories each brain size gets in a real turn, Bring my memories against a stand-in model and line by line, remember/recall/forget, the pin cap).
 - `npm run test:e2e` (after `npm run build`; it starts `next start` on port 3100 with its own database), on a phone and a desktop:
   - the builder to a live chat, an approval and STOP;
+  - Bring my memories: paste, untick, save, pin;
   - meeting notes in the browser with a fake microphone: consent, the floating window, the transcript, the notes, deleting;
   - every page loads;
   - axe accessibility scans in light and dark.

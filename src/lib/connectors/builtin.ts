@@ -57,6 +57,7 @@ export const BUILTIN_CONNECTORS: ConnectorDef[] = [
     capabilities: [
       { id: "recall", label: "Recall what it knows", effect: "read", risk: "low" },
       { id: "remember", label: "Remember new facts", effect: "write", risk: "low" },
+      { id: "forget", label: "Forget facts when asked", effect: "write", risk: "low" },
     ],
     keywords: ["remember", "facts", "preferences"],
   },

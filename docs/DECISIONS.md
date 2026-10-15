@@ -331,6 +331,33 @@ Diego: "Honestly like 5 free messages before confirming email, we want people wi
 - Someone without a confirmed email gets **5** included-brain messages (`ANONYMOUS_INCLUDED_MESSAGES`), then the bot asks them to sign in by email to keep going.
 - The first beta testers stay on the Free plan. Paid plans open when Stripe is set up; until then Plus and Pro show "Coming soon" with a waitlist.
 
+## Decision: memory that works on any brain, and "Bring my memories" (Diego, 2026-10-15)
+
+Diego liked "smarter the more you use it" and bringing memories over from ChatGPT or Claude at setup, with one worry: "we need to be careful because some of these smaller models aren't going to be able to handle as much memory as one of ChatGPT's or Claude's good models." Then: "just crank out that feature really quick. I know some beta users who would really appreciate it. But at the same time, try and not make the UI or anything or UX too complicated… It needs to be super easy, even for non-technical people."
+
+Built (Claude; Diego to confirm the details):
+- **Each message gets only the memories that matter**, sized to the brain (`src/lib/memory`). Before, every turn got the newest 40 memories whatever the model, a bot could keep 200, and `recall` only matched exact words.
+  - First the pinned ones, then the best matches for the message, then the newest.
+  - Small, fast models get up to 24 (about 2,400 characters), mid-size ones 40, the biggest models and subscriptions 80.
+  - The bot is told how many it knows in all, and looks up the rest with `recall`, which now finds related words too ("family" finds a sister).
+- **Up to 2,000 memories per bot.** Up to 15 can be **pinned**: basics like a name, the closest people, the home city or a diet, always on the bot's mind.
+- **Bring my memories:**
+  - The owner starts it from the Memory tab, or from a chip in a new bot's chat.
+  - They copy one message into ChatGPT, Claude or Gemini, paste the answer back, untick anything they'd rather keep private, and save. That's two screens, with no files and no settings.
+  - One message works with all three assistants, free plans included.
+  - A big included model (Qwen3 235B, one call, a cent or two) tidies the answer into short facts and suggests up to 10 pins. When it can't run (an outage, the daily ceiling, or demo mode), the answer is read line by line instead, less tidily.
+- **Safety for imports:**
+  - The pasted answer is information, never instructions. Lines that tell an assistant what to do are dropped.
+  - Passwords, PINs, codes, and card and account numbers are dropped too.
+  - Facts the bot already knows are skipped.
+  - The server checks everything again when saving.
+  - Each person can import 10 times an hour, and each import leaves a receipt in Activity.
+- **The bot keeps its memory tidy:**
+  - It doesn't save the same fact twice.
+  - It updates a fact when the new one adds a detail, or when it names the fact it replaces.
+  - A new `forget` tool handles "forget that".
+- **Later:** a nightly tidy-up that merges and retires old facts, showing which memories a reply used, and learning from what the owner corrects. Training a custom model stays an idea for later (Diego: "it could be something to look into eventually").
+
 ## Build choice (Claude; Diego to confirm): what real testers see (2026-10-14)
 
 Outside demo mode nothing is simulated. Anything without its service set up says **"Coming soon"** and can't be picked or set up:
