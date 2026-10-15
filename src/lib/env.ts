@@ -63,7 +63,10 @@ export const config = {
   telegram: {
     /** Our "manager" bot that creates each user's own bot (Managed Bots, Bot API 9.6). */
     managerToken: v("TELEGRAM_MANAGER_BOT_TOKEN"),
-    managerUsername: v("TELEGRAM_MANAGER_BOT_USERNAME"),
+    /** Without the "@" (it goes into t.me links), even if it was pasted with one. */
+    managerUsername: v("TELEGRAM_MANAGER_BOT_USERNAME")?.replace(/^@/, "") || undefined,
+    /** Telegram sends it with every update to the manager bot; without it, updates are refused. */
+    managerWebhookSecret: v("TELEGRAM_MANAGER_WEBHOOK_SECRET"),
   },
   twilio: {
     accountSid: v("TWILIO_ACCOUNT_SID"),
@@ -128,7 +131,7 @@ export const live = {
   browser: Boolean(config.browserUse.apiKey),
   transcription: Boolean(config.transcribe.apiKey),
   composio: Boolean(config.composio.apiKey),
-  telegramManaged: Boolean(config.telegram.managerToken && config.telegram.managerUsername),
+  telegramManaged: Boolean(config.telegram.managerToken && config.telegram.managerUsername && config.telegram.managerWebhookSecret),
   twilio: Boolean(config.twilio.accountSid && config.twilio.authToken && config.twilio.phoneNumber),
   /** Sign-in links by email (Resend). */
   email: Boolean(config.email.resendKey),
