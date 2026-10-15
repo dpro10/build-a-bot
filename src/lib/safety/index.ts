@@ -44,8 +44,19 @@ export const CRISIS_FOOTER =
 
 export const DISCLOSURE_INTERVAL_MS = 3 * 60 * 60 * 1000;
 
-export function needsDisclosure(lastDisclosureAt: Date | null, now = new Date()): boolean {
-  return !lastDisclosureAt || now.getTime() - lastDisclosureAt.getTime() >= DISCLOSURE_INTERVAL_MS;
+/** Chat apps that tag a bot as an app on every message it sends. */
+const TAGGED_AS_APP = new Set(["slack", "telegram", "discord"]);
+
+/**
+ * Say it's an AI at first contact, then every 3 hours. The web app says so in its UI. The bot's
+ * owner on Slack, Telegram or Discord hears it once: those apps tag the bot on every message
+ * (Diego, 2026-10-15).
+ */
+export function needsDisclosure(lastDisclosureAt: Date | null, to: { channel: string; owner: boolean }, now = new Date()): boolean {
+  if (to.channel === "web") return false;
+  if (!lastDisclosureAt) return true;
+  if (to.owner && TAGGED_AS_APP.has(to.channel)) return false;
+  return now.getTime() - lastDisclosureAt.getTime() >= DISCLOSURE_INTERVAL_MS;
 }
 
 export function disclosureLine(botName: string): string {

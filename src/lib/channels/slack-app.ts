@@ -22,7 +22,7 @@ import { randomToken } from "@/lib/crypto";
 import { UnreachableError } from "@/lib/utils";
 import { rateLimit } from "@/lib/safety/ratelimit";
 import { receipt } from "@/lib/agent/run";
-import { deliver } from "./outbound";
+import { deliver, ensureConversation } from "./outbound";
 import { channelSecret, replaceCredential, storeCredential } from "./secrets";
 import { slackBotToken, slackCall } from "./slack";
 
@@ -153,7 +153,18 @@ export async function finishSlackInstall(
     .where(eq(schema.channels.id, channel.id))
     .returning();
 
-  await deliver(db, bot, "slack", { to: slackUser, text: `Hi! It's ${bot.name} 👋 Message me here anytime, like you would a teammate.`, toOwner: true }, { owner, channel: active });
+  const hello = await deliver(
+    db,
+    bot,
+    "slack",
+    { to: slackUser, text: `Hi! It's ${bot.name}, your AI assistant 👋 Message me here anytime, like you would a teammate.`, toOwner: true },
+    { owner, channel: active },
+  );
+  if (hello.status === "sent") {
+    // The hello says it's an AI, so the first reply doesn't repeat it.
+    const conversation = await ensureConversation(db, bot.id, "slack", slackUser);
+    await db.update(schema.conversations).set({ lastDisclosureAt: new Date() }).where(eq(schema.conversations.id, conversation.id));
+  }
   return { ok: true, redirectTo: back, botName: bot.name, movedFrom };
 }
 
