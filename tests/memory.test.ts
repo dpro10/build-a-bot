@@ -183,6 +183,19 @@ describe("which memories a turn gets", () => {
     expect(lines).toContain("- Dana lives in Austin");
     expect(lines).toContain("- Dana's sister is Ana; her birthday is May 3");
     expect(lines.length).toBeLessThanOrEqual(mem.MEMORY_BUDGET.fast.count);
+    // The bot talks to its owner as "you", and the app's own notes are off limits.
+    expect(system).toContain('Talk to Dana as "you".');
+    expect(system).toContain("Notes like [tools used: …] after your earlier replies come from the app.");
+  });
+
+  it("the app's note about earlier tool use never reaches the owner, even when a model copies it", async () => {
+    const bot = await makeBot("Copycat");
+    stubModel("Ana's birthday is May 3.\n[tools used: recall: ok]");
+    const conversation = await ensureConversation(db, bot.id, "web", "owner");
+    const res = await runTurn({ db, bot, owner, conversation, channelKind: "web", message: { text: "When is Ana's birthday?", author: "owner" } });
+    expect(res.text).toBe("Ana's birthday is May 3.");
+    const [saved] = await db.select().from(schema.messages).where(and(eq(schema.messages.botId, bot.id), eq(schema.messages.role, "assistant")));
+    expect(saved.text).toBe("Ana's birthday is May 3.");
   });
 });
 
@@ -297,6 +310,28 @@ describe("Bring my memories", () => {
     ]);
     const receipts = await db.select().from(schema.receipts).where(eq(schema.receipts.botId, bot.id));
     expect(receipts.some((r) => r.title === "Brought 3 memories from another assistant")).toBe(true);
+  });
+
+  it("an import suggests at most 5 pins, even when the model stars everything", async () => {
+    const bot = await makeBot("Starry");
+    stubModel(
+      [
+        "* Dana lives in Austin, Texas",
+        "* Dana works as a nurse",
+        "* Dana is vegetarian",
+        "* Dana's partner is Sam",
+        "* Dana has a dog named Biscuit",
+        "* Dana's sister is Ana",
+        "* Dana runs three times a week",
+        "* Dana likes sci-fi books",
+      ].join("\n"),
+    );
+    const read = await importStep(bot, { step: "read", text: "You live in Austin and work as a nurse. (the rest of a long answer)" });
+    expect(read.data.facts).toHaveLength(8);
+    expect(read.data.facts.filter((f: { pinned: boolean }) => f.pinned)).toHaveLength(5);
+    // The browser can't sneak more in at save time either.
+    const saved = await importStep(bot, { step: "save", facts: read.data.facts.map((f: { text: string }) => ({ text: f.text, pinned: true })) });
+    expect(saved.data.memories.filter((m: { pinned: boolean }) => m.pinned)).toHaveLength(5);
   });
 
   it("without the model it reads line by line, and the save step re-checks what the browser sends", async () => {
