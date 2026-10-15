@@ -500,6 +500,8 @@ A code review of the server and the desktop app. Each fix has a test that fails 
 5. **One recording per bot isn't enforced by the database.** A double start can make two meetings. It needs a partial unique index (a migration).
 6. **Long meetings:** notes for a meeting near 4 hours may exceed Vercel's 300-second function limit. Housekeeping writes notes inside the cron tick.
 
+**Fixed 2026-10-15: an open redirect after sign-in.** `safeNext` let `/\evil.example` through, which browsers read as `//evil.example`, so `/login?next=/\evil.example` could send a signed-in person to another site. It now refuses backslashes and control characters (tested). In the same change, a signed-out link into the app (the site's "Try voice typing", an email, the desktop app) keeps its page through sign-in: `src/proxy.ts` sends it to `/login?next=<that page>`. Before, everyone came back to `/app`.
+
 ## Gotchas found while building
 
 - Nemotron and other reasoning models: thinking eats `max_tokens`. Included models get 8–16K, and thinking is off on "Quick".
