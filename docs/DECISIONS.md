@@ -488,6 +488,19 @@ A code review of the server and the desktop app. Each fix has a test that fails 
   - Bots' email now has its own flag (`live.botEmail`): `BOT_EMAIL_DOMAIN`, plus AgentMail or Resend with its webhook secret. Until then both show as Coming soon, and there's no fallback domain.
   - Outside demo mode, any channel whose service isn't set up shows as Coming soon, and recipes and saved drafts leave it out.
 
+## On hold: a front desk for small businesses (Diego, 2026-10-15)
+
+Diego: "I really like that front desk for businesses idea. Lets hold on to it." Not built yet.
+
+- **The idea:** a bot that answers a small business's customers by phone, text and web chat. It covers hours, prices and common questions, books appointments, takes messages, and hands anything tricky to the owner.
+- **Why it's promising:** businesses pay more than individuals, and it reuses what's already built: channels, people it can talk to, approvals, receipts, memory and roles. It would be one more role, and probably its own plan.
+- **What it needs first:**
+  - Twilio live for calls and texts. US texting needs a registration that takes weeks.
+  - A place for the business's answers (hours, prices, policies) that the bot sticks to.
+  - Booking through Google Calendar or Calendly.
+  - Rules for talking to customers: it says it's an AI, never promises what the business didn't say, and hands off to a person on request.
+  - A business price in the pricing table.
+
 ## Open questions (updated 2026-10-14)
 
 1. First users: tinkerers or everyday iPhone users? (unchanged)
