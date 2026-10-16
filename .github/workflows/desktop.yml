@@ -80,7 +80,7 @@ jobs:
       # In the user's own folder, as the app keeps it, under a name like a user's (C:\Users\José\…).
       - name: Short names on this drive (Windows)
         if: runner.os == 'Windows'
-        run: fsutil 8dot3name query C:
+        run: fsutil 8dot3name query "C:"
       - name: Hear it on this computer
         working-directory: desktop
         run: node scripts/check-private-speech.mjs "$HOME/José Muñoz/private-speech" "${{ runner.temp }}/said.wav" "team meeting, tuesday"
