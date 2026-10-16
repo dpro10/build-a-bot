@@ -9,12 +9,13 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
+import zlib from "node:zlib";
 import { LOCAL_LANGUAGES, LOCAL_MODEL, LocalSpeech, LocalSpeechError, RUNTIMES, localFirst, tidyLocalText } from "../src/main/voice/local-speech.mjs";
 
 const sha256 = (b) => createHash("sha256").update(b).digest("hex");
@@ -64,24 +65,49 @@ http.createServer((req, res) => {
 }).listen(Number(flag("--port")), flag("--host"));
 `;
 
+/**
+ * A .tar.gz, written here so the tests need no tar of their own (the engine still unpacks with the
+ * system's, as in the app). `tar -xf` goes by what's inside, so it serves for the .tar.bz2 too.
+ * @param {{ name: string, data?: string }[]} entries  a name ending in "/" is a folder
+ */
+function tarGz(entries) {
+  const parts = [];
+  for (const e of entries) {
+    const dir = e.name.endsWith("/");
+    const data = Buffer.from(dir ? "" : (e.data ?? ""));
+    const h = Buffer.alloc(512);
+    const field = (value, at, size) => h.write(value.padStart(size - 1, "0") + "\0", at, size, "latin1");
+    h.write(e.name, 0, 100, "latin1");
+    field((dir ? 0o755 : 0o644).toString(8), 100, 8);
+    field("0", 108, 8);
+    field("0", 116, 8);
+    field(data.length.toString(8), 124, 12);
+    field(Math.floor(Date.now() / 1000).toString(8), 136, 12);
+    h.write(dir ? "5" : "0", 156, 1, "latin1");
+    h.write("ustar\u000000", 257, 8, "latin1");
+    h.fill(" ", 148, 156);
+    let sum = 0;
+    for (const b of h) sum += b;
+    h.write(sum.toString(8).padStart(6, "0") + "\0 ", 148, 8, "latin1");
+    parts.push(h, data, Buffer.alloc((512 - (data.length % 512)) % 512));
+  }
+  parts.push(Buffer.alloc(1024));
+  return zlib.gzipSync(Buffer.concat(parts));
+}
+
 /** The stand-in runtime, its number rules and a model, packed the way NVIDIA ships them. */
 const FIX = fs.mkdtempSync(path.join(os.tmpdir(), "bab-local-fix-"));
 process.on("exit", () => fs.rmSync(FIX, { recursive: true, force: true }));
-const RUNTIME_DIR = path.join(FIX, "src", "nemo-speech-0.2.0-linux-x86_64-cpu");
-fs.mkdirSync(path.join(RUNTIME_DIR, "bin"), { recursive: true });
-fs.mkdirSync(path.join(RUNTIME_DIR, "lib"), { recursive: true });
-fs.writeFileSync(path.join(RUNTIME_DIR, "bin", "nemo-speech"), FAKE_RUNTIME, { mode: 0o644 });
-fs.writeFileSync(path.join(RUNTIME_DIR, "lib", "libggml.so"), "not really");
-execFileSync("tar", ["-czf", path.join(FIX, "runtime.tar.gz"), "-C", path.join(FIX, "src"), "nemo-speech-0.2.0-linux-x86_64-cpu"]);
-fs.mkdirSync(path.join(FIX, "itnsrc", "itn_configs", "en"), { recursive: true });
-fs.writeFileSync(path.join(FIX, "itnsrc", "itn_configs", "en", "tagger.fst"), "rules");
-execFileSync("tar", ["-cjf", path.join(FIX, "itn_configs.tar.bz2"), "-C", path.join(FIX, "itnsrc"), "itn_configs"]);
-fs.mkdirSync(path.join(FIX, "bogus", "nothing-here"), { recursive: true });
-execFileSync("tar", ["-czf", path.join(FIX, "bogus.tar.gz"), "-C", path.join(FIX, "bogus"), "nothing-here"]);
 const FILES = {
-  "/bogus.tar.gz": fs.readFileSync(path.join(FIX, "bogus.tar.gz")),
-  "/runtime.tar.gz": fs.readFileSync(path.join(FIX, "runtime.tar.gz")),
-  "/itn_configs.tar.bz2": fs.readFileSync(path.join(FIX, "itn_configs.tar.bz2")),
+  "/bogus.tar.gz": tarGz([{ name: "nothing-here/" }]),
+  "/runtime.tar.gz": tarGz([
+    { name: "nemo-speech-0.2.0-linux-x86_64-cpu/" },
+    { name: "nemo-speech-0.2.0-linux-x86_64-cpu/bin/" },
+    { name: "nemo-speech-0.2.0-linux-x86_64-cpu/bin/nemo-speech", data: FAKE_RUNTIME },
+    { name: "nemo-speech-0.2.0-linux-x86_64-cpu/lib/" },
+    { name: "nemo-speech-0.2.0-linux-x86_64-cpu/lib/libggml.so", data: "not really" },
+  ]),
+  "/itn_configs.tar.bz2": tarGz([{ name: "itn_configs/" }, { name: "itn_configs/en/" }, { name: "itn_configs/en/tagger.fst", data: "rules" }]),
   "/model.gguf": randomBytes(400_000),
 };
 
@@ -282,7 +308,7 @@ test("downloads NVIDIA's runtime, its number rules and the model, checks them, a
   assert.ok(Number(/\d+/.exec(model[1].range ?? "")?.[0]) > 0);
   assert.deepEqual(fs.readFileSync(local.paths.model), FILES["/model.gguf"]);
   // Unpacked where it runs from, runnable, with its number rules; nothing left over.
-  assert.ok(fs.statSync(local.paths.bin).mode & 0o100, "the runtime can run");
+  if (process.platform !== "win32") assert.ok(fs.statSync(local.paths.bin).mode & 0o100, "the runtime can run");
   assert.ok(fs.existsSync(path.join(local.paths.runtime, "lib", "libggml.so")));
   assert.ok(fs.existsSync(path.join(local.paths.itn, "en", "tagger.fst")));
   assert.equal(fs.existsSync(local.paths.downloads), false);
@@ -408,7 +434,7 @@ test("runs it on 127.0.0.1 behind a key of its own, and tidies what it heard", a
   );
   const run = engineRuns().at(-1);
   assert.equal(run.keyed, true, "the key is in its environment, not on its command line");
-  assert.equal(run.cwd, fs.realpathSync(dir), "it runs in its own folder");
+  assert.equal(fs.realpathSync.native(run.cwd).toLowerCase(), fs.realpathSync.native(dir).toLowerCase(), "it runs in its own folder");
   const args = run.args;
   assert.equal(args[0], "serve");
   assert.equal(args[args.indexOf("--asr-model") + 1], local.paths.model);
@@ -455,7 +481,9 @@ test("a dictation doesn't wait long for an engine that's still loading; the next
   assert.equal(engineRuns().length, 1, "the same engine");
 });
 
-test("an engine left running by a run of the app that was force-quit is stopped; anything else with that id isn't", async (t) => {
+// It checks the process with `ps` here (the tests run the engine as on Linux); on Windows it asks
+// `tasklist`, which scripts/check-private-speech.mjs covers with NVIDIA's real engine.
+test("an engine left running by a run of the app that was force-quit is stopped; anything else with that id isn't", { skip: process.platform === "win32" && "covered on Windows by scripts/check-private-speech.mjs" }, async (t) => {
   const { local, make, logs } = await setup(t);
   await local.install();
   await local.transcribe(wav());
