@@ -1,0 +1,220 @@
+# The desktop app (desktop/): its tests on Linux and Windows; Private speech with NVIDIA's real
+# runtime and Parakeet on Windows and macOS, hearing speech the system's own voice says; and the
+# Windows installer: installed, checking itself, then voice typing end to end in the installed app
+# (the real Ctrl + Windows shortcut, Parakeet on the computer, the words pasted into another app).
+# On main, the installer is published as the "Desktop app (test build)" pre-release.
+name: Desktop app
+
+on:
+  push:
+    branches: [main]
+    paths: ["desktop/**", ".github/workflows/desktop.yml"]
+  pull_request:
+    paths: ["desktop/**", ".github/workflows/desktop.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ELECTRON_BUILDER: electron-builder@26.15.3
+
+jobs:
+  test:
+    name: Tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci
+      - run: npm test
+
+  private-speech:
+    name: Private speech, for real (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Someone talking (the system's own voice)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.Speech
+          $s = New-Object System.Speech.Synthesis.SpeechSynthesizer
+          $s.GetInstalledVoices() | ForEach-Object { "voice: " + $_.VoiceInfo.Name }
+          $fmt = New-Object System.Speech.AudioFormat.SpeechAudioFormatInfo(16000, [System.Speech.AudioFormat.AudioBitsPerSample]::Sixteen, [System.Speech.AudioFormat.AudioChannel]::Mono)
+          $s.SetOutputToWaveFile("$env:RUNNER_TEMP\said.wav", $fmt)
+          $s.Speak("Let's move the team meeting to next Tuesday at ten in the morning.")
+          $s.Dispose()
+          Get-Item "$env:RUNNER_TEMP\said.wav" | Select-Object Name, Length
+      - name: Someone talking (the system's own voice)
+        if: runner.os == 'macOS'
+        run: |
+          say -o "$RUNNER_TEMP/said.aiff" "Let's move the team meeting to next Tuesday at ten in the morning."
+          afconvert -f WAVE -d LEI16@16000 -c 1 "$RUNNER_TEMP/said.aiff" "$RUNNER_TEMP/said.wav"
+          ls -l "$RUNNER_TEMP/said.wav"
+      # Downloads NVIDIA's files the way the app does (about 0.7 GB), checks them, runs the engine.
+      # In the user's own folder, as the app keeps it, under a name like a user's (C:\Users\José\…).
+      - name: Short names on this drive (Windows)
+        if: runner.os == 'Windows'
+        run: fsutil 8dot3name query "C:"
+      - name: Hear it on this computer
+        working-directory: desktop
+        run: node scripts/check-private-speech.mjs "$HOME/José Muñoz/private-speech" "${{ runner.temp }}/said.wav" "team meeting, tuesday"
+
+  windows-installer:
+    name: Windows installer
+    needs: test
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci
+      - name: Build it (unsigned)
+        run: npx --yes ${{ env.ELECTRON_BUILDER }} --config electron-builder.yml --win nsis --x64 --publish never
+      # Installed the way an owner does it (for them only, no admin), silently: it goes to
+      # %LOCALAPPDATA%\Programs\build-a-bot-desktop.
+      - name: Install it, and let the installed app check itself
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem dist\*.exe | Select-Object -First 1
+          "installer: $($setup.Name) ($([math]::Round($setup.Length / 1MB)) MB)"
+          $inst = Start-Process -FilePath $setup.FullName -ArgumentList "/S" -PassThru
+          $inst.WaitForExit()
+          "installer exit code: $($inst.ExitCode)"
+          $exe = Get-ChildItem "$env:LOCALAPPDATA\Programs" -Filter "Build-a-bot.exe" -Recurse -Depth 2 -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $exe) { throw "It isn't installed." }
+          "installed: $exe"
+          "BAB_APP_EXE=$exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          $env:BAB_SMOKE = "1"
+          $env:BAB_SMOKE_OUT = "$env:RUNNER_TEMP\smoke.json"
+          $env:BAB_USER_DATA = "$env:RUNNER_TEMP\bab-smoke"
+          $p = Start-Process -FilePath $exe -PassThru -Wait
+          if (Test-Path $env:BAB_SMOKE_OUT) { Get-Content $env:BAB_SMOKE_OUT } else { "no results" }
+          if ($p.ExitCode -ne 0 -or -not (Test-Path $env:BAB_SMOKE_OUT)) {
+            if (Test-Path "$env:BAB_USER_DATA\logs\main.log") { Get-Content "$env:BAB_USER_DATA\logs\main.log" -Tail 80 }
+            throw "The installed app's self-check failed (exit code $($p.ExitCode))."
+          }
+      - name: Someone talking (the system's own voice)
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.Speech
+          $s = New-Object System.Speech.Synthesis.SpeechSynthesizer
+          $fmt = New-Object System.Speech.AudioFormat.SpeechAudioFormatInfo(16000, [System.Speech.AudioFormat.AudioBitsPerSample]::Sixteen, [System.Speech.AudioFormat.AudioChannel]::Mono)
+          $s.SetOutputToWaveFile("$env:RUNNER_TEMP\said.wav", $fmt)
+          $s.Speak("Let's move the team meeting to next Tuesday at ten in the morning.")
+          $s.Dispose()
+      - name: Voice typing in the installed app, end to end
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+          BAB_E2E_SHOTS: ${{ runner.temp }}/shots
+        run: |
+          npm install --no-save playwright@1.56.1
+          $env:BAB_E2E_APP = $env:BAB_APP_EXE
+          $env:BAB_E2E_SPEECH_WAV = "$env:RUNNER_TEMP\said.wav"
+          node --test --test-timeout=900000 e2e/windows-voice.e2e.mjs
+      # Installing a new version over it keeps the owner's data; uninstalling removes the app and
+      # its data, even with Private speech's engine left running from that folder (a stand-in: a
+      # copy of node.exe named nemo-speech.exe, with the engine's model in its command line).
+      - name: An update keeps your data; uninstalling removes everything
+        shell: pwsh
+        run: |
+          $data = Join-Path $env:APPDATA "Build-a-bot"
+          New-Item -ItemType Directory -Force -Path $data | Out-Null
+          Set-Content -Path (Join-Path $data "keep.txt") -Value "kept"
+          $setup = Get-ChildItem dist\*.exe | Select-Object -First 1
+          $p = Start-Process -FilePath $setup.FullName -ArgumentList "/S" -PassThru -Wait
+          "installed over it: exit code $($p.ExitCode)"
+          if (-not (Test-Path (Join-Path $data "keep.txt"))) { throw "Installing over it deleted the app's data." }
+          if (-not (Test-Path $env:BAB_APP_EXE)) { throw "Installing over it lost the app." }
+          $bin = Join-Path $data "speech\runtime\bin"
+          New-Item -ItemType Directory -Force -Path $bin | Out-Null
+          $fake = Join-Path $bin "nemo-speech.exe"
+          Copy-Item (Get-Command node).Source $fake
+          $engine = Start-Process -FilePath $fake -ArgumentList '-e "setTimeout(() => {}, 600000)" -- serve --asr-model models\parakeet-tdt-0.6b-v3.q8_0.gguf --host 127.0.0.1' -PassThru -WindowStyle Hidden
+          Start-Sleep 2
+          if ($engine.HasExited) { throw "The stand-in engine didn't start." }
+          $un = Get-ChildItem (Split-Path $env:BAB_APP_EXE) -Filter "Uninstall*.exe" | Select-Object -First 1
+          "uninstalling: $($un.Name)"
+          Start-Process -FilePath $un.FullName -ArgumentList "/S" -Wait
+          # The uninstaller hands over to a copy of itself and returns: wait for that to finish.
+          for ($i = 0; $i -lt 90 -and ((Test-Path $env:BAB_APP_EXE) -or (Test-Path $data)); $i++) { Start-Sleep 1 }
+          if (-not $engine.HasExited) { Stop-Process -Id $engine.Id -Force; throw "Uninstalling left the engine running." }
+          if (Test-Path $env:BAB_APP_EXE) { throw "Uninstalling left the app." }
+          if (Test-Path $data) { Get-ChildItem -Recurse $data | Select-Object -ExpandProperty FullName; throw "Uninstalling left the app's data." }
+          "an update kept the data; uninstalling stopped the engine and removed the app and its data"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-e2e-screenshots
+          path: ${{ runner.temp }}/shots
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-a-bot-windows
+          path: desktop/dist/*.exe
+          if-no-files-found: error
+
+  # The latest Windows installer from main, at one address: Releases → "Desktop app (test build)".
+  publish:
+    name: Publish the test build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [windows-installer, private-speech]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-a-bot-windows
+          path: dist
+      - name: Replace the pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release delete desktop-test --yes --cleanup-tag || true
+          cat > notes.md <<'EOF'
+          The desktop app for Windows 10 and 11, built from main by GitHub Actions after it was installed on a real Windows computer and typed a sentence there. It isn't signed yet, so:
+
+          - Your browser may say it isn't commonly downloaded. Edge: **…** next to the download → **Keep** → **Show more** → **Keep anyway**. Chrome: **Keep**.
+          - Windows says *"Windows protected your PC"*: click **More info**, then **Run anyway**.
+          - If **Smart App Control** blocks it, it can't run on that PC until it's signed.
+
+          It installs for you only (no admin needed) and starts right away; it lives in the system tray (the **^** by the clock) and in the Start menu as Build-a-bot. Pair it with a code from build-a-bot.site (**Bridge (your computer)**), then **Set up voice typing** and switch it on: NVIDIA Parakeet downloads (about 0.7 GB), then hold **Ctrl + Windows** and talk.
+
+          A newer test build installs over this one and keeps your pairing, settings and Parakeet. See desktop/README.md for everything it does.
+          EOF
+          gh release create desktop-test dist/*.exe --prerelease --target "$GITHUB_SHA" \
+            --title "Desktop app (test build, ${GITHUB_SHA::7})" --notes-file notes.md

@@ -9,12 +9,13 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
+import zlib from "node:zlib";
 import { LOCAL_LANGUAGES, LOCAL_MODEL, LocalSpeech, LocalSpeechError, RUNTIMES, localFirst, tidyLocalText } from "../src/main/voice/local-speech.mjs";
 
 const sha256 = (b) => createHash("sha256").update(b).digest("hex");
@@ -29,8 +30,9 @@ async function until(fn, ms = 5000) {
 
 /**
  * A stand-in for `nemo-speech serve`: the same flags, routes, key check and chatter as NVIDIA's.
- * FAKE_NEMO: "crash" exits at once, "never-ready" never gets ready, "slow" takes 1.5 s to get
- * ready, "broken" answers 500. No require or import, so it runs the same as CommonJS or as a module.
+ * FAKE_NEMO: "crash" exits at once, "gpu-crash" exits at once unless it's told to use the CPU,
+ * "never-ready" never gets ready, "slow" takes 1.5 s to get ready, "broken" answers 500. No require
+ * or import, so it runs the same as CommonJS or as a module.
  */
 const FAKE_RUNTIME = `#!/usr/bin/env node
 const http = process.getBuiltinModule("node:http");
@@ -40,7 +42,7 @@ const flag = (n) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : u
 const mode = process.env.FAKE_NEMO || "";
 if (process.env.FAKE_NEMO_LOG) fs.appendFileSync(process.env.FAKE_NEMO_LOG, JSON.stringify({ args, cwd: process.cwd(), keyed: Boolean(process.env.NEMO_SPEECH_HTTP_API_KEY) }) + "\\n");
 if (args[0] !== "serve" || !fs.existsSync(flag("--asr-model"))) process.exit(2);
-if (mode === "crash") process.exit(3);
+if (mode === "crash" || (mode === "gpu-crash" && flag("--device") !== "cpu")) process.exit(3);
 const key = process.env.NEMO_SPEECH_HTTP_API_KEY;
 const born = Date.now();
 console.log("[nemo-speech] serve session started");
@@ -64,24 +66,49 @@ http.createServer((req, res) => {
 }).listen(Number(flag("--port")), flag("--host"));
 `;
 
+/**
+ * A .tar.gz, written here so the tests need no tar of their own (the engine still unpacks with the
+ * system's, as in the app). `tar -xf` goes by what's inside, so it serves for the .tar.bz2 too.
+ * @param {{ name: string, data?: string }[]} entries  a name ending in "/" is a folder
+ */
+function tarGz(entries) {
+  const parts = [];
+  for (const e of entries) {
+    const dir = e.name.endsWith("/");
+    const data = Buffer.from(dir ? "" : (e.data ?? ""));
+    const h = Buffer.alloc(512);
+    const field = (value, at, size) => h.write(value.padStart(size - 1, "0") + "\0", at, size, "latin1");
+    h.write(e.name, 0, 100, "latin1");
+    field((dir ? 0o755 : 0o644).toString(8), 100, 8);
+    field("0", 108, 8);
+    field("0", 116, 8);
+    field(data.length.toString(8), 124, 12);
+    field(Math.floor(Date.now() / 1000).toString(8), 136, 12);
+    h.write(dir ? "5" : "0", 156, 1, "latin1");
+    h.write("ustar\u000000", 257, 8, "latin1");
+    h.fill(" ", 148, 156);
+    let sum = 0;
+    for (const b of h) sum += b;
+    h.write(sum.toString(8).padStart(6, "0") + "\0 ", 148, 8, "latin1");
+    parts.push(h, data, Buffer.alloc((512 - (data.length % 512)) % 512));
+  }
+  parts.push(Buffer.alloc(1024));
+  return zlib.gzipSync(Buffer.concat(parts));
+}
+
 /** The stand-in runtime, its number rules and a model, packed the way NVIDIA ships them. */
 const FIX = fs.mkdtempSync(path.join(os.tmpdir(), "bab-local-fix-"));
 process.on("exit", () => fs.rmSync(FIX, { recursive: true, force: true }));
-const RUNTIME_DIR = path.join(FIX, "src", "nemo-speech-0.2.0-linux-x86_64-cpu");
-fs.mkdirSync(path.join(RUNTIME_DIR, "bin"), { recursive: true });
-fs.mkdirSync(path.join(RUNTIME_DIR, "lib"), { recursive: true });
-fs.writeFileSync(path.join(RUNTIME_DIR, "bin", "nemo-speech"), FAKE_RUNTIME, { mode: 0o644 });
-fs.writeFileSync(path.join(RUNTIME_DIR, "lib", "libggml.so"), "not really");
-execFileSync("tar", ["-czf", path.join(FIX, "runtime.tar.gz"), "-C", path.join(FIX, "src"), "nemo-speech-0.2.0-linux-x86_64-cpu"]);
-fs.mkdirSync(path.join(FIX, "itnsrc", "itn_configs", "en"), { recursive: true });
-fs.writeFileSync(path.join(FIX, "itnsrc", "itn_configs", "en", "tagger.fst"), "rules");
-execFileSync("tar", ["-cjf", path.join(FIX, "itn_configs.tar.bz2"), "-C", path.join(FIX, "itnsrc"), "itn_configs"]);
-fs.mkdirSync(path.join(FIX, "bogus", "nothing-here"), { recursive: true });
-execFileSync("tar", ["-czf", path.join(FIX, "bogus.tar.gz"), "-C", path.join(FIX, "bogus"), "nothing-here"]);
 const FILES = {
-  "/bogus.tar.gz": fs.readFileSync(path.join(FIX, "bogus.tar.gz")),
-  "/runtime.tar.gz": fs.readFileSync(path.join(FIX, "runtime.tar.gz")),
-  "/itn_configs.tar.bz2": fs.readFileSync(path.join(FIX, "itn_configs.tar.bz2")),
+  "/bogus.tar.gz": tarGz([{ name: "nothing-here/" }]),
+  "/runtime.tar.gz": tarGz([
+    { name: "nemo-speech-0.2.0-linux-x86_64-cpu/" },
+    { name: "nemo-speech-0.2.0-linux-x86_64-cpu/bin/" },
+    { name: "nemo-speech-0.2.0-linux-x86_64-cpu/bin/nemo-speech", data: FAKE_RUNTIME },
+    { name: "nemo-speech-0.2.0-linux-x86_64-cpu/lib/" },
+    { name: "nemo-speech-0.2.0-linux-x86_64-cpu/lib/libggml.so", data: "not really" },
+  ]),
+  "/itn_configs.tar.bz2": tarGz([{ name: "itn_configs/" }, { name: "itn_configs/en/" }, { name: "itn_configs/en/tagger.fst", data: "rules" }]),
   "/model.gguf": randomBytes(400_000),
 };
 
@@ -158,8 +185,10 @@ async function setup(t, o = {}) {
   const spawned = [];
   const logs = [];
   const { mode, spawnImpl, sources, ...rest } = o;
-  const make = (extra = {}) =>
-    new LocalSpeech({
+  /** Every engine made here, stopped before the folder goes (Windows can't delete a folder a running program is in). */
+  const made = [];
+  const make = (extra = {}) => {
+    const m = new LocalSpeech({
       dir,
       platform: "linux",
       arch: "x64",
@@ -188,11 +217,14 @@ async function setup(t, o = {}) {
       ...rest,
       ...extra,
     });
+    made.push(m);
+    return m;
+  };
   const local = make();
   const states = [];
   local.on("change", (s) => states.push(s));
   t.after(async () => {
-    await local.stop();
+    await Promise.all(made.map((m) => m.stop()));
     await server.close();
     fs.rmSync(dir, { recursive: true, force: true });
     fs.rmSync(engineLog, { force: true });
@@ -258,6 +290,29 @@ test("a computer NVIDIA has no runtime for says so, and never downloads anything
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+test("a folder named with letters from outside English: kept as is where the engine opens it, else Windows' short name", async () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), "bab-local-"));
+  const dir = path.join(base, "José Muñoz", "speech");
+  if (process.platform === "win32") {
+    // As on a Windows computer (where NVIDIA's engine can't open such a path, even relative).
+    const local = new LocalSpeech({ dir, platform: "win32", arch: "x64" });
+    const place = await local.place();
+    if (place === null) {
+      assert.equal(local.blocked(), true, "no short names on this drive: it says it can't run here");
+    } else {
+      assert.match(place, /^[\x20-\x7e]+$/, "plain ASCII");
+      fs.writeFileSync(path.join(dir, "marker"), "same folder");
+      assert.equal(fs.readFileSync(path.join(place, "marker"), "utf8"), "same folder");
+      assert.equal(local.blocked(), false);
+    }
+  } else {
+    const local = new LocalSpeech({ dir, platform: process.platform, arch: "x64" });
+    assert.equal(await local.place(), dir, "macOS and Linux open it as it is");
+    assert.equal(local.blocked(), false);
+  }
+  fs.rmSync(base, { recursive: true, force: true });
+});
+
 // ---------------------------------------------------------------------------
 // Getting it
 // ---------------------------------------------------------------------------
@@ -282,7 +337,7 @@ test("downloads NVIDIA's runtime, its number rules and the model, checks them, a
   assert.ok(Number(/\d+/.exec(model[1].range ?? "")?.[0]) > 0);
   assert.deepEqual(fs.readFileSync(local.paths.model), FILES["/model.gguf"]);
   // Unpacked where it runs from, runnable, with its number rules; nothing left over.
-  assert.ok(fs.statSync(local.paths.bin).mode & 0o100, "the runtime can run");
+  if (process.platform !== "win32") assert.ok(fs.statSync(local.paths.bin).mode & 0o100, "the runtime can run");
   assert.ok(fs.existsSync(path.join(local.paths.runtime, "lib", "libggml.so")));
   assert.ok(fs.existsSync(path.join(local.paths.itn, "en", "tagger.fst")));
   assert.equal(fs.existsSync(local.paths.downloads), false);
@@ -293,7 +348,7 @@ test("downloads NVIDIA's runtime, its number rules and the model, checks them, a
   // The settings window heard about it as it went.
   assert.equal(states[0].state, "downloading");
   assert.equal(states.at(-1).state, "installed");
-  assert.deepEqual(local.status(), { state: "installed", supported: true, received: 0, total: 0, error: null, model: "NVIDIA Parakeet", bytes: 400_000 });
+  assert.deepEqual(local.status(), { state: "installed", supported: true, blocked: false, received: 0, total: 0, error: null, model: "NVIDIA Parakeet", bytes: 400_000 });
 
   // Already here: nothing to download, and the next run of the app knows it.
   const before = server.requests.length;
@@ -408,14 +463,15 @@ test("runs it on 127.0.0.1 behind a key of its own, and tidies what it heard", a
   );
   const run = engineRuns().at(-1);
   assert.equal(run.keyed, true, "the key is in its environment, not on its command line");
-  assert.equal(run.cwd, fs.realpathSync(dir), "it runs in its own folder");
+  assert.equal(fs.realpathSync.native(run.cwd).toLowerCase(), fs.realpathSync.native(dir).toLowerCase(), "it runs in its own folder");
   const args = run.args;
   assert.equal(args[0], "serve");
-  assert.equal(args[args.indexOf("--asr-model") + 1], local.paths.model);
+  assert.equal(path.resolve(run.cwd, args[args.indexOf("--asr-model") + 1]), path.resolve(run.cwd, path.relative(dir, local.paths.model)));
+  assert.equal(path.isAbsolute(args[args.indexOf("--asr-model") + 1]), false, "relative to its folder, so no user name in it");
   assert.equal(args[args.indexOf("--host") + 1], "127.0.0.1");
   assert.equal(args[args.indexOf("--port") + 1], String(local.port));
-  assert.equal(args[args.indexOf("--itn-model-dir") + 1], local.paths.itn);
-  assert.equal(args[args.indexOf("--device") + 1], "auto");
+  assert.equal(args[args.indexOf("--itn-model-dir") + 1], path.relative(dir, local.paths.itn));
+  assert.equal(args[args.indexOf("--device") + 1], "cpu", "NVIDIA's Linux, Windows and Intel Mac runtimes are CPU-only");
   assert.ok(args.includes("--no-ui"));
   assert.equal(args.join(" ").includes(local.secret), false);
 
@@ -455,7 +511,9 @@ test("a dictation doesn't wait long for an engine that's still loading; the next
   assert.equal(engineRuns().length, 1, "the same engine");
 });
 
-test("an engine left running by a run of the app that was force-quit is stopped; anything else with that id isn't", async (t) => {
+// It checks the process with `ps` here (the tests run the engine as on Linux); on Windows it asks
+// `tasklist`, which scripts/check-private-speech.mjs covers with NVIDIA's real engine.
+test("an engine left running by a run of the app that was force-quit is stopped; anything else with that id isn't", { skip: process.platform === "win32" && "covered on Windows by scripts/check-private-speech.mjs" }, async (t) => {
   const { local, make, logs } = await setup(t);
   await local.install();
   await local.transcribe(wav());
@@ -484,6 +542,25 @@ test("an engine left running by a run of the app that was force-quit is stopped;
   assert.doesNotThrow(() => process.kill(/** @type {number} */ (other.pid), 0), "still running");
 });
 
+test("when the app starts it stops an engine left running, before any dictation; one said right away waits for that", { skip: process.platform === "win32" && "covered on Windows by scripts/check-private-speech.mjs" }, async (t) => {
+  const { local, make, logs } = await setup(t);
+  await local.install();
+  await local.transcribe(wav());
+  const orphan = local.child;
+  await until(() => fs.existsSync(local.paths.pid));
+  local.child = null;
+  const gone = new Promise((r) => orphan.once("exit", r));
+  // The app starts again: it checks at once (index.mjs), and the owner talks right away.
+  const next = make();
+  const check = next.reap();
+  assert.equal(next.reap(), check, "one check per run");
+  const heard = next.transcribe(wav());
+  await gone;
+  assert.match(await heard, /Friday/);
+  assert.equal(logs.filter((m) => /stopped an engine left running/.test(m)).length, 1);
+  assert.equal(JSON.parse(fs.readFileSync(next.paths.pid, "utf8")).pid, next.child?.pid);
+});
+
 test("warm() starts it while the owner is still talking", async (t) => {
   const { local } = await setup(t);
   local.warm();
@@ -507,14 +584,40 @@ test("stops after a while unused, so the model isn't in memory all day", async (
   assert.equal(await local.transcribe(wav()), "Let's meet at 3:30 on Friday, or 3:45.");
 });
 
-test("a runtime that keeps crashing is given up on (the server hears the owner instead)", async (t) => {
-  const { local, spawned } = await setup(t, { mode: "crash" });
+// Apple silicon's runtime has a GPU (Metal): these run the engine as there.
+const APPLE_SILICON = { platform: "darwin", arch: "arm64" };
+
+test("a runtime that keeps crashing (on the GPU, then on the CPU) is given up on: the server hears the owner instead", async (t) => {
+  const { local, spawned } = await setup(t, { mode: "crash", ...APPLE_SILICON });
   await local.install();
-  for (let i = 0; i < 3; i++) await assert.rejects(local.ensureRunning(), (e) => e instanceof LocalSpeechError && e.code === "crashed");
+  // The GPU, then at once the CPU; then the CPU again.
+  for (let i = 0; i < 2; i++) await assert.rejects(local.ensureRunning(), (e) => e instanceof LocalSpeechError && e.code === "crashed");
+  assert.deepEqual(
+    spawned.map((a) => a[a.indexOf("--device") + 1]),
+    ["auto", "cpu", "cpu"],
+  );
   assert.equal(local.state, "installed");
   await assert.rejects(local.ensureRunning(), (e) => e instanceof LocalSpeechError && e.code === "crashing");
   await assert.rejects(local.transcribe(wav()), (e) => e instanceof LocalSpeechError && e.code === "crashing");
   assert.equal(spawned.length, 3, "it wasn't started a fourth time");
+});
+
+test("the GPU failing on this computer moves it to the CPU, at once and from then on", async (t) => {
+  const { local, make, engineRuns, logs } = await setup(t, { mode: "gpu-crash", ...APPLE_SILICON });
+  await local.install();
+  assert.equal(await local.transcribe(wav()), "Let's meet at 3:30 on Friday, or 3:45.", "this dictation is still heard here");
+  const devices = () => engineRuns().map((r) => r.args[r.args.indexOf("--device") + 1]);
+  assert.deepEqual(devices(), ["auto", "cpu"]);
+  assert.ok(logs.some((m) => /it didn't start on the GPU \(it stopped: 3\); using the CPU from now on/.test(m)), logs.join("\n"));
+  assert.equal(JSON.parse(fs.readFileSync(local.paths.device, "utf8")).device, "cpu");
+  await local.stop();
+  // The next run of the app goes straight to the CPU…
+  const next = make();
+  t.after(() => next.stop());
+  await next.transcribe(wav());
+  assert.deepEqual(devices(), ["auto", "cpu", "cpu"]);
+  // …until NVIDIA's runtime changes: a new one gets another try on the GPU.
+  assert.equal(make({ sources: { ...local.src, runtimeSha256: "0".repeat(64) } }).loadDevice(), "auto");
 });
 
 test("a runtime that can't run at all fails at once instead of hanging the dictation", async (t) => {

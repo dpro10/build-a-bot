@@ -124,6 +124,30 @@ export function categorize(app) {
   return { name: name.slice(0, 40), category: "other" };
 }
 
+/** Terminals by the TERM_PROGRAM they set, for when macOS doesn't say which app started this one. */
+const TERM_PROGRAMS = /** @type {Record<string, string>} */ ({
+  apple_terminal: "Terminal",
+  "iterm.app": "iTerm",
+  vscode: "your code editor",
+  warpterminal: "Warp",
+  ghostty: "Ghostty",
+  wezterm: "WezTerm",
+  zed: "Zed",
+});
+
+/**
+ * The app macOS asks about for the microphone and Accessibility, so the owner knows which one to
+ * turn on: Build-a-bot itself, or, run from source (`npm start`), the app it was started from
+ * (Terminal, VS Code…), since macOS asks on behalf of that one.
+ * @param {{ platform: string, packaged: boolean, env?: Record<string, string | undefined> }} o
+ */
+export function permissionApp({ platform, packaged, env = process.env }) {
+  if (platform !== "darwin" || packaged) return "Build-a-bot";
+  const launcher = BY_ID.get(String(env.__CFBundleIdentifier ?? "").toLowerCase());
+  if (launcher) return launcher.name;
+  return TERM_PROGRAMS[String(env.TERM_PROGRAM ?? "").toLowerCase()] ?? "the app you started it from";
+}
+
 /**
  * `lsappinfo info -only bundleid -only name <asn>`:
  *   "CFBundleIdentifier"="com.tinyspeck.slackmacgap"

@@ -48,7 +48,8 @@ test("token store: encrypted with the OS keychain, never in plain text on disk",
   assert.deepEqual(store.save(device), { stored: "encrypted" });
   const raw = fs.readFileSync(file, "utf8");
   assert.ok(!raw.includes("bab_dev_secret_123"), "the token isn't readable in the file");
-  assert.equal((fs.statSync(file).mode & 0o777).toString(8), "600");
+  // Only the owner can read it (Windows has no such mode bits: the profile folder is the owner's).
+  if (process.platform !== "win32") assert.equal((fs.statSync(file).mode & 0o777).toString(8), "600");
   const loaded = new TokenStore({ file, safeStorage: fakeSafe(), platform: "darwin" }).load();
   assert.equal(loaded.token, "bab_dev_secret_123");
   assert.equal(loaded.stored, "encrypted");
