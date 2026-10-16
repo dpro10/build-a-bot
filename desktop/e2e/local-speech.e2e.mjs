@@ -148,10 +148,13 @@ async function serveFiles(dir) {
 let app = null;
 let target = null;
 let files = null;
+let userData = null;
 after(async () => {
   target?.kill();
   if (app) await app.close().catch(() => {});
   files?.close();
+  // The app's folder holds its own copy of the model (0.7 GB).
+  if (userData) fs.rmSync(userData, { recursive: true, force: true });
 });
 
 test("NVIDIA Parakeet on this computer: downloaded, checked, and hearing real speech", { timeout: 600_000 }, async () => {
@@ -184,7 +187,7 @@ test("NVIDIA Parakeet on this computer: downloaded, checked, and hearing real sp
   const { code } = await (await web.post("/api/bridge/pairing-code")).json();
 
   // ---- the app, with voice typing on, downloading NVIDIA's files from here
-  const userData = fs.mkdtempSync(path.join(os.tmpdir(), "bab-local-e2e-"));
+  userData = fs.mkdtempSync(path.join(os.tmpdir(), "bab-local-e2e-"));
   const mic = path.join(userData, "mic.wav");
   const said = micFile(DICTATION, mic);
   app = await electron.launch({
@@ -231,8 +234,10 @@ test("NVIDIA Parakeet on this computer: downloaded, checked, and hearing real sp
   await step("downloading", () => voiceWin.waitForSelector("#local:not([hidden]) #local-progress:not([hidden])", { timeout: 30_000 }));
   assert.match(await voiceWin.textContent("#local-status"), /Getting NVIDIA Parakeet/);
   await voiceWin.screenshot({ path: path.join(SHOTS, "local-0-downloading.png"), fullPage: true });
-  await step("installed", () => until("Parakeet downloaded and checked", async () => (await probe())?.local?.state === "installed", 300_000, 500));
+  await step("installed", () => until("Parakeet downloaded and checked", async () => ["installed", "starting", "ready"].includes((await probe())?.local?.state), 300_000, 250));
   const installMs = Date.now() - t0;
+  // It loads the model right away, so the first dictation doesn't wait for it.
+  await step("loaded", () => until("the engine loaded", async () => (await probe())?.local?.state === "ready", 60_000, 250));
   const modelGets = files.requests.filter((r) => r.name === MODEL);
   assert.equal(modelGets.length, 2, "the cut-off download picked up where it stopped");
   assert.match(modelGets[1].range ?? "", /^bytes=[1-9]\d*-$/);
