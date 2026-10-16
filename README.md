@@ -6,6 +6,13 @@ Anyone makes their own AI agent in about a minute: pick a face, give it a name, 
 - **Status (2026-10-15):** the whole product is built (the website, the dashboard, and a desktop app for meeting notes and voice typing) and runs locally in demo mode with zero keys. `docs/DEPLOY.md` lists what each integration needs.
 - **Reviewing it?** Start with [`docs/TRY-IT.md`](docs/TRY-IT.md): how to run both apps, what to click, and what's simulated.
 
+## Built on NVIDIA and Nebius
+
+- **The brains:** NVIDIA Nemotron on **Nebius Token Factory**. Nemotron 3.5 Lightning is every new bot's default: fast, and cheap enough (about $4–5 a month per active bot) to include on the free plan. Nemotron 3 Super and Nemotron 3 Ultra take the harder jobs on Plus and Pro. Token Factory also runs the other included open models, and the AI cleanup for voice typing.
+- **The ears:** NVIDIA **Parakeet TDT 0.6B v3** and **Nemotron 3.5 ASR** turn speech into text for voice typing and meeting notes. They run on NVIDIA's NeMo-Speech.cpp in our own server (`speech/`), built to deploy as a **Nebius Serverless AI** endpoint.
+- **Web search:** Tavily.
+- A possible entry in the Nebius × NVIDIA Global AI Hackathon (due October 30): [`docs/HACKATHON.md`](docs/HACKATHON.md).
+
 ## Try it
 
 ```bash
