@@ -25,8 +25,8 @@ Open http://localhost:3000.
 | Channels (Telegram, texts, email, Slack, Discord) | Simulated: nothing really goes out | Each provider's keys (`docs/DEPLOY.md`) |
 | Sign-in emails | The magic link appears on screen | An email provider |
 | Payments | Plans switch without paying | Stripe keys |
-| Meeting transcripts | A scripted meeting plays, whatever is said | `TRANSCRIBE_API_KEY` (a Groq key) |
-| Voice typing | It types sample sentences, whatever is said (marked *Demo*) | `TRANSCRIBE_API_KEY` (the same Groq key also runs the AI cleanup) |
+| Meeting transcripts | A scripted meeting plays, whatever is said | The speech server (`speech/`, run it locally with Docker) and `TRANSCRIBE_PROVIDER=nvidia`, `TRANSCRIBE_BASE_URL`, `TRANSCRIBE_API_KEY`; or a Together AI or Groq key |
+| Voice typing | It types sample sentences, whatever is said (marked *Demo*) | The same speech-to-text settings; the AI cleanup runs on `TOKEN_FACTORY_API_KEY` |
 | Web actions | Simulated sites | `BROWSER_USE_API_KEY` |
 
 Weather, Wikipedia and exchange rates are live when your computer can reach them; otherwise you get labeled placeholders.

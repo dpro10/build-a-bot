@@ -87,7 +87,9 @@ describe("speech-to-text", () => {
     expect(out.provider).toBe("together");
     expect(calls[1].url).toBe("https://api.together.ai/v1/audio/transcriptions");
     expect(calls[1].auth).toBe("Bearer tg_test_fallback");
-    expect(calls[1].form.get("model")).toBe("openai/whisper-large-v3");
+    // Together's default is NVIDIA Parakeet (it takes no prompt).
+    expect(calls[1].form.get("model")).toBe("nvidia/parakeet-tdt-0.6b-v3");
+    expect(calls[1].form.get("prompt")).toBeNull();
   });
 
   it("network failures are retryable; unreadable audio is not", async () => {
