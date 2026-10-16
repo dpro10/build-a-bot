@@ -46,12 +46,14 @@ jobs:
           node-version: 22
       - name: Build tools
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ninja-build libsentencepiece-dev
+      # Built for AVX2 (the Dockerfile's v3 flags), not for this runner's own CPU: runners differ, and
+      # a cached native build crashes (SIGILL) on one without the same instructions.
       - name: Cache NeMo-Speech.cpp
         id: engine-cache
         uses: actions/cache@v4
         with:
           path: ~/nemo-speech
-          key: nemo-speech-${{ env.NEMO_SPEECH_COMMIT }}-${{ runner.os }}-native-${{ hashFiles('voice/native/**') }}
+          key: nemo-speech-${{ env.NEMO_SPEECH_COMMIT }}-${{ runner.os }}-v3-${{ hashFiles('voice/native/**') }}
       - name: Build NeMo-Speech.cpp v0.2.0 and nemo-voice
         if: steps.engine-cache.outputs.cache-hit != 'true'
         run: |
@@ -60,7 +62,7 @@ jobs:
           cd /tmp/nsc
           test "$(git rev-parse HEAD)" = "$NEMO_SPEECH_COMMIT"
           git submodule update --init --depth 1 llama.cpp third_party/cpp-httplib
-          scripts/configure.sh cpu-server -DGGML_NATIVE=ON -DNEMO_SPEECH_BUILD_NMT=OFF -DNEMO_SPEECH_BUILD_DIAR=OFF
+          scripts/configure.sh cpu-server -DGGML_NATIVE=OFF -DGGML_AVX=ON -DGGML_AVX2=ON -DGGML_FMA=ON -DGGML_F16C=ON -DGGML_BMI2=ON -DNEMO_SPEECH_BUILD_NMT=OFF -DNEMO_SPEECH_BUILD_DIAR=OFF
           cmake --build --preset cpu-server -j "$(nproc)"
           cmake --install build/cpu-server --prefix ~/nemo-speech
           cmake -S "$GITHUB_WORKSPACE/voice/native" -B /tmp/nemo-voice -G Ninja -DCMAKE_PREFIX_PATH=$HOME/nemo-speech -DCMAKE_INSTALL_PREFIX=$HOME/nemo-speech

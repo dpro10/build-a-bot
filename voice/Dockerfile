@@ -37,6 +37,7 @@ RUN set -eux; \
     cd nemo-speech; \
     case "$CPU_LEVEL" in \
       native) flags="-DGGML_NATIVE=ON";; \
+      # (.github/workflows/voice.yml builds the same v3 for its real-model tests.)
       v3) flags="-DGGML_NATIVE=OFF -DGGML_AVX=ON -DGGML_AVX2=ON -DGGML_FMA=ON -DGGML_F16C=ON -DGGML_BMI2=ON";; \
       v4) flags="-DGGML_NATIVE=OFF -DGGML_AVX=ON -DGGML_AVX2=ON -DGGML_FMA=ON -DGGML_F16C=ON -DGGML_BMI2=ON -DGGML_AVX512=ON -DGGML_AVX512_VBMI=ON -DGGML_AVX512_VNNI=ON -DGGML_AVX512_BF16=ON -DGGML_AMX_TILE=ON -DGGML_AMX_INT8=ON -DGGML_AMX_BF16=ON";; \
       *) echo "CPU_LEVEL must be v3, v4 or native" >&2; exit 1;; \
