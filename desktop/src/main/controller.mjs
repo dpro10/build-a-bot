@@ -48,7 +48,7 @@ export const DEFAULT_LIMITS = Object.freeze({
 const STOP_NOTES = {
   silence: (bot) => `${bot} stopped taking notes because it's been quiet for 15 minutes.`,
   max_length: (bot) => `${bot} stopped at 4 hours, the longest one meeting can be.`,
-  limit: (bot) => `You've used this month's meeting minutes, so ${bot} stopped. Notes for what it heard are on the way.`,
+  limit: (bot) => `You're out of credit, so ${bot} stopped. Notes for what it heard are on the way.`,
   hidden: (bot) => `${bot} stopped taking notes because it couldn't stay on your screen.`,
   "lock-screen": (bot) => `${bot} stopped taking notes when your screen locked.`,
   suspend: (bot) => `${bot} stopped taking notes when your computer went to sleep.`,
@@ -64,8 +64,9 @@ export function startError(err, botName) {
   switch (e.code) {
     case "meetings_off":
       return { message: server ?? `Turn on Meeting notes for ${botName} first.`, openTarget: "apps" };
+    case "no_credit":
     case "limit":
-      return { message: "You've used this month's meeting minutes. Upgrade for more.", openTarget: "billing" };
+      return { message: server ?? "You're out of credit. Add some to take notes.", openTarget: "billing" };
     case "paused":
       return { message: server ?? `${botName} is paused. Resume it to take notes.`, openTarget: "bot" };
     case "already_recording":

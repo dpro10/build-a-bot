@@ -7,8 +7,8 @@
  * - "Make this shorter" with nothing selected says to select something instead of writing nonsense.
  * - The selection goes to the model as text to work on, inside tags, after worked examples that
  *   include a selection giving orders.
- * - Slow, cut-off or unusable replies fail cleanly; words typed count toward the plan; answers don't.
- * - The same limits as a dictation, and nothing is stored.
+ * - Slow, cut-off or unusable replies fail cleanly; words typed are counted; answers aren't.
+ * - It's paid from credit, like a dictation's cleanup (none left: it doesn't run), and nothing is stored.
  */
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
@@ -211,13 +211,14 @@ describe("editing by voice for an owner", () => {
     expect(await editByVoice(db, owner, { instruction: "make it rude", selection: "Thanks!", category: "chat", styles: true })).toMatchObject({ ok: false, status: 502, code: "failed" });
   });
 
-  it("stops at the Free plan's words, like dictation", async () => {
-    await db.update(schema.usage).set({ dictationWords: 8000 }).where(eq(schema.usage.userId, owner.id));
+  it("is paid from credit: with none left it doesn't run, and says how to add some", async () => {
+    const before = await getUsage(db, owner.id);
+    await db.update(schema.usage).set({ costMicros: 1_000_001 }).where(eq(schema.usage.userId, owner.id)); // past the starter dollar
     fakeGroq([]);
     const out = await editByVoice(db, owner, { instruction: "make it friendlier", selection: "hello", category: "chat", styles: true });
-    expect(out).toMatchObject({ ok: false, status: 402, code: "limit", upgrade: "plus" });
+    expect(out).toEqual({ ok: false, status: 402, code: "no_credit", error: "You're out of credit. Adding credit is coming soon." });
     expect(calls).toHaveLength(0);
-    await db.update(schema.usage).set({ dictationWords: 0 }).where(eq(schema.usage.userId, owner.id));
+    await db.update(schema.usage).set({ costMicros: before.costMicros }).where(eq(schema.usage.userId, owner.id));
   });
 
   it("keeps the selection out of the database", async () => {

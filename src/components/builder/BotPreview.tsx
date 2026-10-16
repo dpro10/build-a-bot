@@ -37,7 +37,7 @@ export function brainSummary(s: BuilderState): { title: string; sub: string } {
   return { title: m?.label ?? (b.model || "Your model"), sub: `Your ${p?.name ?? "provider"} key` };
 }
 
-/** `appLimit`: apps the plan connects (left out in demo mode, which connects them all). */
+/** `appLimit`: apps one bot connects (fair use; left out in demo mode, which connects them all). */
 export function speech(step: StepId, s: BuilderState, appLimit?: number): string {
   const a = AVATARS[s.avatar];
   const name = s.name.trim();
@@ -49,7 +49,7 @@ export function speech(step: StepId, s: BuilderState, appLimit?: number): string
     case "brain":
       return s.brain.kind === "subscription" ? "I'll think with your own plan, on your computer." : s.brain.kind === "byok" ? "Your key, your model. Nice." : "Which brain should I think with?";
     case "apps": {
-      // The apps that will really be connected, counted like the plan counts them (built-in tools aren't apps).
+      // The apps that will really be connected, counted like the fair-use limit counts them (built-in tools aren't apps).
       const n = Math.min(countedApps(s.connectors, s.customMcp), appLimit ?? Infinity);
       if (n) return `${n} app${n === 1 ? "" : "s"}! I'll put ${n === 1 ? "it" : "them"} to work.`;
       return s.connectors.some((c) => !ALWAYS_ON.has(c)) ? "Tools packed! Which apps do you use?" : "Which apps can I help with?";

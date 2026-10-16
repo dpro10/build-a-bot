@@ -57,9 +57,9 @@ function NameVisual() {
 
 function BrainVisual() {
   const rows = [
-    { label: "Included", tag: "Free", icon: <Sparkles className="size-3.5" />, on: true },
+    { label: "Included", tag: "At cost", icon: <Sparkles className="size-3.5" />, on: true },
     { label: "Your API key", icon: <KeyRound className="size-3.5" /> },
-    { label: "Your plan", icon: <Laptop className="size-3.5" /> },
+    { label: "Your subscription", icon: <Laptop className="size-3.5" /> },
   ];
   return (
     <Frame className="flex-col gap-1.5">
@@ -126,7 +126,7 @@ export function HowItWorks() {
     { title: "Name it", body: "Anything you like. Stuck? Tap Surprise me.", visual: <NameVisual /> },
     {
       title: "Give it a brain",
-      body: "Free open models, your own API key, or the Claude or ChatGPT plan you already pay for.",
+      body: "Open models we run (at cost), your own API key, or the Claude or ChatGPT plan you already pay for.",
       visual: <BrainVisual />,
     },
     { title: "Apps & trust", body: "Connect the apps it can use, then decide how much it may do on its own.", visual: <AppsVisual /> },

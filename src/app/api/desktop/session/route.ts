@@ -2,14 +2,13 @@ import { and, eq, inArray, isNull } from "drizzle-orm";
 import { schema } from "@/lib/db";
 import { apiError, json } from "@/lib/api";
 import { authDevice } from "@/lib/bridge/auth";
-import { getPlan } from "@/lib/billing/plans";
-import { getUsage } from "@/lib/billing/usage";
-import { appUrl, demoMode, demoSpeech } from "@/lib/env";
+import { getCredit } from "@/lib/billing/credit";
+import { appUrl, config, demoMode, demoSpeech } from "@/lib/env";
 import { CHUNK_MS, MEETINGS_CONNECTOR, meetingNotesAvailable } from "@/lib/meetings";
 import { dictationUsage, speechToTextAvailable, voiceEditAvailable, voicePolishAvailable } from "@/lib/dictation";
 import { transcriptionAvailable, transcriptionSetup } from "@/lib/transcribe";
 
-/** The desktop app's view of the account: which bots can take notes, minutes left, and voice typing. */
+/** The desktop app's view of the account: which bots can take notes, whether there's credit, and voice typing. */
 export async function GET(req: Request) {
   const auth = await authDevice(req);
   if (!auth) return apiError(401, "This computer was unpaired. Pair it again from the app.");
@@ -23,18 +22,26 @@ export async function GET(req: Request) {
         .from(schema.connections)
         .where(and(inArray(schema.connections.botId, bots.map((b) => b.id)), eq(schema.connections.connectorId, MEETINGS_CONNECTOR)))
     : [];
-  const plan = getPlan(owner.plan);
-  const usage = await getUsage(db, owner.id);
+  const credit = await getCredit(db, owner.id);
+  const hasCredit = credit.balanceMicros > 0;
+  // Notes written by an included model cost credit (when it's the real one); the owner's own AI is free here.
+  const needsCredit = (b: (typeof bots)[number]) => b.brain.kind === "included" && Boolean(config.tokenFactory.apiKey);
+  const meetingsOn = (b: (typeof bots)[number]) => on.some((c) => c.botId === b.id && c.status !== "disabled");
   return json({
     device: { id: device.id, name: device.name },
-    owner: { name: owner.name ?? owner.email?.split("@")[0] ?? null, plan: plan.id },
+    // No plans: people pay for what they use ("payg" is what older apps read as the plan).
+    owner: { name: owner.name ?? owner.email?.split("@")[0] ?? null, plan: "payg" },
+    /** Credit left, in micro-dollars (what an included model, lookups and the like are paid from). */
+    credit: { balanceMicros: credit.balanceMicros },
     bots: bots.map((b) => ({
       id: b.id,
       name: b.name,
       avatar: b.avatar,
       color: b.color,
       paused: b.status === "paused",
-      meetingsOn: on.some((c) => c.botId === b.id && c.status !== "disabled"),
+      meetingsOn: meetingsOn(b),
+      /** Its notes are written by an included model, so taking them needs credit (its owner's own AI is free here). */
+      notesNeedCredit: needsCredit(b),
     })),
     meetings: {
       /**
@@ -44,7 +51,13 @@ export async function GET(req: Request) {
       available: meetingNotesAvailable() && transcriptionAvailable(),
       /** Meeting notes are taken here, from what the app heard on the computer (NVIDIA Parakeet): only the lines are sent. */
       local: meetingNotesAvailable(),
-      minutesLeft: Math.max(0, plan.limits.meetingMinutes - Math.floor(usage.meetingSeconds / 60)),
+      /** Credit to take notes on an included model. */
+      credit: hasCredit,
+      /**
+       * For older apps, which read this as meeting minutes left: plenty, or none when there's no credit
+       * and every bot taking notes would need it.
+       */
+      minutesLeft: hasCredit || !bots.some((b) => meetingsOn(b) && needsCredit(b)) ? 600 : 0,
       chunkMs: CHUNK_MS,
     },
     voice: {

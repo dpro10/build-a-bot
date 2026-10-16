@@ -19,7 +19,6 @@ export type TrustDef = {
   never: string[];
   /** Default cap on actions per day that run without asking. */
   dailyActions: number;
-  minPlan: "free" | "plus" | "pro";
 };
 
 export const TRUST: Record<TrustLevel, TrustDef> = {
@@ -33,7 +32,6 @@ export const TRUST: Record<TrustLevel, TrustDef> = {
     asks: [],
     never: ["Send, post or reply", "Create, change or delete anything", "Spend money"],
     dailyActions: 0,
-    minPlan: "free",
   },
   ask: {
     id: "ask",
@@ -45,7 +43,6 @@ export const TRUST: Record<TrustLevel, TrustDef> = {
     asks: ["Before every send, post, change or delete"],
     never: ["Spend money"],
     dailyActions: 0,
-    minPlan: "free",
   },
   trusted: {
     id: "trusted",
@@ -57,7 +54,6 @@ export const TRUST: Record<TrustLevel, TrustDef> = {
     asks: ["Messaging someone new", "Deleting anything", "High-risk changes"],
     never: ["Spend money unless you set a cap"],
     dailyActions: 25,
-    minPlan: "free",
   },
   full: {
     id: "full",
@@ -74,7 +70,6 @@ export const TRUST: Record<TrustLevel, TrustDef> = {
     ],
     never: ["Share your passwords or keys", "Pretend to be human"],
     dailyActions: 100,
-    minPlan: "plus",
   },
 };
 

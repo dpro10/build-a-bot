@@ -24,7 +24,7 @@ Open http://localhost:3000.
 | Apps (Gmail, Calendar, GitHub, Drive…) | Sample data: a small inbox, a week of calendar, a few PRs. Nothing really changes. | Composio, or each app's sign-in (`docs/DEPLOY.md`) |
 | Channels (Telegram, texts, email, Slack, Discord) | Simulated: nothing really goes out | Each provider's keys (`docs/DEPLOY.md`) |
 | Sign-in emails | The magic link appears on screen | An email provider |
-| Payments | Plans switch without paying | Stripe keys |
+| Credit | Every account starts with $1 of credit; adding more is free in demo mode (nothing is charged) | Stripe keys |
 | Meeting notes | Real, in the desktop app: NVIDIA Parakeet hears the call on your computer (the same download as voice typing), and the bot's brain writes the notes (the demo brain's are simple). The website doesn't record | Nothing for speech; the real notes run on `TOKEN_FACTORY_API_KEY` |
 | Voice typing | Real, in the desktop app: NVIDIA Parakeet hears you on your computer (it downloads once, about 0.7 GB). The website doesn't listen | Nothing for speech; the AI cleanup runs on `TOKEN_FACTORY_API_KEY` (without it, the plain cleanup) |
 | Web actions | Simulated sites | `BROWSER_USE_API_KEY` |
@@ -36,7 +36,7 @@ To start over, stop the server and delete the `.data/` folder (the local databas
 ## 1. The public site (5 min)
 
 - **`/`, the landing page:** the five characters, how it works, the brains, apps, trust levels, channels, meeting notes, voice typing and safety. Try the light/dark toggle, and a phone-width window.
-- **`/pricing`:** Free, Plus ($12) and Pro ($39), monthly or yearly.
+- **`/pricing`:** no plans. What everything costs, at cost (a message on Nemotron 3.5 Lightning is about $0.0004), what's free (your own AI, speech heard on your computer), the $1 of starter credit and how adding credit works.
 - **`/safety`:** the trust levels and the hard limits, including the meeting-notes rule.
 - **`/explore`:** recipes, which are ready-made bots. "Make this bot" opens the builder prefilled.
 - **`/legal/...`:** drafts, not reviewed by a lawyer yet.
@@ -53,13 +53,13 @@ No account needed. A live preview builds the bot as you go.
 
 1. **Face:** pick a character and a color.
 2. **Name:** type one or tap "Surprise me", and say what it should call you.
-3. **Brain:** keep **Free open models**. Optional detours:
+3. **Brain:** keep **Open models we run** (each one shows what a message costs, at cost). Optional detours:
    - Open **Your own API key** and paste a made-up key: it's checked live with the provider and refused (when your computer is online).
    - Open **Your Claude or ChatGPT plan** to see how the Bridge works.
 4. **Apps:** under "What should … help with?" tap **Inbox**, **Calendar**, **Meetings** and **Errands** (each brings its built-in tools, like notes and web search). Then search for and add **Gmail** and **Google Calendar**.
-5. **Trust:** keep **Ask me first** for now, and read the hard limits. (Full faith is a Plus feature; demo mode lets you try it without paying, in step 6.)
+5. **Trust:** keep **Ask me first** for now, and read the hard limits. (Full faith is there for every bot; you'll try it in step 6.)
 6. **Talk:** pick any channels. Web chat is always on.
-7. **Go:** tick "I'm 18 or older", then **Bring … to life**.
+7. **Go:** the **Cost** line says what the bot will cost to run. Tick "I'm 18 or older", then **Bring … to life**.
 
 **Expect:** the dashboard opens and the bot greets you first by name, offering a few things it can do.
 
@@ -176,13 +176,13 @@ Without Accessibility on a Mac it still works: press **⌘ Shift Space** to star
   - its brain;
   - **Share as a recipe** (a public `/r/…` link, never with your data);
   - **Other AI apps** (use the bot's apps from Claude Desktop or Claude Code, under the same rules).
-- **Plan & usage:** switch plans (free in demo mode) and watch the meters, meeting minutes and voice typing words included.
+- **Credit & usage:** the balance (it starts at $1), Add $5, $10 or $20 (free in demo mode), what you used this month and what it cost, the credit you added, and every price.
 - **Bridge (your computer):** pairing for the Bridge (subscription brains) and the desktop app.
 - **Account:**
   - **Add your email** saves the account (in demo mode the magic link appears on screen instead of in your inbox);
   - **Download my data** exports everything as JSON, meetings and transcripts included;
   - **Delete my account** removes it all.
-- **`/admin`:** the operator dashboard with revenue, growth, usage and costs, as aggregates. In demo mode any signed-in user can see it; in production only `ADMIN_EMAILS`.
+- **`/admin`:** the operator dashboard with credit sold against what was used (are we breaking even?), growth, usage and costs, as aggregates. In demo mode any signed-in user can see it; in production only `ADMIN_EMAILS`.
 
 ## 7. What's simulated or not done yet
 

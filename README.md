@@ -8,7 +8,7 @@ Anyone makes their own AI agent in about a minute: pick a face, give it a name, 
 
 ## Built on NVIDIA and Nebius
 
-- **The brains:** NVIDIA Nemotron on **Nebius Token Factory**. Nemotron 3.5 Lightning is every new bot's default: fast, and cheap enough (about $4–5 a month per active bot) to include on the free plan. Nemotron 3 Super and Nemotron 3 Ultra take the harder jobs on Plus and Pro. Token Factory also runs the other included open models, and the AI cleanup for voice typing.
+- **The brains:** NVIDIA Nemotron on **Nebius Token Factory**. Nemotron 3.5 Lightning is every new bot's default: fast, and cheap (about $0.0004 for a typical message, at Token Factory's price). Nemotron 3 Super and Nemotron 3 Ultra take the harder jobs. Token Factory also runs the other included open models, and the AI cleanup for voice typing.
 - **The ears:** NVIDIA **Parakeet TDT 0.6B v3** turns speech into text on the user's own computer, for voice typing and meeting notes. The desktop app runs it on NVIDIA's NeMo-Speech.cpp, so the audio never leaves the computer. Our own speech server (`speech/`: Parakeet and **Nemotron 3.5 ASR** on NeMo-Speech.cpp, built to deploy as a **Nebius Serverless AI** endpoint) is optional, for computers where Parakeet can't run.
 - **Web search:** Tavily.
 - A possible entry in the Nebius × NVIDIA Global AI Hackathon (due October 30): [`docs/HACKATHON.md`](docs/HACKATHON.md).
@@ -50,7 +50,7 @@ Recipes prefill it (`/build?recipe=inbox-zero`, or any shared `/r/[slug]`). The 
 
 ### Brains
 
-- **Included open models** on Nebius Token Factory: Nemotron 3.5 Lightning by default, plus Qwen, gpt-oss, DeepSeek, GLM, MiniMax, Kimi and Hermes by plan.
+- **Included open models** on Nebius Token Factory: Nemotron 3.5 Lightning by default, plus Qwen, gpt-oss, DeepSeek, GLM, MiniMax, Kimi and Hermes, each at Token Factory's price.
 - **The owner's own key:** Anthropic, OpenAI, Gemini, OpenRouter, Groq, Mistral, xAI, DeepSeek, Together, Fireworks, Cerebras, or any OpenAI-compatible endpoint. Checked live, then encrypted.
 - **Their Claude or ChatGPT subscription, through the Bridge** (`bridge/`): a small program on their own computer that runs their own `claude -p` or `codex exec`, signed in by them, with only the bot's tools. We never see the login. While the computer sleeps the bot waits, unless the owner opts in to fall back to the included model.
 
@@ -95,7 +95,7 @@ Web chat, phone calls and texts (Twilio), email (its own brand-free address), Te
 - **Edit by voice:** select text, hold Shift with your key, and say what to change ("make it friendlier", "turn it into a list", "translate it to Spanish"). With nothing selected, it writes what you ask for. "Hey Otto, add this to my calendar" sends your bot what you selected, treated as outside content so it asks before sending anything to someone new.
 - **"Hey Otto, …"** asks your bot instead of typing; it answers in a small bubble with Paste, Copy, Reply and Open chat.
 - **Private:** the mic is on only while you hold the key, with a pill on screen the whole time. NVIDIA Parakeet hears you on your own computer, so the audio never leaves it; the server gets the words to clean up and keeps a word count, not the words. History stays on your computer, encrypted.
-- **In the desktop app**, like Wispr Flow: the website doesn't listen. The **Voice typing** page (`/app/voice`) gets you the app, pairs it, and holds your words and snippets. Free: 8,000 words a month; Plus and Pro: unlimited.
+- **In the desktop app**, like Wispr Flow: the website doesn't listen. The **Voice typing** page (`/app/voice`) gets you the app, pairs it, and holds your words and snippets. No word limit: hearing you is free on your computer, and the AI cleanup is paid from credit (a fraction of a cent).
 
 ### Web actions (beta)
 
@@ -114,12 +114,12 @@ An optional morning brief (on by default), routines and reminders, on any channe
 ### The dashboard (`/app`)
 
 - **For each bot:** Chat with inline approvals, Meetings, Activity (receipts), Apps & trust, Channels, Routines, Memory, Settings (look, personality, brain, recipes, MCP access).
-- **For the account:** Approvals inbox, Voice typing, Bridge (your computer, including the desktop app), Plan & usage, Account (export, delete).
+- **For the account:** Approvals inbox, Voice typing, Bridge (your computer, including the desktop app), Credit & usage, Account (export, delete).
 
 ### The business side
 
-- Plans and billing with Stripe: Free, Plus ($12/mo) and Pro ($39/mo). The full table is in `docs/DECISIONS.md`. In demo mode, plans switch without paying; on a real server without Stripe, Plus and Pro say "Coming soon" and offer a waitlist.
-- An operator dashboard (`/admin`, locked to `ADMIN_EMAILS`): revenue, growth, usage and costs, as aggregates only.
+- **No plans: people pay for what they use, at cost** (Diego, 2026-10-16). A message on an included model costs Token Factory's price for its tokens, a web lookup Tavily's $0.008, a text or a call Twilio's price, and a bot on your own AI key or subscription is free here. Every account starts with $1 of credit; adding $5, $10 or $20 goes through Stripe Checkout, with Stripe's card fee on top so the credit is all yours. Prices are in `src/lib/billing/prices.ts`, on `/pricing` and in `docs/DECISIONS.md`. In demo mode, credit is added without paying; on a real server without Stripe, adding credit says "Coming soon".
+- An operator dashboard (`/admin`, locked to `ADMIN_EMAILS`): credit sold against what was used (are we breaking even?), growth, usage and costs, as aggregates only.
 - Shareable recipes (`/r/[slug]`). Each bot is also an MCP server, usable from Claude Desktop or Claude Code.
 - A public site: landing, pricing, safety, legal drafts, explore.
 
@@ -194,7 +194,7 @@ The full notes, with Diego's own words, are in `docs/DECISIONS.md`.
 **Claude's build choices, for Diego to confirm:**
 
 - the four trust levels and the hard limits;
-- the pricing table;
+- the pricing table (replaced on 2026-10-16: pay for usage, at cost);
 - the morning brief, on by default;
 - web actions on Browser Use Cloud, with Stagehand + Browserbase as the fallback;
 - the meeting-notes safety rules.
@@ -206,7 +206,7 @@ The full notes, with Diego's own words, are in `docs/DECISIONS.md`.
 The current list is in `docs/DECISIONS.md`.
 
 1. **First users:** tinkerers or everyday iPhone users? A 3-week hand-built test with 5 non-developers could decide.
-2. **Pricing:** confirm the table. Is Full faith a paid feature?
+2. **Pricing:** pay for usage at cost is decided (2026-10-16). Open: the starter credit ($1), refunding unused credit by hand when asked, and when, if ever, to add a margin.
 3. **Web actions:** confirm Browser Use Cloud, then test with a live key on about 10 real forms before turning it on for everyone.
 4. **Before launch:** a brand-free domain for bot inboxes, Twilio A2P 10DLC registration, and a Composio plan. The Bridge needs nothing on npm: the site serves its own copy.
 5. **Trademark clearance** before spending on the brand.

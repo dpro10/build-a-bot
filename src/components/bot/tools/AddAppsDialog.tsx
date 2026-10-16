@@ -1,7 +1,6 @@
 "use client";
 import * as React from "react";
-import Link from "next/link";
-import { ArrowLeft, Ban, Check, Hand, KeyRound, Plug, Plus, Rocket, ShieldCheck, TriangleAlert } from "lucide-react";
+import { ArrowLeft, Ban, Check, Hand, KeyRound, Plug, Plus, ShieldCheck, TriangleAlert } from "lucide-react";
 import type { ConnectorDef } from "@/lib/connectors";
 import { getConnector } from "@/lib/connectors";
 import type { TrustLevel } from "@/lib/trust";
@@ -37,7 +36,6 @@ export function AddAppsDialog({
   trust,
   spendCapUsd,
   composioLive,
-  paidPlans,
   comingSoon,
   onAdded,
   onConnect,
@@ -53,8 +51,6 @@ export function AddAppsDialog({
   trust: TrustLevel;
   spendCapUsd: number | undefined;
   composioLive: boolean;
-  /** Paid plans can be bought here; otherwise the app limit says they're coming soon, with no link. */
-  paidPlans: boolean;
   /** Built-ins this server can't run yet. */
   comingSoon: string[];
   onAdded: (conn: ConnectionView) => void;
@@ -65,7 +61,8 @@ export function AddAppsDialog({
   const [view, setView] = React.useState<View>("browse");
   const [pending, setPending] = React.useState<ConnectorDef | null>(null);
   const [conn, setConn] = React.useState<ConnectionView | null>(null);
-  const [upgrade, setUpgrade] = React.useState<string | null>(null);
+  /** The bot already has as many apps as one bot can have: the server's words. */
+  const [full, setFull] = React.useState<string | null>(null);
   const [connecting, setConnecting] = React.useState(false);
   const [connectError, setConnectError] = React.useState<string | null>(null);
   const [connected, setConnected] = React.useState(false);
@@ -75,7 +72,7 @@ export function AddAppsDialog({
       setView(startInCustom ? "custom" : "browse");
       setPending(null);
       setConn(null);
-      setUpgrade(null);
+      setFull(null);
       setConnectError(null);
       setConnected(false);
     }
@@ -85,7 +82,7 @@ export function AddAppsDialog({
     setView("added");
     setPending(def);
     setConn(null);
-    setUpgrade(null);
+    setFull(null);
     setConnectError(null);
     setConnected(false);
     try {
@@ -95,8 +92,8 @@ export function AddAppsDialog({
       onAdded(view);
       return view;
     } catch (err) {
-      if (err instanceof ApiError && (err.status === 402 || err.upgrade)) {
-        setUpgrade(err.message);
+      if (err instanceof ApiError && err.code === "fair_use") {
+        setFull(err.message);
       } else {
         toast.error(err instanceof Error ? err.message : "Couldn't add that app.");
         setView(body.connectorId === "custom_mcp" ? "custom" : "browse");
@@ -177,10 +174,8 @@ export function AddAppsDialog({
                 </div>
               ) : null}
               <DialogTitle className="text-center">
-                {upgrade
-                  ? paidPlans
-                    ? `Add ${name} with Plus`
-                    : "More apps are part of Plus"
+                {full
+                  ? `${botName} has all the apps it can hold`
                   : !conn
                     ? `Adding ${name}…`
                     : connected || conn.status === "connected"
@@ -188,8 +183,8 @@ export function AddAppsDialog({
                       : `${name} is added`}
               </DialogTitle>
               <DialogDescription className="max-w-sm text-center">
-                {upgrade
-                  ? upgrade
+                {full
+                  ? full
                   : !conn
                     ? "One moment."
                     : connected || conn.status === "connected"
@@ -206,23 +201,12 @@ export function AddAppsDialog({
               </DialogDescription>
             </DialogHeader>
             <DialogBody className="sm:px-10">
-              {!conn && !upgrade ? (
+              {!conn && !full ? (
                 <div className="flex justify-center py-6">
                   <Spinner className="size-6 text-primary" />
                 </div>
               ) : null}
-              {upgrade ? (
-                <div className="flex flex-col items-center gap-3 py-2">
-                  <span className="flex size-11 items-center justify-center rounded-2xl bg-primary-soft text-primary">
-                    <Rocket className="size-5" />
-                  </span>
-                  <p className="max-w-sm text-center text-sm text-muted-foreground">
-                    {paidPlans
-                      ? "Plus connects as many apps as you like, plus phone calls, texts and Full faith."
-                      : `To add ${name} now, remove one of ${botName}'s apps first.`}
-                  </p>
-                </div>
-              ) : null}
+              {full ? <p className="mx-auto max-w-sm py-2 text-center text-sm text-muted-foreground">To add {name} now, remove one of {botName}&apos;s apps first.</p> : null}
               {conn && def ? (
                 <div className="flex flex-col gap-3">
                   {connectError ? (
@@ -239,18 +223,12 @@ export function AddAppsDialog({
               ) : null}
             </DialogBody>
             <DialogFooter className="justify-center sm:px-10">
-              {upgrade ? (
+              {full ? (
                 <>
                   <Button variant="ghost" onClick={() => setView("browse")}>
                     <ArrowLeft /> Back
                   </Button>
-                  {paidPlans ? (
-                    <Button asChild>
-                      <Link href="/app/billing">See Plus</Link>
-                    </Button>
-                  ) : (
-                    <Button onClick={() => onOpenChange(false)}>Done</Button>
-                  )}
+                  <Button onClick={() => onOpenChange(false)}>Done</Button>
                 </>
               ) : conn ? (
                 <>

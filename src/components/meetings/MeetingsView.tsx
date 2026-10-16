@@ -7,12 +7,10 @@ import { Avatar } from "@/components/avatar";
 import { BrandTile } from "@/components/brand/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/misc";
 import { Segmented } from "@/components/ui/segmented";
 import { toast } from "@/components/ui/toaster";
 import { dayKey, dayLabel, timeLabel, useNow } from "@/components/bot/activity/time";
 import { api, ApiError } from "@/lib/client/api";
-import { PAID_PLANS_SOON } from "@/lib/billing/plans";
 import type { DesktopApp } from "@/lib/meetings";
 import { formatDuration, meetingAppIcon, STATUS, statusOf, type BotFace, type MeetingView } from "./shared";
 
@@ -27,11 +25,12 @@ type Props = {
   enabled: boolean;
   /** Meeting notes are taken here (the desktop app can be had); otherwise they're coming soon. */
   available: boolean;
-  plan: { id: string; name: string; minutes: number };
-  /** Paid plans can be bought here; otherwise there's no "get more" link. */
-  paidPlans: boolean;
-  minutesUsed: number;
-  resetsOn: string;
+  /** Minutes of meetings this month (all the owner's bots). */
+  minutesThisMonth: number;
+  /** What writing an hour's notes costs from credit ("about $0.0012 an hour on …"), or null when it's free here (their own AI). */
+  notesCost: string | null;
+  /** The notes would cost credit and there's none left. */
+  needsCredit: boolean;
   transcriptDays: number | null;
   desktopApp: DesktopApp;
   desktopDevices: DesktopDevice[];
@@ -45,7 +44,7 @@ const KEEP_OPTIONS = [
 type KeepValue = (typeof KEEP_OPTIONS)[number]["value"];
 
 export function MeetingsView(props: Props) {
-  const { botId, bot, timezone, plan } = props;
+  const { botId, bot, timezone } = props;
   const router = useRouter();
   const [meetings, setMeetings] = React.useState(props.initialMeetings);
   const [enabled, setEnabled] = React.useState(props.enabled);
@@ -56,7 +55,6 @@ export function MeetingsView(props: Props) {
   React.useEffect(() => setMeetings(props.initialMeetings), [props.initialMeetings]);
   React.useEffect(() => setEnabled(props.enabled), [props.enabled]);
 
-  const minutesLeft = Math.max(0, plan.minutes - props.minutesUsed);
   const active = meetings.find((m) => m.status === "recording") ?? null;
 
   // Keep statuses fresh while something is recording or being written.
@@ -106,8 +104,8 @@ export function MeetingsView(props: Props) {
   /** Why the desktop app can't take notes for this bot right now (null when it can). */
   const blocked = bot.paused
     ? `${bot.name} is paused. Resume it at the top of the page to take notes.`
-    : minutesLeft <= 0
-      ? `You've used all ${plan.minutes} meeting minutes on ${plan.name} this month.`
+    : props.needsCredit
+      ? `You're out of credit, and ${bot.name} writes its notes on an included model. Add credit in Credit & usage, or switch it to your own AI in Settings → Brain.`
       : null;
 
   const groups = React.useMemo(() => {
@@ -176,7 +174,7 @@ export function MeetingsView(props: Props) {
           </section>
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <MinutesCard plan={plan} used={props.minutesUsed} resetsOn={props.resetsOn} paidPlans={props.paidPlans} />
+            <UsageCard minutes={props.minutesThisMonth} notesCost={props.notesCost} needsCredit={props.needsCredit} />
             <KeepCard botId={botId} initial={props.transcriptDays} />
           </div>
         </>
@@ -361,41 +359,21 @@ function DesktopCard({ bot, app, devices, blocked }: { bot: BotFace; app: Deskto
   );
 }
 
-function MinutesCard({ plan, used, resetsOn, paidPlans }: { plan: { id: string; name: string; minutes: number }; used: number; resetsOn: string; paidPlans: boolean }) {
-  const left = Math.max(0, plan.minutes - used);
-  const pct = (Math.min(used, plan.minutes) / Math.max(1, plan.minutes)) * 100;
-  const low = left <= Math.max(15, plan.minutes * 0.15);
-  const hours = (n: number) => (n % 60 === 0 && n >= 60 ? `${n / 60} hours` : `${n.toLocaleString("en-US")} min`);
+function UsageCard({ minutes, notesCost, needsCredit }: { minutes: number; notesCost: string | null; needsCredit: boolean }) {
   return (
     <div className="flex flex-col justify-center gap-2 rounded-3xl border border-border bg-card p-4 shadow-soft sm:p-5">
       <div className="flex items-center justify-between gap-3 text-sm">
         <span className="font-semibold">
-          {used.toLocaleString("en-US")} of {plan.minutes.toLocaleString("en-US")} meeting minutes
+          {minutes.toLocaleString("en-US")} minute{minutes === 1 ? "" : "s"} of meetings this month
         </span>
-        <span className="flex shrink-0 items-center gap-2">
-          <Badge tone="primary">{plan.name}</Badge>
-          {plan.id !== "pro" && paidPlans ? (
-            <Link href="/app/billing" className="text-xs font-semibold text-primary hover:underline">
-              {low ? "Get more" : "Plans"}
-            </Link>
-          ) : null}
-        </span>
+        <Link href="/app/billing" className="shrink-0 text-xs font-semibold text-primary hover:underline">
+          Credit &amp; usage
+        </Link>
       </div>
-      <Progress value={pct} tone={left === 0 ? "danger" : low ? "warning" : "primary"} label="Meeting minutes used this month" />
-      <div className="text-xs text-muted-foreground">
-        {left === 0 ? "None left this month." : `${hours(left)} left this month.`} Resets {resetsOn}.
-        {low && plan.id !== "pro" ? (
-          paidPlans ? (
-            <>
-              {" "}
-              <Link href="/app/billing" className="font-semibold text-primary hover:underline">
-                {plan.id === "free" ? "Plus has 15 hours a month." : "Pro has 50 hours a month."}
-              </Link>
-            </>
-          ) : (
-            ` ${PAID_PLANS_SOON}`
-          )
-        ) : null}
+      <div className={needsCredit ? "text-xs font-medium text-danger" : "text-xs text-muted-foreground"}>
+        Hearing the call is free: it happens on your computer.{" "}
+        {notesCost ? `Writing the notes costs ${notesCost}, from your credit.` : "Writing the notes is free here, on your own AI."}
+        {needsCredit ? " You're out of credit." : ""}
       </div>
     </div>
   );

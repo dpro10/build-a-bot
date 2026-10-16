@@ -6,8 +6,6 @@ import { apiError, authedBot, json, parseJson, sameOrigin, type RouteCtx } from 
 import { AVATAR_IDS, COLORWAY_IDS } from "@/lib/avatars";
 import { TRUST_LEVELS } from "@/lib/trust";
 import { ROLE_IDS } from "@/lib/roles";
-import { getPlan, planAllowsTrust } from "@/lib/billing/plans";
-import { demoMode } from "@/lib/env";
 import { readCredential, storeCredential } from "@/lib/channels/secrets";
 import { setTelegramProfilePhoto, telegramCall } from "@/lib/channels/telegram";
 import { INCLUDED_MODELS, PROVIDER_BY_ID, type ProviderId } from "@/lib/models/catalog";
@@ -25,13 +23,12 @@ export async function GET(_req: Request, ctx: RouteCtx<{ botId: string }>) {
   const { mcpTokenHash: _h, ...bot } = a.bot;
   // Never secrets to the browser: a channel's config holds e.g. its Telegram webhook secret.
   const safeChannels = channels.map(({ config, credentialId, ...c }) => {
-    const cfg = (config ?? {}) as { simulated?: boolean; locked?: boolean; pendingOwnerAddress?: unknown; username?: unknown };
+    const cfg = (config ?? {}) as { simulated?: boolean; pendingOwnerAddress?: unknown; username?: unknown };
     return {
       ...c,
       credentialId: credentialId ? "set" : null,
       config: {
         simulated: cfg.simulated ?? false,
-        locked: cfg.locked ?? false,
         pendingOwnerAddress: typeof cfg.pendingOwnerAddress === "string" ? cfg.pendingOwnerAddress : null,
         username: typeof cfg.username === "string" ? cfg.username : null,
       },
@@ -81,7 +78,6 @@ export async function PATCH(req: Request, ctx: RouteCtx<{ botId: string }>) {
   const parsed = await parseJson(req, patchSchema);
   if (!parsed.ok) return parsed.res;
   const p = parsed.data;
-  const plan = getPlan(a.user.plan);
   const updates: Partial<typeof schema.bots.$inferInsert> = { updatedAt: new Date() };
 
   if (p.name) updates.name = p.name;
@@ -92,15 +88,11 @@ export async function PATCH(req: Request, ctx: RouteCtx<{ botId: string }>) {
   if (p.role !== undefined) updates.role = p.role;
   if (p.vibe) updates.vibe = { ...a.bot.vibe, ...p.vibe };
   if (p.limits) updates.limits = { ...a.bot.limits, ...p.limits };
-  if (p.trust) {
-    if (!planAllowsTrust(plan, p.trust) && !demoMode) return apiError(402, "Full faith is part of Plus.", { upgrade: "plus" });
-    updates.trust = p.trust;
-  }
+  if (p.trust) updates.trust = p.trust;
   if (p.brain) {
     let brain: BrainConfig;
     if (p.brain.kind === "included") {
       const def = INCLUDED_MODELS.find((m) => m.id === p.brain!.model) ?? INCLUDED_MODELS.find((m) => m.default)!;
-      if (!plan.includedModels.includes(def.tier) && !demoMode) return apiError(402, `${def.label} needs a higher plan.`, { upgrade: def.tier === "smart" ? "pro" : "plus" });
       brain = { kind: "included", provider: "nebius", model: def.id, effort: p.brain.effort ?? a.bot.brain.effort ?? "low" };
     } else if (p.brain.kind === "byok") {
       const provider = (p.brain.provider ?? a.bot.brain.provider) as ProviderId;

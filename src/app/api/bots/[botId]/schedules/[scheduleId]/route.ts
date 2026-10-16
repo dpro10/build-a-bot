@@ -3,7 +3,7 @@ import { and, count, eq } from "drizzle-orm";
 import { schema } from "@/lib/db";
 import { apiError, authedBot, json, parseJson, sameOrigin, type RouteCtx } from "@/lib/api";
 import { computeNextRun, describeSchedule } from "@/lib/scheduler/time";
-import { getPlan } from "@/lib/billing/plans";
+import { FAIR_USE } from "@/lib/billing/prices";
 import { demoMode } from "@/lib/env";
 
 type Ctx = RouteCtx<{ botId: string; scheduleId: string }>;
@@ -37,14 +37,13 @@ export async function PATCH(req: Request, ctx: Ctx) {
   const { schedule: newSchedule, ...rest } = parsed.data;
   const updates: Partial<typeof schema.schedules.$inferInsert> = { ...rest, updatedAt: new Date() };
   const willBeActive = parsed.data.active ?? existing.active;
-  // Switching a routine back on counts against the plan, the same as making a new one.
+  // Switching a routine back on counts toward the fair-use cap, the same as making a new one.
   if (existing.kind === "routine" && parsed.data.active === true && !existing.active && !demoMode) {
-    const plan = getPlan(a.user.plan);
     const [{ n }] = await a.db
       .select({ n: count() })
       .from(schema.schedules)
       .where(and(eq(schema.schedules.botId, botId), eq(schema.schedules.kind, "routine"), eq(schema.schedules.active, true)));
-    if (n >= plan.limits.routines) return apiError(402, `The ${plan.name} plan includes ${plan.limits.routines} routines.`, { upgrade: "plus" });
+    if (n >= FAIR_USE.routines) return apiError(409, `A bot can have up to ${FAIR_USE.routines} routines on. Turn one off to make room.`, { code: "fair_use" });
   }
   if (newSchedule) {
     // Times the owner typed are in their current time zone.

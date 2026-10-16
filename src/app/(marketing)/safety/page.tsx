@@ -111,7 +111,6 @@ export default function SafetyPage() {
                 <div key={t} className="rounded-2xl border border-border bg-card p-4 shadow-soft">
                   <div className="flex items-center gap-2 font-semibold">
                     <span aria-hidden="true">{d.emoji}</span> {d.name}
-                    {d.minPlan !== "free" ? <span className="ml-auto rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-bold text-primary">Plus &amp; Pro</span> : null}
                   </div>
                   <p className="mt-1 text-sm leading-snug text-muted-foreground">{d.long}</p>
                   <div className="mt-3 text-xs font-semibold text-muted-foreground">Asks first</div>
@@ -127,7 +126,7 @@ export default function SafetyPage() {
         </DocSection>
 
         <DocSection id="hard-limits" title="Hard limits at every level" icon={<Lock />}>
-          <p>These apply on every plan and every trust level, Full faith included. No setting turns them off.</p>
+          <p>These apply to every bot at every trust level, Full faith included. No setting turns them off.</p>
           <ul className="flex flex-col gap-2">
             {[...HARD_LIMITS, `Deleting more than ${BULK_DELETE_THRESHOLD} things at once asks you first.`].map((l) => (
               <li key={l} className="flex gap-3 rounded-2xl bg-background-2 p-3 text-[15px] leading-snug">
@@ -261,7 +260,7 @@ export default function SafetyPage() {
               <strong>Your voice stays on your computer.</strong> The desktop app turns it into text right there, with NVIDIA&apos;s Parakeet
               speech model, and sends only the words, to be cleaned up. Until that model has downloaded, in a language it doesn&apos;t know, or
               if you turn it off, the audio is turned into text on our servers and thrown away. Either way, nothing you say is kept: the text goes back to your computer without
-              being stored, and we keep a count of the words for your plan, that&apos;s all.
+              being stored, and we keep a count of the words for Credit &amp; usage, that&apos;s all.
             </li>
             <li>
               <strong>It doesn&apos;t look at your screen.</strong> To match the app&apos;s style, it sends the kind of app you&apos;re typing in

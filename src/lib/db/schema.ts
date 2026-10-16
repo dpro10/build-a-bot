@@ -81,8 +81,10 @@ export const users = pgTable(
     name: text("name"),
     timezone: text("timezone").notNull().default("UTC"),
     ageConfirmedAt: timestamp("age_confirmed_at", { withTimezone: true }),
-    plan: text("plan").notNull().default("free"), // free | plus | pro
-    planStatus: text("plan_status").notNull().default("active"), // active | trialing | past_due | canceled
+    // Plans are gone (people pay for what they use: src/lib/billing/credit.ts). These four columns are
+    // from before and unused; they stay so no data is dropped.
+    plan: text("plan").notNull().default("free"),
+    planStatus: text("plan_status").notNull().default("active"),
     planRenewsAt: timestamp("plan_renews_at", { withTimezone: true }),
     stripeCustomerId: text("stripe_customer_id"),
     stripeSubscriptionId: text("stripe_subscription_id"),
@@ -559,6 +561,31 @@ export const usage = pgTable(
   (t) => [uniqueIndex("usage_user_period_uq").on(t.userId, t.period)],
 );
 
+/**
+ * Credit added to an account (src/lib/billing/credit.ts). People pay for what they use, at cost:
+ * the balance is the starter credit plus these rows, minus what `usage.cost_micros` adds up to.
+ */
+export const credits = pgTable(
+  "credits",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** topup (paid with Stripe) | demo (demo mode, nothing paid) | gift (added by hand) | refund (taken back) */
+    kind: text("kind").notNull(),
+    /** Credit added, in micro-dollars (negative takes it back). */
+    amountMicros: bigint("amount_micros", { mode: "number" }).notNull(),
+    /** What the card was charged, in cents (the credit plus Stripe's fee). */
+    paidCents: integer("paid_cents"),
+    /** The Stripe Checkout session that paid for it: a payment is credited once. */
+    stripeSessionId: text("stripe_session_id"),
+    note: text("note"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("credits_user_idx").on(t.userId, t.createdAt), uniqueIndex("credits_stripe_session_uq").on(t.stripeSessionId)],
+);
+
 // ---------------------------------------------------------------------------
 // Bridge (subscription brains on the user's own computer)
 // ---------------------------------------------------------------------------
@@ -712,6 +739,7 @@ export type DictionaryEntry = typeof dictionary.$inferSelect;
 export type Note = typeof notes.$inferSelect;
 export type ScheduleRow = typeof schedules.$inferSelect;
 export type Usage = typeof usage.$inferSelect;
+export type CreditRow = typeof credits.$inferSelect;
 export type BridgeDevice = typeof bridgeDevices.$inferSelect;
 export type BridgeJob = typeof bridgeJobs.$inferSelect;
 export type Meeting = typeof meetings.$inferSelect;

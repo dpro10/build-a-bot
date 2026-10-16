@@ -111,7 +111,7 @@ export async function resolveBrain(db: Db, bot: Bot): Promise<ResolvedBrain> {
         label: `${def.label} (demo brain)`,
       };
     }
-    return { kind: "unavailable", reason: "The free brain is coming soon. Until then, switch me to your own AI key or subscription in Settings → Brain." };
+    return { kind: "unavailable", reason: "The open models we run are coming soon. Until then, switch me to your own AI key or subscription in Settings → Brain." };
   }
 
   // Bring your own key.

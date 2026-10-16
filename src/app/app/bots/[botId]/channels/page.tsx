@@ -48,9 +48,7 @@ export default async function ChannelsPage({
     <ChannelsView
       bot={{ id: bot.id, name: bot.name }}
       channels={channels.map(toChannelView).filter((c): c is ChannelView => Boolean(c))}
-      planId={user.plan}
       demo={demoMode}
-      plansOnSale={live.stripe || demoMode}
       ownerEmail={user.email ?? null}
       botEmail={botEmailAddress(bot)}
       availability={availability}

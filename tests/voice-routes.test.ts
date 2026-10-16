@@ -94,7 +94,7 @@ describe("dictating", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toMatchObject({ kind: "text", text: DEMO_DICTATIONS[0].typed, heard: DEMO_DICTATIONS[0].heard, polished: true, simulated: true });
-    expect(body.usage).toEqual({ words: body.words, limit: 8000 });
+    expect(body.usage).toEqual({ words: body.words, limit: null });
 
     // With the cleanup off, the plain cleanup: fillers out, the words kept.
     const plain = await (await dictateRoute.POST(dictateReq("durationMs=4200&speechMs=3500&polish=0&demo=0"))).json();
@@ -159,7 +159,7 @@ describe("editing by voice", () => {
     const res = await editRoute.POST(jsonReq("POST", "http://localhost/api/voice/edit", { instruction: heard.text, selection: "Can you send me the slides from yesterday's call?", category: "chat", app: "Slack" }));
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toMatchObject({ kind: "replace", text: "Hi! Can you send me the slides from yesterday's call? Thanks so much!", simulated: true, usage: { limit: 8000 } });
+    expect(body).toMatchObject({ kind: "replace", text: "Hi! Can you send me the slides from yesterday's call? Thanks so much!", simulated: true, usage: { limit: null } });
     expect(body.words).toBe(13);
   });
 
@@ -281,10 +281,10 @@ describe("the dictionary", () => {
 });
 
 describe("the desktop session", () => {
-  it("says voice typing works (simulated) and how many words are left", async () => {
+  it("says voice typing works (simulated), with this month's words and no limit", async () => {
     const res = await sessionRoute.GET(new Request("http://localhost/api/desktop/session", { headers: device }));
     const body = await res.json();
-    expect(body.voice).toMatchObject({ available: true, polish: true, edit: true, simulated: true, local: true, usage: { limit: 8000 } });
+    expect(body.voice).toMatchObject({ available: true, polish: true, edit: true, simulated: true, local: true, usage: { limit: null } });
     expect(body.voice.usage.words).toBeGreaterThan(0);
     expect(body.bots.map((b: { name: string }) => b.name)).toEqual(["Otto"]);
   });

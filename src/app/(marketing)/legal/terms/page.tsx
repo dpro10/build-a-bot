@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { DocLayout, DocSection, type TocEntry } from "@/components/marketing/DocLayout";
 import { LegalHeader } from "@/components/marketing/LegalHeader";
-import { PLANS } from "@/lib/billing/plans";
 import { contactLink, pageMetadata } from "@/lib/site";
 
 export const metadata = pageMetadata({
@@ -21,7 +20,7 @@ const SECTIONS: TocEntry[] = [
   { id: "third-parties", title: "Third-party services" },
   { id: "bridge", title: "Subscriptions and the Bridge" },
   { id: "content", title: "Your content" },
-  { id: "billing", title: "Plans, billing and cancellation" },
+  { id: "billing", title: "Credit, billing and refunds" },
   { id: "termination", title: "Suspension and termination" },
   { id: "disclaimers", title: "Disclaimers" },
   { id: "liability", title: "Limits of liability" },
@@ -190,18 +189,25 @@ export default function TermsPage() {
         <DocSection id="billing" title={title("billing")}>
           <ul>
             <li>
-              Free is free. Paid plans (Plus at ${PLANS.plus.priceMonthly}/month and Pro at ${PLANS.pro.priceMonthly}/month, or less when billed
-              yearly) renew automatically each month or year until you cancel. Prices are in US dollars, and taxes may apply.
-            </li>
-            <li>Payments are handled by Stripe. We don&apos;t see or store your full card number.</li>
-            <li>
-              Each plan has monthly limits. When you reach one, that part of your bot pauses until the next month; we don&apos;t charge overages.
+              There are no plans or subscriptions. You pay for what your bots use, from prepaid credit, at the prices on our{" "}
+              <Link href="/pricing">pricing page</Link>, which are what our providers charge us. Prices are in US dollars, and taxes may apply.
             </li>
             <li>
-              You can cancel any time from Plan &amp; usage in the app. Your plan stays active until the end of the period you&apos;ve paid for,
-              then moves to Free. Except where the law requires otherwise, payments aren&apos;t refundable.
+              Every account starts with a little free credit. You can add more by card. Payments are handled by Stripe; we don&apos;t see or store
+              your full card number. Stripe&apos;s card fee is added to what you pay, so the credit you add is all yours to use.
             </li>
-            <li>If we change prices, we&apos;ll tell you in advance, and the change applies from your next billing period.</li>
+            <li>
+              Nothing is charged on its own. When your credit runs out, the parts of your bot that cost money pause until you add more. A cost is
+              known only once something is done, so a balance can go a little below zero; the next credit you add covers it.
+            </li>
+            <li>
+              Credit doesn&apos;t expire. Credit you added and haven&apos;t used can be refunded to your card when you ask, less Stripe&apos;s card fee,
+              which Stripe doesn&apos;t return. Starter credit can&apos;t be exchanged for money.
+            </li>
+            <li>
+              Our prices follow our providers&apos;. If theirs change, the new prices apply to what&apos;s used after the change, and the pricing page
+              always shows the current ones.
+            </li>
           </ul>
         </DocSection>
 

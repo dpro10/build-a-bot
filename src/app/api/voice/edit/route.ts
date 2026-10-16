@@ -28,6 +28,6 @@ export async function POST(req: Request) {
   if (limited) return limited;
   const d = parsed.data;
   const out = await editByVoice(a.db, a.owner, { instruction: d.instruction, selection: d.selection ?? null, category: d.category, appName: d.app, styles: d.styles !== false });
-  if (!out.ok) return apiError(out.status, out.error, { code: out.code, upgrade: out.upgrade });
+  if (!out.ok) return apiError(out.status, out.error, { code: out.code });
   return json({ kind: out.kind, text: out.text, words: out.words, usage: out.usage, simulated: out.simulated, ms: out.ms });
 }

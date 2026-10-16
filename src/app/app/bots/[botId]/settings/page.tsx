@@ -4,8 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { requireUser } from "@/lib/auth/session";
 import { credentialHint, getOwnedBot, listBridgeDevices } from "@/lib/data";
-import { getPlan } from "@/lib/billing/plans";
-import { appUrl, available, config, demoMode } from "@/lib/env";
+import { appUrl, config, demoMode } from "@/lib/env";
 import { isAvatarId, isColorwayId } from "@/lib/avatars";
 import { brainLabel } from "@/lib/bots/labels";
 import { SettingsNav } from "@/components/bot/settings/SettingsNav";
@@ -26,7 +25,6 @@ export default async function SettingsPage({ params }: { params: Promise<{ botId
   const bot = await getOwnedBot(db, user.id, botId);
   if (!bot) notFound();
 
-  const plan = getPlan(user.plan);
   const [hint, devices, recipeRows] = await Promise.all([
     bot.brain.kind === "byok" ? credentialHint(db, user.id, bot.brain.credentialId) : Promise.resolve(null),
     listBridgeDevices(db, user.id),
@@ -82,9 +80,6 @@ export default async function SettingsPage({ params }: { params: Promise<{ botId
               }}
               label={brainLabel(bot.brain)}
               keyHint={hint?.hint ?? null}
-              plan={{ id: plan.id, name: plan.name, includedModels: plan.includedModels }}
-              demo={demoMode}
-              paidPlans={available("stripe")}
               demoBrain={!config.tokenFactory.apiKey && demoMode}
               devices={devices
                 .filter((d) => !d.revokedAt)

@@ -14,9 +14,9 @@
 import { and, asc, desc, eq, gt, ilike, inArray, lt, ne, or, sql } from "drizzle-orm";
 import { schema, type Db } from "@/lib/db";
 import type { Bot, Meeting, MeetingSegment, User } from "@/lib/db/schema";
-import { checkLimit, recordUsage } from "@/lib/billing/usage";
-import { config, demoMode, demoSpeech, paidPlansOpen } from "@/lib/env";
-import { PAID_PLANS_SOON, type PlanId } from "@/lib/billing/plans";
+import { recordUsage } from "@/lib/billing/usage";
+import { hasCredit, outOfCreditMessage } from "@/lib/billing/credit";
+import { config, creditOpen, demoMode, demoSpeech } from "@/lib/env";
 import { receipt } from "@/lib/agent/run";
 import { transcribe, transcriptionAvailable, TranscriptionError } from "@/lib/transcribe";
 import { newId, sortableId, truncate } from "@/lib/utils";
@@ -51,6 +51,16 @@ export function desktopApp(): DesktopApp {
  */
 export function meetingNotesAvailable(): boolean {
   return desktopApp().status !== "soon";
+}
+
+/**
+ * Writing this bot's notes costs money: they're written by an included model (paid from credit),
+ * not the owner's own AI key or subscription (free here).
+ */
+export async function notesCostCredit(db: Db, bot: Bot): Promise<boolean> {
+  const { resolveBrain } = await import("@/lib/agent/brain");
+  const brain = await resolveBrain(db, bot);
+  return brain.kind === "llm" && brain.included && brain.providerId !== "demo";
 }
 
 export type MeetingView = {
@@ -125,7 +135,7 @@ export function segmentView(s: MeetingSegment): SegmentView {
   };
 }
 
-export type MeetingFailure = { ok: false; status: number; error: string; code?: string; upgrade?: PlanId; meetingId?: string };
+export type MeetingFailure = { ok: false; status: number; error: string; code?: string; meetingId?: string };
 
 export async function meetingsEnabled(db: Db, botId: string): Promise<boolean> {
   const [row] = await db
@@ -208,10 +218,9 @@ export async function startMeeting(
   if (!(await meetingsEnabled(db, bot.id))) {
     return { ok: false, status: 409, code: "meetings_off", error: `Turn on Meeting notes for ${bot.name} first.` };
   }
-  const limit = await checkLimit(db, owner, "meetingMinutes");
-  if (!limit.ok) {
-    const more = paidPlansOpen ? "Upgrade for more meeting notes." : PAID_PLANS_SOON;
-    return { ok: false, status: 402, code: "limit", error: `${limit.message} ${more}`, upgrade: limit.plan.id === "free" ? "plus" : "pro" };
+  // The call is heard on the computer (free); writing the notes costs what the bot's brain does.
+  if (!(await hasCredit(db, owner.id)) && (await notesCostCredit(db, bot))) {
+    return { ok: false, status: 402, code: "no_credit", error: outOfCreditMessage({ canAdd: creditOpen, ownBrain: true }) };
   }
 
   // One recording per bot at a time. A leftover from the same recorder (crash, closed tab) is wrapped up instead.
@@ -325,14 +334,16 @@ export async function addChunk(db: Db, input: ChunkInput): Promise<{ ok: true; s
     .where(and(eq(schema.meetingSegments.meetingId, meeting.id), eq(schema.meetingSegments.track, track), eq(schema.meetingSegments.chunk, chunk)));
   if (existing.length) return { ok: true, segments: existing.filter((s) => s.text), duplicate: true };
 
-  const limit = await checkLimit(db, owner, "meetingMinutes");
-  if (!limit.ok) return { ok: false, status: 402, code: "limit", error: limit.message, upgrade: limit.plan.id === "free" ? "plus" : "pro" };
+  // Audio heard here costs speech-to-text; lines heard on the computer are free.
+  if (toHear && !(await hasCredit(db, owner.id))) return { ok: false, status: 402, code: "no_credit", error: outOfCreditMessage({ canAdd: creditOpen }) };
 
   let segments: { startMs: number; endMs: number; text: string }[] = [];
   let warning: string | undefined;
   let provider: string | undefined;
-  /** Audio that was heard (on the computer, or by speech-to-text here), for the plan's minutes. */
+  /** Audio that was heard (on the computer, or by speech-to-text here), for the meeting's minutes. */
   let heardMs = 0;
+  /** What hearing it here cost (speech-to-text); hearing it on the computer costs nothing. */
+  let sttMicros = 0;
   if (input.heard) {
     segments = cleanHeard(input.heard, input.durationMs);
     provider = HEARD_ON_DEVICE;
@@ -356,6 +367,7 @@ export async function addChunk(db: Db, input: ChunkInput): Promise<{ ok: true; s
       });
       segments = result.segments;
       provider = `${result.provider}/${result.model}`;
+      sttMicros = result.costMicros;
       // The provider's own measure wins when the recorder said much less (it can't shrink what's billed).
       heardMs = result.audioMs && result.audioMs > input.durationMs + 1000 ? result.audioMs : input.durationMs;
     } catch (err) {
@@ -381,9 +393,12 @@ export async function addChunk(db: Db, input: ChunkInput): Promise<{ ok: true; s
     : [{ id: sortableId("seg"), meetingId: meeting.id, track, chunk, idx: -1, startMs: input.startMs, endMs: input.startMs + input.durationMs, speaker, text: "" }];
   const inserted = await db.insert(schema.meetingSegments).values(rows).onConflictDoNothing().returning();
   // A concurrent retry of the same chunk already counted it.
-  if (!inserted.length) heardMs = 0;
+  if (!inserted.length) {
+    heardMs = 0;
+    sttMicros = 0;
+  }
 
-  // Meeting length (and the plan's meeting minutes) follows wall-clock time, whichever track gets there first.
+  // Meeting length follows wall-clock time, whichever track gets there first.
   // The timeline comes from the recorder, so it's also held to the audio each track really had
   // transcribed (a track never overlaps itself): restarting the timeline can't hide minutes.
   const reach = Math.ceil((input.startMs + input.durationMs) / 1000);
@@ -399,7 +414,7 @@ export async function addChunk(db: Db, input: ChunkInput): Promise<{ ok: true; s
     returning prev.duration_sec as before, meetings.duration_sec as after`);
   const row = (bumped as unknown as { rows?: { before: number; after: number }[] }).rows?.[0] ?? (bumped as unknown as { before: number; after: number }[])[0];
   const added = row ? Number(row.after) - Number(row.before) : 0;
-  if (added > 0) await recordUsage(db, owner.id, { meetingSeconds: added });
+  if (added > 0 || sttMicros > 0) await recordUsage(db, owner.id, { meetingSeconds: Math.max(0, added), costMicros: sttMicros });
   return { ok: true, segments: inserted.filter((s) => s.text), warning };
 }
 

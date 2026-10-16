@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { AppWindow, AudioLines, BookA, Download, Keyboard, Laptop, Lock, MessageCircle, ShieldCheck, Sparkles, Trash2, Wand2 } from "lucide-react";
 import { getDb } from "@/lib/db";
 import { requireUser } from "@/lib/auth/session";
@@ -47,7 +48,7 @@ const privatePoints = () => {
     {
       icon: <Trash2 />,
       text: !stt
-        ? "We keep a word count for your plan, never your words."
+        ? "We keep a word count, never your words."
         : stt.provider === "nvidia"
           ? "If you turn Private speech off, or talk in a language Parakeet doesn't know, the recording is turned into text on our own server, by NVIDIA's open speech models, and thrown away. We keep a word count, never your words."
           : "If you turn Private speech off, or talk in a language Parakeet doesn't know, the recording is turned into text on our server and thrown away. We keep a word count, never your words.",
@@ -200,9 +201,11 @@ export default async function VoicePage() {
           ))}
         </ul>
         <p className="mt-4 text-sm text-muted-foreground">
-          {usage.limit
-            ? `${usage.words.toLocaleString()} of your ${usage.limit.toLocaleString()} free words this month are used. Plus and Pro have no monthly limit.`
-            : `${usage.words.toLocaleString()} words this month. Your plan has no monthly limit.`}
+          {usage.words.toLocaleString("en-US")} word{usage.words === 1 ? "" : "s"} this month, with no limit. Hearing you is free on your computer; the AI
+          cleanup is paid from your credit, a fraction of a cent each time, and without credit you still get the plain cleanup.{" "}
+          <Link href="/app/billing" className="font-medium text-primary hover:underline">
+            Credit &amp; usage
+          </Link>
         </p>
       </section>
     </PageContainer>

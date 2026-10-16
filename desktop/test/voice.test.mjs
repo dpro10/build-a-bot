@@ -770,8 +770,12 @@ test("a failed send can be tried again with the same recording (kept in memory o
   assert.equal(env.v.failed, null);
 });
 
-test("errors say what to do: limits, unpaired, the microphone", async () => {
-  assert.deepEqual(voiceError({ status: 402, code: "limit", message: "You've used all 8,000 words of voice typing on the Free plan this month." }).actions, ["upgrade"]);
+test("errors say what to do: out of credit, unpaired, the microphone", async () => {
+  assert.deepEqual(voiceError({ status: 402, code: "no_credit", message: "You're out of credit. Add credit in Credit & usage to keep going." }), {
+    message: "You're out of credit. Add credit in Credit & usage to keep going.",
+    actions: ["upgrade"],
+  });
+  assert.equal(voiceError({ status: 402 }).message, "You're out of credit. Add some to keep going.");
   assert.deepEqual(voiceError({ status: 401 }).actions, ["pair"]);
   assert.deepEqual(voiceError({ code: "mic-denied" }).actions, ["mic-settings"]);
   assert.match(copiedNote("darwin", false), /Accessibility/);

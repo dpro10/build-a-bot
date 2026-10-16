@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { Ellipsis, MessageCircle, PhoneCall, Power, PowerOff, Rocket, Send, TriangleAlert } from "lucide-react";
+import { Ellipsis, MessageCircle, PhoneCall, Power, PowerOff, Send, TriangleAlert } from "lucide-react";
 import { BrandTile } from "@/components/brand/icons";
 import { channelIcon } from "@/components/catalog/channel-icon";
 import { Badge } from "@/components/ui/badge";
@@ -29,15 +29,9 @@ const WHERE: Record<string, string> = {
   discord: "Discord",
 };
 
-const UPGRADE_PITCH: Record<string, string> = {
-  sms: "Text it from any phone, no app needed. Plus includes 300 texts a month.",
-  voice: "Call it and talk out loud, or let it call you with your morning brief. Plus includes 60 minutes a month.",
-};
-
 export function ChannelCard({
   channel,
   ctx,
-  planBadge,
   available,
   highlighted,
   joined,
@@ -45,8 +39,6 @@ export function ChannelCard({
 }: {
   channel: ChannelView;
   ctx: ChannelCtx;
-  /** "Plus" / "Pro" when the owner's plan doesn't include this channel. */
-  planBadge: string | null;
   /** The integration behind it is set up on this server (or simulated in demo mode). */
   available: boolean;
   highlighted: boolean;
@@ -57,9 +49,8 @@ export function ChannelCard({
   const [busy, setBusy] = React.useState<string | null>(null);
   const isWeb = channel.kind === "web";
   const waitlist = channel.status === "waitlist" || def.availability === "waitlist" || def.availability === "soon";
-  // Its service isn't set up on this server: that comes before any plan question.
+  // Its service isn't set up on this server.
   const soon = !isWeb && !waitlist && !available;
-  const locked = Boolean(planBadge) && !soon;
   const active = channel.status === "active";
   const off = channel.status === "disabled";
   const status = isWeb ? "active" : channel.status;
@@ -98,23 +89,6 @@ export function ChannelCard({
     );
   } else if (soon) {
     body = <p className="text-sm text-muted-foreground">{comingSoonNote(def)} Nothing to set up until then.</p>;
-  } else if (locked) {
-    body = (
-      <div className="flex flex-col gap-3 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary-soft to-card p-4 sm:flex-row sm:items-center">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
-          <Rocket className="size-5" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="font-semibold">{ctx.plansOnSale ? `${def.name} ${def.plural ? "are" : "is"} part of ${planBadge}` : `Part of ${planBadge}. Paid plans are coming soon.`}</div>
-          <p className="text-sm text-muted-foreground">{UPGRADE_PITCH[channel.kind] ?? def.description}</p>
-        </div>
-        {ctx.plansOnSale ? (
-          <Button asChild size="sm" className="w-fit shrink-0">
-            <Link href="/app/billing">See {planBadge}</Link>
-          </Button>
-        ) : null}
-      </div>
-    );
   } else if (off) {
     body = <p className="text-sm text-muted-foreground">Turned off. {ctx.botName} won&apos;t message you or answer on {def.name} until you turn it back on.</p>;
   } else if (channel.kind === "telegram") {
@@ -131,7 +105,7 @@ export function ChannelCard({
     body = <p className="text-sm text-muted-foreground">{def.description}</p>;
   }
 
-  const canToggle = !isWeb && !waitlist && !soon && !locked;
+  const canToggle = !isWeb && !waitlist && !soon;
   const footer =
     canToggle && active ? (
       <>
@@ -170,7 +144,7 @@ export function ChannelCard({
             <h3 id={`${channel.kind}-name`} className="font-display text-[17px] font-semibold leading-tight">
               {def.name}
             </h3>
-            {soon ? <Badge>Coming soon</Badge> : locked ? <Badge tone="accent">{planBadge}</Badge> : <ChannelStatusPill status={status} simulated={channel.simulated} />}
+            {soon ? <Badge>Coming soon</Badge> : <ChannelStatusPill status={status} simulated={channel.simulated} />}
           </div>
           <p className="mt-0.5 text-[13px] text-muted-foreground">
             {isWeb ? "Always on. Chat here in your browser, or add it to your phone's home screen for an app-like feel." : def.tagline}

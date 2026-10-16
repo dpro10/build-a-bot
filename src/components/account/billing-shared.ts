@@ -1,10 +1,10 @@
 /**
- * Helpers shared by the Plan & usage and Account pages (server side).
+ * Helpers shared by the Credit & usage and Account pages (server side).
  */
 import { count, eq } from "drizzle-orm";
 import { schema, type Db } from "@/lib/db";
 import { usageSummary } from "@/lib/data";
-import type { UsageNumbers } from "./UsageMeters";
+import type { UsageNumbers } from "./UsageSummary";
 
 /** The user's time zone if the runtime knows it, else UTC (stored zones aren't validated everywhere). */
 export function safeTimeZone(tz: string | null | undefined): string {
@@ -45,6 +45,7 @@ export async function usageNumbers(db: Db, userId: string): Promise<{ used: Usag
       meetingMinutes: Math.floor(usage.meetingSeconds / 60),
       dictationWords: usage.dictationWords,
       bots: Number(bots?.n ?? 0),
+      costMicros: usage.costMicros,
     },
   };
 }

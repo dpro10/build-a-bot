@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Dropdown, DropdownContent, DropdownItem, DropdownSeparator, DropdownTrigger } from "@/components/ui/dropdown";
-import { EmptyState, Progress } from "@/components/ui/misc";
+import { EmptyState } from "@/components/ui/misc";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/toaster";
 import { api, ApiError } from "@/lib/client/api";
@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 import { ago, useNow, whenLabel } from "@/components/bot/activity/time";
 import { RoutineDialog, blankForm, formFrom, type DeliverOption, type RoutineForm } from "./RoutineDialog";
 import { describeSchedule, isFinished, routineEmoji, templatesFor, type ScheduleView, type Template } from "./schedule";
-import { PAID_PLANS_SOON, PLANS } from "@/lib/billing/plans";
+import { FAIR_USE } from "@/lib/billing/prices";
 import type { ScheduleOutcome } from "@/lib/scheduler/tick";
 import type { AppKind } from "@/lib/connectors/types";
 
@@ -67,8 +67,6 @@ export function RoutinesView({
   tzName,
   serverNow,
   initial,
-  plan,
-  paidPlans,
   deliverOptions,
   autoHint,
   apps,
@@ -79,9 +77,6 @@ export function RoutinesView({
   tzName: string;
   serverNow: string;
   initial: ScheduleView[];
-  plan: { id: string; name: string; limit: number };
-  /** Paid plans can be bought here; otherwise the routine limit says they're coming soon, with no link. */
-  paidPlans: boolean;
   deliverOptions: DeliverOption[];
   autoHint: string;
   /** What the bot's apps can see, so templates only mention those. */
@@ -103,9 +98,8 @@ export function RoutinesView({
   const routines = items.filter((s) => s.kind === "routine").sort(byRank);
   const reminders = items.filter((s) => s.kind === "reminder").sort(byRank);
   const activeRoutines = routines.filter((r) => r.active).length;
-  const atLimit = activeRoutines >= plan.limit;
-  const overLimit = activeRoutines > plan.limit;
-  const nextPlan = plan.id === "free" ? PLANS.plus : PLANS.pro;
+  // A fair-use limit, not a plan: having routines costs nothing, each run costs what it does.
+  const atLimit = activeRoutines >= FAIR_USE.routines;
   const nextUp = items
     .filter((s) => s.active && s.nextRunAt)
     .sort((a, b) => a.nextRunAt!.localeCompare(b.nextRunAt!))[0];
@@ -241,37 +235,24 @@ export function RoutinesView({
         <div className="flex min-w-0 flex-col justify-center gap-2 rounded-3xl border border-border bg-card p-4 shadow-soft">
           <div className="flex items-center justify-between gap-3 text-sm">
             <span className="min-w-0 font-semibold">
-              {overLimit ? `${activeRoutines} routines on · ${plan.name} includes ${plan.limit}` : `${activeRoutines} of ${plan.limit} routines on`}
+              {activeRoutines} routine{activeRoutines === 1 ? "" : "s"} on
             </span>
-            <span className="flex shrink-0 items-center gap-2">
-              <Badge tone="primary">{plan.name}</Badge>
-              {plan.id !== "pro" && paidPlans ? (
-                <Link href="/app/billing" className="text-xs font-semibold text-primary hover:underline">
-                  {atLimit ? "Get more" : "Plans"}
-                </Link>
-              ) : null}
-            </span>
+            <Link href="/app/billing" className="shrink-0 text-xs font-semibold text-primary hover:underline">
+              Credit &amp; usage
+            </Link>
           </div>
-          <Progress value={(activeRoutines / Math.max(1, plan.limit)) * 100} tone={atLimit ? "warning" : "primary"} />
-          <div className="text-xs text-muted-foreground">Reminders don&apos;t count toward this.</div>
+          <div className="text-xs text-muted-foreground">
+            Each run costs only the thinking it does (free on your own AI). Up to {FAIR_USE.routines} on per bot; reminders don&apos;t count.
+          </div>
         </div>
       </div>
 
-      {atLimit && plan.id !== "pro" ? (
-        <div className="flex flex-col gap-3 rounded-3xl border border-primary/20 bg-primary-soft/60 p-4 sm:flex-row sm:items-center">
+      {atLimit ? (
+        <div className="flex items-center gap-3 rounded-3xl border border-primary/20 bg-primary-soft/60 p-4">
           <Sparkles className="size-5 shrink-0 text-primary" aria-hidden />
           <p className="min-w-0 flex-1 text-sm">
-            {!paidPlans
-              ? `${overLimit ? `You have ${activeRoutines} routines on, and ${plan.name} includes ${plan.limit}. Turn some off` : `You're using all ${plan.limit} routines on ${plan.name}. Turn one off`} to make room. ${PAID_PLANS_SOON}`
-              : overLimit
-                ? `You have ${activeRoutines} routines on, and ${plan.name} includes ${plan.limit}. ${nextPlan.name} gives you up to ${nextPlan.limits.routines}, or turn some off.`
-                : `You're using all ${plan.limit} routines on ${plan.name}. ${nextPlan.name} gives you up to ${nextPlan.limits.routines}, or turn one off to make room.`}
+            {botName} has {activeRoutines} routines on, the most one bot can have. Turn one off to make room for another.
           </p>
-          {paidPlans ? (
-            <Button asChild size="sm">
-              <Link href="/app/billing">See plans</Link>
-            </Button>
-          ) : null}
         </div>
       ) : null}
 
@@ -399,8 +380,6 @@ export function RoutinesView({
         autoHint={autoHint}
         initial={dialog.initial}
         editing={dialog.editing}
-        planName={plan.name}
-        paidPlans={paidPlans}
         onSaved={onSaved}
       />
 
