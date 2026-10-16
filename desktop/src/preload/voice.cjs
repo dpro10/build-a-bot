@@ -12,7 +12,7 @@ contextBridge.exposeInMainWorld(
   "babVoice",
   Object.freeze({
     getState: () => ipcRenderer.invoke("voice:get-state"),
-    /** Change settings: { enabled, shortcut, polish, styles, commands, sounds, language, micId, history, restoreClipboard }. */
+    /** Change settings: { enabled, shortcut, polish, styles, commands, edit, onDevice, sounds, language, micId, history, restoreClipboard }. */
     set: (patch) => ipcRenderer.invoke("voice:set", patch && typeof patch === "object" ? patch : {}),
     /** The next keys pressed together become the shortcut. */
     recordShortcut: () => ipcRenderer.invoke("voice:record-shortcut"),
@@ -30,6 +30,8 @@ contextBridge.exposeInMainWorld(
     /** Save a corrected version; returns words worth adding to the dictionary. */
     fix: (id, text) => ipcRenderer.invoke("voice:history-fix", { id: str(id, 100), text: str(text, 20000) }),
     open: (what) => (OPEN.has(what) ? ipcRenderer.invoke("voice:open", what) : Promise.resolve(false)),
+    /** Speech-to-text on this computer: "retry" the download, or "remove" it. */
+    local: (action) => (action === "retry" || action === "remove" ? ipcRenderer.invoke("voice:local", action) : Promise.resolve(null)),
     onState(cb) {
       if (typeof cb !== "function") return () => {};
       const fn = (_e, state) => cb(state);

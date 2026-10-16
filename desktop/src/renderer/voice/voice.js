@@ -97,7 +97,9 @@
     const bot = s.bots[0];
     $("tip-bot").hidden = !bot || !s.options.commands;
     if (bot) $("tip-bot").textContent = `Start with “Hey ${bot.name}” to ask ${bot.name} instead of typing.`;
-    $("demo").hidden = !s.server?.simulated;
+    // Demo mode means the server can't hear you; NVIDIA Parakeet on this computer can.
+    $("demo").hidden = !s.server?.simulated || Boolean(s.local?.active);
+    $("privacy-voice").textContent = s.local?.active ? "Your voice is turned into text on this computer and never leaves it; only the words go on, to be cleaned up." : "Your voice is turned into text and thrown away;";
 
     // What's in the way.
     const problem = $("problem");
@@ -153,7 +155,34 @@
       ? `Start with “Hey ${bot.name}” to ask instead of typing: “Hey ${bot.name}, remind me to call Mom at 5.” Writing to someone named ${bot.name}? Turn this off.`
       : "Start with “Hey” and your bot's name to ask it instead of typing.";
     renderSelects(s);
+    renderLocal(s);
     renderHistory(s);
+  }
+
+  const MB = (b) => Math.round(b / 1e6).toLocaleString();
+
+  /** Private speech: NVIDIA Parakeet on this computer, and where its download is at. */
+  function renderLocal(s) {
+    const l = s.local;
+    const card = $("local");
+    card.hidden = !l || !l.supported;
+    if (card.hidden) return;
+    $("local-on").checked = l.on;
+    const status = $("local-status");
+    const bar = $("local-progress");
+    const pct = l.total ? Math.min(100, Math.floor((l.received / l.total) * 100)) : 0;
+    const langName = (LANGUAGES.find(([code]) => code === s.options.language) || [])[1] || "That language";
+    bar.hidden = !(l.on && l.state === "downloading");
+    bar.value = pct;
+    $("local-retry").hidden = !(l.on && l.state === "error");
+    $("local-remove").hidden = !(l.state === "installed" || l.state === "ready" || l.state === "starting");
+    if (!l.on) status.textContent = "Off: your voice goes to Build-a-bot's servers to be turned into text, and is thrown away there.";
+    else if (l.state === "downloading") status.textContent = l.total ? `Getting NVIDIA Parakeet: ${pct}% (${MB(l.received)} of ${MB(l.total)} MB). Until it's done, Build-a-bot's servers hear you.` : "Getting NVIDIA Parakeet…";
+    else if (l.state === "error") status.textContent = `${l.error || "It didn't download."} Until then, Build-a-bot's servers hear you.`;
+    else if (l.state === "absent") status.textContent = "It downloads when voice typing is on.";
+    else if (l.server === false) status.textContent = "Downloaded, but this Build-a-bot server can't take text from it yet, so the servers hear you for now.";
+    else if (!l.language) status.textContent = `${langName} isn't one of Parakeet's languages, so Build-a-bot's servers hear you in it. English and 24 European languages work here.`;
+    else status.textContent = "On: your voice is turned into text on this computer and never leaves it.";
   }
 
   function renderSetup(s) {
@@ -431,6 +460,14 @@
     input.addEventListener("change", async () => render(await api.set({ [input.dataset.opt]: input.checked })));
   }
   $("language").addEventListener("change", async (e) => render(await api.set({ language: e.target.value })));
+  $("local-on").addEventListener("change", async (e) => render(await api.set({ onDevice: e.target.checked })));
+  $("local-retry").addEventListener("click", async () => render(await api.local("retry")));
+  $("local-remove").addEventListener("click", async () => {
+    if (!confirm("Remove NVIDIA Parakeet from this computer? Voice typing will use Build-a-bot's servers until it downloads again (about 0.7 GB).")) return;
+    $("local-on").checked = false;
+    render(await api.set({ onDevice: false }));
+    render(await api.local("remove"));
+  });
   $("mic").addEventListener("change", async (e) => render(await api.set({ micId: e.target.value })));
   $("mic-allow").addEventListener("click", () => act(state?.permissions.mic === "denied" ? "mic-settings" : "mic"));
   $("access-allow").addEventListener("click", () => act("accessibility"));

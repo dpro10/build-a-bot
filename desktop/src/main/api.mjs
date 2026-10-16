@@ -24,6 +24,24 @@ const VERSION = "0.1.0";
  * @param {() => string | null} o.token
  * @param {string} [o.platform]
  */
+/**
+ * A dictation's query string: how long, how much speech, where the cursor is, and the switches.
+ * @param {{ durationMs: number, speechMs?: number }} rec
+ * @param {{ category?: string, app?: string | null, lang?: string | null, polish?: boolean, commands?: boolean, styles?: boolean, demo?: string | null }} p
+ */
+function dictationQuery(rec, p) {
+  const q = new URLSearchParams({ durationMs: String(Math.max(1, Math.round(rec.durationMs))) });
+  if (rec.speechMs !== undefined) q.set("speechMs", String(Math.max(0, Math.round(rec.speechMs))));
+  if (p.category) q.set("category", p.category);
+  if (p.app) q.set("app", String(p.app).slice(0, 60));
+  if (p.lang && p.lang !== "auto") q.set("lang", p.lang);
+  q.set("polish", p.polish === false ? "0" : "1");
+  q.set("commands", p.commands === false ? "0" : "1");
+  q.set("styles", p.styles === false ? "0" : "1");
+  if (p.demo) q.set("demo", p.demo);
+  return q;
+}
+
 export function createApi(o) {
   const ua = `BuildABotDesktop/${VERSION} (${o.platform ?? process.platform})`;
 
@@ -214,16 +232,17 @@ export function createApi(o) {
      * @param {{ category?: string, app?: string | null, lang?: string | null, polish?: boolean, commands?: boolean, styles?: boolean, demo?: string | null }} p
      */
     dictate(rec, p = {}) {
-      const q = new URLSearchParams({ durationMs: String(Math.max(1, Math.round(rec.durationMs))) });
-      if (rec.speechMs !== undefined) q.set("speechMs", String(Math.max(0, Math.round(rec.speechMs))));
-      if (p.category) q.set("category", p.category);
-      if (p.app) q.set("app", String(p.app).slice(0, 60));
-      if (p.lang && p.lang !== "auto") q.set("lang", p.lang);
-      q.set("polish", p.polish === false ? "0" : "1");
-      q.set("commands", p.commands === false ? "0" : "1");
-      q.set("styles", p.styles === false ? "0" : "1");
-      if (p.demo) q.set("demo", p.demo);
-      return json("POST", `/api/voice/dictate?${q}`, { body: rec.bytes, contentType: rec.mime || "audio/webm", timeoutMs: 60_000 });
+      return json("POST", `/api/voice/dictate?${dictationQuery(rec, p)}`, { body: rec.bytes, contentType: rec.mime || "audio/webm", timeoutMs: 60_000 });
+    },
+    /**
+     * The same, when this computer already turned the speech into text (on-device NVIDIA Parakeet):
+     * only the words are sent, never the audio.
+     * @param {string} heard
+     * @param {{ durationMs: number, speechMs?: number }} rec
+     * @param {Parameters<typeof dictationQuery>[1]} p
+     */
+    dictateText(heard, rec, p = {}) {
+      return json("POST", `/api/voice/dictate?${dictationQuery(rec, { ...p, demo: null })}`, { json: { heard }, timeoutMs: 60_000 });
     },
     /**
      * Editing by voice: what they said to do with the selection (or, with none, what to write).

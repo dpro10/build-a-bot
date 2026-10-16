@@ -199,12 +199,15 @@ export class PillWindow {
     }
   }
 
-  /** Stop, release the mic, and hand over the recording. */
+  /** Stop, release the mic, and hand over the recording (and its WAV, when asked for at start). */
   async stop() {
     const r = await this.call("stop");
     if (!r?.ok || !r.data) return null;
-    const bytes = Buffer.from(r.data, "base64");
-    return { bytes: new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength), mime: r.mime, durationMs: r.durationMs, speechMs: r.speechMs };
+    const view = (b64) => {
+      const b = Buffer.from(b64, "base64");
+      return new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
+    };
+    return { bytes: view(r.data), mime: r.mime, durationMs: r.durationMs, speechMs: r.speechMs, ...(typeof r.wav === "string" ? { wav: view(r.wav) } : {}) };
   }
 
   /** Stop, release the mic, throw the recording away. */

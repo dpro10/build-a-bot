@@ -114,6 +114,24 @@ describe("dictating", () => {
     expect((await dictateRoute.POST(dictateReq("durationMs=3000&lang=english"))).status).toBe(422);
   });
 
+  it("takes what the computer already heard (on-device speech): cleaned up and counted, with no audio and nothing simulated", async () => {
+    const said = "Hey Otto, remind me to call Priya tomorrow at 3:30.";
+    const cmd = await dictateRoute.POST(jsonReq("POST", "http://localhost/api/voice/dictate?durationMs=3500&speechMs=3000", { heard: said }));
+    expect(cmd.status).toBe(200);
+    expect(await cmd.json()).toMatchObject({ kind: "command", command: "Remind me to call Priya tomorrow at 3:30.", heard: said, simulated: false });
+
+    const before = (await (await dictateRoute.POST(jsonReq("POST", "http://localhost/api/voice/dictate?durationMs=2000&speechMs=1800&commands=0", { heard: "Sounds good, see you then." }))).json()) as { kind: string; text: string; words: number; usage: { words: number }; simulated: boolean; ms: { stt: number } };
+    expect(before).toMatchObject({ kind: "text", text: "Sounds good, see you then.", words: 5, simulated: false });
+    expect(before.ms.stt).toBeLessThan(50);
+
+    // Silence on the computer: nothing to type, nothing counted.
+    expect(await (await dictateRoute.POST(jsonReq("POST", "http://localhost/api/voice/dictate?durationMs=2000&speechMs=1500", { heard: "  " }))).json()).toMatchObject({ kind: "empty" });
+    // Not JSON, too long, or the wrong shape.
+    expect((await dictateRoute.POST(new Request("http://localhost/api/voice/dictate?durationMs=2000", { method: "POST", headers: { ...device, "content-type": "application/json" }, body: "{not json" }))).status).toBe(400);
+    expect((await dictateRoute.POST(jsonReq("POST", "http://localhost/api/voice/dictate?durationMs=2000", { heard: "x".repeat(20_001) }))).status).toBe(422);
+    expect((await dictateRoute.POST(jsonReq("POST", "http://localhost/api/voice/dictate?durationMs=2000", { text: "hi" }))).status).toBe(422);
+  });
+
   it("works from the Voice typing page, on the same site only", async () => {
     session.user = owner;
     const ok = await dictateRoute.POST(dictateReq("durationMs=3000&speechMs=2500&demo=2", { origin: "http://localhost", host: "localhost" }));
@@ -261,7 +279,7 @@ describe("the desktop session", () => {
   it("says voice typing works (simulated) and how many words are left", async () => {
     const res = await sessionRoute.GET(new Request("http://localhost/api/desktop/session", { headers: device }));
     const body = await res.json();
-    expect(body.voice).toMatchObject({ available: true, polish: true, edit: true, simulated: true, usage: { limit: 8000 } });
+    expect(body.voice).toMatchObject({ available: true, polish: true, edit: true, simulated: true, local: true, usage: { limit: 8000 } });
     expect(body.voice.usage.words).toBeGreaterThan(0);
     expect(body.bots.map((b: { name: string }) => b.name)).toEqual(["Otto"]);
   });
