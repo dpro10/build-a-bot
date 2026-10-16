@@ -73,9 +73,19 @@ jobs:
       - name: Someone talking (the system's own voice)
         if: runner.os == 'macOS'
         run: |
-          say -o "$RUNNER_TEMP/said.aiff" "Let's move the team meeting to next Tuesday at ten in the morning."
-          afconvert -f WAVE -d LEI16@16000 -c 1 "$RUNNER_TEMP/said.aiff" "$RUNNER_TEMP/said.wav"
-          ls -l "$RUNNER_TEMP/said.wav"
+          said="Let's move the team meeting to next Tuesday at ten in the morning."
+          # On these machines macOS's voice sometimes writes an almost empty file (0.1 s): try again, then other voices.
+          for voice in "" "" Samantha Alex Daniel Karen; do
+            say ${voice:+-v "$voice"} -o "$RUNNER_TEMP/said.aiff" "$said" || continue
+            afconvert -f WAVE -d LEI16@16000 -c 1 "$RUNNER_TEMP/said.aiff" "$RUNNER_TEMP/said.wav" || continue
+            size=$(stat -f%z "$RUNNER_TEMP/said.wav")
+            echo "voice ${voice:-(default)}: $size bytes"
+            # The sentence takes about 4 s; 16 kHz, 16-bit mono is 32,000 bytes a second.
+            if [ "$size" -gt 64000 ]; then exit 0; fi
+            sleep 2
+          done
+          echo "::error::macOS's voice didn't say the sentence"
+          exit 1
       # Downloads NVIDIA's files the way the app does (about 0.7 GB), checks them, runs the engine.
       # In the user's own folder, as the app keeps it, under a name like a user's (C:\Users\José\…).
       - name: Short names on this drive (Windows)
