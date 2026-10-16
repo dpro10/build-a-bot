@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { AppWindow, AudioLines, BookA, Download, Keyboard, Laptop, MessageCircle, ShieldCheck, Sparkles, Trash2, Wand2 } from "lucide-react";
+import { AppWindow, AudioLines, BookA, Download, Keyboard, Laptop, Lock, MessageCircle, ShieldCheck, Sparkles, Trash2, Wand2 } from "lucide-react";
 import { getDb } from "@/lib/db";
 import { requireUser } from "@/lib/auth/session";
 import { listBots, listBridgeDevices } from "@/lib/data";
@@ -40,12 +40,13 @@ const HOW = [
 /** What stays private. Who hears the audio is named when it's NVIDIA's models on our own server. */
 const privatePoints = () => [
   { icon: <AudioLines />, text: "The mic is on only while you hold the key, and the pill on your screen shows it the whole time." },
+  { icon: <Lock />, text: "The desktop app hears you on your own computer, with NVIDIA's Parakeet speech model (English and 24 European languages), so your voice stays there. Only the words come to us, to be cleaned up." },
   {
     icon: <Trash2 />,
     text:
       transcriptionSetup()?.provider === "nvidia"
-        ? "Your voice is turned into text on our own server, by NVIDIA's open speech models, and thrown away. We keep a word count, never your words."
-        : "Your voice is turned into text and thrown away. We keep a word count, never your words.",
+        ? "Here in the browser, your voice is turned into text on our own server, by NVIDIA's open speech models, and thrown away. We keep a word count, never your words."
+        : "Here in the browser, your voice is turned into text and thrown away. We keep a word count, never your words.",
   },
   { icon: <Laptop />, text: "Your history stays on your computer, encrypted, and you can turn it off." },
   { icon: <ShieldCheck />, text: "So the words fit, only the kind of app you're in (“chat”, “email”) and a well-known app's name are sent. Never what's on your screen." },
@@ -113,7 +114,7 @@ export default async function VoicePage() {
       </div>
 
       <section id="desktop" aria-labelledby="desktop-title" className="mb-10 scroll-mt-6">
-        <SectionHeading id="desktop-title" title="In every app" description="The desktop app listens for your shortcut anywhere, then types where your cursor is." />
+        <SectionHeading id="desktop-title" title="In every app" description="The desktop app listens for your shortcut anywhere, hears you on your computer, then types where your cursor is." />
         <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-soft">
           <div className="grid grid-cols-1 gap-px bg-border md:grid-cols-2">
             <div className="min-w-0 bg-card p-5 sm:p-6">

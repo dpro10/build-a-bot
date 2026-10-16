@@ -15,6 +15,7 @@ import { minutesSaved, VoiceHistory, wordsPerMinute, wordsThisWeek } from "./his
 import { Hotkey, ToggleHotkey } from "./hotkey.mjs";
 import { checkCustom, keyName, presetsFor, resolveShortcut } from "./keys.mjs";
 import { suggestWords } from "./learn.mjs";
+import { LOCAL_LANGUAGES, LocalSpeech, localFirst } from "./local-speech.mjs";
 import { Paster, pressCopy, pressPaste } from "./paste.mjs";
 import { PillWindow } from "./pill-window.mjs";
 import { VoiceSettingsWindow } from "./settings-window.mjs";
@@ -49,6 +50,26 @@ export function setupVoice(o) {
   const platform = process.platform;
 
   const history = new VoiceHistory({ file: path.join(o.userData, "voice-history.json"), safeStorage, secure: () => o.tokens.security().secure });
+  // NVIDIA Parakeet on this computer. It downloads through the app's own network stack (the
+  // system's proxy and certificates). BAB_SPEECH_*_URL: other places to download it from (tests, a
+  // mirror); the files still have to match the pinned hashes. BAB_PRIVATE_SPEECH=off: not at all.
+  const localOff = process.env.BAB_PRIVATE_SPEECH === "off";
+  const local = new LocalSpeech({
+    dir: path.join(o.userData, "speech"),
+    fetchImpl: (url, init) => o.apiSession.fetch(url, init),
+    log,
+    sources: {
+      ...(process.env.BAB_SPEECH_RUNTIME_URL ? { runtimeUrl: process.env.BAB_SPEECH_RUNTIME_URL } : {}),
+      ...(process.env.BAB_SPEECH_ITN_URL ? { itnUrl: process.env.BAB_SPEECH_ITN_URL } : {}),
+      ...(process.env.BAB_SPEECH_MODEL_URL ? { modelUrl: process.env.BAB_SPEECH_MODEL_URL } : {}),
+    },
+  });
+  local.on("change", () => {
+    pushState();
+    o.onChange();
+  });
+  /** When it last started downloading Parakeet (a download that failed tries again on its own later). */
+  let localTriedAt = 0;
   const frontApp = new FrontApp({ log });
   const settingsWindow = new VoiceSettingsWindow({ log, onClosed: () => stopAccessibilityWatch() });
 
@@ -93,10 +114,36 @@ export function setupVoice(o) {
     log,
   });
 
+  /**
+   * Speech-to-text runs on this computer for the next dictation: it's on, downloaded, the server
+   * takes text, and Parakeet speaks the language picked.
+   */
+  function onDevice() {
+    const v = settings.get().voice;
+    const lang = v.language || "auto";
+    return !localOff && v.onDevice !== false && local.isInstalled() && account.session?.voice?.local === true && (lang === "auto" || LOCAL_LANGUAGES.has(lang));
+  }
+
+  /** On this computer first; if that fails, the recording goes to the server as before. */
+  const dictate = localFirst({ local, api, use: onDevice, log });
+
+  /**
+   * Get Parakeet in the background while voice typing is on. After a failed download it tries again
+   * on its own half an hour later (or right away from Settings: `now`).
+   */
+  function maybeInstall(now = false) {
+    const v = settings.get().voice;
+    if (localOff || !v.enabled || !account.device || v.onDevice === false || !local.supported() || local.isInstalled() || local.installing) return;
+    if (!now && localTriedAt && Date.now() - localTriedAt < 30 * 60_000) return;
+    localTriedAt = Date.now();
+    void local.install().catch(() => {});
+  }
+
   const voice = new VoiceTyping({
     settings,
     account,
-    api,
+    api: { ...api, dictate },
+    localReady: onDevice,
     pill,
     paster,
     frontApp,
@@ -123,8 +170,10 @@ export function setupVoice(o) {
   voice.on("dictated", () => pushState());
   voice.on("asked", () => pushState());
 
-  /** Open the connection to the server while the owner talks, so sending is quick. */
+  /** Open the connection to the server, and start Parakeet, while the owner talks, so sending is quick. */
   function warmUp() {
+    if (onDevice()) local.warm();
+    else maybeInstall();
     const server = account.server();
     if (!server || Date.now() - lastWarm < 20_000) return;
     lastWarm = Date.now();
@@ -212,6 +261,7 @@ export function setupVoice(o) {
       return;
     }
     void pill.ensure();
+    maybeInstall();
     const shortcut = resolveShortcut(v, platform);
     problem = null;
     if (platform === "darwin" && !trusted()) {
@@ -265,7 +315,7 @@ export function setupVoice(o) {
       platform,
       enabled: Boolean(v.enabled),
       mode,
-      problem: account.device && sessionVoice && sessionVoice.available === false ? { message: "Voice typing isn't set up on this server yet." } : problem,
+      problem: account.device && sessionVoice && sessionVoice.available === false && !onDevice() ? { message: "Voice typing isn't set up on this server yet." } : problem,
       shortcut: { id: shortcut.id, label: shortcut.label },
       presets: presetsFor(platform).map((p) => ({ id: p.id, label: p.label, hint: p.hint ?? null })),
       toggleShortcut: toggleLabel(platform),
@@ -274,6 +324,7 @@ export function setupVoice(o) {
         styles: v.styles,
         commands: v.commands,
         edit: v.edit !== false,
+        onDevice: v.onDevice !== false,
         sounds: v.sounds,
         language: v.language,
         micId: v.micId,
@@ -289,6 +340,15 @@ export function setupVoice(o) {
       bots: account.bots().map((b) => ({ id: b.id, name: b.name })),
       history: v.history ? history.list().slice(0, 50) : [],
       last: voice.last,
+      /** Speech-to-text on this computer: where it's at. */
+      local: {
+        ...local.status(),
+        supported: local.supported() && !localOff,
+        on: v.onDevice !== false,
+        server: sessionVoice ? sessionVoice.local === true : null,
+        language: (v.language || "auto") === "auto" || LOCAL_LANGUAGES.has(v.language),
+        active: onDevice(),
+      },
     };
   }
 
@@ -330,12 +390,14 @@ export function setupVoice(o) {
       fromWindow(e);
       const p = /** @type {Record<string, unknown>} */ (patch ?? {});
       const next = {};
-      for (const k of ["enabled", "polish", "styles", "commands", "edit", "sounds", "history", "restoreClipboard"]) if (typeof p[k] === "boolean") next[k] = p[k];
+      for (const k of ["enabled", "polish", "styles", "commands", "edit", "onDevice", "sounds", "history", "restoreClipboard"]) if (typeof p[k] === "boolean") next[k] = p[k];
       if (typeof p.language === "string" && /^(auto|[a-z]{2})$/.test(p.language)) next.language = p.language;
       if (typeof p.micId === "string" && p.micId.length <= 300) next.micId = p.micId;
       if (typeof p.shortcut === "string" && (presetsFor(platform).some((x) => x.id === p.shortcut) || (p.shortcut === "custom" && settings.get().voice.customKeys))) next.shortcut = p.shortcut;
       settings.updateVoice(next);
       if (next.history === false) history.clear();
+      if (next.onDevice === true) maybeInstall(true);
+      if (next.onDevice === false) void local.stop();
       if ("enabled" in next || "shortcut" in next || Object.keys(next).length === 0) await apply();
       return state();
     });
@@ -400,6 +462,12 @@ export function setupVoice(o) {
       paster.copy(text);
       return { suggestions, state: state() };
     });
+    ipcMain.handle("voice:local", async (e, action) => {
+      fromWindow(e);
+      if (action === "retry") maybeInstall(true);
+      if (action === "remove") await local.remove();
+      return state();
+    });
     ipcMain.handle("voice:open", (e, what) => {
       fromWindow(e);
       open(String(what));
@@ -437,6 +505,7 @@ export function setupVoice(o) {
       void apply();
     },
     dispose() {
+      void local.stop();
       stopAccessibilityWatch();
       active?.disable();
       frontApp.dispose();
@@ -454,6 +523,7 @@ export function setupVoice(o) {
         history: history.list().length,
         usage: voice.usage,
         problem: problem?.message ?? null,
+        local: { state: local.status().state, active: onDevice() },
       };
     },
   };

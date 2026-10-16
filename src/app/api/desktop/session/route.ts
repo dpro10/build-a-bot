@@ -49,6 +49,8 @@ export async function GET(req: Request) {
       edit: voiceEditAvailable(),
       /** Demo mode without a speech-to-text key: it "hears" sample lines. */
       simulated: !transcriptionSetup(),
+      /** Takes what the computer already heard (on-device speech-to-text): no audio is sent. */
+      local: true,
       usage: await dictationUsage(db, owner),
     },
     appUrl: appUrl(),

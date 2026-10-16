@@ -35,7 +35,7 @@ const SUBPROCESSORS: { name: string; purpose: string; data: string }[] = [
   { name: "Nebius Token Factory", purpose: "The included open models", data: "Messages and context, when your bot uses an included model (and dictated text, when voice typing's cleanup runs there)" },
   { name: "Your chosen AI provider", purpose: "Your own API key, if you add one", data: "Messages and context, sent to that provider only" },
   { name: "Tavily", purpose: "Web search", data: "Search queries" },
-  { name: "Nebius AI Cloud (our speech server, running NVIDIA's open speech models), with Together AI as a backup", purpose: "Turning meeting audio and voice typing into text", data: "Audio, only while it's turned into text" },
+  { name: "Nebius AI Cloud (our speech server, running NVIDIA's open speech models), with Together AI as a backup", purpose: "Turning meeting audio, and voice typing that isn't heard on your computer, into text", data: "Audio, only while it's turned into text" },
   { name: "Composio", purpose: "Sign-in and actions for many apps", data: "App tokens and the actions your bot takes in those apps" },
   { name: "Twilio", purpose: "Phone calls and texts", data: "Phone numbers, texts, call speech and transcripts" },
   { name: "AgentMail and Resend", purpose: "Your bot's email address and sign-in emails", data: "Email addresses and email content" },
@@ -72,7 +72,7 @@ export default function PrivacyPage() {
             <li>API keys and app logins are encrypted at rest and never shown again.</li>
             <li>Your Claude or ChatGPT login never leaves your computer.</li>
             <li>Meeting notes only listen after you say yes. The audio becomes text and isn&apos;t kept.</li>
-            <li>Voice typing only listens while you hold its key. Neither the audio nor what you dictate is kept on our servers: we count the words, that&apos;s all.</li>
+            <li>Voice typing only listens while you hold its key, and the desktop app turns your voice into text on your own computer. Neither the audio nor what you dictate is kept on our servers: we count the words, that&apos;s all.</li>
             <li>
               You can export everything or delete your account from your <Link href="/app/account">Account page</Link>.
             </li>
@@ -106,8 +106,12 @@ export default function PrivacyPage() {
           </p>
           <h3>Voice typing</h3>
           <p>
-            If you use voice typing: the words and snippets you add to your dictionary, and a monthly count of the words you typed by voice. What
-            you say is turned into text, cleaned up and sent back to you; neither the audio nor the text is stored on our servers. The kind of app
+            If you use voice typing: the words and snippets you add to your dictionary, and a monthly count of the words you typed by voice. The
+            desktop app turns what you say into text on your own computer, with NVIDIA&apos;s Parakeet speech model (downloaded once from NVIDIA&apos;s
+            pages on GitHub and Hugging Face), and sends us only the text. In the browser, and in the desktop app before that download is done, in
+            a language the model doesn&apos;t know, or if it fails, the recording is sent once and turned into text by the speech-to-text service
+            listed above. Either way, the text is cleaned up and sent back to you;
+            neither the audio nor the text is stored on our servers. The kind of app
             you&apos;re typing in (like &ldquo;chat&rdquo; or &ldquo;email&rdquo;) and, for well-known apps, its name are sent along so the text fits
             it, never what&apos;s on your screen. To spell your names right, the names your bots remember are used as hints. The desktop app keeps your recent dictations
             on your own computer, encrypted, and you can turn that off or clear it. A request that starts with your bot&apos;s name (&ldquo;Hey

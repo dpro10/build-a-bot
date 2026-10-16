@@ -4,7 +4,8 @@
  * Recorder: the microphone opens when the main process calls start() (the shortcut was pressed)
  * and is released on stop() or cancel(). One MediaRecorder (webm/opus, 32 kbps: plenty for speech)
  * while it's held; nothing is stored here. stop() hands the recording to the main process, which
- * sends it once and forgets it.
+ * sends it once and forgets it. When speech-to-text runs on this computer (start({ wav: true })),
+ * stop() also hands over the same recording as 16 kHz mono WAV, the format NVIDIA's runtime reads.
  *
  * Pill: shows what the main process says (listening, writing, typed, the bot's answer, errors)
  * and sends back button presses and its size (the window is exactly as big as the pill).
@@ -34,6 +35,7 @@
   let analyser = null;
   let buf = null;
   let sounds = true;
+  let wantWav = false;
   const BARS = 24;
   const levels = new Array(BARS).fill(0);
 
@@ -119,6 +121,7 @@
   async function start(opts) {
     opts = opts || {};
     sounds = opts.sounds !== false;
+    wantWav = opts.wav === true;
     if (rec || stream) await cancel();
     if (!MIME) return { ok: false, error: "NoMediaRecorder: this computer can't record audio" };
     try {
@@ -159,6 +162,44 @@
     });
   }
 
+  /**
+   * The recording as 16 kHz mono 16-bit WAV, with a second of silence after it (without it, the
+   * last word of a clip that stops mid-word comes out cut). Decoded and resampled by the browser's
+   * own audio engine; nothing is written anywhere.
+   */
+  async function toWav16k(blob) {
+    const rate = 16000;
+    const decoded = await audio().decodeAudioData(await blob.arrayBuffer());
+    const off = new OfflineAudioContext(1, Math.max(1, Math.ceil(decoded.duration * rate)), rate);
+    const src = off.createBufferSource();
+    src.buffer = decoded;
+    src.connect(off.destination);
+    src.start();
+    const pcm = (await off.startRendering()).getChannelData(0);
+    const frames = pcm.length + rate;
+    const out = new DataView(new ArrayBuffer(44 + frames * 2));
+    const text = (at, s) => {
+      for (let i = 0; i < s.length; i++) out.setUint8(at + i, s.charCodeAt(i));
+    };
+    text(0, "RIFF");
+    out.setUint32(4, 36 + frames * 2, true);
+    text(8, "WAVEfmt ");
+    out.setUint32(16, 16, true);
+    out.setUint16(20, 1, true);
+    out.setUint16(22, 1, true);
+    out.setUint32(24, rate, true);
+    out.setUint32(28, rate * 2, true);
+    out.setUint16(32, 2, true);
+    out.setUint16(34, 16, true);
+    text(36, "data");
+    out.setUint32(40, frames * 2, true);
+    for (let i = 0; i < pcm.length; i++) {
+      const v = Math.max(-1, Math.min(1, pcm[i]));
+      out.setInt16(44 + i * 2, v < 0 ? v * 0x8000 : v * 0x7fff, true);
+    }
+    return new Blob([out.buffer], { type: "audio/wav" });
+  }
+
   async function stop() {
     const durationMs = Math.round(performance.now() - t0);
     const heard = speechMs;
@@ -168,7 +209,16 @@
     const blob = new Blob(chunks, { type: MIME });
     chunks = [];
     if (!blob.size) return { ok: false };
-    return { ok: true, data: await toBase64(blob), mime: UPLOAD_MIME, durationMs, speechMs: heard };
+    let wav = null;
+    if (wantWav) {
+      try {
+        wav = await toBase64(await toWav16k(blob));
+      } catch (err) {
+        // The main process falls back to sending the recording.
+        bridge.log?.(`couldn't make WAV: ${err && err.name}`);
+      }
+    }
+    return { ok: true, data: await toBase64(blob), mime: UPLOAD_MIME, durationMs, speechMs: heard, ...(wav ? { wav } : {}) };
   }
 
   async function cancel() {
@@ -340,8 +390,11 @@
       // Edits: how to take it back (the app's own undo).
       $("hint").textContent = s.hint || "";
       $("hint").hidden = !s.hint;
-      // Demo mode: it didn't hear you, it typed a sample line.
-      $("badge").hidden = !s.simulated;
+      // Demo mode: it didn't hear you, it typed a sample line. Private: heard on this computer.
+      const badge = $("badge");
+      badge.hidden = !s.simulated && !s.local;
+      badge.textContent = s.simulated ? "demo" : "private";
+      badge.title = s.simulated ? "Demo mode: a sample line" : "Heard on this computer: your voice didn't leave it";
     } else if (s.phase === "note" || s.phase === "error") {
       icon.innerHTML = s.phase === "error" ? ICONS.warn : ICONS.info;
       icon.classList.add(s.phase === "error" ? "warn" : "info");

@@ -49,6 +49,8 @@ export { APP_CATEGORIES, isAppCategory, type AppCategory } from "./polish";
 /** Long enough for a long email, short enough that one upload stays small (~2 MB of opus). */
 export const MAX_DICTATION_MS = 10 * 60_000;
 export const MAX_DICTATION_BYTES = 12 * 1024 * 1024;
+/** What 10 minutes of fast talking comes to, with room to spare. */
+export const MAX_HEARD_CHARS = 20_000;
 /** Less speech than this is a tap or a cough: not worth sending to speech-to-text. */
 export const MIN_SPEECH_MS = 250;
 /** A guard for "unlimited" plans: about 8 hours of nonstop talking a day. */
@@ -118,8 +120,14 @@ export function voicePolishAvailable(): boolean {
 }
 
 export type DictateInput = {
-  audio: ArrayBuffer;
-  mime: string;
+  /** The recording. Or, instead, `heard`. */
+  audio?: ArrayBuffer;
+  mime?: string;
+  /**
+   * What the owner's own computer already heard (the desktop app runs NVIDIA Parakeet on the
+   * device): no audio reaches the server, and no speech-to-text runs here.
+   */
+  heard?: string;
   durationMs: number;
   /** How long the recorder heard speech (above its silence level), when it measured it. */
   speechMs?: number;
@@ -179,17 +187,21 @@ export async function dictationUsage(db: Db, owner: Pick<User, "id" | "plan">): 
 }
 
 export async function dictate(db: Db, owner: User, input: DictateInput): Promise<DictateOutcome> {
-  if (!voiceTypingAvailable()) return { ok: false, status: 503, code: "unavailable", error: "Voice typing is coming soon." };
+  // Heard on the owner's computer: this server only cleans it up, so it needs no speech-to-text.
+  const onDevice = input.heard !== undefined;
+  if (!onDevice && !voiceTypingAvailable()) return { ok: false, status: 503, code: "unavailable", error: "Voice typing is coming soon." };
   if (input.durationMs < 1 || input.durationMs > MAX_DICTATION_MS) return { ok: false, status: 422, code: "too_long", error: "A dictation can be up to 10 minutes." };
-  if (input.audio.byteLength > MAX_DICTATION_BYTES) return { ok: false, status: 413, code: "too_large", error: "That recording is too large." };
+  if ((input.audio?.byteLength ?? 0) > MAX_DICTATION_BYTES) return { ok: false, status: 413, code: "too_large", error: "That recording is too large." };
+  if ((input.heard?.length ?? 0) > MAX_HEARD_CHARS) return { ok: false, status: 413, code: "too_large", error: "That dictation is too long." };
+  if (!onDevice && !input.audio) return { ok: false, status: 422, code: "unreadable", error: "I couldn't make out that recording." };
 
   const limit = await checkLimit(db, owner, "dictationWords");
   if (!limit.ok) return { ok: false, status: 402, code: "limit", error: limit.message, upgrade: limit.plan.id === "free" ? "plus" : "pro" };
   const before = (await getUsage(db, owner.id)).dictationWords;
 
   // A tap, or a recording with no speech in it: nothing to send (and nothing to pay for).
-  if ((input.speechMs !== undefined && input.speechMs < MIN_SPEECH_MS) || input.audio.byteLength < 400) {
-    return { ok: true, result: { kind: "empty" }, usage: usageOf(owner, before), simulated: !transcriptionSetup(), ms: { stt: 0, polish: 0 } };
+  if ((input.speechMs !== undefined && input.speechMs < MIN_SPEECH_MS) || (!onDevice && (input.audio?.byteLength ?? 0) < 400)) {
+    return { ok: true, result: { kind: "empty" }, usage: usageOf(owner, before), simulated: !onDevice && !transcriptionSetup(), ms: { stt: 0, polish: 0 } };
   }
 
   // "Unlimited" plans are for people, not scripts; and the whole site has a daily ceiling.
@@ -199,17 +211,20 @@ export async function dictate(db: Db, owner: User, input: DictateInput): Promise
 
   const ctx = await loadVoiceContext(db, owner);
   const prompt = whisperPrompt(ctx.vocabulary);
-  const simulated = !transcriptionSetup();
+  const simulated = !onDevice && !transcriptionSetup();
 
-  // 2. Speech-to-text.
+  // 2. Speech-to-text (unless the owner's computer already did it).
   const t0 = Date.now();
   let heard = "";
   let costMicros = 0;
-  if (simulated) {
-    heard = demoHeard(input.demoSample, input.audio.byteLength, ctx.bots[0]?.name ?? null);
+  if (onDevice) {
+    heard = String(input.heard).replace(/\s+/g, " ").trim();
+    if (input.speechMs !== undefined && input.speechMs < 500 && isPhantom(heard)) heard = "";
+  } else if (simulated || !input.audio) {
+    heard = demoHeard(input.demoSample, input.audio?.byteLength ?? 0, ctx.bots[0]?.name ?? null);
   } else {
     try {
-      const result = await transcribe({ audio: input.audio, mime: input.mime, durationMs: input.durationMs, prompt, language: input.language, track: "mic", chunk: 0 });
+      const result = await transcribe({ audio: input.audio, mime: input.mime ?? "audio/webm", durationMs: input.durationMs, prompt, language: input.language, track: "mic", chunk: 0 });
       costMicros = result.costMicros;
       heard = result.segments.map((s) => s.text).join(" ").replace(/\s+/g, " ").trim();
       if (result.prompted && isPromptEcho(heard, prompt)) heard = "";

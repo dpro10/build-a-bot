@@ -192,12 +192,15 @@ Hold a key in any app and talk; what the owner meant is typed at the cursor. Sta
 desktop app (desktop/src/main/voice)          browser (/app/voice, TryVoice)
   hold the shortcut → the pill + the mic         hold the button (click: hands-free)
   let go → one recording                          let go → one recording
+  NVIDIA Parakeet on this computer → the words
+  (NeMo-Speech.cpp on 127.0.0.1; or, until it's
+  downloaded or if it fails, the recording)
             │  + the kind of app in front (chat, email, code…), language, the owner's switches
             ▼
-POST /api/voice/dictate  (raw audio body; device token or session)
+POST /api/voice/dictate  (JSON { heard }, or a raw audio body; device token or session)
    1. limits: words a month per plan, 3,000 dictations a day, 60 a minute, the site's daily ceiling
-   2. speech-to-text (NVIDIA Parakeet on our speech server; Whisper providers get the owner's
-      words and bots' names as a prompt)
+   2. speech-to-text, unless the computer already did it (NVIDIA Parakeet on our speech server;
+      Whisper providers get the owner's words and bots' names as a prompt)
    3. guards: too little speech → nothing; silence turned into "Thank you." or the prompt echoed → nothing
    4. "Hey Otto, …" → { kind: "command" } → the caller asks POST /api/voice/ask (SSE, runTurn)
    5. plain cleanup (always): fillers, stutters, "new line", "scratch that"
@@ -206,8 +209,11 @@ POST /api/voice/dictate  (raw audio body; device token or session)
       Skipped when there's nothing for it to do (needsPolish: short, punctuated, no correction,
       no numbers or punctuation said in words, no name that sounds like one of theirs)
    7. the dictionary: spellings, then snippets → { kind: "text", text, heard, words }
-audio is never stored; the server keeps a word count, never the words
+audio is never stored (and from the desktop app, with Private speech, never sent); the server
+keeps a word count, never the words
 ```
+
+- **Private speech** (`desktop/src/main/voice/local-speech.mjs`): the desktop app downloads NVIDIA NeMo-Speech.cpp 0.2.0 for its platform (GitHub release) and Parakeet TDT 0.6B v3 in 8-bit GGUF (Hugging Face, 714 MB), each pinned to its SHA-256, resumable, into the app's folder, and runs `nemo-speech serve` on 127.0.0.1 behind a random key, from the shortcut's press until 20 minutes unused. The pill hands over the recording as 16 kHz WAV too (decoded in Chromium); the engine's text goes to `/api/voice/dictate` as `{ heard }`, and the server skips speech-to-text, so its pipeline (guards, "Hey {bot}", cleanup, dictionary) is the same for both. Anything that stops it (not downloaded yet, a language Parakeet doesn't speak, an engine error or crash, a server that doesn't say `voice.local` in `/api/desktop/session`) sends the recording instead, so voice typing keeps working. macOS (Metal on Apple silicon), Windows x64 and Linux x64. It also means the server needs no speech-to-text of its own for desktop voice typing: without a speech provider, the desktop app still hears its owner.
 
 - **Files:** `src/lib/dictation/text.ts` (pure text rules: tidy, snippets, commands, the guards, the checks on the AI's answer), `polish.ts` (the prompt, its examples and where it runs), `index.ts` (the pipeline, limits, the owner's vocabulary), `dictionary.ts` (add/edit/delete), `demo.ts` (sample dictations for demo mode). Routes under `src/app/api/voice/`.
 - **The AI cleanup** runs on the included model on Token Factory; on Groq (`openai/gpt-oss-120b`, low reasoning) when speech-to-text runs on Groq, so the words go to one provider; or not at all (`DICTATION_POLISH`). It has a few seconds: when it's slow, fails or its answer fails the checks, the plain cleanup is typed instead, so a dictation never waits long or comes back wrong.
@@ -256,5 +262,5 @@ Every flow in the product can be tried with zero keys, and nothing real is sent 
 - **On real Postgres.** Supabase runs the server through postgres.js and a transaction pooler, which are stricter than the in-memory database the tests use. Check database changes on a real one too: a local Postgres with pgbouncer in front in `pool_mode = transaction` on port 6543, like Supabase's pooler (port 6543 also makes the client skip prepared statements).
   - `TEST_DATABASE_URL=postgres://postgres@127.0.0.1:6543/bab_test npx vitest run tests/postgres.test.ts` wipes that database and covers sign-in, rate limits, the admin numbers and the cron tick.
   - `DATABASE_URL=postgres://postgres@127.0.0.1:6543/bab_e2e ENCRYPTION_KEY=$(openssl rand -base64 32) npm run test:e2e` runs the whole e2e suite there.
-- `cd desktop && npm test`: call detection on each OS (parsers on captured-style output), the call state machine, the controller's safety rules, the upload queue, placement, token storage, and voice typing's shortcut machine, paste and clipboard restore, app categories, history and controller.
-- `cd desktop && npm run test:e2e`: the real Electron app under Xvfb against a running dev server: pair, a fake call, ask, take notes, pause, stop, notes ready, stop and delete, and the mic-only path; then voice typing with real X key presses: hold, talk, the cleaned-up text pasted into another app with the clipboard put back, hands-free, Esc, and "Hey Otto".
+- `cd desktop && npm test`: call detection on each OS (parsers on captured-style output), the call state machine, the controller's safety rules, the upload queue, placement, token storage, and voice typing's shortcut machine, paste and clipboard restore, app categories, history and controller, and Private speech against a stand-in runtime (download, resume, hashes, the key, idle stop, crashes, falling back).
+- `cd desktop && npm run test:e2e`: the real Electron app under Xvfb against a running dev server: pair, a fake call, ask, take notes, pause, stop, notes ready, stop and delete, and the mic-only path; then voice typing with real X key presses: hold, talk, the cleaned-up text pasted into another app with the clipboard put back, hands-free, Esc, and "Hey Otto". With NVIDIA's files and two spoken sentences at hand (`BAB_E2E_SPEECH_*`), `e2e/local-speech.e2e.mjs` also downloads and runs the real Parakeet on the computer and types what was said.
