@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { apiError, json, limitOr429, readBodyCapped } from "@/lib/api";
-import { APP_CATEGORIES, MAX_DICTATION_BYTES, MAX_DICTATION_MS, dictate } from "@/lib/dictation";
+import { APP_CATEGORIES, MAX_DICTATION_BYTES, MAX_DICTATION_MS, MAX_HEARD_CHARS, dictate } from "@/lib/dictation";
 import { voiceAuth } from "@/lib/dictation/auth";
 import { demoMode } from "@/lib/env";
 import { audioExtension } from "@/lib/transcribe";
@@ -23,10 +23,15 @@ const query = z.object({
   demo: z.string().max(10).optional(),
 });
 
+/** What the desktop app sends when its own NVIDIA Parakeet already turned the speech into text. */
+const heardBody = z.object({ heard: z.string().max(MAX_HEARD_CHARS) });
+
 /**
  * One dictation: the raw recording (webm/ogg/mp4/wav) in the body → what to type, or a request
- * for the bot ("Hey Otto, …"). Query: durationMs, speechMs, category, app, lang, polish, commands,
- * styles. The audio is never kept, and what was said isn't stored.
+ * for the bot ("Hey Otto, …"). Or, as JSON `{ heard }`, what the owner's computer already heard
+ * (on-device speech-to-text): then no audio comes here at all. Query: durationMs, speechMs,
+ * category, app, lang, polish, commands, styles. The audio is never kept, and what was said isn't
+ * stored.
  */
 export async function POST(req: Request) {
   const a = await voiceAuth(req, { write: true });
@@ -34,19 +39,31 @@ export async function POST(req: Request) {
   const q = query.safeParse(Object.fromEntries(new URL(req.url).searchParams));
   if (!q.success) return apiError(422, "Bad dictation parameters");
   const mime = (req.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
-  if (!audioExtension(mime)) return apiError(415, "Send audio as webm, ogg, wav, mp3 or m4a.");
+  const onDevice = mime === "application/json";
+  if (!onDevice && !audioExtension(mime)) return apiError(415, "Send audio as webm, ogg, wav, mp3 or m4a.");
   if (Number(req.headers.get("content-length") ?? 0) > MAX_DICTATION_BYTES) return apiError(413, "That recording is too large.");
   // People pause between dictations; this only stops runaway scripts.
   const limited = await limitOr429(a.db, `dictate:${a.owner.id}`, 60, 60, "That's a lot of voice typing at once. Give it a moment.");
   if (limited) return limited;
-  const audio = await readBodyCapped(req, MAX_DICTATION_BYTES);
-  if (!audio) return apiError(413, "That recording is too large.");
+  const body = await readBodyCapped(req, onDevice ? MAX_HEARD_CHARS * 4 + 1024 : MAX_DICTATION_BYTES);
+  if (!body) return apiError(413, "That recording is too large.");
+  let heard: string | undefined;
+  if (onDevice) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(new TextDecoder().decode(body));
+    } catch {
+      return apiError(400, "Send { heard } as JSON.");
+    }
+    const h = heardBody.safeParse(parsed);
+    if (!h.success) return apiError(422, "Send what was heard as { heard }, up to 20,000 characters.");
+    heard = h.data.heard;
+  }
 
   const d = q.data;
   const sample = demoMode && d.demo ? (["command", "edit", "write"].includes(d.demo) ? (d.demo as "command" | "edit" | "write") : Number.isInteger(Number(d.demo)) ? Number(d.demo) : undefined) : undefined;
   const out = await dictate(a.db, a.owner, {
-    audio,
-    mime,
+    ...(onDevice ? { heard } : { audio: body, mime }),
     durationMs: d.durationMs,
     speechMs: d.speechMs,
     category: d.category,

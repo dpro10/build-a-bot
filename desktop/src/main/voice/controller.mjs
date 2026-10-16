@@ -77,6 +77,7 @@ export class VoiceTyping extends EventEmitter {
    * @param {() => boolean} o.canPaste
    * @param {() => Promise<boolean>} [o.ensureMic]
    * @param {() => void} [o.warmUp]
+   * @param {() => boolean} [o.localReady]  speech-to-text runs on this computer: ask the pill for WAV too
    * @param {(target: string, extra?: any) => void} [o.open]  'pair' | 'settings' | 'upgrade' | 'chat' | 'mic-settings' | 'accessibility'
    * @param {string} [o.platform]
    * @param {() => number} [o.now]
@@ -201,7 +202,8 @@ export class VoiceTyping extends EventEmitter {
   blocker() {
     if (!this.account.device) return { status: 401 };
     const v = this.account.session?.voice;
-    if (v && v.available === false) return { code: "unavailable" };
+    // The server has no speech-to-text of its own, but this computer can hear the owner.
+    if (v && v.available === false && !this.o.localReady?.()) return { code: "unavailable" };
     return null;
   }
 
@@ -236,7 +238,7 @@ export class VoiceTyping extends EventEmitter {
       return;
     }
     const v = this.voice();
-    rec.started = this.pill.start({ micId: v.micId, sounds: v.sounds });
+    rec.started = this.pill.start({ micId: v.micId, sounds: v.sounds, wav: Boolean(this.o.localReady?.()) });
     const res = await rec.started;
     if (this.rec !== rec) return;
     if (!res?.ok) {
@@ -364,7 +366,7 @@ export class VoiceTyping extends EventEmitter {
     this.last = { kind: "text", text: res.text, heard: res.heard, at: this.now(), pasted: out.pasted };
     this.emit("dictated", { text: res.text, pasted: out.pasted, words: res.words });
     if (seq !== this.seq || this.rec) return;
-    if (out.pasted) await this.showPill({ phase: "done", text: res.text, simulated: Boolean(res.simulated) }, this.limits.doneMs);
+    if (out.pasted) await this.showPill({ phase: "done", text: res.text, simulated: Boolean(res.simulated), local: Boolean(res.local) }, this.limits.doneMs);
     else await this.showPill({ phase: "note", message: copiedNote(this.platform, this.o.canPaste()), actions: this.platform === "darwin" && !this.o.canPaste() ? ["accessibility"] : [] }, this.limits.noteMs);
   }
 

@@ -719,3 +719,33 @@ summary {
     grid-template-columns: 1fr;
   }
 }
+
+/* Private speech: the download's progress. */
+#local-progress {
+  width: 100%;
+  height: 8px;
+  margin: 8px 0 4px;
+  appearance: none;
+  border: none;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--primary-soft);
+}
+#local-progress::-webkit-progress-bar {
+  background: var(--primary-soft);
+  border-radius: 999px;
+}
+#local-progress::-webkit-progress-value {
+  background: var(--primary);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+#local .row:empty,
+#local .row:not(:has(button:not([hidden]))) {
+  display: none;
+}
+#local .credit {
+  margin-top: 10px;
+  font-size: 12px;
+  opacity: 0.8;
+}

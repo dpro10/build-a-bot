@@ -39,6 +39,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
     commands: true,
     /** Shift with the shortcut: change the selected text by voice (or write something new). */
     edit: true,
+    /** Turn speech into text on this computer (NVIDIA Parakeet), so the voice never leaves it. */
+    onDevice: true,
     sounds: true,
     /** ISO 639-1, or "auto". */
     language: "auto",

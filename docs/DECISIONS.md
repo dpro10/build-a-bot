@@ -464,6 +464,20 @@ What this settles (built by Claude; Diego to confirm the details):
   - Docker Hub rate-limits anonymous pulls from shared machines; GitHub's runners build the image.
 - **Next:** stream the audio while the key is held (the server already has NVIDIA's realtime WebSocket), and an on-device mode with the same runtime in the desktop app.
 
+## Decision: NVIDIA Parakeet on the owner's computer (Diego, 2026-10-16)
+
+On the speech server's monthly cost: "ok, hold up. I cant pay $380 for this, I also dont need so many langauages I really only need english. dont build just report back". Then: "wait. I really like this parakeet on the users computer and they only need the language they will be speaking in so it wont be that big right? help me think about this." Told that fewer languages don't make it smaller (one 0.7 GB model hears all 25), and that a laptop runs it faster than real time. Then: "this is honestly a great idea. We should have done this from the start, it makes it more simple for the user if we do it right and its more impressive to the hackathon judges."
+
+What this settles (built by Claude; Diego to confirm the details):
+- **The desktop app hears its owner on their own computer:** NVIDIA Parakeet TDT 0.6B v3 on NVIDIA NeMo-Speech.cpp, the same model and runtime as the speech server. *Private speech* is on by default. The first time voice typing is on, it downloads about 0.7 GB in the background (pinned to NVIDIA's published hashes, resumable). Until it's ready, or whenever it can't hear (another language, an engine failure), the server hears them as before, so voice typing never stops working.
+- **Only the words go to the server** (`POST /api/voice/dictate` with `{ heard }`). The voice never leaves the computer, and desktop voice typing needs no speech server: no Nebius endpoint, no cost per hour. The server still does the cleanup, "Hey {bot}" and the dictionary.
+- **Mac first:** Apple silicon runs it on the GPU (Metal), Intel Macs on the CPU; Windows x64 and Linux x64 too, from NVIDIA's own builds.
+- **The website stays as it is:** in the browser it types sample sentences until a speech key is set (Together AI's Parakeet, $0.0015 per audio minute, is the cheap way). The Nebius speech server stays in the repository, off, for meeting notes and the web.
+- **Measured here** (the real app under Xvfb on a 4-vCPU Linux box with no GPU, NVIDIA's real files, a spoken sentence; `desktop/e2e/local-speech.e2e.mjs`): downloaded from a local copy, checked and unpacked in under 10 s; a 3.4 s sentence typed about 1.5 s after letting go with the engine running, 2.7 s for the first one; "Hey Otto, add a reminder to pay the electricity bill, about one hundred and forty two dollars, on October thirtieth" reached Otto as "Add a reminder to pay the electricity bill about $142 on October 30th."
+- **How it's kept safe:** it runs on 127.0.0.1 behind a random key (in its environment, not on its command line); it starts when the shortcut is pressed and stops after 20 minutes unused; recordings go to it from memory, never to disk; it's given up on after 3 crashes in 10 minutes; *Remove it from this computer* deletes it.
+- **Diego's side:** try it on his Mac: `cd desktop && npm install && npm start`, pair, turn on voice typing, and watch *Private speech* in Voice typing settings (the first download takes a few minutes); dictations then show *private* in the pill.
+- **Next:** meeting notes on the computer with the same engine, and streaming while the key is held.
+
 ## Build choice (Claude; Diego to confirm): what real testers see (2026-10-14)
 
 Outside demo mode nothing is simulated. Anything without its service set up says **"Coming soon"** and can't be picked or set up:
@@ -576,6 +590,11 @@ A code review of the server and the desktop app. Each fix has a test that fails 
   - `node --test` runs test files in parallel. The desktop e2e files share one X display, so `test:e2e` runs them one at a time.
   - Pairing is limited to 10 tries per 10 minutes per address. Running the desktop e2e suite many times in a row hits it; wait 10 minutes.
   - The brand's lighter purple `#7c5cff` with white text is only 4.35:1, under the 4.5:1 that small text needs. Buttons with white text use `#6a4af5` (5.4:1), on the site and in the pill.
+- **Private speech** (2026-10-16):
+  - When Node can't run a program at all (missing, not executable), the child process emits `error` and never `exit`. Waiting for `exit` hung the first dictation; the engine now treats that `error` as the end, and stopping it never waits more than 5 s.
+  - A stream that errors (a full disk) throws if nothing listens for its `error` event, which would crash the main process. Downloads write through a file handle instead, and a full disk says so.
+  - Chromium's fake microphone reads its file from the start for each new stream, so a test can change what's "said" between dictations by rewriting the file.
+  - A stale Turbopack cache (`.next/dev`) made `next dev` answer 404 for API routes that exist. Deleting `.next/dev` fixed it.
 - **The Resend key for sign-in links made bots' email look live** (2026-10-14). Any email key turned the Email channel and "Its own inbox" on, so the live site offered them and tried to send codes from `<handle>@botmail.dev`. Resend refused, and the page got a 500.
   - Bots' email now has its own flag (`live.botEmail`): `BOT_EMAIL_DOMAIN`, plus AgentMail or Resend with its webhook secret. Until then both show as Coming soon, and there's no fallback domain.
   - Outside demo mode, any channel whose service isn't set up shows as Coming soon, and recipes and saved drafts leave it out.
@@ -605,7 +624,7 @@ Diego: "I really like that front desk for businesses idea. Lets hold on to it." 
    - the speech server on Nebius (`speech/README.md`) and a Together AI key for its backup;
    - sign and notarize the Mac app. Diego already has an Apple Developer account (2026-10-14); what's needed is a Developer ID Application certificate and notarization credentials in CI secrets, and a Mac or macOS runner to build;
    - whether to merge the desktop app with the Bridge into one "Build-a-bot app".
-7. Meeting notes, next: transcription on the owner's own key or on-device (sherpa-onnx with Parakeet), and calendar-based meeting titles.
+7. Meeting notes, next: transcription on the computer with the same NVIDIA Parakeet engine voice typing now uses (2026-10-16), and calendar-based meeting titles.
 8. More apps (Diego, 2026-10-15: "lets start trying to think about how we can get more apps integrated we can just think for now no need to build something new"). Options, cheapest first:
    - **The rest of Composio's catalog.** Composio has far more toolkits with its own sign-in than the ~190 we list. A "search all apps" box could offer any of them, with a generic icon and tool list.
    - **Apps that only need an API key** (many marketing, analytics and developer tools). Owners paste the key; it's stored encrypted like other keys.
@@ -614,5 +633,5 @@ Diego: "I really like that front desk for businesses idea. Lets hold on to it." 
    - **Remote MCP servers from the official MCP Registry**, curated, since quality varies. Owners can already paste any MCP server's URL.
    - **The long tail through Zapier's MCP server**, where the owner connects their own Zapier account, or a second sign-in provider for apps Composio lacks.
    - Count clicks on "Coming soon" apps to see what testers want first.
-9. Voice typing before launch: Diego tests it on his Mac; the speech server on Nebius (`TRANSCRIBE_PROVIDER=nvidia`) turns it on for real; the signed Mac and Windows apps ship it to everyone.
+9. Voice typing before launch: Diego tests it on his Mac; the signed Mac and Windows apps ship it to everyone. Since 2026-10-16 the desktop app hears on the computer, so it needs no speech server; only the web page (and meeting notes) need one: a Together AI key, or the speech server on Nebius.
 10. The Nebius × NVIDIA hackathon (due 2026-10-30, 10am PT): enter Build-a-bot as a second entry? It qualifies except for one requirement: the repository must be public with an open-source license. Diego decides that, the track (Personal AI suggested), what judges can use, and the video. Draft write-up, video script, checklist and feedback: `docs/HACKATHON.md`.

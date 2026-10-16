@@ -147,7 +147,7 @@ export default function TermsPage() {
               <strong>Apps</strong>: the apps you connect, either directly or through Composio, which handles sign-in and actions for many of them;
             </li>
             <li>
-              <strong>Other building blocks</strong>: web search, speech-to-text for meeting notes and voice typing (NVIDIA's open speech models on our own server at Nebius, with Together AI as a backup), payments
+              <strong>Other building blocks</strong>: web search, speech-to-text for meeting notes and voice typing (NVIDIA's open speech models: on your own computer in the desktop app, or on our own server at Nebius with Together AI as a backup), payments
               (Stripe) and hosting.
             </li>
           </ul>

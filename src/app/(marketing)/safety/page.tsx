@@ -258,8 +258,10 @@ export default function SafetyPage() {
           </p>
           <ul>
             <li>
-              <strong>Nothing you say is kept.</strong> The audio is turned into text and thrown away, and the text goes back to your computer
-              without being stored. We keep a count of the words for your plan, that&apos;s all.
+              <strong>Your voice stays on your computer.</strong> The desktop app turns it into text right there, with NVIDIA&apos;s Parakeet
+              speech model, and sends only the words, to be cleaned up. Until that model has downloaded, in a language it doesn&apos;t know, or
+              if you turn it off, the audio is turned into text on our servers and thrown away. Either way, nothing you say is kept: the text goes back to your computer without
+              being stored, and we keep a count of the words for your plan, that&apos;s all.
             </li>
             <li>
               <strong>It doesn&apos;t look at your screen.</strong> To match the app&apos;s style, it sends the kind of app you&apos;re typing in
