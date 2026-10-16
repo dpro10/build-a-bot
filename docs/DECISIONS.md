@@ -558,6 +558,7 @@ Diego: "since I'm submitting this in a hackathon, I don't want to make plans bec
 - **Where people see it:** the pricing page lists every price, at cost; Credit & usage (`/app/billing`) shows the balance, adds credit, and lists this month's use, credit added and the prices; the sidebar shows the balance; the builder's review step says what the bot will cost; each model shows its price per message.
 - **Breaking even:** `/admin` shows credit sold against what everything used cost.
 - **Kept from before:** the plan columns stay in the database, unused, so no data is dropped; old receipts that say "Paid by: Your plan" still read that way.
+- **Building a bot before signing in:** demo credit added before signing in (the only kind there can be; a card needs an email first) moves to the account you sign in to, up to the $20 demo cap. One person can't pile it up with throwaway accounts.
 - **Accounts from before this change:** what they already used was recorded all along (`usage.cost_micros`), so it counts against their $1 starter credit. Someone who used more than $1 starts at zero or a little below, and adds credit (free, in demo mode) to keep going.
 
 ## Build choice (Claude; Diego to confirm): what real testers see (2026-10-14)
@@ -636,7 +637,7 @@ A code review of the server and the desktop app. Each fix has a test that fails 
 2. **Owner by email address or caller ID.** Both can be forged.
    - Email from the owner already counts as outside content, so a forged one can't write to strangers. It can still make writes in the owner's own apps under Trusted helper or Full faith, and send STOP or START.
    - Fix: require the email provider's DKIM/SPF pass, and STIR/SHAKEN attestation for calls.
-3. **Bot-sent texts aren't metered.** Only incoming ones count toward the plan.
+3. **Bot-sent texts aren't metered.** Only incoming ones count toward the plan. *Done 2026-10-16: every text is now paid from credit, per segment, sent or received (no plans; see below).*
 4. **The monthly spending cap is still a placeholder** (`spentThisMonthUsd` is 0). This is harmless today: no tool reports amounts, so all spending is refused.
 5. **One recording per bot isn't enforced by the database.** A double start can make two meetings. It needs a partial unique index (a migration).
 6. **Long meetings:** notes for a meeting near 4 hours may exceed Vercel's 300-second function limit. Housekeeping writes notes inside the cron tick.

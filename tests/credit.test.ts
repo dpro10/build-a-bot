@@ -199,6 +199,20 @@ describe("signing in to an account you already had", () => {
     expect(signedIn?.user.id).toBe(existing.id);
     expect((await db.select().from(schema.users).where(eq(schema.users.id, anon.id))).length).toBe(0);
     expect(await getCredit(db, existing.id)).toMatchObject({ addedMicros: 3_000_000, balanceMicros: 4_000_000 });
+    // It was demo credit (a card needs an email first), and it stays demo credit.
+    expect(await creditHistory(db, existing.id)).toMatchObject([{ kind: "demo", amountMicros: 3_000_000 }]);
+  });
+
+  it("moves demo credit only as far as the demo cap, so throwaway accounts can't pile it up", async () => {
+    const main = await person("usr_main");
+    await addCredit(db, { userId: main.id, kind: "demo", amountMicros: 18_000_000 });
+    for (const [i, expected] of [[1, 20_000_000], [2, 20_000_000]] as const) {
+      const throwaway = await person(`usr_throwaway_${i}`, false);
+      await addCredit(db, { userId: throwaway.id, kind: "demo", amountMicros: 20_000_000 });
+      const link = await createLoginLink(db, { email: main.email!, anonymousUserId: throwaway.id });
+      expect((await consumeLoginLink(db, new URL(link).searchParams.get("token")!))?.user.id).toBe(main.id);
+      expect((await getCredit(db, main.id)).addedMicros).toBe(expected);
+    }
   });
 });
 
