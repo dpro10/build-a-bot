@@ -6,6 +6,7 @@ import { BotLiveProvider } from "@/components/app/live-state";
 import { BotHeader } from "@/components/app/BotHeader";
 import { brainLabel } from "@/lib/bots/labels";
 import { computerFor } from "@/lib/bridge/jobs";
+import { live } from "@/lib/env";
 
 export default async function BotLayout({ children, params }: { children: React.ReactNode; params: Promise<{ botId: string }> }) {
   const { botId } = await params;
@@ -20,6 +21,7 @@ export default async function BotLayout({ children, params }: { children: React.
         <BotHeader
           bot={{ id: bot.id, name: bot.name, avatar: bot.avatar, color: bot.color, trust: bot.trust, status: bot.status, role: bot.role }}
           brain={brainLabel(bot.brain)}
+          callable={live.voiceServer}
         />
         {children}
       </div>

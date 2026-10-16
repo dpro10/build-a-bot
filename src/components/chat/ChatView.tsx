@@ -9,6 +9,7 @@ import { Markdown } from "./Markdown";
 import { ToolChip, type ToolView } from "./ToolChip";
 import { mergeServerMessages, toChatMessage, type ChatMessage } from "./messages";
 import { ChatMeetingNotes } from "@/components/meetings/ChatNotes";
+import { ChatCall } from "@/components/call/ChatCall";
 import { cn } from "@/lib/utils";
 import type { AvatarId, ColorwayId } from "@/lib/avatars";
 import type { ComputerState } from "@/lib/bridge/jobs";
@@ -524,6 +525,8 @@ function MessageRow({
             </span>
             {activity ? <span className="shimmer-text text-sm font-medium">{activity}…</span> : null}
           </div>
+        ) : m.call ? (
+          <ChatCall call={m.call} botName={botName} />
         ) : m.text && m.meeting ? (
           <ChatMeetingNotes botId={botId} text={m.text} meeting={m.meeting} />
         ) : m.text ? (

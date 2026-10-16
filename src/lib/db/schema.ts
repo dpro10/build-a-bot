@@ -88,6 +88,11 @@ export const users = pgTable(
     planRenewsAt: timestamp("plan_renews_at", { withTimezone: true }),
     stripeCustomerId: text("stripe_customer_id"),
     stripeSubscriptionId: text("stripe_subscription_id"),
+    /** scrypt hash of the PIN that proves it's the owner on a phone call (src/lib/calls/pin.ts). */
+    phonePinHash: text("phone_pin_hash"),
+    /** Wrong PINs in a row; five lock phone PINs for 15 minutes. */
+    phonePinFailures: integer("phone_pin_failures").notNull().default(0),
+    phonePinLockedUntil: timestamp("phone_pin_locked_until", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -702,6 +707,50 @@ export const waitlist = pgTable(
   (t) => [uniqueIndex("waitlist_email_feature_uq").on(t.email, t.feature)],
 );
 
+/** One spoken entry in a call's transcript. */
+export type CallTurn = { role: "caller" | "bot"; text: string; at: number; interrupted?: boolean };
+
+/**
+ * A voice call with a bot: from the app's Call button (web) or a phone line (phone), handled by
+ * the voice server (voice/). The app decides who's calling; the voice server reports the call.
+ */
+export const calls = pgTable(
+  "calls",
+  {
+    id: text("id").primaryKey(),
+    botId: text("bot_id")
+      .notNull()
+      .references(() => bots.id, { onDelete: "cascade" }),
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(), // web | phone
+    direction: text("direction").notNull().default("inbound"), // inbound | outbound
+    /** pending (token issued) → active (the voice server took it) → ended | failed */
+    status: text("status").notNull().default("pending"),
+    /** Who's on the line: owner | unverified (the owner's number, not yet proven) | contact */
+    speaker: text("speaker").notNull().default("owner"),
+    fromAddress: text("from_address"),
+    toAddress: text("to_address"),
+    /** Twilio's CallSid for phone calls. */
+    callSid: text("call_sid"),
+    conversationId: text("conversation_id"),
+    transcript: jsonb("transcript").$type<CallTurn[]>().notNull().default([]),
+    /** What the voice server reported at the end: latency, model usage, who hung up. */
+    report: jsonb("report").$type<Record<string, unknown>>(),
+    durationS: integer("duration_s"),
+    costMicros: bigint("cost_micros", { mode: "number" }).notNull().default(0),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("calls_bot_idx").on(t.botId, t.createdAt),
+    index("calls_owner_idx").on(t.ownerId, t.createdAt),
+    uniqueIndex("calls_call_sid_uq").on(t.callSid),
+  ],
+);
+
 /** Results of work that finishes after a webhook already answered (voice turns, slow channels). */
 export const asyncResults = pgTable("async_results", {
   id: text("id").primaryKey(),
@@ -745,3 +794,4 @@ export type BridgeJob = typeof bridgeJobs.$inferSelect;
 export type Meeting = typeof meetings.$inferSelect;
 export type MeetingSegment = typeof meetingSegments.$inferSelect;
 export type Recipe = typeof recipes.$inferSelect;
+export type Call = typeof calls.$inferSelect;

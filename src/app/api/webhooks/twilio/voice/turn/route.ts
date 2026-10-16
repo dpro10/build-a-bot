@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { appUrl } from "@/lib/env";
 import { handleInbound, loadBotAndOwner } from "@/lib/channels/inbound";
-import { answerTwiml, gather, readTwilioForm, say, twiml } from "@/lib/channels/twilio-inbound";
+import { answerTwiml, gather, readTwilioForm, say, tierParam, twiml } from "@/lib/channels/twilio-inbound";
 import { escapeXml } from "@/lib/channels/twilio";
 import { newId, sleep } from "@/lib/utils";
 
@@ -18,6 +18,7 @@ export async function POST(req: Request) {
   const url = new URL(req.url);
   const channelId = url.searchParams.get("c") ?? "";
   const attempt = Number(url.searchParams.get("a") ?? 0);
+  const tier = tierParam(url);
   const db = await getDb();
   const [channel] = await db.select().from(schema.channels).where(eq(schema.channels.id, channelId)).limit(1);
   if (!channel) return twiml("<Hangup/>");
@@ -25,13 +26,14 @@ export async function POST(req: Request) {
 
   if (!speech) {
     if (attempt >= 2) return twiml(`${say("I'll let you go. Talk soon!")}<Hangup/>`);
-    return twiml(gather(channelId, "Sorry, I didn't catch that. What can I do for you?", attempt + 1));
+    return twiml(gather(channelId, "Sorry, I didn't catch that. What can I do for you?", attempt + 1, tier));
   }
   if (BYE.test(speech)) return twiml(`${say("Okay, bye!")}<Hangup/>`);
 
   const loaded = await loadBotAndOwner(db, channel.botId);
   if (!loaded) return twiml("<Hangup/>");
-  const isOwner = channel.ownerAddress === params.From;
+  // The owner's number, and the carrier vouched for it when the call came in (see voice/route.ts).
+  const isOwner = tier === "owner" && channel.ownerAddress === params.From;
   const resultId = newId("vr");
   await db.insert(schema.asyncResults).values({ id: resultId, kind: "voice_turn", expiresAt: new Date(Date.now() + 10 * 60_000) });
 
@@ -61,8 +63,8 @@ export async function POST(req: Request) {
   for (let i = 0; i < 16; i++) {
     await sleep(500);
     const [row] = await db.select().from(schema.asyncResults).where(eq(schema.asyncResults.id, resultId)).limit(1);
-    if (row && row.status !== "pending") return twiml(answerTwiml(channelId, row.result as { text?: string; approvals?: number; error?: string } | null));
+    if (row && row.status !== "pending") return twiml(answerTwiml(channelId, row.result as { text?: string; approvals?: number; error?: string } | null, tier));
   }
-  const wait = `${appUrl()}/api/webhooks/twilio/voice/wait?c=${encodeURIComponent(channelId)}&r=${resultId}`;
+  const wait = `${appUrl()}/api/webhooks/twilio/voice/wait?c=${encodeURIComponent(channelId)}&r=${resultId}&t=${tier}`;
   return twiml(`${say("One moment.")}<Pause length="2"/><Redirect method="POST">${escapeXml(wait)}</Redirect>`);
 }

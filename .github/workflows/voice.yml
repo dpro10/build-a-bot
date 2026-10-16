@@ -1,0 +1,191 @@
+# The voice server (voice/): tests on every change, including whole calls on NVIDIA's real models,
+# and its container built for both CPU levels; on main, once Google Cloud is set up
+# (docs/DEPLOY.md §8), a deploy.
+name: Voice server
+
+on:
+  push:
+    branches: [main]
+    paths: ["voice/**", ".github/workflows/voice.yml"]
+  pull_request:
+    paths: ["voice/**", ".github/workflows/voice.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NEMO_SPEECH_COMMIT: 6a3ca369370782acee0dd155e34394ba60b920c4
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install
+        working-directory: voice
+        run: npm ci
+      - name: Types
+        working-directory: voice
+        run: npm run typecheck
+      - name: Test
+        working-directory: voice
+        run: npm test
+
+  # NVIDIA's engine built from source here, the real models, and whole calls through the server:
+  # Magpie makes a caller's voice, Parakeet hears it (browser and phone paths), Magpie answers.
+  real-models:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build tools
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ninja-build libsentencepiece-dev
+      # Built for AVX2 (the Dockerfile's v3 flags), not for this runner's own CPU: runners differ, and
+      # a cached native build crashes (SIGILL) on one without the same instructions.
+      - name: Cache NeMo-Speech.cpp
+        id: engine-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/nemo-speech
+          key: nemo-speech-${{ env.NEMO_SPEECH_COMMIT }}-${{ runner.os }}-v3-${{ hashFiles('voice/native/**') }}
+      - name: Build NeMo-Speech.cpp v0.2.0 and nemo-voice
+        if: steps.engine-cache.outputs.cache-hit != 'true'
+        run: |
+          set -eux
+          git clone --depth 1 --branch v0.2.0 https://github.com/NVIDIA/NeMo-Speech.cpp.git /tmp/nsc
+          cd /tmp/nsc
+          test "$(git rev-parse HEAD)" = "$NEMO_SPEECH_COMMIT"
+          git submodule update --init --depth 1 llama.cpp third_party/cpp-httplib
+          scripts/configure.sh cpu-server -DGGML_NATIVE=OFF -DGGML_AVX=ON -DGGML_AVX2=ON -DGGML_FMA=ON -DGGML_F16C=ON -DGGML_BMI2=ON -DNEMO_SPEECH_BUILD_NMT=OFF -DNEMO_SPEECH_BUILD_DIAR=OFF
+          cmake --build --preset cpu-server -j "$(nproc)"
+          cmake --install build/cpu-server --prefix ~/nemo-speech
+          cmake -S "$GITHUB_WORKSPACE/voice/native" -B /tmp/nemo-voice -G Ninja -DCMAKE_PREFIX_PATH=$HOME/nemo-speech -DCMAKE_INSTALL_PREFIX=$HOME/nemo-speech
+          cmake --build /tmp/nemo-voice
+          cmake --install /tmp/nemo-voice
+      - name: Cache models
+        id: models-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/models
+          key: voice-models-${{ hashFiles('voice/scripts/fetch-models.sh', 'voice/scripts/magpie-q8.py') }}
+      - name: Fetch the models
+        if: steps.models-cache.outputs.cache-hit != 'true'
+        run: voice/scripts/fetch-models.sh ~/models
+      - name: Install
+        working-directory: voice
+        run: npm ci
+      - name: Whole calls on the real models
+        working-directory: voice
+        run: |
+          M=$HOME/models
+          export NEMO_VOICE_BIN=$HOME/nemo-speech/bin/nemo-voice
+          export NEMO_VOICE_ARGS="--asr-model $M/parakeet-tdt-0.6b-v3.q8_0.gguf --tts-model $M/magpie/magpie_tts_multilingual_357m.v2607.q8_0.gguf --codec-model $M/magpie/nemo_nano_codec_22khz_1.89kbps_21.5fps.decoder.f16.gguf --tokenizer-dir $M/magpie/tokenizer --voice Aria --tts-threads 2 --codec-threads 2 --no-cfg"
+          export SILERO_VAD_MODEL=$M/silero_vad.onnx
+          node --test --test-timeout=900000 test/sidecar.test.ts test/turn.test.ts test/real-call.test.ts
+
+  image:
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        level: [v3, v4]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: voice
+          build-args: CPU_LEVEL=${{ matrix.level }}
+          load: true
+          tags: build-a-bot-voice:try
+          cache-from: type=gha,scope=voice-${{ matrix.level }}
+          cache-to: type=gha,mode=max,scope=voice-${{ matrix.level }}
+      # The AVX2 build runs on any runner: it starts, loads both models and says it's ready.
+      # (The AVX-512 + AMX build needs a Sapphire Rapids CPU to run.)
+      - name: Start it
+        if: matrix.level == 'v3'
+        run: |
+          docker run -d --name voice -p 8080:8080 \
+            -e APP_URL=https://build-a-bot.site -e VOICE_SERVER_SECRET=ci-secret-ci-secret-ci-secret-ci-secret \
+            -e TOKEN_FACTORY_API_KEY=ci-key build-a-bot-voice:try
+          for i in $(seq 1 120); do curl -sf http://localhost:8080/health > /dev/null && break; sleep 5; done
+          curl -sf http://localhost:8080/health && echo
+      - name: The container's log
+        if: always() && matrix.level == 'v3'
+        run: docker logs voice 2>&1 | tail -40 || true
+
+  # Google Compute Engine, once these are set in the repository's settings: secrets GCP_SA_KEY,
+  # VOICE_SERVER_SECRET and TOKEN_FACTORY_API_KEY; variable GCP_PROJECT (and optionally GCP_ZONE,
+  # VOICE_MACHINE_TYPE, VOICE_HOST, APP_URL). Until then this job says what's missing and stops.
+  # The image is the one the image job built (from its cache), pushed to the project's own registry.
+  deploy:
+    needs: [image, real-models]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: voice-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Is Google Cloud set up?
+        id: ready
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          VOICE_SERVER_SECRET: ${{ secrets.VOICE_SERVER_SECRET }}
+          TOKEN_FACTORY_API_KEY: ${{ secrets.TOKEN_FACTORY_API_KEY }}
+          GCP_PROJECT: ${{ vars.GCP_PROJECT }}
+        run: |
+          missing=""
+          [ -n "$GCP_SA_KEY" ] || missing="$missing GCP_SA_KEY(secret)"
+          [ -n "$VOICE_SERVER_SECRET" ] || missing="$missing VOICE_SERVER_SECRET(secret)"
+          [ -n "$TOKEN_FACTORY_API_KEY" ] || missing="$missing TOKEN_FACTORY_API_KEY(secret)"
+          [ -n "$GCP_PROJECT" ] || missing="$missing GCP_PROJECT(variable)"
+          if [ -n "$missing" ]; then
+            echo "::notice::Not deploying the voice server: set$missing in the repository's settings (docs/DEPLOY.md §8)."
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: google-github-actions/auth@v2
+        if: steps.ready.outputs.go == 'true'
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - uses: google-github-actions/setup-gcloud@v2
+        if: steps.ready.outputs.go == 'true'
+      - name: Which build
+        if: steps.ready.outputs.go == 'true'
+        id: level
+        env:
+          VOICE_MACHINE_TYPE: ${{ vars.VOICE_MACHINE_TYPE }}
+        run: echo "level=$(voice/deploy/gce.sh --cpu-level)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+        if: steps.ready.outputs.go == 'true'
+      - name: Build
+        if: steps.ready.outputs.go == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: voice
+          build-args: CPU_LEVEL=${{ steps.level.outputs.level }}
+          load: true
+          tags: build-a-bot-voice:deploy
+          cache-from: type=gha,scope=voice-${{ steps.level.outputs.level }}
+      - name: Deploy
+        if: steps.ready.outputs.go == 'true'
+        env:
+          GCP_PROJECT: ${{ vars.GCP_PROJECT }}
+          GCP_ZONE: ${{ vars.GCP_ZONE }}
+          VOICE_MACHINE_TYPE: ${{ vars.VOICE_MACHINE_TYPE }}
+          VOICE_HOST: ${{ vars.VOICE_HOST }}
+          APP_URL: ${{ vars.APP_URL }}
+          VOICE_SERVER_SECRET: ${{ secrets.VOICE_SERVER_SECRET }}
+          TOKEN_FACTORY_API_KEY: ${{ secrets.TOKEN_FACTORY_API_KEY }}
+          IMAGE_TAG: ${{ github.sha }}
+          SOURCE_IMAGE: build-a-bot-voice:deploy
+        run: voice/deploy/gce.sh

@@ -561,6 +561,43 @@ Diego: "since I'm submitting this in a hackathon, I don't want to make plans bec
 - **Building a bot before signing in:** demo credit added before signing in (the only kind there can be; a card needs an email first) moves to the account you sign in to, up to the $20 demo cap. One person can't pile it up with throwaway accounts.
 - **Accounts from before this change:** what they already used was recorded all along (`usage.cost_micros`), so it counts against their $1 starter credit. Someone who used more than $1 starts at zero or a little below, and adds credit (free, in demo mode) to keep going.
 
+## Decision: call your bot; NVIDIA's speech models on our own server (Diego, 2026-10-16)
+
+Diego: "I really want this phone call with your agents to be able to work… Look into all this and try and make me a solid plan for how I should move forward." Then: "I can just create another free trial Twilio account… The Google one that I'm using for Chef is free. I have 300 free credits… as far as callbacks go, it only has to mention 'an AI assistant' the first time… your focus shouldn't be on meeting the deadline. Your focus should be on building something extremely, extremely impressive." And: "Yes, we're only going to enter build a bot. Not chef." Then the go: "do everything you need to do and as soon as I get home I'll add the things that you can't."
+
+- **Only Build-a-bot is entered in the hackathon.** It borrows Chef's phone ideas (who's calling, a PIN, memory across calls); Chef isn't entered.
+- **Accounts:** a new Twilio trial (upgraded later for streaming), and the Google Cloud free trial's $300 for the server.
+- **"AI assistant" the first time only:** the owner's first call opens "Hi Diego, it's Otto, your AI assistant. What can I do for you?", later ones "Hey Diego, it's Otto. What can I do for you?". Anyone else always hears it's the owner's AI assistant.
+
+**What's built (Claude; details in `voice/README.md`):**
+- **The voice server** (`voice/`), one VM:
+  - NVIDIA NeMo-Speech.cpp v0.2.0, built from source; a small C++ sidecar on its C API keeps both models loaded.
+  - NVIDIA Parakeet TDT 0.6B v3 hears. NVIDIA Magpie TTS (the Aria voice) speaks, streamed as it's made and stoppable mid-word. Silero VAD finds speech.
+  - Nemotron 3.5 Lightning on Token Factory holds the conversation. Its `ask_bot` tool hands the real work to the bot's own agent (`/api/calls/act` → the same turn as a chat: apps, memory, approvals, receipts). This is the front/back split of NVIDIA's Nemotron voice agent blueprint.
+  - Turn-taking: an early guess at the first pause (~0.2 s) whose answer is held until the turn ends; barge-in that stops the voice and remembers what the caller actually heard; short fillers while the bot works; slow work reported back when it's done.
+- **Measured** on 4 Sapphire Rapids vCPUs, with a scripted talker: from the caller stopping to the bot's first word, 1.3 s on the phone path and in the browser, with both directions heard word for word. The real talker adds Nemotron's first token.
+- **Two ways in:**
+  - the **Call** button in each bot's header (the browser streams 16 kHz audio over a WebSocket);
+  - phone calls over Twilio Media Streams, once `TWILIO_MEDIA_STREAMS=1` (trial accounts can't stream). The old Twilio-speech line stays as the fallback whenever the voice server is down or busy.
+- **Who's calling** (the app decides, `src/lib/calls`):
+  - **The owner:** on the Call button, or from their own number when the carrier vouches for it (STIR/SHAKEN attestation A).
+  - **Unverified:** the owner's number otherwise, until they say or type their phone PIN (Account → Phone PIN). The PIN is 4–8 digits, scrypt-hashed; 5 wrong tries lock it for 15 minutes. It never reaches the model.
+  - **A contact:** anyone else. The bot takes a message and does nothing for them.
+- **Privacy:** audio is never kept. The transcript goes into the bot's chat as a call card. Logs never contain what anyone said.
+- **Price, at cost** (`prices.ts`): NVIDIA's speech runs on our server, so a call in the app costs only the talker's tokens. A phone call adds Twilio's minute plus the stream: $0.0129 a minute in, $0.0184 out. The Twilio-speech line stays $0.05 a minute.
+- **Hosting:**
+  - A `c3-highcpu-4` VM on the free trial (about $124 a month).
+  - The image is built for AVX-512 + AMX ("v4"): Magpie is about 40% faster than on NVIDIA's AVX2 prebuilt.
+  - Container-Optimized OS, with Caddy for HTTPS on `<ip>.sslip.io`.
+  - `.github/workflows/voice.yml` deploys it once Diego adds the keys (`docs/DEPLOY.md` §8). The VM's fixed cost isn't charged to anyone; whether calls should carry a share of it is Diego's call.
+- **Magpie as Q8_0:** requantized from NVIDIA's F16 GGUF (`voice/scripts/magpie-q8.py`; NVIDIA benchmarks Q8_0), byte-identical every build. Classifier-free guidance is off: it halves the work, and the voice stays clear on a phone line.
+
+**Next:**
+- Calls from the bot: owner only, "AI assistant" the first time, saying who's calling (TCPA).
+- The bot's other agents on a call: desk tasks through the Bridge, research, the cloud browser, "call me when it's done", and a live view of the call in the app.
+- Home mode: the desktop app hears and speaks the call on the owner's computer.
+- Published speed numbers ("Call-Bench"), and a GPU image.
+
 ## Build choice (Claude; Diego to confirm): what real testers see (2026-10-14)
 
 Outside demo mode nothing is simulated. Anything without its service set up says **"Coming soon"** and can't be picked or set up:
@@ -692,6 +729,19 @@ A code review of the server and the desktop app. Each fix has a test that fails 
 - **The Resend key for sign-in links made bots' email look live** (2026-10-14). Any email key turned the Email channel and "Its own inbox" on, so the live site offered them and tried to send codes from `<handle>@botmail.dev`. Resend refused, and the page got a 500.
   - Bots' email now has its own flag (`live.botEmail`): `BOT_EMAIL_DOMAIN`, plus AgentMail or Resend with its webhook secret. Until then both show as Coming soon, and there's no fallback domain.
   - Outside demo mode, any channel whose service isn't set up shows as Coming soon, and recipes and saved drafts leave it out.
+- **Calls and the voice server** (2026-10-16):
+  - NeMo-Speech.cpp's prebuilt Linux binaries are AVX2 only. On them, Magpie F16 ran at 0.53× real time on 4 vCPUs, too slow for a call. Built from source for AVX-512 + AMX, with Magpie as Q8_0 and classifier-free guidance off (on by default, it doubles the work), it's 0.93×, with first audio in about 0.8 s.
+  - NVIDIA's HTTP server sends Magpie's audio only once a whole sentence is made. The sidecar uses the C API's streaming callback instead, which can also stop mid-word.
+  - Magpie's tokenizer files are inside the 1.5 GB `.nemo` tar. NVIDIA's `pull` fetches only the bytes before and after the weights; `voice/scripts/fetch-models.sh` does the same with two range requests and a sparse file. The tar holds two copies of some files, and the later one wins.
+  - A v4 (AVX-512 + AMX) build may not run on the machine building it, so the Dockerfile runs NVIDIA's binary only for v3 builds, and the models are fetched without it.
+  - GitHub's free storage for private packages (500 MB) can't hold the 2.5 GB images, so CI doesn't publish them. The deploy job rebuilds from the build cache and pushes to the project's own Artifact Registry.
+  - C3, C4 and N4 machines refuse the default `pd-standard` boot disk: C3 gets `pd-balanced`, C4 and N4 `hyperdisk-balanced`.
+  - Twilio trial accounts block `<Stream>` (and `<Record>`, `<Dial>`…), cap TwiML at 10 hops a call and fetch it with a 5 s timeout.
+  - onnxruntime-node's install script downloads extra binaries from NuGet, which the cloud sandbox blocks. The npm package already has Linux x64's, so `voice/.npmrc` skips the download.
+  - Node 22 runs the voice server's TypeScript directly, so it may only use syntax that can be erased: no parameter properties, no enums.
+  - Magpie's NanoCodec, not the Magpie model, limits the speed. On 4 vCPUs: 2 threads + 2 for the codec ≈ 1.0× real time with first audio at 0.9 s; 1 + 3 streams at 1.2× but first audio takes 1.5 s; 3 + 1 drops to 0.6×. Barely real time means a stutter whenever the machine is busy, so the server measures its speed and holds each sentence until it can play through (`SpeechPace`).
+  - The tokenizer folder inside Magpie's `.nemo` is mode 0700. Unpacked as root and run as the container's own user, Magpie couldn't read it ("failed to read …/model_config.yaml"). CI's start-up check caught it; `fetch-models.sh` now keeps its own folder modes and makes everything readable.
+  - Found in a real-browser test: an owner without a name was greeted "Hi your, it's Otto" (`ownerName` falls back to "your owner"). Greetings now leave the name out when there isn't one.
 
 ## On hold: a front desk for small businesses (Diego, 2026-10-15)
 
@@ -728,4 +778,5 @@ Diego: "I really like that front desk for businesses idea. Lets hold on to it." 
    - **The long tail through Zapier's MCP server**, where the owner connects their own Zapier account, or a second sign-in provider for apps Composio lacks.
    - Count clicks on "Coming soon" apps to see what testers want first.
 9. Voice typing before launch: Diego tests it on his Mac; the signed Mac and Windows apps ship it to everyone. Since 2026-10-16 the desktop app hears on the computer, so it needs no speech server; only the web page (and meeting notes) need one: a Together AI key, or the speech server on Nebius.
-10. The Nebius × NVIDIA hackathon (due 2026-10-30, 10am PT): enter Build-a-bot as a second entry? It qualifies except for one requirement: the repository must be public with an open-source license. Diego decides that, the track (Personal AI suggested), what judges can use, and the video. Draft write-up, video script, checklist and feedback: `docs/HACKATHON.md`.
+10. The Nebius × NVIDIA hackathon (due 2026-10-30, 10am PT): Build-a-bot is Diego's only entry (2026-10-16; Chef isn't entered). It qualifies except for one requirement: the repository must be public with an open-source license. Diego decides that, the track (Personal AI suggested), what judges can use, and the video. Draft write-up, video script, checklist and feedback: `docs/HACKATHON.md`.
+11. Calls (2026-10-16): Diego adds the Google Cloud key, the GitHub secrets, the Vercel settings and a Twilio number (`docs/DEPLOY.md` §8), then upgrades Twilio for streaming. Still his call: whether calls should carry a share of the voice server's fixed cost, and when to keep the VM running (it costs about $4 a day).

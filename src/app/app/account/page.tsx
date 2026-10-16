@@ -8,7 +8,8 @@ import { FAIR_USE, creditTone, formatMicros } from "@/lib/billing/prices";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageContainer, PageHeader } from "@/components/account/PageHeader";
-import { DataActions, ProfileForm } from "@/components/account/AccountForms";
+import { DataActions, PhonePinForm, ProfileForm } from "@/components/account/AccountForms";
+import { pinLocked } from "@/lib/calls/pin";
 import { periodLabels, safeTimeZone, usageNumbers } from "@/components/account/billing-shared";
 
 export const metadata: Metadata = { title: "Account" };
@@ -77,6 +78,19 @@ export default async function AccountPage() {
             <Link href="/app/billing" className="group mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-primary">
               Credit &amp; usage <ArrowRight className="size-4 transition group-hover:translate-x-0.5" aria-hidden />
             </Link>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Phone PIN</CardTitle>
+            <CardDescription>
+              When you call your bot, it knows it&apos;s you if your carrier vouches for your number. When it can&apos;t, it asks for this PIN before
+              it shares anything or does anything for you.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <PhonePinForm initialSet={Boolean(user.phonePinHash)} locked={pinLocked(user)} />
           </CardContent>
         </Card>
 

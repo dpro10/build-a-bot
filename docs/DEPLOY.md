@@ -44,7 +44,7 @@ Own-key (BYOK) and subscription brains need nothing from you.
 | Channel | Setup |
 |---|---|
 | **Telegram** | Create a manager bot with @BotFather and turn on Bot Management (Bot Settings). Set `TELEGRAM_MANAGER_BOT_TOKEN`, `TELEGRAM_MANAGER_BOT_USERNAME` and `TELEGRAM_MANAGER_WEBHOOK_SECRET` (required: without it the webhook refuses every update), The server points the manager bot's webhook at itself as soon as those keys are live, and checks it every 30 minutes, so a new domain or secret is picked up. Each owner's own bot gets its webhook automatically. Without a manager bot, owners can still paste a BotFather token. |
-| **SMS & calls** | Twilio account + a US/Canada number. `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER`. On the number: *A message comes in* → `POST {APP_URL}/api/webhooks/twilio/sms`; *A call comes in* → `POST {APP_URL}/api/webhooks/twilio/voice`. **US texting needs A2P 10DLC (or toll-free) registration before launch.** |
+| **SMS & calls** | Twilio account + a US/Canada number. `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER`. On the number: *A message comes in* → `POST {APP_URL}/api/webhooks/twilio/sms`; *A call comes in* → `POST {APP_URL}/api/webhooks/twilio/voice`; *Call status changes* → `POST {APP_URL}/api/webhooks/twilio/voice/status` (that's how a call's minutes are counted and charged). Calls are heard and spoken by Twilio until the voice server takes them (§8). **US texting needs A2P 10DLC (or toll-free) registration before launch.** |
 | **Email** | Buy a brand-free domain for bot inboxes (never containing "build-a-bot") and set `BOT_EMAIL_DOMAIN`. Either AgentMail (`AGENTMAIL_API_KEY`, webhook `message.received` → `{APP_URL}/api/webhooks/email/agentmail`, `AGENTMAIL_WEBHOOK_SECRET`) or Resend (`RESEND_API_KEY`, inbound on the domain, webhook `email.received` → `{APP_URL}/api/webhooks/email/resend`, `RESEND_WEBHOOK_SECRET`). Until the domain and one provider's key and webhook secret are all set, the Email channel and "Its own inbox" show as Coming soon. Bots' mail goes out through that provider. `EMAIL_FROM` sends sign-in links, and `RESEND_API_KEY` on its own only does that. |
 | **Slack** | **One click (recommended):** create the shared app from `docs/slack-app-manifest.json` (api.slack.com/apps → Create New App → From a manifest; it uses `https://build-a-bot.site`, so change the URLs if `APP_URL` differs). Set `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET` and `SLACK_SIGNING_SECRET` from Basic Information, redeploy, then in Slack: Event Subscriptions → Retry if the URL isn't verified yet, and Manage Distribution → Activate Public Distribution so other workspaces can add it. Owners then click **Add to Slack**, pick a workspace and click Allow. Each person reaches only their own bot, which answers with its own name and face. Slack must reach `APP_URL` without a redirect. **Without these keys,** each owner makes their bot its own Slack app from a manifest link in the app. |
 | **Discord** | Create an application. `DISCORD_APPLICATION_ID`, `DISCORD_PUBLIC_KEY`, `DISCORD_BOT_TOKEN`. Once those are live, set the Interactions Endpoint URL to `{APP_URL}/api/webhooks/discord` (Discord checks it right away). The server registers `/ask` and `/link` by itself, and again every 6 hours; `npm run discord:register` does it on demand. |
@@ -81,4 +81,51 @@ A paid Checkout for an account deleted before Stripe confirmed it adds no credit
   - a lawyer reviews the consent flow and transcript retention;
   - if server speech-to-text is set up as a fallback, check that provider's data-retention and training terms;
   - sign and notarize the desktop app (Apple Developer Program for Mac, a code-signing certificate for Windows) and publish its downloads. See `desktop/README.md`. Then set `NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL` to the download page: until it's set, the site shows the desktop app, and with it meeting notes and voice typing, as "Coming soon".
-- [ ] Smoke test: build a bot, chat, approve an action, STOP from a channel, a reminder fires, add credit with a Stripe test card.
+- [ ] Calls (§8): the voice server is up, the Call button works on `APP_URL`, and with Twilio upgraded and `TWILIO_MEDIA_STREAMS=1`, a phone call is answered by the bot's voice.
+- [ ] Smoke test: build a bot, chat, approve an action, STOP from a channel, a reminder fires, add credit with a Stripe test card, call the bot.
+
+## 8. Calls (the voice server)
+
+Talking with a bot by phone, or with the **Call** button in the app, goes through the voice server (`voice/`, see its README): NVIDIA Parakeet hears, NVIDIA Magpie speaks, Nemotron 3.5 Lightning holds the conversation, and the bot's own agent does the work. It runs on one Google Compute Engine VM that `.github/workflows/voice.yml` deploys. Without it nothing breaks: the Call button stays hidden, and phone calls use the simpler line (§5), where Twilio hears and speaks.
+
+**What it costs:** the default `c3-highcpu-4` VM (4 Intel Sapphire Rapids vCPUs, 8 GB) is about $0.17 an hour, $124 a month, plus about $7 a month for its disk and IP address. The Google Cloud free trial's $300 (good for 90 days from sign-up) covers about two months of it running all the time. A stopped VM costs only the $7 (below).
+
+**Is it fast enough?** On 4 vCPUs Magpie makes speech at about real time, which is just enough: the server measures its own speed at start, and the deploy log prints it (`speechRate`, also in `/health`). If it says it's under 1, sentences wait a moment before playing so they don't stutter, and answers start later; an 8-vCPU `c3-highcpu-8` (about $0.34 an hour) is about twice as fast. It takes one call at a time (`VOICE_MAX_CALLS`); a second phone call gets the simpler line, a second Call button says the line is busy.
+
+**1. Google Cloud** (5 minutes, in the console with the free-trial account):
+1. Create a project, e.g. `build-a-bot-voice`, with the free trial as its billing account. A separate project keeps the voice server apart from anything else in the account.
+2. Open Cloud Shell (the `>_` button at the top right) and make the key GitHub deploys with (put your project ID in `P`):
+   ```bash
+   P=build-a-bot-voice
+   gcloud iam service-accounts create voice-deploy --project $P
+   for r in compute.admin artifactregistry.admin iam.serviceAccountUser serviceusage.serviceUsageAdmin; do
+     gcloud projects add-iam-policy-binding $P --member serviceAccount:voice-deploy@$P.iam.gserviceaccount.com --role roles/$r --condition None
+   done
+   gcloud iam service-accounts keys create key.json --iam-account voice-deploy@$P.iam.gserviceaccount.com
+   cat key.json; rm key.json
+   ```
+   If gcloud asks to enable an API, say yes. Copy what `cat` printed for the next step. (If key creation is blocked by an organization policy, the workflow can sign in with Workload Identity Federation instead.)
+
+**2. GitHub** (the repository → Settings → Secrets and variables → Actions):
+- **Secrets:**
+  - `GCP_SA_KEY`: the key from Cloud Shell, all of it.
+  - `VOICE_SERVER_SECRET`: a new random string of 32 or more characters (`openssl rand -hex 32` in Cloud Shell). Vercel gets the same one.
+  - `TOKEN_FACTORY_API_KEY`: the same Token Factory key as Vercel's.
+- **Variables:** `GCP_PROJECT`, the project ID. Optional: `GCP_ZONE` (default `us-central1-a`), `VOICE_MACHINE_TYPE` (default `c3-highcpu-4`), `APP_URL` (default `https://build-a-bot.site`), `VOICE_HOST` (default `<ip>.sslip.io`, a hostname that needs no DNS).
+
+Then Actions → **Voice server** → Run workflow on `main`. The first run takes about half an hour (NVIDIA's engine is built from source twice, and every test runs, including whole calls on the real models). The **deploy** job makes everything in the project (an image registry, a static IP, an HTTPS firewall rule, the VM with Caddy for the certificate) and ends with the server's address: `Voice server is up at https://34-…sslip.io`. After that, each push to `main` that changes `voice/` ships itself in a few minutes; phone calls use the simpler line while the VM restarts.
+
+**3. Vercel:** set `VOICE_SERVER_URL` to that address and `VOICE_SERVER_SECRET` to the same secret, then redeploy. Each bot's header now has a **Call** button (it works on `APP_URL`'s address; the server refuses calls started from other sites).
+
+**4. Phone calls on the voice server:**
+1. Twilio as in §5, with all three webhooks on the number.
+2. A trial account can't stream a call's audio (`<Stream>` is blocked), so calls stay on the simpler line. On a trial, callers also hear Twilio's trial notice first, and a call allows about ten back-and-forths. Upgrade the account (Twilio Console → Upgrade: a profile, an address and a starting balance, about $20).
+3. Set `TWILIO_MEDIA_STREAMS=1` in Vercel and redeploy. Calls to the number are then answered by the voice server. If it's down or busy, the call goes on on the simpler line by itself.
+
+Who's who on a call: the owner on the app's Call button, or from their own number when the carrier vouches for it (STIR/SHAKEN attestation A); the owner's number without that is unverified until they say or type their phone PIN (Account → Phone PIN); anyone else gets the bot's message-taking manner and nothing done for them.
+
+**Day to day:**
+- Stop it when nobody needs it, and start it again: `gcloud compute instances stop build-a-bot-voice --zone us-central1-a --project <P>`, then `… start …`. Meanwhile phone calls use the simpler line, and the Call button says the voice line is down. A deploy leaves a stopped VM stopped.
+- Its log (one JSON line per event, never what anyone said): `gcloud compute ssh build-a-bot-voice --zone us-central1-a --project <P> -- sudo journalctl -u voice -u caddy -n 200`, or Logs Explorer in the console.
+- A different machine: set `VOICE_MACHINE_TYPE` and run the workflow; the VM is replaced (it keeps nothing). C3, C4 and N4 get the AVX-512 + AMX build, other types the AVX2 one. The free trial allows 8 vCPUs running at once across the account, and no GPUs.
+- A nicer address: point an A record (e.g. `voice.build-a-bot.site`) at the static IP `build-a-bot-voice-ip`, set the variable `VOICE_HOST` to it, run the workflow, and update `VOICE_SERVER_URL`.
