@@ -93,8 +93,8 @@ Web chat, phone calls and texts (Twilio), email (its own brand-free address), Te
 - **Your words:** names and terms spelled your way, what speech-to-text writes instead, snippets ("my booking link" types the link), and the names your bots already remember. Fix a dictation and it learns.
 - **Edit by voice:** select text, hold Shift with your key, and say what to change ("make it friendlier", "turn it into a list", "translate it to Spanish"). With nothing selected, it writes what you ask for. "Hey Otto, add this to my calendar" sends your bot what you selected, treated as outside content so it asks before sending anything to someone new.
 - **"Hey Otto, …"** asks your bot instead of typing; it answers in a small bubble with Paste, Copy, Reply and Open chat.
-- **Private:** the mic is on only while you hold the key, with a pill on screen the whole time; the audio is turned into text and thrown away, and the server keeps a word count, not the words. History stays on your computer, encrypted.
-- The **Voice typing** page (`/app/voice`) does it in the browser, and holds your words and snippets. Free: 8,000 words a month; Plus and Pro: unlimited.
+- **Private:** the mic is on only while you hold the key, with a pill on screen the whole time. NVIDIA Parakeet hears you on your own computer, so the audio never leaves it; the server gets the words to clean up and keeps a word count, not the words. History stays on your computer, encrypted.
+- **In the desktop app**, like Wispr Flow: the website doesn't listen. The **Voice typing** page (`/app/voice`) gets you the app, pairs it, and holds your words and snippets. Free: 8,000 words a month; Plus and Pro: unlimited.
 
 ### Web actions (beta)
 

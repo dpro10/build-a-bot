@@ -47,8 +47,16 @@ test("dashboard pages", async ({ page }) => {
     },
   });
   const { id } = await res.json();
-  // A request by voice with text the owner selected, so the chat shows one.
-  await (await page.request.post("/api/voice/ask", { data: { botId: id, text: "Remind me about this tomorrow at 9.", selection: "Team lunch Friday at 12:30." } })).text();
+  // A request by voice with text the owner selected, so the chat shows one. It comes from the
+  // desktop app: a computer paired the way the app does it.
+  const code = await (await page.request.post("/api/bridge/pairing-code")).json();
+  const { token } = await (await page.request.post("/api/bridge/pair", { data: { code: code.code, name: "Ally's Mac", platform: "desktop-darwin-arm64" } })).json();
+  const asked = await page.request.post("/api/voice/ask", {
+    headers: { authorization: `Bearer ${token}` },
+    data: { botId: id, text: "Remind me about this tomorrow at 9.", selection: "Team lunch Friday at 12:30." },
+  });
+  expect(asked.ok()).toBeTruthy();
+  await asked.text();
   for (const tab of ["", "/meetings", "/tools", "/channels", "/routines", "/activity", "/memory", "/settings"]) await scan(page, `/app/bots/${id}${tab}`);
   for (const path of ["/app/approvals", "/app/billing", "/app/voice", "/app/bridge", "/app/account"]) await scan(page, path);
 });

@@ -21,7 +21,7 @@ process.env.TRANSCRIBE_API_KEY = "gsk_test_voice_key";
 for (const key of ["TOKEN_FACTORY_API_KEY", "TRANSCRIBE_FALLBACK_API_KEY", "DICTATION_POLISH", "DICTATION_POLISH_MODEL", "DICTATION_DAILY_LIMIT"]) delete process.env[key];
 
 const { getDb, resetDbForTests, schema } = await import("@/lib/db");
-const { dictate, loadVoiceContext, voicePolishAvailable, voiceTypingAvailable } = await import("@/lib/dictation");
+const { dictate, loadVoiceContext, speechToTextAvailable, voicePolishAvailable } = await import("@/lib/dictation");
 const { addEntry } = await import("@/lib/dictation/dictionary");
 const { polishPrompt } = await import("@/lib/dictation/polish");
 const { getUsage } = await import("@/lib/billing/usage");
@@ -97,7 +97,7 @@ afterAll(async () => {
 
 describe("voice typing, end to end", () => {
   it("is available with a speech-to-text key, and cleans up on Groq with the same key", () => {
-    expect(voiceTypingAvailable()).toBe(true);
+    expect(speechToTextAvailable()).toBe(true);
     expect(voicePolishAvailable()).toBe(true);
   });
 

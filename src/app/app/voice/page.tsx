@@ -2,22 +2,19 @@ import type { Metadata } from "next";
 import { AppWindow, AudioLines, BookA, Download, Keyboard, Laptop, Lock, MessageCircle, ShieldCheck, Sparkles, Trash2, Wand2 } from "lucide-react";
 import { getDb } from "@/lib/db";
 import { requireUser } from "@/lib/auth/session";
-import { listBots, listBridgeDevices } from "@/lib/data";
+import { listBridgeDevices } from "@/lib/data";
 import { DEVICE_ONLINE_MS } from "@/lib/bridge/jobs";
 import { desktopApp } from "@/lib/meetings";
-import { dictationUsage, dictionaryView, loadVoiceContext, voiceTypingAvailable } from "@/lib/dictation";
+import { dictationUsage, dictionaryView, loadVoiceContext } from "@/lib/dictation";
 import { transcriptionSetup } from "@/lib/transcribe";
-import { paidPlansOpen } from "@/lib/env";
 import { isDesktopApp } from "@/components/account/bridge-shared";
 import { PageContainer, PageHeader, SectionHeading } from "@/components/account/PageHeader";
 import { DesktopPairing } from "@/components/meetings/DesktopPairing";
 import { DictionaryEditor } from "@/components/voice/DictionaryEditor";
-import { TryVoice } from "@/components/voice/TryVoice";
 import { VoicePillMock } from "@/components/voice/VoicePillMock";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
-import type { AvatarId, ColorwayId } from "@/lib/avatars";
 
 export const metadata: Metadata = { title: "Voice typing" };
 
@@ -37,38 +34,45 @@ const HOW = [
   { icon: <MessageCircle />, title: "Or ask your bot", body: "Start with “Hey” and your bot's name: “Hey Otto, remind me to call Mom at 5.” With text selected and Shift held, it gets that too: “Hey Otto, add this to my calendar.”" },
 ];
 
-/** What stays private. Who hears the audio is named when it's NVIDIA's models on our own server. */
-const privatePoints = () => [
-  { icon: <AudioLines />, text: "The mic is on only while you hold the key, and the pill on your screen shows it the whole time." },
-  { icon: <Lock />, text: "The desktop app hears you on your own computer, with NVIDIA's Parakeet speech model (English and 24 European languages), so your voice stays there. Only the words come to us, to be cleaned up." },
-  {
-    icon: <Trash2 />,
-    text:
-      transcriptionSetup()?.provider === "nvidia"
-        ? "Here in the browser, your voice is turned into text on our own server, by NVIDIA's open speech models, and thrown away. We keep a word count, never your words."
-        : "Here in the browser, your voice is turned into text and thrown away. We keep a word count, never your words.",
-  },
-  { icon: <Laptop />, text: "Your history stays on your computer, encrypted, and you can turn it off." },
-  { icon: <ShieldCheck />, text: "So the words fit, only the kind of app you're in (“chat”, “email”) and a well-known app's name are sent. Never what's on your screen." },
-  { icon: <Wand2 />, text: "When you edit by voice, the text you selected is sent once to change it, and never kept." },
-];
+/**
+ * What stays private. A recording reaches our server only when this site has speech-to-text and
+ * the owner turned Private speech off (or talks in a language Parakeet doesn't know); who hears it
+ * then is named when it's NVIDIA's models on our own server.
+ */
+const privatePoints = () => {
+  const stt = transcriptionSetup();
+  return [
+    { icon: <AudioLines />, text: "The mic is on only while you hold the key, and the pill on your screen shows it the whole time." },
+    { icon: <Lock />, text: "The app hears you on your own computer, with NVIDIA's Parakeet speech model (English and 24 European languages), so your voice stays there. Only the words come to us, to be cleaned up." },
+    {
+      icon: <Trash2 />,
+      text: !stt
+        ? "We keep a word count for your plan, never your words."
+        : stt.provider === "nvidia"
+          ? "If you turn Private speech off, or talk in a language Parakeet doesn't know, the recording is turned into text on our own server, by NVIDIA's open speech models, and thrown away. We keep a word count, never your words."
+          : "If you turn Private speech off, or talk in a language Parakeet doesn't know, the recording is turned into text on our server and thrown away. We keep a word count, never your words.",
+    },
+    { icon: <Laptop />, text: "Your history stays on your computer, encrypted, and you can turn it off." },
+    { icon: <ShieldCheck />, text: "So the words fit, only the kind of app you're in (“chat”, “email”) and a well-known app's name are sent. Never what's on your screen." },
+    { icon: <Wand2 />, text: "When you edit by voice, the text you selected is sent once to change it, and never kept." },
+  ];
+};
 
 export default async function VoicePage() {
   const user = await requireUser("/app/voice");
   const db = await getDb();
-  const [ctx, usage, devices, bots] = await Promise.all([loadVoiceContext(db, user), dictationUsage(db, user), listBridgeDevices(db, user.id), listBots(db, user.id)]);
+  const [ctx, usage, devices] = await Promise.all([loadVoiceContext(db, user), dictationUsage(db, user), listBridgeDevices(db, user.id)]);
   const app = desktopApp();
   const now = Date.now();
   const computers = devices
     .filter((d) => !d.revokedAt && isDesktopApp(d.platform))
     .map((d) => ({ id: d.id, name: d.name, online: Boolean(d.lastSeenAt && now - d.lastSeenAt.getTime() < DEVICE_ONLINE_MS) }));
-  const botList = bots.map(({ bot }) => ({ id: bot.id, name: bot.name, avatar: bot.avatar as AvatarId, color: bot.color as ColorwayId }));
 
   return (
     <PageContainer>
       <PageHeader
         title="Voice typing"
-        description="Hold a key in any app and talk. What you meant is typed where your cursor is: no ums, the right punctuation, your names spelled your way."
+        description="Hold a key in any app and talk. What you meant is typed where your cursor is: no ums, the right punctuation, your names spelled your way. It works in the desktop app."
         actions={app.status === "soon" ? <Badge tone="outline">Desktop app coming soon</Badge> : <Badge tone="primary">Beta</Badge>}
       />
 
@@ -108,18 +112,13 @@ export default async function VoicePage() {
         </div>
       </section>
 
-      <SectionHeading id="try-title" title="Try it" description="Right here in your browser, with the same cleanup and your words. The desktop app does this in every app." />
-      <div className="mb-10">
-        <TryVoice bots={botList} available={voiceTypingAvailable()} simulated={!transcriptionSetup()} initialUsage={usage} paidPlans={paidPlansOpen} />
-      </div>
-
       <section id="desktop" aria-labelledby="desktop-title" className="mb-10 scroll-mt-6">
-        <SectionHeading id="desktop-title" title="In every app" description="The desktop app listens for your shortcut anywhere, hears you on your computer, then types where your cursor is." />
+        <SectionHeading id="desktop-title" title="Get the desktop app" description="Voice typing happens in the app: it listens for your key in any app, hears you on your computer with NVIDIA Parakeet, and types where your cursor is." />
         <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-soft">
           <div className="grid grid-cols-1 gap-px bg-border md:grid-cols-2">
             <div className="min-w-0 bg-card p-5 sm:p-6">
               <h3 className="flex items-center gap-2 font-semibold">
-                <AppWindow className="size-4 text-primary" aria-hidden="true" /> Get the app
+                <AppWindow className="size-4 text-primary" aria-hidden="true" /> Install it
               </h3>
               {app.status === "download" ? (
                 <>
@@ -142,7 +141,7 @@ export default async function VoicePage() {
                   </div>
                 </>
               ) : (
-                <p className="mt-2 text-sm text-muted-foreground">Signed downloads for Mac and Windows are coming soon. Until then, try it above in your browser.</p>
+                <p className="mt-2 text-sm text-muted-foreground">Signed downloads for Mac and Windows are coming soon.</p>
               )}
               <h4 className="mt-5 text-sm font-semibold">The key to hold</h4>
               <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
@@ -182,7 +181,7 @@ export default async function VoicePage() {
       </section>
 
       <section id="dictionary" aria-labelledby="dictionary-title" className="mb-10 scroll-mt-6">
-        <SectionHeading id="dictionary-title" title="Your words" description="Used everywhere you type by voice: here, and in the desktop app." />
+        <SectionHeading id="dictionary-title" title="Your words" description="The desktop app spells these your way, and types your snippets, everywhere you talk." />
         <DictionaryEditor initial={[...ctx.words, ...ctx.snippets].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()).map(dictionaryView)} fromMemories={ctx.fromMemories} />
       </section>
 

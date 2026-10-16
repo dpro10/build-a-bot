@@ -176,13 +176,15 @@
     bar.value = pct;
     $("local-retry").hidden = !(l.on && l.state === "error" && !l.blocked);
     $("local-remove").hidden = !(l.state === "installed" || l.state === "ready" || l.state === "starting");
-    if (!l.on) status.textContent = "Off: your voice goes to Build-a-bot's servers to be turned into text, and is thrown away there.";
-    else if (l.blocked) status.textContent = "It can't run from this Windows account's folder yet (its name has letters from outside English), so Build-a-bot's servers hear you, and throw your voice away once it's text.";
-    else if (l.state === "downloading") status.textContent = l.total ? `Getting NVIDIA Parakeet: ${pct}% (${MB(l.received)} of ${MB(l.total)} MB). Until it's done, Build-a-bot's servers hear you.` : "Getting NVIDIA Parakeet…";
-    else if (l.state === "error") status.textContent = `${l.error || "It didn't download."} Until then, Build-a-bot's servers hear you.`;
+    // Whether Build-a-bot's servers can hear a recording when Parakeet can't (some don't: then only Parakeet does).
+    const servers = s.server?.available !== false;
+    if (!l.on) status.textContent = servers ? "Off: your voice goes to Build-a-bot's servers to be turned into text, and is thrown away there." : "Off: this server doesn't turn recordings into text, so voice typing needs it on.";
+    else if (l.blocked) status.textContent = servers ? "It can't run from this Windows account's folder yet (its name has letters from outside English), so Build-a-bot's servers hear you, and throw your voice away once it's text." : "It can't run from this Windows account's folder yet (its name has letters from outside English), and this server doesn't turn recordings into text, so voice typing can't hear you here yet.";
+    else if (l.state === "downloading") status.textContent = l.total ? `Getting NVIDIA Parakeet: ${pct}% (${MB(l.received)} of ${MB(l.total)} MB). ${servers ? "Until it's done, Build-a-bot's servers hear you." : "Voice typing works as soon as it's done."}` : "Getting NVIDIA Parakeet…";
+    else if (l.state === "error") status.textContent = `${l.error || "It didn't download."} ${servers ? "Until then, Build-a-bot's servers hear you." : "Voice typing works once it's here."}`;
     else if (l.state === "absent") status.textContent = "It downloads when voice typing is on.";
     else if (l.server === false) status.textContent = "Downloaded, but this Build-a-bot server can't take text from it yet, so the servers hear you for now.";
-    else if (!l.language) status.textContent = `${langName} isn't one of Parakeet's languages, so Build-a-bot's servers hear you in it. English and 24 European languages work here.`;
+    else if (!l.language) status.textContent = servers ? `${langName} isn't one of Parakeet's languages, so Build-a-bot's servers hear you in it. English and 24 European languages work here.` : `${langName} isn't one of Parakeet's languages, and this server doesn't turn recordings into text: pick English or one of 24 European languages.`;
     else status.textContent = "On: your voice is turned into text on this computer and never leaves it.";
   }
 

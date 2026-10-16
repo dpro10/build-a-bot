@@ -186,18 +186,18 @@ POST …/finish  →  the bot writes notes  →  web chat + the owner's best cha
 
 ## Voice typing
 
-Hold a key in any app and talk; what the owner meant is typed at the cursor. Starting with "Hey" and a bot's name asks that bot instead. The desktop app does it everywhere; `/app/voice` does it in the browser with the same pipeline.
+Hold a key in any app and talk; what the owner meant is typed at the cursor. Starting with "Hey" and a bot's name asks that bot instead. It happens in the desktop app, like Wispr Flow: the website doesn't listen, and the voice endpoints (dictate, edit, ask) answer only the app's device token. `/app/voice` gets the owner the app, pairs it, and keeps their words.
 
 ```
-desktop app (desktop/src/main/voice)          browser (/app/voice, TryVoice)
-  hold the shortcut → the pill + the mic         hold the button (click: hands-free)
-  let go → one recording                          let go → one recording
+desktop app (desktop/src/main/voice)
+  hold the shortcut → the pill + the mic
+  let go → one recording
   NVIDIA Parakeet on this computer → the words
-  (NeMo-Speech.cpp on 127.0.0.1; or, until it's
-  downloaded or if it fails, the recording)
+  (NeMo-Speech.cpp on 127.0.0.1; or, when this server turns recordings into text and Parakeet
+  can't — Private speech off, a language it doesn't know, an engine error — the recording)
             │  + the kind of app in front (chat, email, code…), language, the owner's switches
             ▼
-POST /api/voice/dictate  (JSON { heard }, or a raw audio body; device token or session)
+POST /api/voice/dictate  (JSON { heard }, or a raw audio body; the app's device token)
    1. limits: words a month per plan, 3,000 dictations a day, 60 a minute, the site's daily ceiling
    2. speech-to-text, unless the computer already did it (NVIDIA Parakeet on our speech server;
       Whisper providers get the owner's words and bots' names as a prompt)
@@ -213,16 +213,16 @@ audio is never stored (and from the desktop app, with Private speech, never sent
 keeps a word count, never the words
 ```
 
-- **Private speech** (`desktop/src/main/voice/local-speech.mjs`): the desktop app downloads NVIDIA NeMo-Speech.cpp 0.2.0 for its platform (GitHub release) and Parakeet TDT 0.6B v3 in 8-bit GGUF (Hugging Face, 714 MB), each pinned to its SHA-256, resumable, into the app's folder, and runs `nemo-speech serve` on 127.0.0.1 behind a random key, from the shortcut's press until 20 minutes unused. The pill hands over the recording as 16 kHz WAV too (decoded in Chromium); the engine's text goes to `/api/voice/dictate` as `{ heard }`, and the server skips speech-to-text, so its pipeline (guards, "Hey {bot}", cleanup, dictionary) is the same for both. Anything that stops it (not downloaded yet, a language Parakeet doesn't speak, an engine error or crash, a server that doesn't say `voice.local` in `/api/desktop/session`) sends the recording instead, so voice typing keeps working. macOS (Metal on Apple silicon), Windows x64 and Linux x64. It also means the server needs no speech-to-text of its own for desktop voice typing: without a speech provider, the desktop app still hears its owner.
+- **Private speech** (`desktop/src/main/voice/local-speech.mjs`): the desktop app downloads NVIDIA NeMo-Speech.cpp 0.2.0 for its platform (GitHub release) and Parakeet TDT 0.6B v3 in 8-bit GGUF (Hugging Face, 714 MB), each pinned to its SHA-256, resumable, into the app's folder, and runs `nemo-speech serve` on 127.0.0.1 behind a random key, from the shortcut's press until 20 minutes unused. The pill hands over the recording as 16 kHz WAV too (decoded in Chromium); the engine's text goes to `/api/voice/dictate` as `{ heard }`, and the server skips speech-to-text, so its pipeline (guards, "Hey {bot}", cleanup, dictionary) is the same for both. When it can't (a language Parakeet doesn't speak, an engine error or crash, Private speech off, a server that doesn't say `voice.local` in `/api/desktop/session`), the recording goes to the server instead, if the server turns recordings into text (`voice.available` in the session). If it doesn't, nothing is sent and the pill says why ("Getting NVIDIA Parakeet: 45%…", "Turn on Private speech…"): words are never made up. macOS (Metal on Apple silicon), Windows x64 and Linux x64. So the server needs no speech-to-text of its own for voice typing.
 
-- **Files:** `src/lib/dictation/text.ts` (pure text rules: tidy, snippets, commands, the guards, the checks on the AI's answer), `polish.ts` (the prompt, its examples and where it runs), `index.ts` (the pipeline, limits, the owner's vocabulary), `dictionary.ts` (add/edit/delete), `demo.ts` (sample dictations for demo mode). Routes under `src/app/api/voice/`.
+- **Files:** `src/lib/dictation/text.ts` (pure text rules: tidy, snippets, commands, the guards, the checks on the AI's answer), `polish.ts` (the prompt, its examples and where it runs), `index.ts` (the pipeline, limits, the owner's vocabulary), `dictionary.ts` (add/edit/delete), `demo.ts` (sample dictations, for tests: `DEMO_SPEECH`). Routes under `src/app/api/voice/`.
 - **The AI cleanup** runs on the included model on Token Factory; on Groq (`openai/gpt-oss-120b`, low reasoning) when speech-to-text runs on Groq, so the words go to one provider; or not at all (`DICTATION_POLISH`). It has a few seconds: when it's slow, fails or its answer fails the checks, the plain cleanup is typed instead, so a dictation never waits long or comes back wrong.
 - **The dictionary** (`dictionary` table: `kind` word | snippet, `text`, `heard` = what speech-to-text writes instead or the phrase that types a snippet, `source` manual | correction). Words are fed to speech-to-text as a hint and fixed afterwards; names the owner's bots remember (`memories`) are used too, without being copied. Snippets are swapped for markers before the AI cleanup so it can't rewrite them.
 - **Speech-to-text** (`src/lib/transcribe`, `speech/`): one client for any OpenAI-compatible `/audio/transcriptions`. The recommended main provider is our own speech server, `speech/`: NVIDIA Parakeet TDT 0.6B v3 (English and 24 European languages) and NVIDIA Nemotron 3.5 ASR (Japanese, Chinese, Korean, Hindi, Arabic, Vietnamese, Turkish, Norwegian) on NVIDIA NeMo-Speech.cpp, behind a small Node server that checks a key, turns any recording into 16 kHz WAV (plus a second of silence, so the last word isn't cut), picks the model by language and answers in OpenAI's shape. It runs as a Nebius Serverless AI endpoint. The backup (`TRANSCRIBE_FALLBACK_*`) is NVIDIA Parakeet on Together AI, with Whisper there for languages neither NVIDIA model hears; a language the main provider can't hear goes straight to the backup. NVIDIA's models take no prompt, so the owner's words reach them afterwards: a name that sounds like one of theirs sends the text through the AI cleanup, which knows them, and the dictionary's spellings apply last.
 - **Editing by voice** (`src/lib/dictation/edit.ts`, `POST /api/voice/edit`): Shift with the shortcut makes the recording an instruction. The desktop app copies the selection (a marker on the clipboard, then copy, then the clipboard put back; never in a terminal), dictates the instruction with the AI cleanup and commands off, and sends both. One model call, no tools: the selection is wrapped in tags as text to work on, after worked examples that include a selection giving orders; the reply must be `<replace>` (typed over the selection) or `<answer>` (shown in the pill), and a chat-style preamble, our own tags or a reply far longer than the job is refused. "Make this shorter" with nothing selected is refused before any model call. Typed words count like dictation; the selection is never stored.
 - **"Hey {bot}"** goes into the bot's web conversation like a typed message (`meta.via = "voice"`), with a directive to answer briefly, so it runs through `runTurn`, the policy engine and approvals like everything else, and shows up in the chat later.
   - **With a selection** (Shift held), the selected text goes along (`meta.selection`, shown in the chat bubble). The model reads it wrapped as `<untrusted_content>` (`src/lib/agent/selection.ts`, for included brains and the Bridge alike), and the run is tainted while it's in that conversation's history, so the injection guard asks before a send to anyone new, even under Full faith.
-- **Auth:** the desktop app's device token (the same pairing as the Bridge) or the web session (same-origin checked for writes): `src/lib/dictation/auth.ts`.
+- **Auth:** the desktop app's device token (the same pairing as the Bridge) for talking, editing and asking; the web session (same-origin checked for writes) only for the dictionary: `src/lib/dictation/auth.ts`.
 - **Limits:** `usage.dictationWords` (Free 8,000 words a month; Plus and Pro unlimited), counted when text is typed, never for commands or nothing heard. The per-owner daily cap and the site ceiling (`DICTATION_DAILY_LIMIT`) keep "unlimited" from being a blank check.
 - **The desktop half:** a keyboard hook (`uiohook-napi`) hears the shortcut anywhere (a pure state machine: hold, tap, double tap for hands-free, chords left alone); the pill is a small focus-less window; the text is pasted with the clipboard (snapshot → paste → put back) and real key presses. It works out the app's kind locally and sends only that. History is encrypted on the computer. See `desktop/README.md`.
 
@@ -243,10 +243,10 @@ Plans live in `src/lib/billing/plans.ts`; limits are enforced in code. Stripe Ch
 `DEMO_MODE=1` (default outside production) simulates whatever isn't configured:
 - **A scripted brain** (`src/lib/llm/demo.ts`) that calls the real tools, so the policy engine, approvals and receipts all run for real. It answers every job's starter ideas, and does its time math on the owner's clock.
 - **Simulated apps and channels** with sample data: an inbox with a phishing email, a week of calendar, a few PRs.
-- **A scripted meeting** for transcription, and **sample dictations** for voice typing (the pill and the page say *demo*).
+- **A scripted meeting** for transcription and **sample dictations** for voice typing, only when you run it yourself (or tests, `DEMO_SPEECH=1`; the pill says *demo*). A deployed site never makes up speech: without a speech-to-text key, a recording isn't turned into text there, meeting notes say they're coming soon, and voice typing works with what the desktop app hears on the computer.
 - **Instant plan switching.**
 
-Every flow in the product can be tried with zero keys, and nothing real is sent or charged. `docs/TRY-IT.md` walks through it.
+Every flow in the product can be tried with zero keys when you run it yourself, and nothing real is sent or charged. `docs/TRY-IT.md` walks through it.
 
 ## Testing
 
@@ -256,7 +256,7 @@ Every flow in the product can be tried with zero keys, and nothing real is sent 
   - Bring my memories: paste, untick, save, pin;
   - a ready-made tutor: one tap in the builder, its first question, then back to a general assistant in Settings;
   - meeting notes in the browser with a fake microphone: consent, the floating window, the transcript, the notes, deleting;
-  - voice typing in the browser with a fake microphone: hold to type, hands-free, "Hey Otto" and its reply, editing selected text by voice, a dictionary word that's then used;
+  - voice typing's web side: the page sends you to the desktop app and the website doesn't listen, a request by voice from a paired app shows in the chat with its selection, a dictionary word that's then used (voice typing itself is tested in the desktop app's own e2e);
   - every page loads;
   - axe accessibility scans in light and dark.
 - **On real Postgres.** Supabase runs the server through postgres.js and a transaction pooler, which are stricter than the in-memory database the tests use. Check database changes on a real one too: a local Postgres with pgbouncer in front in `pool_mode = transaction` on port 6543, like Supabase's pooler (port 6543 also makes the client skip prepared statements).

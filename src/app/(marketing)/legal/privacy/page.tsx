@@ -108,9 +108,10 @@ export default function PrivacyPage() {
           <p>
             If you use voice typing: the words and snippets you add to your dictionary, and a monthly count of the words you typed by voice. The
             desktop app turns what you say into text on your own computer, with NVIDIA&apos;s Parakeet speech model (downloaded once from NVIDIA&apos;s
-            pages on GitHub and Hugging Face), and sends us only the text. In the browser, and in the desktop app before that download is done, in
-            a language the model doesn&apos;t know, or if it fails, the recording is sent once and turned into text by the speech-to-text service
-            listed above. Either way, the text is cleaned up and sent back to you;
+            pages on GitHub and Hugging Face), and sends us only the text. Voice typing works only in the desktop app; our website doesn&apos;t
+            listen. If you turn that off, talk in a language the model doesn&apos;t know, or it fails, the recording is sent once and turned into
+            text by the speech-to-text service listed above, when we have one; otherwise it isn&apos;t sent at all. Either way, the text is
+            cleaned up and sent back to you;
             neither the audio nor the text is stored on our servers. The kind of app
             you&apos;re typing in (like &ldquo;chat&rdquo; or &ldquo;email&rdquo;) and, for well-known apps, its name are sent along so the text fits
             it, never what&apos;s on your screen. To spell your names right, the names your bots remember are used as hints. The desktop app keeps your recent dictations
