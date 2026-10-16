@@ -22,14 +22,14 @@ function Cut({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** `desktopApp`: the desktop app can be had; otherwise voice typing everywhere is "coming soon" (the browser try-out works). */
+/** Voice typing is in the desktop app. `desktopApp`: it can be had (downloads, or the repo); otherwise it's coming soon. */
 export function VoiceTyping({ desktopApp }: { desktopApp: boolean }) {
   return (
     <Section id="voice" aria-labelledby="voice-title" className="overflow-hidden bg-background-2">
       <Container>
         <SectionHeader id="voice-title" eyebrow="Voice typing" icon={<Mic />} title="Talk instead of type. In any app.">
           Hold a key and say it the way you'd say it. It types what you meant, where your cursor is. Most people talk about three times faster than they type.
-          {desktopApp ? "" : " Coming soon to the desktop app; try it in your browser today."}
+          {desktopApp ? " It's in the desktop app." : " Coming soon in the desktop app."}
         </SectionHeader>
 
         <div className="mt-14 grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:items-stretch">
@@ -98,7 +98,7 @@ export function VoiceTyping({ desktopApp }: { desktopApp: boolean }) {
 
         <div className="mt-10 flex flex-col items-center gap-2 text-center">
           <Link href="/app/voice" className="inline-flex items-center gap-1.5 font-semibold text-primary hover:underline">
-            Try voice typing <ArrowRight className="size-4" aria-hidden="true" />
+            {desktopApp ? "Get the desktop app" : "See how it works"} <ArrowRight className="size-4" aria-hidden="true" />
           </Link>
           <p className="text-sm text-muted-foreground">8,000 words a month free. Unlimited on Plus and Pro.</p>
         </div>

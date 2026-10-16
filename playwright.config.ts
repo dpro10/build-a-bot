@@ -25,6 +25,7 @@ export default defineConfig({
         port: PORT,
         reuseExistingServer: true,
         timeout: 120_000,
-        env: { DATA_DIR: ".data/e2e", DEMO_MODE: "1" },
+        // DEMO_SPEECH: the scripted meeting for meeting notes (no speech-to-text key in tests).
+        env: { DATA_DIR: ".data/e2e", DEMO_MODE: "1", DEMO_SPEECH: "1" },
       },
 });

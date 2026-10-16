@@ -10,10 +10,11 @@
  * backup. A language the main provider can't hear goes straight to the backup; on Together that's
  * Whisper for the languages Parakeet doesn't speak.
  *
- * Without a key, demo mode returns a scripted meeting so every flow can be clicked through.
+ * Without a key, nothing is transcribed: never made up. Tests and screenshots can turn on a
+ * scripted meeting (DEMO_SPEECH=1, in demo mode) so every flow can be clicked through.
  * Audio is transcribed in memory and never stored.
  */
-import { config, demoMode } from "@/lib/env";
+import { config, demoSpeech } from "@/lib/env";
 import { fetchWithTimeout } from "@/lib/tools/net";
 import { demoTranscription } from "./demo";
 
@@ -144,9 +145,9 @@ export function groqApiKey(): string | null {
   return null;
 }
 
-/** Meeting notes can run: a real speech-to-text key, or demo mode. */
+/** Meeting notes can run: a real speech-to-text key (or, in tests, scripted speech). */
 export function transcriptionAvailable(): boolean {
-  return Boolean(transcriptionSetup()) || demoMode;
+  return Boolean(transcriptionSetup()) || demoSpeech;
 }
 
 export class TranscriptionError extends Error {
@@ -204,7 +205,7 @@ const UNSUPPORTED = (language?: string) => new TranscriptionError(`Speech-to-tex
 export async function transcribe(input: TranscribeInput): Promise<Transcription> {
   const primary = resolveSetup(config.transcribe);
   if (!primary) {
-    if (!demoMode) throw new TranscriptionError("Meeting notes are coming soon.", false);
+    if (!demoSpeech) throw new TranscriptionError("Speech-to-text isn't set up on this server yet.", false);
     return { segments: demoTranscription(input.track, input.chunk, input.durationMs), provider: "demo", model: "demo", simulated: true, prompted: false, costMicros: 0 };
   }
   const fallback = resolveSetup(config.transcribe.fallback);

@@ -42,6 +42,8 @@ export const VOICE_LIMITS = Object.freeze({
 export function voiceError(err) {
   const e = /** @type {any} */ (err) ?? {};
   if (e.status === 401) return { message: "This computer was unpaired. Pair it again to use voice typing.", actions: ["pair"] };
+  // Nothing can hear it: this server doesn't turn recordings into text, and Parakeet can't yet (why is in the message).
+  if (e.code === "on-device") return { message: e.message || "Voice typing can't hear you yet.", actions: e.actions ?? [] };
   if (e.status === 402 || e.code === "limit") return { message: e.message || "You've used this month's voice typing.", actions: ["upgrade"] };
   if (e.code === "unavailable") return { message: "Voice typing isn't set up on this server yet.", actions: [] };
   if (e.code === "daily") return { message: e.message || "That's a lot of voice typing for one day. It resets tomorrow.", actions: [] };
@@ -78,6 +80,7 @@ export class VoiceTyping extends EventEmitter {
    * @param {() => Promise<boolean>} [o.ensureMic]
    * @param {() => void} [o.warmUp]
    * @param {() => boolean} [o.localReady]  speech-to-text runs on this computer: ask the pill for WAV too
+   * @param {() => ({ code: string, message?: string, actions?: string[] } | null)} [o.cantHear]  why nothing can hear the next dictation
    * @param {(target: string, extra?: any) => void} [o.open]  'pair' | 'settings' | 'upgrade' | 'chat' | 'mic-settings' | 'accessibility'
    * @param {string} [o.platform]
    * @param {() => number} [o.now]
@@ -202,8 +205,9 @@ export class VoiceTyping extends EventEmitter {
   blocker() {
     if (!this.account.device) return { status: 401 };
     const v = this.account.session?.voice;
-    // The server has no speech-to-text of its own, but this computer can hear the owner.
-    if (v && v.available === false && !this.o.localReady?.()) return { code: "unavailable" };
+    // The server doesn't turn recordings into text (it never makes words up): only Parakeet on this
+    // computer can hear the owner, and when it can't yet, the pill says why instead of recording.
+    if (v && v.available === false && !this.o.localReady?.()) return this.o.cantHear?.() ?? { code: "unavailable" };
     return null;
   }
 

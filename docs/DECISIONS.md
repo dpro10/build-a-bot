@@ -478,6 +478,18 @@ What this settles (built by Claude; Diego to confirm the details):
 - **Diego's side:** try it on his Mac: `cd desktop && npm install && npm start`, pair, turn on voice typing, and watch *Private speech* in Voice typing settings (the first download takes a few minutes); dictations then show *private* in the pill.
 - **Next:** meeting notes on the computer with the same engine, and streaming while the key is held.
 
+## Decision: voice typing lives in the desktop app, and nothing makes up what someone said (Diego, 2026-10-16)
+
+Diego tried the Voice typing page's try-it on build-a-bot.site, said "test, test, test", and it typed "Quick update: the beta has about 200 people and the feedback is mostly positive.": "ok, idk what is going on but when i tried testing it, i said "test, test, test" and this popped up. this isnt good". Then: "honestly, i would be down to just only allow the "wispr" parts of build a bot to work in the app. thats how wipr flow does it you have to dowload the app to use those parts."
+
+Why it happened: the live site runs in demo mode with no speech-to-text key, so a recording "heard" one of the demo's sample sentences, shown as "You said". The same would have happened in the desktop app for any dictation before NVIDIA Parakeet finished downloading, typed into whatever app was in front.
+
+What this settles (built by Claude, agreeing with Diego):
+- **Voice typing happens in the desktop app**, like Wispr Flow. The website doesn't listen: the in-browser try-it is gone, and `/api/voice/dictate`, `/api/voice/edit` and `/api/voice/ask` answer only a paired app's device token (the website gets "Voice typing works in the desktop app."). The Voice typing page explains it, gets you the app, pairs it, and keeps your words (the dictionary stays on the web). The landing page's link says *Get the desktop app*. This fits the pitch: your voice never leaves your computer (NVIDIA Parakeet hears it there), and the website would have needed a paid speech service, or faked it.
+- **Nothing makes up speech on a site people use.** Without a speech-to-text key, a recording isn't turned into text, even in demo mode: no sample dictations, no scripted meeting. The scripted versions stay for running it yourself and for tests (`DEMO_SPEECH`, on by default only outside production).
+  - Desktop: when the server can't hear recordings and Parakeet isn't ready, nothing is recorded or sent. The pill says why ("Getting NVIDIA Parakeet: 45%. Voice typing works as soon as it's done.", "Turn on Private speech…"), and the settings window stops promising that the servers hear you meanwhile.
+  - Meeting notes on build-a-bot.site say they're coming soon until there's speech-to-text: a Together AI key (NVIDIA Parakeet, about $0.09 an hour of audio) or our speech server. Diego's call. Moving meeting notes onto Parakeet in the desktop app, like voice typing, would make them free and private too.
+
 ## Decision: a Windows app, tested on real Windows (Diego, 2026-10-16)
 
 "Do you think we can try and get an app going for windows too I have a windows computer as well that I will try it out on. Try and make sure everything works I don't want to run into any issues."

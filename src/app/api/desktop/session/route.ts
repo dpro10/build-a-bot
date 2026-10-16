@@ -4,9 +4,9 @@ import { apiError, json } from "@/lib/api";
 import { authDevice } from "@/lib/bridge/auth";
 import { getPlan } from "@/lib/billing/plans";
 import { getUsage } from "@/lib/billing/usage";
-import { appUrl, demoMode } from "@/lib/env";
+import { appUrl, demoMode, demoSpeech } from "@/lib/env";
 import { CHUNK_MS, MEETINGS_CONNECTOR } from "@/lib/meetings";
-import { dictationUsage, voiceEditAvailable, voicePolishAvailable, voiceTypingAvailable } from "@/lib/dictation";
+import { dictationUsage, speechToTextAvailable, voiceEditAvailable, voicePolishAvailable } from "@/lib/dictation";
 import { transcriptionAvailable, transcriptionSetup } from "@/lib/transcribe";
 
 /** The desktop app's view of the account: which bots can take notes, minutes left, and voice typing. */
@@ -42,13 +42,17 @@ export async function GET(req: Request) {
       chunkMs: CHUNK_MS,
     },
     voice: {
-      available: voiceTypingAvailable(),
+      /**
+       * This server turns recordings into text. When it doesn't, voice typing works only with what
+       * the computer hears itself (Private speech), and the app never sends a recording.
+       */
+      available: speechToTextAvailable(),
       /** The AI cleanup (fillers out, punctuation, corrections); without it, the plain cleanup. */
       polish: voicePolishAvailable(),
       /** Editing by voice (Shift with the shortcut): a model for it, or demo mode. */
       edit: voiceEditAvailable(),
-      /** Demo mode without a speech-to-text key: it "hears" sample lines. */
-      simulated: !transcriptionSetup(),
+      /** Tests only (DEMO_SPEECH): no speech-to-text key, and recordings "hear" sample lines. */
+      simulated: demoSpeech && !transcriptionSetup(),
       /** Takes what the computer already heard (on-device speech-to-text): no audio is sent. */
       local: true,
       usage: await dictationUsage(db, owner),
