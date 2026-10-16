@@ -185,8 +185,10 @@ async function setup(t, o = {}) {
   const spawned = [];
   const logs = [];
   const { mode, spawnImpl, sources, ...rest } = o;
-  const make = (extra = {}) =>
-    new LocalSpeech({
+  /** Every engine made here, stopped before the folder goes (Windows can't delete a folder a running program is in). */
+  const made = [];
+  const make = (extra = {}) => {
+    const m = new LocalSpeech({
       dir,
       platform: "linux",
       arch: "x64",
@@ -215,11 +217,14 @@ async function setup(t, o = {}) {
       ...rest,
       ...extra,
     });
+    made.push(m);
+    return m;
+  };
   const local = make();
   const states = [];
   local.on("change", (s) => states.push(s));
   t.after(async () => {
-    await local.stop();
+    await Promise.all(made.map((m) => m.stop()));
     await server.close();
     fs.rmSync(dir, { recursive: true, force: true });
     fs.rmSync(engineLog, { force: true });

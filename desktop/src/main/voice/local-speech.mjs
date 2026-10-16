@@ -498,7 +498,11 @@ export class LocalSpeech extends EventEmitter {
     this.abort?.abort();
     await this.installing?.catch(() => {});
     await this.stop();
-    await fsp.rm(this.dir, { recursive: true, force: true });
+    // One left running by an earlier run would hold the folder open (Windows won't delete it then).
+    this.reaped = false;
+    await this.reap();
+    // Windows lets go of a stopped program's files a moment later.
+    await fsp.rm(this.dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
     this.files.clear();
     this.error = null;
     this.set(this.runtime ? "absent" : "unsupported");
