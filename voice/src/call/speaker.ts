@@ -5,10 +5,42 @@
  *
  * Audio can be held back (a reply prepared before the caller has finished: see session.ts) and
  * released at once, and everything can be stopped mid-word when the caller cuts in.
+ *
+ * When speech is made slower than it plays (Magpie on a small CPU), a sentence streamed straight
+ * out would stutter, a little gap every chunk. With a SpeechPace, each sentence waits until enough
+ * of it is ready to play through without a gap, and the pauses fall between sentences instead.
  */
 import type { SpeechEngine } from "../speech/engine.ts";
 import type { CallTransport } from "./transport.ts";
 import { forSpeech } from "../speech/text.ts";
+
+/**
+ * How fast this machine makes speech, measured as it goes and shared by every call: seconds of
+ * audio made per second while streaming (under 1 is slower than it plays), and how long speech
+ * runs per character of text.
+ */
+export class SpeechPace {
+  rate: number;
+  msPerChar: number;
+
+  constructor(rate = 1, msPerChar = 62) {
+    this.rate = rate;
+    this.msPerChar = msPerChar;
+  }
+
+  /** A piece was made: `streamMs` of wall time for `audioMs` of audio after its first chunk. */
+  observe(audioMs: number, streamMs: number, totalAudioMs: number, chars: number): void {
+    if (audioMs >= 800 && streamMs > 0) this.rate = this.rate * 0.6 + (audioMs / streamMs) * 0.4;
+    if (chars >= 20 && totalAudioMs > 0) this.msPerChar = this.msPerChar * 0.8 + (totalAudioMs / chars) * 0.2;
+  }
+
+  /** Audio to have ready before a piece of `chars` characters starts, so it plays without a gap. */
+  leadMs(chars: number): number {
+    if (this.rate >= 1.15) return 0;
+    const estimate = chars * this.msPerChar;
+    return Math.min(6000, Math.round(estimate * Math.max(0, 1 - this.rate) * 1.15 + 150));
+  }
+}
 
 type Piece = {
   id: number;
@@ -16,6 +48,11 @@ type Piece = {
   text: string;
   /** Pre-made audio (a filler from the phrase cache), at the transport's rate. */
   audio?: Int16Array;
+  /** Audio made but held until enough is ready to play without a gap (see SpeechPace). */
+  pending: Int16Array[] | null;
+  pendingMs: number;
+  leadMs: number;
+  /** Audio handed on so far. */
   durationMs: number;
   /** Wall time its audio starts playing at the far end (estimated); null until sent. */
   startsAt: number | null;
@@ -42,6 +79,7 @@ export class Speaker {
   private readonly transport: CallTransport;
   private readonly events: SpeakerEvents;
   private readonly now: () => number;
+  private readonly pace: SpeechPace | undefined;
   voice: string | undefined;
   language: string | undefined;
   private queue: Piece[] = [];
@@ -57,9 +95,10 @@ export class Speaker {
   private timers = new Set<ReturnType<typeof setTimeout>>();
   private closed = false;
 
-  constructor(opts: { engine: SpeechEngine; transport: CallTransport; voice?: string; language?: string; events?: SpeakerEvents; now?: () => number }) {
+  constructor(opts: { engine: SpeechEngine; transport: CallTransport; voice?: string; language?: string; events?: SpeakerEvents; now?: () => number; pace?: SpeechPace }) {
     this.engine = opts.engine;
     this.transport = opts.transport;
+    this.pace = opts.pace;
     this.voice = opts.voice;
     this.language = opts.language;
     this.events = opts.events ?? {};
@@ -94,7 +133,7 @@ export class Speaker {
 
   /** Queue a sentence (said as written: numbers, times and the rest are converted here). */
   say(text: string, audio?: Int16Array): number {
-    const piece: Piece = { id: this.nextId++, text, audio, durationMs: 0, startsAt: null, done: false, played: false };
+    const piece: Piece = { id: this.nextId++, text, audio, pending: null, pendingMs: 0, leadMs: 0, durationMs: 0, startsAt: null, done: false, played: false };
     this.queue.push(piece);
     this.pieces.set(piece.id, piece);
     void this.pump();
@@ -114,15 +153,28 @@ export class Speaker {
           if (spoken) {
             const ac = new AbortController();
             this.synth = ac;
+            const lead = this.pace?.leadMs(spoken.length) ?? 0;
+            if (lead > 0) {
+              piece.pending = [];
+              piece.leadMs = lead;
+            }
+            const rate = this.transport.outputRate;
+            let firstAt = 0;
+            let firstMs = 0;
+            let madeMs = 0;
             try {
-              const result = await this.engine.speak(
-                spoken,
-                { sampleRate: this.transport.outputRate, voice: this.voice, language: this.language, signal: ac.signal },
-                (pcm) => {
-                  if (!ac.signal.aborted) this.out(piece, pcm);
-                },
-              );
+              const result = await this.engine.speak(spoken, { sampleRate: rate, voice: this.voice, language: this.language, signal: ac.signal }, (pcm) => {
+                if (ac.signal.aborted) return;
+                const ms = (pcm.length * 1000) / rate;
+                if (!firstAt) {
+                  firstAt = this.now();
+                  firstMs = ms;
+                }
+                madeMs += ms;
+                this.out(piece, pcm);
+              });
               if (result.status === "error") this.events.onError?.(new Error(result.error ?? "speech synthesis failed"));
+              if (result.status === "ok" && firstAt) this.pace?.observe(madeMs - firstMs, this.now() - firstAt, madeMs, spoken.length);
             } catch (err) {
               this.events.onError?.(err as Error);
             } finally {
@@ -130,6 +182,7 @@ export class Speaker {
             }
             // stop() dropped the queue (and this piece) while it was being made.
             if (ac.signal.aborted) continue;
+            if (piece.pending) this.flush(piece);
           }
         }
         this.queue.shift();
@@ -145,6 +198,24 @@ export class Speaker {
 
   private out(piece: Piece, pcm: Int16Array): void {
     if (!pcm.length) return;
+    if (piece.pending) {
+      piece.pending.push(pcm);
+      piece.pendingMs += (pcm.length * 1000) / this.transport.outputRate;
+      // What's still playing ahead of it counts too.
+      const ahead = this.held ? 0 : Math.max(0, this.playhead - this.now());
+      if (piece.pendingMs + ahead >= piece.leadMs) this.flush(piece);
+      return;
+    }
+    this.send(piece, pcm);
+  }
+
+  private flush(piece: Piece): void {
+    const parts = piece.pending ?? [];
+    piece.pending = null;
+    for (const pcm of parts) this.send(piece, pcm);
+  }
+
+  private send(piece: Piece, pcm: Int16Array): void {
     piece.durationMs += (pcm.length * 1000) / this.transport.outputRate;
     this.enqueue({ audio: pcm, piece: piece.id });
   }

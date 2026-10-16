@@ -7,6 +7,7 @@ import { loadConfig } from "./config.ts";
 import { HttpApp } from "./brain/app.ts";
 import { OpenAiCompatibleLlm } from "./brain/llm.ts";
 import { PhraseCache, FILLERS } from "./call/phrases.ts";
+import { SpeechPace } from "./call/speaker.ts";
 import { createVoiceServer } from "./server.ts";
 import { HttpEngine } from "./speech/http.ts";
 import { SidecarEngine } from "./speech/sidecar.ts";
@@ -38,6 +39,7 @@ try {
 const llm = new OpenAiCompatibleLlm({ baseUrl: config.talker.baseUrl, apiKey: config.talker.apiKey, model: config.talker.model, extraBody: config.talker.extraBody });
 const app = new HttpApp({ baseUrl: config.appUrl, secret: config.secret });
 const phrases = new PhraseCache(engine);
+const pace = new SpeechPace();
 
 const voice = createVoiceServer({
   secret: config.secret,
@@ -49,6 +51,7 @@ const voice = createVoiceServer({
   llm,
   app,
   phrases,
+  pace,
   ready: () => ready,
   log,
 });
@@ -64,8 +67,37 @@ try {
 log("engine_ready", { ms: Math.round(performance.now() - t0), version: engine.info.version, voices: engine.info.voices });
 // Fillers in the default voice, at phone and browser rates, before the first call.
 for (const rate of [8000, config.webRate]) await phrases.warm(FILLERS, engine.info.voice || config.voice, rate);
+// How fast this machine makes speech, so the first call's sentences already play without gaps.
+await measurePace();
 ready = true;
-log("ready", { ms: Math.round(performance.now() - t0) });
+log("ready", { ms: Math.round(performance.now() - t0), speechRate: Math.round(pace.rate * 100) / 100, msPerChar: Math.round(pace.msPerChar) });
+
+async function measurePace(): Promise<void> {
+  const text = "Hi there! This is a quick check of how fast I can talk, so every call sounds smooth from the very first word.";
+  const rate = config.webRate;
+  let firstAt = 0;
+  let firstMs = 0;
+  let madeMs = 0;
+  try {
+    const result = await engine.speak(text, { sampleRate: rate, voice: engine.info.voice || config.voice }, (pcm) => {
+      const ms = (pcm.length * 1000) / rate;
+      if (!firstAt) {
+        firstAt = performance.now();
+        firstMs = ms;
+      }
+      madeMs += ms;
+    });
+    if (result.status === "ok" && firstAt) {
+      const streamed = madeMs - firstMs;
+      const wall = performance.now() - firstAt;
+      // The first measurement replaces the default rather than being averaged into it.
+      if (streamed > 0 && wall > 0) pace.rate = streamed / wall;
+      pace.msPerChar = madeMs / text.length;
+    }
+  } catch (err) {
+    log("pace_failed", { error: (err as Error).message });
+  }
+}
 
 for (const signal of ["SIGTERM", "SIGINT"] as const) {
   process.on(signal, () => {

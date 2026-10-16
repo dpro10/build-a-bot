@@ -83,15 +83,19 @@ gc compute firewall-rules describe "$NAME-web" >/dev/null 2>&1 ||
 ENV_FILE="$(mktemp)"
 trap 'rm -f "$ENV_FILE"' EXIT
 chmod 600 "$ENV_FILE"
+CORES="$(gc compute machine-types describe "$MACHINE" --zone "$ZONE" --format 'value(guestCpus)')"
+# Magpie and its codec run at the same time, and the codec needs more of the CPU (measured on 4
+# vCPUs: 2 + 2 is best). One call at a time by default: the engine speaks for one call at once, so
+# a second caller would wait on the first (a second phone call gets the simpler line instead).
+if [ "$CORES" -ge 8 ]; then TTS=3; elif [ "$CORES" -ge 4 ]; then TTS=2; else TTS=1; fi
+CODEC=$(( CORES - TTS > 0 ? CORES - TTS : 1 ))
 {
   echo "APP_URL=$APP_URL"
   echo "VOICE_SERVER_SECRET=$VOICE_SERVER_SECRET"
   echo "TOKEN_FACTORY_API_KEY=$TOKEN_FACTORY_API_KEY"
-  echo "MAX_CALLS=${VOICE_MAX_CALLS:-2}"
-  # Split the cores between Magpie and its codec, which run at the same time.
-  CORES="$(gc compute machine-types describe "$MACHINE" --zone "$ZONE" --format 'value(guestCpus)')"
-  echo "TTS_THREADS=$(( CORES > 2 ? CORES / 2 : 1 ))"
-  echo "CODEC_THREADS=$(( CORES > 2 ? CORES / 2 : 1 ))"
+  echo "MAX_CALLS=${VOICE_MAX_CALLS:-1}"
+  echo "TTS_THREADS=$TTS"
+  echo "CODEC_THREADS=$CODEC"
 } > "$ENV_FILE"
 
 echo "== VM ($MACHINE in $ZONE)"
@@ -119,19 +123,31 @@ if [ -n "$CURRENT" ]; then
   gc compute instances reset "$NAME" --zone "$ZONE"
 else
   # Default access scopes: enough to pull the image and write logs, and nothing else in the project.
-  gc compute instances create "$NAME" --zone "$ZONE" --machine-type "$MACHINE" \
+  if ! OUT="$(gc compute instances create "$NAME" --zone "$ZONE" --machine-type "$MACHINE" \
     --image-family cos-stable --image-project cos-cloud --boot-disk-size 30GB --boot-disk-type "$DISK" \
     --address "$IP" --tags "$NAME" \
-    --metadata "voice-image=$IMAGE,voice-host=$HOST,google-logging-enabled=true" --metadata-from-file "voice-env=$ENV_FILE,user-data=$HERE/cloud-init.yaml"
+    --metadata "voice-image=$IMAGE,voice-host=$HOST,google-logging-enabled=true" --metadata-from-file "voice-env=$ENV_FILE,user-data=$HERE/cloud-init.yaml" 2>&1)"; then
+    echo "$OUT" >&2
+    if grep -qi "quota" <<<"$OUT"; then
+      echo "Not enough CPU quota for a $MACHINE ($CORES vCPUs). Google Cloud's free trial allows 8 vCPUs running at once across the account: stop another VM, or set VOICE_MACHINE_TYPE to a smaller machine." >&2
+    fi
+    exit 1
+  fi
+  echo "$OUT"
 fi
 
 echo "== Waiting for https://$HOST/health"
 for i in $(seq 1 90); do
-  if curl -sf "https://$HOST/health" >/dev/null 2>&1; then
-    curl -s "https://$HOST/health"
-    echo
+  if HEALTH="$(curl -sf "https://$HOST/health" 2>/dev/null)"; then
+    echo "$HEALTH"
     echo "Voice server is up at https://$HOST"
     echo "In Vercel, set VOICE_SERVER_URL=https://$HOST (and VOICE_SERVER_SECRET to the same secret)."
+    # How fast this machine makes speech (seconds of audio a second). Under 1, each sentence waits a
+    # little before it plays so it doesn't stutter, and answers start later.
+    RATE="$(sed -n 's/.*"speechRate":\([0-9.]*\).*/\1/p' <<<"$HEALTH")"
+    if [ -n "$RATE" ] && awk "BEGIN { exit !($RATE < 0.95) }"; then
+      echo "::warning::This $MACHINE makes speech at ${RATE}x real time, so answers start late. An 8-vCPU machine (VOICE_MACHINE_TYPE=c3-highcpu-8) is about twice as fast."
+    fi
     exit 0
   fi
   sleep 10

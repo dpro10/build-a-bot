@@ -13,6 +13,7 @@ import type { AppApi } from "./brain/app.ts";
 import type { Llm } from "./brain/llm.ts";
 import { CallSession, type SessionConfig } from "./call/session.ts";
 import type { PhraseCache } from "./call/phrases.ts";
+import type { SpeechPace } from "./call/speaker.ts";
 import type { SpeechEngine } from "./speech/engine.ts";
 import type { Vad } from "./vad/vad.ts";
 import { TwilioTransport } from "./transports/twilio.ts";
@@ -28,6 +29,8 @@ export type ServerDeps = {
   llm: Llm;
   app: AppApi;
   phrases: PhraseCache;
+  /** How fast speech is made here, shared by every call (see SpeechPace). */
+  pace?: SpeechPace;
   /** Is everything loaded? Calls are refused until it is. */
   ready: () => boolean;
   session?: Partial<SessionConfig>;
@@ -53,6 +56,8 @@ export function createVoiceServer(deps: ServerDeps): VoiceServer {
           talker: deps.llm.model,
           calls: live.size,
           capacity: deps.maxCalls,
+          // Seconds of speech made per second (under 1, sentences wait a little to play smoothly).
+          ...(deps.pace ? { speechRate: Math.round(deps.pace.rate * 100) / 100 } : {}),
         }),
       );
       return;
@@ -155,6 +160,7 @@ export function createVoiceServer(deps: ServerDeps): VoiceServer {
       llm: deps.llm,
       app: deps.app,
       phrases: deps.phrases,
+      pace: deps.pace,
       config: deps.session,
       log,
     };

@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import type { AvatarId, AvatarMood, ColorwayId } from "@/lib/avatars";
 import { cn } from "@/lib/utils";
+import { plainText } from "@/lib/dictation/text";
 import { useVoiceCall, type CallStatus } from "./useVoiceCall";
 
 const STATUS_TEXT: Record<CallStatus, string> = {
@@ -139,7 +140,7 @@ export function CallPanel({
             <ul className="flex flex-col gap-2">
               {call.lines.map((l) => (
                 <li key={l.id} className={cn("max-w-[85%] rounded-2xl px-3 py-1.5", l.role === "caller" ? "self-end bg-primary text-primary-foreground" : "self-start bg-card")}>
-                  {l.text}
+                  {l.role === "bot" ? plainText(l.text) : l.text}
                   {l.cut ? <span className="ml-1 text-xs opacity-70">(you cut in)</span> : null}
                 </li>
               ))}
@@ -160,7 +161,7 @@ export function CallPanel({
                 )}
                 <span className="min-w-0">
                   <span className="font-medium">{t.request}</span>
-                  {t.result ? <span className="block truncate text-muted-foreground">{t.result}</span> : null}
+                  {t.result ? <span className="block truncate text-muted-foreground">{plainText(t.result).replace(/\s*\n+\s*/g, " ")}</span> : null}
                 </span>
               </li>
             ))}

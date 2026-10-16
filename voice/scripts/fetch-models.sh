@@ -64,7 +64,8 @@ cat "$TMP/nemo.tar" "$TMP/nemo.tail" | sha256sum | grep -q "^$TOKENIZER_SHA256 "
 # Put the tail back where it sits in the .nemo, leaving a hole (no disk used) for the weights, then
 # unpack: later copies of a file in the tar replace earlier ones, as NVIDIA's pull does.
 dd if="$TMP/nemo.tail" of="$TMP/nemo.tar" bs=512 seek=$((${TOKENIZER_TAIL%-*} / 512)) conv=notrunc status=none
-tar -xf "$TMP/nemo.tar" -C "$DEST/magpie/tokenizer" --exclude=./model_weights.ckpt --no-same-owner
+# (The tar's own folder is private to its owner: keep ours, so the server's user can read it.)
+tar -xf "$TMP/nemo.tar" -C "$DEST/magpie/tokenizer" --exclude=./model_weights.ckpt --no-same-owner --no-same-permissions --no-overwrite-dir
 (
   cd "$DEST/magpie/tokenizer"
   sha256sum -c --quiet - <<'SUMS'
@@ -89,4 +90,6 @@ python3 -m venv "$TMP/venv"
 "$TMP/venv/bin/python" -I "$HERE/magpie-q8.py" "$TMP/magpie.f16.gguf" "$DEST/magpie/magpie_tts_multilingual_357m.v2607.q8_0.gguf"
 check "$MAGPIE_Q8_SHA256" "$DEST/magpie/magpie_tts_multilingual_357m.v2607.q8_0.gguf"
 
+# Readable by whoever runs the server (the container's user isn't the one that fetched them).
+chmod -R a+rX "$DEST"
 find "$DEST" -type f -exec ls -l {} + | awk '{print $5, $9}'

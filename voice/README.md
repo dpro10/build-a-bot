@@ -67,9 +67,17 @@ Measured on 4 vCPUs (Intel Sapphire Rapids, 2.1 GHz):
 | Silero VAD | 0.23 ms of CPU per 32 ms of audio |
 | Whole turn (caller stops → bot's first word), scripted talker, the `v4` build | 1.3 s, on the phone path and in the browser |
 
-An 8-vCPU machine should keep Magpie comfortably faster than real time. With the real talker, add
-Nemotron's first token (about 0.5 to 1 s from Token Factory); the early guess at the first pause
-hides part of it.
+Magpie's codec is the slow part: on 4 vCPUs, 2 threads for Magpie and 2 for its codec is the best
+split, at about 1.0× real time (1 + 3 streams faster, but first audio takes 1.5 s). That's just
+enough, so the server measures its own speed (`speechRate` in `/health`), and when speech is made
+slower than it plays, each sentence waits until enough of it is ready to play through without a
+gap (`SpeechPace` in `call/speaker.ts`). An 8-vCPU machine has room to spare. With the real talker,
+add Nemotron's first token (about 0.5 to 1 s from Token Factory); the early guess at the first
+pause hides part of it.
+
+The whole thing was also checked in a real browser: Chromium with a fake microphone playing a
+Magpie-voiced question, the app's Call button, this server on the real models and the bot's agent
+in demo mode. The question was heard, the answer spoken back, and the call landed in the chat.
 
 ## Run it
 
@@ -92,7 +100,8 @@ docker run -p 8080:8080 --env-file voice.env build-a-bot-voice
 
 Settings: `APP_URL`, `VOICE_SERVER_SECRET` (shared with the app, 32+ characters),
 `TOKEN_FACTORY_API_KEY`, and optionally `TALKER_MODEL` (default `nvidia/Nemotron-3_5-Lightning`),
-`VOICE` (Aria, Sofia, John, Jason or Leo), `MAX_CALLS`, `TTS_THREADS`, `CODEC_THREADS`, `TTS_CFG=1`,
-`SPEECH_URL` (use a stock `nemo-speech serve` instead of the sidecar), `ALLOWED_ORIGINS`.
+`VOICE` (Aria, Sofia, John, Jason or Leo), `MAX_CALLS` (default 1: the engine speaks for one call at
+a time), `TTS_THREADS`, `CODEC_THREADS`, `TTS_CFG=1`, `SPEECH_URL` (use a stock `nemo-speech serve`
+instead of the sidecar), `ALLOWED_ORIGINS`.
 
 Logs are one JSON object a line and never contain what anyone said.

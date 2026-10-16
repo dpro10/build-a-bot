@@ -22,7 +22,6 @@ import type { Bot, Call, CallTurn, User } from "@/lib/db/schema";
 import { config, live } from "@/lib/env";
 import { AVATARS, isAvatarId } from "@/lib/avatars";
 import { roleOf } from "@/lib/roles";
-import { ownerName } from "@/lib/agent/prompt";
 import { receipt, runTurn } from "@/lib/agent/run";
 import { ensureConversation, messageOwner } from "@/lib/channels/outbound";
 import { loadMemories } from "@/lib/memory";
@@ -145,7 +144,13 @@ async function botAndOwner(db: Db, call: Call): Promise<{ bot: Bot; owner: User 
   return bot && owner ? { bot, owner } : null;
 }
 
-const firstNameOf = (owner: User) => ownerName(owner).split(/\s+/)[0] || "there";
+/** The owner's first name, if they've given one (an email address isn't something to say out loud). */
+export function callFirstName(owner: Pick<User, "name">): string | null {
+  return owner.name?.trim().split(/\s+/)[0] || null;
+}
+
+/** How prompts refer to the owner. */
+const firstNameOf = (owner: User) => callFirstName(owner) ?? "the owner";
 
 function persona(bot: Bot, owner: User): string {
   const avatar = isAvatarId(bot.avatar) ? AVATARS[bot.avatar] : AVATARS.blip;
@@ -189,22 +194,28 @@ export async function ownerContext(db: Db, bot: Bot, owner: User): Promise<strin
 /** The words the bot should catch even when they're unusual: its name, its owner's, the apps'. */
 async function phrasesFor(db: Db, bot: Bot, owner: User): Promise<string[]> {
   const apps = await db.select({ connectorId: schema.connections.connectorId }).from(schema.connections).where(eq(schema.connections.botId, bot.id));
-  const words = [bot.name, ...ownerName(owner).split(/\s+/), ...apps.map((a) => CONNECTOR_BY_ID[a.connectorId]?.name ?? "")];
+  const words = [bot.name, ...(owner.name ?? "").split(/\s+/), ...apps.map((a) => CONNECTOR_BY_ID[a.connectorId]?.name ?? "")];
   return [...new Set(words.map((w) => w.trim()).filter((w) => w.length > 1))].slice(0, 30);
 }
 
-/** First words. "AI assistant" is said to anyone who isn't the owner, and to the owner on the first call. */
-export function greetingFor(input: { botName: string; firstName: string; speaker: Speaker; firstCall: boolean; pinAvailable: boolean; kind: "web" | "phone" }): string {
+/**
+ * First words. "AI assistant" is said to anyone who isn't the owner, and to the owner on the first
+ * call. Without a first name on the account, the greeting just doesn't use one.
+ */
+export function greetingFor(input: { botName: string; firstName: string | null; speaker: Speaker; firstCall: boolean; pinAvailable: boolean; kind: "web" | "phone" }): string {
   const { botName, firstName, speaker } = input;
+  const name = firstName ? ` ${firstName}` : "";
   if (speaker === "owner") {
-    return input.firstCall ? `Hi ${firstName}, it's ${botName}, your AI assistant. What can I do for you?` : `Hey ${firstName}, it's ${botName}. What can I do for you?`;
+    return input.firstCall ? `Hi${name}, it's ${botName}, your AI assistant. What can I do for you?` : `Hey${name}, it's ${botName}. What can I do for you?`;
   }
   if (speaker === "unverified") {
     return input.pinAvailable
       ? `Hi, it's ${botName}, an AI assistant. To make sure it's you, say or type your phone PIN.`
       : `Hi, it's ${botName}, an AI assistant. I can't confirm who's calling from this phone, so I can only take a message. To unlock calls from your phone, set a phone PIN in the Build-a-bot app.`;
   }
-  return `Hi, you've reached ${botName}, ${firstName}'s AI assistant. ${firstName} isn't on this line, but I can take a message.`;
+  return firstName
+    ? `Hi, you've reached ${botName}, ${firstName}'s AI assistant. ${firstName} isn't on this line, but I can take a message.`
+    : `Hi, you've reached ${botName}, an AI assistant. The person I work for isn't on this line, but I can take a message.`;
 }
 
 export type CallSessionInfo = {
@@ -243,7 +254,7 @@ export async function callSession(db: Db, call: Call): Promise<CallSessionInfo |
     bot: { id: bot.id, name: bot.name, persona: persona(bot, owner) },
     owner: { firstName: firstNameOf(owner), timezone: owner.timezone || "UTC" },
     speaker,
-    greeting: greetingFor({ botName: bot.name, firstName: firstNameOf(owner), speaker, firstCall: (earlier?.n ?? 0) === 0, pinAvailable, kind }),
+    greeting: greetingFor({ botName: bot.name, firstName: callFirstName(owner), speaker, firstCall: (earlier?.n ?? 0) === 0, pinAvailable, kind }),
     context: speaker === "owner" ? await ownerContext(db, bot, owner) : "",
     phrases: await phrasesFor(db, bot, owner),
     maxMinutes: MAX_CALL_MINUTES[kind],
