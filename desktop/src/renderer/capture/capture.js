@@ -4,8 +4,10 @@
  *   system — the call's audio (getDisplayMedia + Electron's system-audio loopback;
  *            the video track it needs is dropped at once)
  * Each track has its own MediaRecorder (webm/opus, ~32 kbps), restarted every chunk so
- * every chunk is a complete file. Chunks, a 0..1 level and "silent" flags go to the
- * main process; nothing is stored here. Paused = microphone released.
+ * every chunk is a complete file. A chunk ends at a pause in the talking when there is one
+ * near its length, so a word isn't cut in two (each chunk is turned into text on its own).
+ * Chunks, a 0..1 level and "silent" flags go to the main process; nothing is stored here.
+ * Paused = microphone released.
  *
  * The main process drives it through window.__babCapture (start/pause/resume/stop).
  */
@@ -17,6 +19,8 @@
   const UPLOAD_MIME = MIME.startsWith("audio/ogg") ? "audio/ogg" : "audio/webm";
 
   let cfg = { chunkMs: 20000, system: "loopback", silenceRms: 0.006 };
+  /** Every track quiet this long is a pause between words or sentences: a good place to end a chunk. */
+  const PAUSE_MS = 300;
   /** @type {AudioContext | null} */
   let ctx = null;
   /** @type {Record<string, TrackRec>} */
@@ -47,6 +51,8 @@
       this.analyser = null;
       this.buf = null;
       this.ended = false;
+      /** The quietest it's been lately (the room's noise, or the call's hiss): rises slowly, drops at once. -1: not measured yet. */
+      this.floor = -1;
       for (const t of stream.getAudioTracks()) {
         t.addEventListener("ended", () => {
           if (this.ended) return;
@@ -78,6 +84,12 @@
       return Math.sqrt(s / this.buf.length);
     }
 
+    /** Quiet enough to count as a pause: near the noise floor, and under the "voiced" level. */
+    quiet() {
+      if (!this.analyser || this.ended || !this.cur) return true;
+      return this.rms() < Math.max(cfg.silenceRms, Math.max(0, this.floor) * 2.5);
+    }
+
     /** Start a new segment; returns the previous one (still recording) so it can be finished. */
     begin(chunk, startMs) {
       const prev = this.cur;
@@ -101,7 +113,7 @@
   }
 
   /** Stop a segment and send it as one standalone file. */
-  async function finishSegment(track, seg, durationMs) {
+  async function finishSegment(track, seg, durationMs, why = "stop") {
     if (!seg) return;
     try {
       if (seg.rec.state !== "inactive") seg.rec.stop();
@@ -120,6 +132,8 @@
       durationMs: Math.max(1, Math.round(durationMs)),
       // Fewer than ~0.2 s above the noise floor: nothing worth transcribing.
       silent: seg.voiced < 2,
+      // How it ended: at a pause, at the longest a chunk waits for one, or at pause/stop.
+      cut: why,
       mime: UPLOAD_MIME,
       data,
     });
@@ -140,18 +154,41 @@
         const r = t.rms();
         if (r >= cfg.silenceRms && t.cur) t.cur.voiced++;
         if (r > max) max = r;
+        t.floor = t.floor < 0 ? r : Math.min(r, t.floor * 1.01 + 1e-5);
       }
       // Levels go out ~6 times a second; voice is measured 10 times a second.
       if (++tick % 2 === 0 || max > 0.05) bridge.send("level", Math.round(toLevel(max) * 100) / 100);
     }, 100);
   }
 
+  /**
+   * The next chunk ends at the first pause (every track quiet for PAUSE_MS) from a little before
+   * its length to a little after (about -2.5 s to +5 s for 20-second chunks); with no pause by
+   * then, it ends anyway.
+   */
   function scheduleRotate() {
     clearTimeout(rotateTimer);
-    rotateTimer = setTimeout(rotate, cfg.chunkMs);
+    const early = Math.min(2500, cfg.chunkMs * 0.15);
+    const late = Math.min(5000, cfg.chunkMs * 0.25);
+    rotateTimer = setTimeout(() => endAtPause(performance.now() + early + late), cfg.chunkMs - early);
   }
 
-  async function rotate() {
+  function endAtPause(deadline) {
+    if (!running) return;
+    let quietSince = performance.now();
+    const check = () => {
+      if (!running) return;
+      const now = performance.now();
+      if (!Object.values(tracks).every((t) => t.quiet())) quietSince = now;
+      if (now - quietSince >= PAUSE_MS) return void rotate("pause");
+      if (now >= deadline) return void rotate("time");
+      rotateTimer = setTimeout(check, 50);
+    };
+    check();
+  }
+
+  /** @param {'pause'|'time'} why  how this chunk ended (for the log) */
+  async function rotate(why) {
     if (!running) return;
     const now = performance.now();
     const dur = now - segT0;
@@ -162,7 +199,7 @@
     // Start the next recorder first, then stop the old one: no gap between chunks.
     const prev = Object.values(tracks).map((t) => [t, t.begin(chunkNo, nextStart)]);
     scheduleRotate();
-    await Promise.all(prev.map(([t, seg]) => finishSegment(t, seg, dur)));
+    await Promise.all(prev.map(([t, seg]) => finishSegment(t, seg, dur, why)));
     // A track that ended (e.g. system audio permission revoked) is let go.
     for (const [name, t] of Object.entries(tracks)) if (t.ended && !t.cur) delete tracks[name];
   }

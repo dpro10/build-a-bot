@@ -58,7 +58,7 @@ function setup(opts = {}) {
   };
   const api = {
     async startMeeting(botId, body) {
-      calls.push(`api.start:${body.app}:${body.consentNotice}`);
+      calls.push(`api.start:${body.app}:${body.consentNotice}${body.inPerson ? ":room" : ""}`);
       if (opts.startError) throw opts.startError;
       return { meeting: { id: "mtg_1", title: "Zoom meeting" }, chunkMs: 6000 };
     },
@@ -78,18 +78,38 @@ function setup(opts = {}) {
       calls.push("api.notice");
       return {};
     },
+    async keepHearing(botId, meetingId) {
+      calls.push(`api.keepHearing:${meetingId}`);
+      return {};
+    },
+    ...(opts.api ?? {}),
   };
   const uploads = {
     pushed: [],
+    /** Pieces still to be heard or sent (tests set it). */
+    left: 0,
+    age: 0,
+    dropped: false,
     push(i) {
       this.pushed.push(i);
     },
     async drain() {
       calls.push("uploads.drain");
+      if (opts.drain) return opts.drain(this);
       return { ok: true, left: 0 };
     },
     drop() {
       calls.push("uploads.drop");
+      this.dropped = true;
+    },
+    size() {
+      return this.left;
+    },
+    oldestAge() {
+      return this.age;
+    },
+    isDropped() {
+      return this.dropped;
     },
     persist() {},
     dispose() {},
@@ -120,6 +140,7 @@ function setup(opts = {}) {
     openUrl: (u) => opened.push(u),
     openSpecial: (t) => opened.push(`special:${t}`),
     writeClipboard: (t) => calls.push(`clipboard:${t.slice(0, 20)}`),
+    ...(opts.hearing ? { hearing: opts.hearing } : {}),
     limits: { silenceStopMs: 12_000, slowNotesMs: 60_000, ...(opts.limits ?? {}) },
   });
   return { c, calls, buddy, uploads, notes, opened, settingsData };
@@ -415,5 +436,194 @@ test("a meeting that ended without notes says why, not 'your notes are ready'", 
   assert.equal(env.c.state.phase, "error");
   assert.match(env.c.state.message, /didn't catch any speech/);
   assert.ok(!env.notes.some((n) => /are ready/.test(n)));
+  env.c.dispose();
+});
+
+// ---------------------------------------------------------------------------
+// Meeting notes heard on this computer (NVIDIA Parakeet)
+// ---------------------------------------------------------------------------
+
+/** NVIDIA Parakeet as the controller sees it (voice/index.mjs): how pieces are heard, and what to say meanwhile. */
+function parakeet(calls, way = "local", note = null) {
+  return {
+    way: () => way,
+    waitNote: () => note,
+    ensure: () => calls.push("hearing.ensure"),
+    warm: () => calls.push("hearing.warm"),
+  };
+}
+
+test("Take notes in the room: the mic only, and the server knows it's in the room", async () => {
+  const calls = [];
+  const env = setup({ hearing: parakeet(calls) });
+  env.c.takeNow({ inPerson: true });
+  await flush();
+  assert.equal(env.c.state.phase, "listening");
+  assert.ok(env.calls.includes("api.start:other:false:room"), env.calls.join(", "));
+  assert.ok(env.calls.includes("capture.start:off"), "no call audio in the room");
+  assert.equal(env.c.statusText(), "Taking notes in the room");
+  assert.deepEqual(calls, ["hearing.ensure", "hearing.warm"], "Parakeet is made ready before the first piece");
+  // The tray offers it next to "Take notes now".
+  const items = trayItems({ status: "", signedIn: true, phase: "idle", canTake: true, detectionPaused: false, captions: true, openAtLogin: false, macTabs: false, platform: "linux", bots: [], botId: null, neverApps: [] });
+  assert.ok(items.some((i) => i.id === "take-room" && i.label === "Take notes in the room" && i.enabled !== false));
+  env.c.dispose();
+});
+
+test("a call before NVIDIA Parakeet is here: it listens, says so, and makes sure it's on its way", async () => {
+  const calls = [];
+  const env = setup({ hearing: parakeet(calls, "wait", "Getting NVIDIA Parakeet (45%). I'm listening, and I'll write your notes once it's here.") });
+  await listening(env);
+  assert.ok(calls.includes("hearing.ensure"));
+  assert.match(env.buddy.states.at(-1).caption?.text ?? "", /Getting NVIDIA Parakeet \(45%\)/);
+  assert.equal(env.c.statusText(), "Taking notes (getting NVIDIA Parakeet…)");
+  env.c.dispose();
+});
+
+test("while NVIDIA Parakeet downloads there are no captions: the bot says why now and then, and when it's caught up", async () => {
+  let way = "wait";
+  let note = "Getting NVIDIA Parakeet (10%). I'm listening, and I'll write your notes once it's here.";
+  const env = setup({ hearing: { way: () => way, waitNote: () => note, ensure() {}, warm() {} }, limits: { waitNoteMs: 120_000 } });
+  await listening(env);
+  const said = () => env.c.stats.notices.filter((n) => /NVIDIA Parakeet|Catching up/.test(n));
+  assert.deepEqual(said(), [note]);
+  const realNow = Date.now;
+  let fake = realNow();
+  Date.now = () => fake;
+  const seconds = (n) => {
+    for (let i = 0; i < n; i++) {
+      fake += 1000;
+      env.c.tick();
+    }
+  };
+  try {
+    seconds(60);
+    assert.equal(said().length, 1, "not every few seconds");
+    note = "Getting NVIDIA Parakeet (60%). I'm listening, and I'll write your notes once it's here.";
+    seconds(75);
+    assert.equal(said().at(-1), note, "again after a couple of minutes, with the progress");
+    way = "local";
+    note = null;
+    seconds(15);
+    assert.equal(said().at(-1), "NVIDIA Parakeet is ready. Catching up on the call so far.");
+    const count = said().length;
+    seconds(300);
+    assert.equal(said().length, count, "said once");
+  } finally {
+    Date.now = realNow;
+  }
+  env.c.dispose();
+});
+
+test("Stop: the notes wait until the last pieces are heard, and the server hears they're still coming", async () => {
+  let heard = false;
+  const env = setup({
+    hearing: parakeet([]),
+    limits: { hearingPingMs: 20 },
+    // Pieces wait for Parakeet (each drain runs out of time) until they've been heard.
+    drain: (u) => {
+      if (heard) {
+        u.left = 0;
+        return { ok: true, left: 0 };
+      }
+      return new Promise((r) => setTimeout(() => r({ ok: false, left: u.left }), 10));
+    },
+    api: {
+      // The server writes the notes once the meeting is finished.
+      async getMeeting() {
+        return { meeting: { status: env.calls.includes("api.finish") ? "ready" : "recording", title: "Zoom meeting" }, segments: [] };
+      },
+    },
+  });
+  await listening(env);
+  env.uploads.left = 2;
+  env.c.stopNow();
+  await flush(16);
+  assert.equal(env.c.state.phase, "saving", "the bubble moves on: it doesn't hang on Stop");
+  assert.equal(env.calls.includes("api.finish"), false, "no notes from part of the meeting");
+  assert.ok(env.c.finishing.has("mtg_1"));
+  assert.ok(env.calls.filter((x) => x === "api.keepHearing:mtg_1").length >= 1, "the server hears the meeting is still being heard");
+  heard = true;
+  await flush(16);
+  assert.ok(env.calls.indexOf("api.finish") > env.calls.lastIndexOf("api.keepHearing:mtg_1"), "finished once every piece was in");
+  assert.equal(env.c.finishing.size, 0);
+  env.c.dispose();
+});
+
+test("notes aren't asked for again while the last pieces are still being heard", async () => {
+  let gets = 0;
+  const env = setup({
+    hearing: parakeet([]),
+    limits: { hearingPingMs: 60_000 },
+    drain: () => new Promise((r) => setTimeout(() => r({ ok: false, left: 1 }), 30)),
+    api: {
+      async getMeeting() {
+        gets++;
+        return { meeting: { status: gets <= 2 ? "recording" : "ready", title: "Zoom meeting" }, segments: [] };
+      },
+    },
+  });
+  await listening(env);
+  env.uploads.left = 1;
+  env.c.stopNow();
+  await flush(14);
+  assert.ok(env.c.finishing.has("mtg_1"));
+  // A wait for the notes that has gone on well past Stop still sees "recording": normally it would
+  // finish the meeting again, but not while its last pieces are still being heard.
+  const realNow = Date.now;
+  let fake = realNow();
+  Date.now = () => (fake += 20_000);
+  try {
+    await env.c.waitForNotes("mtg_1", { botId: "bot_1", meetingId: "mtg_1", server: "http://x" });
+  } finally {
+    Date.now = realNow;
+  }
+  assert.ok(gets >= 2);
+  assert.equal(env.calls.filter((x) => x === "api.finish").length, 0);
+  // Once they're in, it finishes.
+  env.uploads.left = 0;
+  await flush(14);
+  assert.equal(env.calls.filter((x) => x === "api.finish").length, 1);
+  env.c.dispose();
+});
+
+test("notes that are ready are announced once, even when two waits for them overlap", async () => {
+  let gets = 0;
+  const env = setup({
+    api: {
+      async getMeeting() {
+        gets++;
+        return { meeting: { status: gets < 3 ? "recording" : "ready", title: "Launch plan", notes: "## Summary\nShip it." }, segments: [] };
+      },
+    },
+  });
+  const rec = { botId: "bot_1", meetingId: "mtg_1", server: "http://x" };
+  // Stop started one; the last pieces being heard in full starts another.
+  await Promise.all([env.c.pollNotes("mtg_1", rec), env.c.pollNotes("mtg_1", rec)]);
+  assert.equal(env.notes.filter((n) => n.startsWith("Notes from “Launch plan” are ready")).length, 1);
+  assert.equal(env.c.polling.size, 0);
+  env.c.dispose();
+});
+
+test("a meeting the server stopped meanwhile isn't finished again", async () => {
+  let drains = 0;
+  const env = setup({
+    hearing: parakeet([]),
+    limits: { hearingPingMs: 10 },
+    drain: (u) => {
+      drains++;
+      if (drains === 2) {
+        // The server said the meeting is over (409): its pieces were dropped.
+        u.left = 0;
+        u.dropped = true;
+        return { ok: true, left: 0 };
+      }
+      return new Promise((r) => setTimeout(() => r({ ok: false, left: u.left }), 15));
+    },
+  });
+  await listening(env);
+  env.uploads.left = 1;
+  env.c.stopNow();
+  await flush(20);
+  assert.equal(env.calls.includes("api.finish"), false);
   env.c.dispose();
 });

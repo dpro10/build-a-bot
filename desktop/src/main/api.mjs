@@ -167,6 +167,16 @@ export function createApi(o) {
   }
 
   const m = (botId, meetingId) => `/api/bots/${encodeURIComponent(botId)}/meetings/${encodeURIComponent(meetingId)}`;
+  /** Where a piece sits in the meeting. @param {import('./spool.mjs').ChunkItem} item */
+  const pieceQuery = (item) =>
+    new URLSearchParams({
+      track: item.track,
+      chunk: String(item.chunk),
+      startMs: String(Math.max(0, Math.round(item.startMs))),
+      durationMs: String(Math.max(1, Math.round(item.durationMs))),
+      silent: item.silent ? "1" : "0",
+    });
+  const otherServer = () => ({ status: 404, body: { error: "This computer is paired with another server now.", code: "other_server" } });
 
   return {
     /** Trade a pairing code for a device token. */
@@ -180,32 +190,43 @@ export function createApi(o) {
     revokeDevice() {
       return json("DELETE", "/api/desktop/session");
     },
-    startMeeting(botId, { app, consentNotice }) {
-      return json("POST", `/api/bots/${encodeURIComponent(botId)}/meetings`, { json: { app, consentNotice: Boolean(consentNotice) } });
+    /** `inPerson`: a meeting in the room (the mic only; its lines are labeled "Room"). */
+    startMeeting(botId, { app, consentNotice, inPerson = false }) {
+      return json("POST", `/api/bots/${encodeURIComponent(botId)}/meetings`, { json: { app, consentNotice: Boolean(consentNotice), ...(inPerson ? { inPerson: true } : {}) } });
     },
     /**
-     * One audio chunk; returns { status, body } and never throws for HTTP errors
-     * (the upload queue decides what to do), only for network errors.
+     * One piece's audio, for a server that turns it into text itself (this computer can't hear it);
+     * returns { status, body } and never throws for HTTP errors (the upload queue decides what to
+     * do), only for network errors.
      * @param {import('./spool.mjs').ChunkItem} item
      */
     async uploadChunk(item) {
       // Audio for a server this computer is no longer paired with: that meeting is gone for us
       // (the queue drops just its chunks; 401 would drop every meeting's).
-      if (item.server !== o.server()) return { status: 404, body: { error: "This computer is paired with another server now.", code: "other_server" } };
-      const q = new URLSearchParams({
-        track: item.track,
-        chunk: String(item.chunk),
-        startMs: String(Math.max(0, Math.round(item.startMs))),
-        durationMs: String(Math.max(1, Math.round(item.durationMs))),
-        silent: item.silent ? "1" : "0",
-      });
-      const r = await call("POST", `${m(item.botId, item.meetingId)}/audio?${q}`, {
+      if (item.server !== o.server()) return otherServer();
+      const r = await call("POST", `${m(item.botId, item.meetingId)}/audio?${pieceQuery(item)}`, {
         server: item.server,
         body: /** @type {Uint8Array} */ (item.bytes),
         contentType: item.mime || "audio/webm",
         timeoutMs: 150_000,
       });
       return { status: r.status, body: r.data };
+    },
+    /**
+     * What NVIDIA Parakeet heard in one piece, on this computer: only these lines are sent, never
+     * the audio. Same answers as uploadChunk.
+     * @param {import('./spool.mjs').ChunkItem} item
+     * @param {Array<{ startMs: number, endMs: number, text: string }>} lines  times within the piece
+     */
+    async uploadChunkText(item, lines) {
+      if (item.server !== o.server()) return otherServer();
+      const heard = lines.map((l) => ({ startMs: Math.max(0, Math.round(l.startMs)), endMs: Math.max(0, Math.round(l.endMs)), text: String(l.text).slice(0, 4000) }));
+      const r = await call("POST", `${m(item.botId, item.meetingId)}/audio?${pieceQuery(item)}`, { server: item.server, json: { heard }, timeoutMs: 60_000 });
+      return { status: r.status, body: r.data };
+    },
+    /** This computer is still hearing the meeting (NVIDIA Parakeet was on its way): don't wrap it up yet. */
+    keepHearing(botId, meetingId) {
+      return json("PATCH", m(botId, meetingId), { json: { hearing: true } });
     },
     finish(botId, meetingId, server) {
       return json("POST", `${m(botId, meetingId)}/finish`, { server, json: {} });

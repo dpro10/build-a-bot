@@ -33,7 +33,7 @@ Build-a-bot is one Next.js 16 app (App Router, TypeScript) with Postgres behind 
 | `src/lib/connectors` | The app catalog (data), MCP client + OAuth 2.1, Composio, demo tools |
 | `src/lib/channels` | Inbound/outbound for every channel, setup flows, webhook verification |
 | `src/lib/bridge`, `bridge/` | Subscription brains on the owner's computer (server side + the CLI) |
-| `src/lib/meetings`, `src/lib/transcribe`, `desktop/` | Meeting notes: recording, speech-to-text, notes, and the desktop app that notices calls |
+| `src/lib/meetings`, `src/lib/transcribe`, `desktop/` | Meeting notes: the desktop app that notices calls and hears them on the computer, the transcript, notes |
 | `src/lib/dictation`, `src/components/voice`, `desktop/src/main/voice` | Voice typing: the dictation pipeline, the personal dictionary, the `/app/voice` page and the desktop app's hold-to-talk |
 | `src/app/desktop` | Pages the desktop app shows (the buddy at the bottom of the screen) |
 | `src/lib/mcp-server` | The bot's tools as an MCP server |
@@ -159,30 +159,32 @@ When the computer is asleep, the bot waits (default) or, if the owner opted in, 
 
 ## Meeting notes
 
-The bot takes notes in calls, only after the owner says yes, and stays visible the whole time it listens.
+The bot takes notes in calls, only after the owner says yes, and stays visible the whole time it listens. Notes are taken in the desktop app (like voice typing); the website shows them and never records.
 
 ```
-desktop app (Electron, desktop/)            browser (Meetings tab)
-  notices a call → the bot peeks up:          Start → share the call's tab + mic
-  "Want me to take notes?"                     the bot sits at the bottom of the page
-  yes → it sits at the bottom of the           (and can pop out in a floating window)
-  screen with a red dot and a timer
-            │  mic track = the owner, system/tab track = everyone else
-            ▼  ~20-second standalone audio chunks (6 s in demo mode)
-POST /api/bots/[botId]/meetings/[id]/audio  →  speech-to-text (any OpenAI-compatible
-            │                                  /audio/transcriptions endpoint; NVIDIA's models on
-            │                                  our speech server, Together AI as backup) → lines
-            ▼                                  audio is never stored
+desktop app (Electron, desktop/)
+  notices a call → the bot peeks up: "Want me to take notes?"
+  yes → it sits at the bottom of the screen with a red dot and a timer
+            │  mic track = the owner, system track = the call (everyone else); "in the room": mic only
+            ▼  ~20-second standalone webm/opus pieces, each ending at a pause when there's one near
+            │  (6 s with scripted speech, in tests)
+  each piece → 16 kHz WAV (hidden decoder page) → NVIDIA Parakeet on the computer, with word times
+            │  → transcript lines (at pauses and sentence ends); the audio never leaves the computer
+            ▼  (a piece waits on disk while Parakeet downloads; voice typing goes first)
+POST /api/bots/[botId]/meetings/[id]/audio  { heard: [{ startMs, endMs, text }] }  →  stored lines
+            │  (or a piece's audio, from an app that can't run Parakeet, to a server with speech-to-text)
+            ▼
 POST …/finish  →  the bot writes notes  →  web chat + the owner's best channel
 ```
 
 - **Tables:** `meetings` (title, app, status recording → processing → ready, summary, notes, action items) and `meeting_segments` (time-sortable transcript lines; a chunk with no speech leaves an empty marker so retries are idempotent).
-- **Auth:** the web app uses the session; the desktop app uses a device token from the same pairing as the Bridge (`src/lib/meetings/auth.ts`).
+- **Auth:** starting a meeting and sending what was said take the desktop app's device token only (the same pairing as the Bridge; `meetingAuth(…, { appOnly: true })` in `src/lib/meetings/auth.ts`). The web app (the session) lists meetings, stops a recording, writes notes again and deletes.
+- **Hearing it on the computer** (`desktop/src/main/meeting-speech.mjs`, `decoder-window.mjs`, `voice/local-speech.mjs`): the same Parakeet engine and "Private speech" setting as voice typing. The upload queue holds a piece until it can be heard; the notes are written only once every piece is in, and while pieces wait the app sends `PATCH { hearing: true }` so the server doesn't wrap the meeting up as abandoned. The desktop session says what the server takes: `meetings.local` (lines heard on the computer) and `meetings.available` (audio it hears itself).
 - **Notes** (`src/lib/meetings/notes.ts`): one model call with no tools, the transcript wrapped as untrusted content, so a hostile line in a call can only skew the notes. Meetings over about an hour are summarized in parts first. Bots on the owner's own Claude/ChatGPT plan write their notes on the owner's computer, as a Bridge job that reads the transcript through the bot's tools.
 - **Tools:** `list_meetings`, `read_meeting`, `search_meetings`. All three taint the run, so a transcript can't get the bot to email a stranger without the owner's tap, even under Full faith (tested).
 - **Limits:** meeting minutes per plan (wall-clock time, counted once across both tracks); 4 hours per meeting; one recording per bot at a time; the scheduler wraps up recordings whose recorder vanished (20 minutes without audio), gives notes that never finished an honest ending, and deletes transcripts past each bot's retention (90 days by default; the notes stay).
-- **Consent:** never before the owner says yes, no auto-record, and only while the bot is visible (the desktop window or the browser's picture-in-picture window). Each meeting records who said yes, when, and whether the heads-up was copied for the call.
-- **The buddy** (`src/components/meetings/Buddy.tsx`): the same component on three surfaces. `/desktop/buddy` is what the desktop app shows in its transparent, always-on-top window; its contract is `src/components/meetings/desktop-api.ts`.
+- **Consent:** never before the owner says yes, no auto-record, and only while the bot is visible (the desktop app's window at the bottom of the screen). Each meeting records who said yes, when, and whether the heads-up was copied for the call.
+- **The buddy** (`src/components/meetings/Buddy.tsx`): `/desktop/buddy` is what the desktop app shows in its transparent, always-on-top window; its contract is `src/components/meetings/desktop-api.ts`.
 
 ## Voice typing
 
@@ -243,7 +245,7 @@ Plans live in `src/lib/billing/plans.ts`; limits are enforced in code. Stripe Ch
 `DEMO_MODE=1` (default outside production) simulates whatever isn't configured:
 - **A scripted brain** (`src/lib/llm/demo.ts`) that calls the real tools, so the policy engine, approvals and receipts all run for real. It answers every job's starter ideas, and does its time math on the owner's clock.
 - **Simulated apps and channels** with sample data: an inbox with a phishing email, a week of calendar, a few PRs.
-- **A scripted meeting** for transcription and **sample dictations** for voice typing, only when you run it yourself (or tests, `DEMO_SPEECH=1`; the pill says *demo*). A deployed site never makes up speech: without a speech-to-text key, a recording isn't turned into text there, meeting notes say they're coming soon, and voice typing works with what the desktop app hears on the computer.
+- **A scripted meeting** and **sample dictations** for a recording sent to the server, only when you run it yourself (or tests, `DEMO_SPEECH=1`; the pill says *demo*). A deployed site never makes up speech: without a speech-to-text key, a recording isn't turned into text there, and meeting notes and voice typing work with what the desktop app hears on the computer.
 - **Instant plan switching.**
 
 Every flow in the product can be tried with zero keys when you run it yourself, and nothing real is sent or charged. `docs/TRY-IT.md` walks through it.
@@ -255,12 +257,12 @@ Every flow in the product can be tried with zero keys when you run it yourself, 
   - the builder to a live chat, an approval and STOP;
   - Bring my memories: paste, untick, save, pin;
   - a ready-made tutor: one tap in the builder, its first question, then back to a general assistant in Settings;
-  - meeting notes in the browser with a fake microphone: consent, the floating window, the transcript, the notes, deleting;
+  - meeting notes on the web: the Meetings tab sends you to the desktop app and the website can't record; a meeting a paired app heard shows its lines live, is stopped from the website, and gets its notes, which can be ticked, searched and deleted;
   - voice typing's web side: the page sends you to the desktop app and the website doesn't listen, a request by voice from a paired app shows in the chat with its selection, a dictionary word that's then used (voice typing itself is tested in the desktop app's own e2e);
   - every page loads;
   - axe accessibility scans in light and dark.
 - **On real Postgres.** Supabase runs the server through postgres.js and a transaction pooler, which are stricter than the in-memory database the tests use. Check database changes on a real one too: a local Postgres with pgbouncer in front in `pool_mode = transaction` on port 6543, like Supabase's pooler (port 6543 also makes the client skip prepared statements).
   - `TEST_DATABASE_URL=postgres://postgres@127.0.0.1:6543/bab_test npx vitest run tests/postgres.test.ts` wipes that database and covers sign-in, rate limits, the admin numbers and the cron tick.
   - `DATABASE_URL=postgres://postgres@127.0.0.1:6543/bab_e2e ENCRYPTION_KEY=$(openssl rand -base64 32) npm run test:e2e` runs the whole e2e suite there.
-- `cd desktop && npm test`: call detection on each OS (parsers on captured-style output), the call state machine, the controller's safety rules, the upload queue, placement, token storage, and voice typing's shortcut machine, paste and clipboard restore, app categories, history and controller, and Private speech against a stand-in runtime (download, resume, hashes, the key, idle stop, crashes, falling back).
+- `cd desktop && npm test`: call detection on each OS (parsers on captured-style output), the call state machine, the controller's safety rules, the upload queue, placement, token storage, and voice typing's shortcut machine, paste and clipboard restore, app categories, history and controller, and Private speech against a stand-in runtime (download, resume, hashes, the key, idle stop, crashes, falling back), and meetings heard on the computer (timed words into lines, pieces that wait for Parakeet, dictations first, notes only once every piece is in).
 - `cd desktop && npm run test:e2e`: the real Electron app under Xvfb against a running dev server: pair, a fake call, ask, take notes, pause, stop, notes ready, stop and delete, and the mic-only path; then voice typing with real X key presses: hold, talk, the cleaned-up text pasted into another app with the clipboard put back, hands-free, Esc, and "Hey Otto". With NVIDIA's files and two spoken sentences at hand (`BAB_E2E_SPEECH_*`), `e2e/local-speech.e2e.mjs` also downloads and runs the real Parakeet on the computer and types what was said.

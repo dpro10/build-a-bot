@@ -10,10 +10,12 @@ import { defineTool, type ToolContext } from "../types";
 
 const PART_CHARS = 24_000;
 
-/** Nothing recorded yet: how the owner starts (the desktop app only once people can get it). */
-const NO_MEETINGS = `No meetings yet. The owner can start one from the Meetings tab in the app${
-  available("desktopApp") ? ", or with the desktop app, which offers to take notes when a call starts" : ""
-}.`;
+/** Nothing recorded yet: how the owner starts (notes are taken in the desktop app). */
+const NO_MEETINGS = `No meetings yet. ${
+  available("desktopApp")
+    ? "The owner takes notes with the desktop app: it offers to when a call starts, and its menu starts notes for a meeting in the room."
+    : "Notes are taken with the desktop app, which is coming soon."
+}`;
 
 function when(d: Date, ctx: ToolContext): string {
   try {

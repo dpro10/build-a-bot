@@ -2,7 +2,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, AudioLines, Check, ChevronRight, Laptop, ListChecks, LoaderCircle, NotebookPen, Sparkles } from "lucide-react";
+import { ArrowRight, AudioLines, Bell, Check, ChevronRight, Laptop, ListChecks, LoaderCircle, NotebookPen, ShieldCheck, Sparkles, Users } from "lucide-react";
 import { Avatar } from "@/components/avatar";
 import { BrandTile } from "@/components/brand/icons";
 import { Badge } from "@/components/ui/badge";
@@ -14,21 +14,18 @@ import { dayKey, dayLabel, timeLabel, useNow } from "@/components/bot/activity/t
 import { api, ApiError } from "@/lib/client/api";
 import { PAID_PLANS_SOON } from "@/lib/billing/plans";
 import type { DesktopApp } from "@/lib/meetings";
-import { BrowserRecorder, type RecorderBlock } from "./BrowserRecorder";
-import type { BotFace } from "./RecorderSetup";
-import { formatDuration, meetingAppIcon, recordingHere, STATUS, statusOf, type MeetingView } from "./shared";
+import { formatDuration, meetingAppIcon, STATUS, statusOf, type BotFace, type MeetingView } from "./shared";
 
 export type DesktopDevice = { id: string; name: string; online: boolean };
 
 type Props = {
   botId: string;
   bot: BotFace & { paused: boolean };
-  ownerId: string;
-  ownerName: string;
   timezone: string;
   serverNow: string;
   initialMeetings: MeetingView[];
   enabled: boolean;
+  /** Meeting notes are taken here (the desktop app can be had); otherwise they're coming soon. */
   available: boolean;
   plan: { id: string; name: string; minutes: number };
   /** Paid plans can be bought here; otherwise there's no "get more" link. */
@@ -53,22 +50,14 @@ export function MeetingsView(props: Props) {
   const [meetings, setMeetings] = React.useState(props.initialMeetings);
   const [enabled, setEnabled] = React.useState(props.enabled);
   const [turningOn, setTurningOn] = React.useState(false);
-  const [ownId, setOwnId] = React.useState<string | null>(null);
-  const [busyId, setBusyId] = React.useState<string | null>(null);
   const [stopping, setStopping] = React.useState(false);
-  const [elsewhereHere, setElsewhereHere] = React.useState(false);
   const now = useNow(props.serverNow, 30_000);
 
   React.useEffect(() => setMeetings(props.initialMeetings), [props.initialMeetings]);
   React.useEffect(() => setEnabled(props.enabled), [props.enabled]);
 
   const minutesLeft = Math.max(0, plan.minutes - props.minutesUsed);
-  const active = meetings.find((m) => m.status === "recording" && m.id !== ownId) ?? (busyId ? meetings.find((m) => m.id === busyId) : undefined) ?? null;
-
-  React.useEffect(() => {
-    if (!active) return;
-    setElsewhereHere(recordingHere(active.id));
-  }, [active]);
+  const active = meetings.find((m) => m.status === "recording") ?? null;
 
   // Keep statuses fresh while something is recording or being written.
   const working = meetings.some((m) => m.status === "recording" || m.status === "processing");
@@ -106,7 +95,6 @@ export function MeetingsView(props: Props) {
     try {
       const { meeting } = await api<{ meeting: MeetingView }>(`/api/bots/${botId}/meetings/${active.id}/finish`, { method: "POST" });
       setMeetings((ms) => ms.map((m) => (m.id === meeting.id ? meeting : m)));
-      setBusyId(null);
       toast.success(`${bot.name} stopped and is writing your notes.`);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Couldn't stop it. Try again.");
@@ -115,17 +103,12 @@ export function MeetingsView(props: Props) {
     }
   };
 
-  const block: RecorderBlock = !enabled
-    ? { kind: "off", text: `Turn on meeting notes for ${bot.name} first.` }
-    : !props.available
-      ? { kind: "unavailable", text: "Meeting notes are coming soon." }
-      : bot.paused
-        ? { kind: "paused", text: `${bot.name} is paused. Resume it at the top of the page to take notes.` }
-        : active && (active.source === "desktop" || elsewhereHere)
-          ? { kind: "busy", text: `${bot.name} is already taking notes in another meeting.` }
-          : minutesLeft <= 0
-            ? { kind: "minutes", text: `You've used all ${plan.minutes} meeting minutes on ${plan.name} this month.` }
-            : null;
+  /** Why the desktop app can't take notes for this bot right now (null when it can). */
+  const blocked = bot.paused
+    ? `${bot.name} is paused. Resume it at the top of the page to take notes.`
+    : minutesLeft <= 0
+      ? `You've used all ${plan.minutes} meeting minutes on ${plan.name} this month.`
+      : null;
 
   const groups = React.useMemo(() => {
     const out: { key: string; items: MeetingView[] }[] = [];
@@ -138,14 +121,12 @@ export function MeetingsView(props: Props) {
     return out;
   }, [meetings, timezone]);
 
-  const desktopCard = <DesktopCard botName={bot.name} app={props.desktopApp} devices={props.desktopDevices} />;
-
   return (
     <div className="flex flex-col gap-8">
       <div className="flex flex-col gap-1">
         <h2 className="font-display text-2xl font-bold sm:text-3xl">Meetings</h2>
         <p className="max-w-2xl text-muted-foreground">
-          {bot.name} takes notes in your calls when you say yes. Audio becomes text and is thrown away.
+          {bot.name} takes notes in your calls when you say yes, with the desktop app. The call is turned into text on your computer; only the words come here.
         </p>
       </div>
 
@@ -162,14 +143,12 @@ export function MeetingsView(props: Props) {
                 </span>
                 <div className="min-w-0">
                   <div className="font-semibold">
-                    {bot.name} is taking notes{" "}
-                    {active.source === "desktop" ? "with the desktop app" : elsewhereHere ? "in another tab" : "in another browser"}
+                    {bot.name} is taking notes{active.source === "desktop" ? " with the desktop app" : ""}
                   </div>
                   <div className="text-sm text-muted-foreground">
                     <span className="block truncate sm:inline">{active.title}</span>
                     <span className="hidden sm:inline"> · </span>
                     started {timeLabel(active.startedAt, timezone)}
-                    {active.source === "browser" && !elsewhereHere ? ". Starting notes here wraps that one up." : ""}
                   </div>
                 </div>
               </div>
@@ -189,34 +168,11 @@ export function MeetingsView(props: Props) {
               <h3 id="take-notes-title" className="font-display text-lg font-semibold">
                 Take notes in a call
               </h3>
-              <p className="text-sm text-muted-foreground">Either way, {bot.name} asks first and stays on your screen the whole time it listens.</p>
+              <p className="text-sm text-muted-foreground">
+                In the desktop app, {bot.name} asks first and stays on your screen the whole time it listens. The website never listens.
+              </p>
             </div>
-            <BrowserRecorder
-              botId={botId}
-              bot={bot}
-              ownerId={props.ownerId}
-              ownerName={props.ownerName}
-              minutesLeft={minutesLeft}
-              block={block}
-              desktopCard={desktopCard}
-              desktopApp={props.desktopApp.status !== "soon"}
-              paidPlans={props.paidPlans}
-              onStarted={(m) => {
-                setOwnId(m.id);
-                setMeetings((ms) => [m, ...ms.filter((x) => x.id !== m.id)]);
-              }}
-              onDiscarded={(id) => {
-                setOwnId(null);
-                setMeetings((ms) => ms.filter((x) => x.id !== id));
-              }}
-              onBlocked={({ code, meetingId }) => {
-                if (code === "meetings_off") setEnabled(false);
-                if (code === "already_recording" && meetingId) {
-                  setBusyId(meetingId);
-                  router.refresh();
-                }
-              }}
-            />
+            <DesktopCard bot={bot} app={props.available ? props.desktopApp : { status: "soon" }} devices={props.desktopDevices} blocked={blocked} />
           </section>
 
           <div className="grid gap-3 sm:grid-cols-2">
@@ -326,7 +282,7 @@ function TurnOnCard({ bot, onTurnOn, busy }: { bot: BotFace; onTurnOn: () => voi
             any meeting later.
           </p>
           <ul className="mx-auto mt-4 flex w-fit flex-col items-start gap-1.5 text-left text-sm sm:mx-0">
-            {["It asks first, every time", "It stays on your screen while it listens", "Audio becomes text and is thrown away"].map((t) => (
+            {["It asks first, every time", "It stays on your screen while it listens", "Your call is heard on your computer, never kept"].map((t) => (
               <li key={t} className="flex items-center gap-2">
                 <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-success-soft text-success" aria-hidden>
                   <Check className="size-3" strokeWidth={3} />
@@ -345,51 +301,62 @@ function TurnOnCard({ bot, onTurnOn, busy }: { bot: BotFace; onTurnOn: () => voi
   );
 }
 
-function DesktopCard({ botName, app, devices }: { botName: string; app: DesktopApp; devices: DesktopDevice[] }) {
+/** Meeting notes happen in the desktop app: what it does, whether it's paired, and where to set it up. */
+function DesktopCard({ bot, app, devices, blocked }: { bot: BotFace; app: DesktopApp; devices: DesktopDevice[]; blocked: string | null }) {
   const apps = ["zoom", "meet", "teams", "webex", "slack"] as const;
   const online = devices.find((d) => d.online);
   const soon = app.status === "soon";
+  const points = [
+    { icon: <Bell />, text: `When a call starts in Zoom, Google Meet, Teams, Webex, Slack or your browser, ${bot.name} pops up and asks. For a meeting in the room, choose Take notes in the room from the app's menu.` },
+    { icon: <ShieldCheck />, text: "NVIDIA Parakeet turns the call into text right on your computer, so the audio never leaves it. Only the words come here, for your notes." },
+    { icon: <Users />, text: "What you say and what the others on the call say are kept apart in the transcript. The notes, action items and transcript land here." },
+  ];
   return (
-    <div className="flex flex-col gap-4 rounded-3xl border border-border bg-card p-5 shadow-soft">
+    <div className="flex flex-col gap-4 rounded-3xl border border-border bg-card p-5 shadow-soft sm:p-6">
       <div className="flex items-start gap-3">
         <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-foreground text-background">
           <Laptop className="size-5" aria-hidden />
         </span>
         <div className="min-w-0">
           <h3 className="flex flex-wrap items-center gap-2 font-display text-lg leading-tight font-semibold">
-            With the desktop app {soon ? <Badge tone="neutral">Coming soon</Badge> : <Badge tone="primary">Beta</Badge>}
+            The desktop app {soon ? <Badge tone="neutral">Coming soon</Badge> : <Badge tone="primary">Beta</Badge>}
           </h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            Notices when a call starts in Zoom, Meet, Teams…, asks first, and sits at the bottom of your screen while it listens.
+            {soon ? "Meeting notes come with the desktop app for Mac and Windows, which is coming soon." : `For Mac and Windows. ${bot.name} sits at the bottom of your screen while it listens.`}
           </p>
         </div>
       </div>
-      <div className="flex items-center gap-3">
-        <div className="flex -space-x-2">
-          {apps.map((a) => (
-            <BrandTile key={a} icon={meetingAppIcon(a)} size={30} className="ring-2 ring-card" />
-          ))}
+      <ul className="flex flex-col gap-2.5">
+        {points.map((p) => (
+          <li key={p.text} className="flex gap-2.5 text-sm text-muted-foreground">
+            <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary [&_svg]:size-3.5" aria-hidden>
+              {p.icon}
+            </span>
+            <span>{p.text}</span>
+          </li>
+        ))}
+      </ul>
+      {blocked && !soon ? <p className="rounded-2xl bg-warning-soft px-3 py-2 text-sm text-foreground">{blocked}</p> : null}
+      <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex -space-x-2">
+            {apps.map((a) => (
+              <BrandTile key={a} icon={meetingAppIcon(a)} size={30} className="ring-2 ring-card" />
+            ))}
+          </div>
+          <span className="text-xs text-muted-foreground">
+            {devices.length ? (online ? `Paired on ${online.name} · online` : `Paired on ${devices[0].name} · offline`) : soon ? "For Mac and Windows" : "Not paired with a computer yet"}
+          </span>
         </div>
-        <span className="text-xs text-muted-foreground">
-          {devices.length
-            ? online
-              ? `Paired on ${online.name} · online`
-              : `Paired on ${devices[0].name} · offline`
-            : soon
-              ? "For Mac and Windows. For now, take notes in this browser."
-              : `Mac and Windows. ${botName} pops up when a call starts.`}
-        </span>
-      </div>
-      {/* Coming soon: nothing to set up yet (no repo instructions for testers). */}
-      {soon ? null : (
-        <div className="mt-auto">
-          <Button asChild variant="outline">
+        {/* Coming soon: nothing to set up yet. */}
+        {soon ? null : (
+          <Button asChild variant={devices.length ? "outline" : "primary"} className="shrink-0 self-start sm:self-auto">
             <Link href="/app/bridge#desktop">
-              {devices.length ? "Manage the desktop app" : "Set up the desktop app"} <ArrowRight />
+              {devices.length ? "Manage the desktop app" : "Get the desktop app"} <ArrowRight />
             </Link>
           </Button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
@@ -482,7 +449,7 @@ function EmptyMeetings({ bot, enabled }: { bot: BotFace; enabled: boolean }) {
       <div className="font-display text-lg font-semibold">No meetings yet</div>
       <p className="max-w-md text-sm text-muted-foreground">
         {enabled
-          ? `Start notes in your next call. The summary, action items and transcript land here, and ${bot.name} sends you the notes in chat.`
+          ? `Take notes in your next call with the desktop app. The summary, action items and transcript land here, and ${bot.name} sends you the notes in chat.`
           : `Once meeting notes are on, every meeting ${bot.name} takes notes in shows up here.`}
       </p>
       <p className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">

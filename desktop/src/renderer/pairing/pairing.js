@@ -70,6 +70,9 @@
     list.replaceChildren();
     const on = s.bots.filter((b) => b.meetingsOn);
     for (const b of [...on, ...s.bots.filter((x) => !x.meetingsOn)]) list.append(botRow(b, s.botId));
+    // How calls are heard here (NVIDIA Parakeet, and how far its download has got).
+    $("hearing").hidden = !s.hearing;
+    $("hearing").textContent = s.hearing || "";
     const none = s.status === "ready" && on.length === 0;
     $("no-bots").hidden = !none;
     if (none) {

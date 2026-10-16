@@ -25,7 +25,8 @@ export default defineConfig({
         port: PORT,
         reuseExistingServer: true,
         timeout: 120_000,
-        // DEMO_SPEECH: the scripted meeting for meeting notes (no speech-to-text key in tests).
-        env: { DATA_DIR: ".data/e2e", DEMO_MODE: "1", DEMO_SPEECH: "1" },
+        // As on build-a-bot.site: demo mode with no speech-to-text and no scripted speech. Meetings and
+        // voice typing come in as the lines the desktop app heard (a paired computer's token stands in).
+        env: { DATA_DIR: ".data/e2e", DEMO_MODE: "1", DEMO_SPEECH: "0" },
       },
 });

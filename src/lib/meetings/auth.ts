@@ -1,6 +1,8 @@
 /**
- * Meeting routes are called by the web app (signed-in session) and by the desktop
- * app (a paired computer's device token, the same pairing the Bridge uses).
+ * Meeting notes are taken in the desktop app (a paired computer's device token, the same pairing
+ * the Bridge uses), which hears the call on the owner's computer: starting a meeting and sending
+ * what was said answer only the app (`appOnly`). The web app (a signed-in session) shows the
+ * meetings, writes notes again, stops a recording and deletes.
  */
 import { eq } from "drizzle-orm";
 import { schema, type Db } from "@/lib/db";
@@ -14,7 +16,7 @@ export function hasDeviceToken(req: Request): boolean {
   return /^bearer\s+bab_dev_/i.test(req.headers.get("authorization") ?? "");
 }
 
-export async function meetingAuth(req: Request, botId: string, opts: { write?: boolean } = {}): Promise<MeetingAuth | { ok: false; res: Response }> {
+export async function meetingAuth(req: Request, botId: string, opts: { write?: boolean; appOnly?: boolean } = {}): Promise<MeetingAuth | { ok: false; res: Response }> {
   if (hasDeviceToken(req)) {
     const auth = await authDevice(req);
     if (!auth) return { ok: false, res: apiError(401, "This computer was unpaired. Pair it again from the app.") };
@@ -24,6 +26,7 @@ export async function meetingAuth(req: Request, botId: string, opts: { write?: b
     if (!owner) return { ok: false, res: apiError(404, "Bot not found") };
     return { ok: true, db: auth.db, bot, owner, device: auth.device };
   }
+  if (opts.appOnly) return { ok: false, res: apiError(403, "Meeting notes are taken in the desktop app.", { code: "app_only" }) };
   if (opts.write && !sameOrigin(req)) return { ok: false, res: apiError(403, "Bad origin") };
   const a = await authedBot(botId);
   if (!a.ok) return a;

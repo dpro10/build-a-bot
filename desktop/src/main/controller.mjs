@@ -9,7 +9,9 @@
  *    meeting) if the bot can't stay on screen, the screen locks, the computer sleeps
  *    or the app quits; checked every second and on window events;
  *  - Stop is one click; "Stop and delete" deletes everything captured so far;
- *  - audio goes to the upload queue only (memory, or the spool while offline).
+ *  - audio goes to the upload queue only (memory, or the spool while it waits). NVIDIA Parakeet
+ *    hears each piece on this computer and only the lines are sent (meeting-speech.mjs); the
+ *    notes are written once every piece has been heard.
  */
 import { EventEmitter } from "node:events";
 import { appName, consentNote } from "./apps.mjs";
@@ -33,6 +35,14 @@ export const DEFAULT_LIMITS = Object.freeze({
   retryBaseMs: 1000,
   /** Deletes and finishes that failed (offline) are retried this often, not just at launch. */
   pendingRetryMs: 60_000,
+  /** While pieces wait to be heard (NVIDIA Parakeet is on its way), the server hears this often that the meeting isn't abandoned. */
+  hearingPingMs: 5 * 60_000,
+  /** A piece waiting this long means pieces are stuck: tell the server the meeting is still being heard. */
+  hearingStuckMs: 2 * 60_000,
+  /** After the call, wait at most this long for the last pieces to be heard; then the notes are written from what arrived. */
+  hearingWaitMs: 12 * 3600_000,
+  /** While pieces wait for NVIDIA Parakeet there are no captions: the bot says why this often. */
+  waitNoteMs: 2 * 60_000,
 });
 
 const STOP_NOTES = {
@@ -101,6 +111,7 @@ export class Controller extends EventEmitter {
    * @param {(text: string) => void} o.writeClipboard
    * @param {() => 'loopback'|'off'} [o.systemAudioMode]
    * @param {() => Promise<boolean>} [o.ensureMicAccess]  macOS: ask for the microphone the first time
+   * @param {{ way(): string, waitNote(): string | null, ensure(): void, warm(): void }} [o.hearing]  NVIDIA Parakeet for meetings (voice/index.mjs)
    * @param {Partial<typeof DEFAULT_LIMITS>} [o.limits]
    * @param {(msg: string) => void} [o.log]
    */
@@ -117,8 +128,14 @@ export class Controller extends EventEmitter {
     this.limits = { ...DEFAULT_LIMITS, ...given };
     this.log = o.log ?? (() => {});
     this.state = initialState();
-    /** @type {null | { meetingId: string, botId: string, server: string, chunkMs: number, lastVoiceMs: number, timelineMs: number, system: string | null }} */
+    /** @type {null | { meetingId: string, botId: string, server: string, chunkMs: number, lastVoiceMs: number, timelineMs: number, system: string | null, inPerson?: boolean }} */
     this.rec = null;
+    /** Meetings whose last pieces are still being heard before their notes are written. @type {Set<string>} */
+    this.finishing = new Set();
+    /** When the server last heard that a meeting is still being heard here. @type {Map<string, number>} */
+    this.hearingPings = new Map();
+    /** Meetings whose notes are being waited for (one wait each, so "ready" is said once). @type {Set<string>} */
+    this.polling = new Set();
     this.lastRec = null;
     /** The bot shown at the bottom (fixed for one recording). */
     this.recBot = null;
@@ -126,6 +143,8 @@ export class Controller extends EventEmitter {
     this.caption = null;
     this.notice = null;
     this.noticeAt = 0;
+    /** What the bot last said about waiting for NVIDIA Parakeet, and when. */
+    this.waiting = { note: /** @type {string | null} */ (null), at: 0 };
     this.hovering = false;
     this.askDeadline = 0;
     this.buddyPending = false;
@@ -290,7 +309,7 @@ export class Controller extends EventEmitter {
     return this.o.systemAudioMode?.() ?? "loopback";
   }
 
-  /** @param {{ app: string, consentNotice: boolean }} fx */
+  /** @param {{ app: string, consentNotice: boolean, inPerson?: boolean }} fx */
   async startRecording(fx) {
     const bot = this.account.bot();
     const server = this.account.server();
@@ -319,10 +338,15 @@ export class Controller extends EventEmitter {
       return;
     }
 
+    // NVIDIA Parakeet will hear it: make sure it's here (or on its way), and loaded.
+    this.o.hearing?.ensure();
+    this.o.hearing?.warm();
+
     // 2. The meeting on the server (with the consent record).
+    const inPerson = fx.inPerson === true;
     let res;
     try {
-      res = await this.api.startMeeting(bot.id, { app: fx.app, consentNotice: fx.consentNotice });
+      res = await this.api.startMeeting(bot.id, { app: fx.app, consentNotice: fx.consentNotice, inPerson });
     } catch (err) {
       const e = /** @type {any} */ (err);
       this.log(`start: server said ${e.status} ${e.code ?? ""}`);
@@ -332,10 +356,10 @@ export class Controller extends EventEmitter {
     }
     const meetingId = res.meeting.id;
     const chunkMs = Number(res.chunkMs) || this.account.session?.meetings?.chunkMs || 20_000;
-    this.rec = { meetingId, botId: bot.id, server, chunkMs, lastVoiceMs: 0, timelineMs: 0, system: null };
+    this.rec = { meetingId, botId: bot.id, server, chunkMs, lastVoiceMs: 0, timelineMs: 0, system: null, inPerson };
 
-    // 3. Capture.
-    const cap = await this.capture.start({ chunkMs, system: this.systemAudioMode() });
+    // 3. Capture. In the room, there's no call to hear: the mic only.
+    const cap = await this.capture.start({ chunkMs, system: inPerson ? "off" : this.systemAudioMode() });
     if (!cap.ok) {
       this.log(`start: capture failed (${cap.error ?? "?"})`);
       // Nothing was captured: the empty meeting goes (retried if offline, so it isn't later
@@ -348,9 +372,31 @@ export class Controller extends EventEmitter {
       return;
     }
     this.rec.system = cap.system;
-    this.log(`start: recording ${meetingId} (mic, system audio: ${cap.system}, ${chunkMs} ms chunks)`);
+    this.log(`start: recording ${meetingId} (mic, system audio: ${cap.system}, ${chunkMs} ms chunks${inPerson ? ", in the room" : ""}; heard: ${this.o.hearing?.way() ?? "server"})`);
     this.dispatch({ type: "started", meetingId });
+    this.waiting = { note: null, at: 0 };
     if (cap.system !== "ok" && cap.system !== "off") this.showNotice(systemNotice(cap.system));
+    else this.remindWaiting();
+  }
+
+  /**
+   * While a meeting's pieces wait for NVIDIA Parakeet (it's still downloading), there are no
+   * captions: the bot says why, and again every `waitNoteMs`; once it can hear, that it's
+   * catching up.
+   */
+  remindWaiting() {
+    if (!this.rec || this.state.phase !== "listening") return;
+    const note = this.o.hearing?.waitNote() ?? null;
+    const now = Date.now();
+    if (note) {
+      if (this.waiting.note && now - this.waiting.at < this.limits.waitNoteMs) return;
+      if (this.notice && now - this.noticeAt < 12_000) return; // let the last notice be read
+      this.waiting = { note, at: now };
+      this.showNotice(note);
+    } else if (this.waiting.note) {
+      this.waiting = { note: null, at: 0 };
+      this.showNotice(this.o.hearing?.way() === "local" ? "NVIDIA Parakeet is ready. Catching up on the call so far." : "Catching up on the call so far.");
+    }
   }
 
   async stopRecording(reason) {
@@ -362,14 +408,15 @@ export class Controller extends EventEmitter {
     }
     await this.capture.stop();
     this.level = 0;
-    const drained = await this.uploads.drain(rec.meetingId, this.limits.drainMs);
-    if (!drained.ok) this.log(`stop: ${drained.left} chunk(s) didn't upload in time`);
+    // Pieces waiting for NVIDIA Parakeet can't go yet: Stop doesn't wait on them (they're finished below).
+    const drained = await this.uploads.drain(rec.meetingId, this.o.hearing?.way() === "wait" ? Math.min(this.limits.drainMs, 3000) : this.limits.drainMs);
     if (!["not_recording", "gone", "unpaired"].includes(reason)) {
-      try {
-        await this.api.finish(rec.botId, rec.meetingId, rec.server);
-      } catch (err) {
-        this.log(`stop: finish failed (${/** @type {any} */ (err)?.status ?? err}); will retry`);
-        this.addPending({ kind: "finish", botId: rec.botId, meetingId: rec.meetingId, server: rec.server });
+      if (drained.ok) await this.finishMeeting(rec);
+      else {
+        // Pieces still to be heard (NVIDIA Parakeet is on its way) or sent (offline): the notes
+        // are written once they're in, not from part of the meeting.
+        this.log(`stop: ${drained.left} piece(s) still to be heard or sent; the notes are written once they're in`);
+        void this.finishWhenHeard(rec);
       }
     }
     this.lastRec = rec;
@@ -402,9 +449,77 @@ export class Controller extends EventEmitter {
     this.dispatch({ type: "discarded" });
   }
 
-  async pollNotes(meetingId) {
-    const rec = this.lastRec;
+  /** Tell the server the meeting is over, so the notes get written (retried later if it can't be reached). */
+  async finishMeeting(rec) {
+    try {
+      await this.api.finish(rec.botId, rec.meetingId, rec.server);
+    } catch (err) {
+      this.log(`stop: finish failed (${/** @type {any} */ (err)?.status ?? err}); will retry`);
+      this.addPending({ kind: "finish", botId: rec.botId, meetingId: rec.meetingId, server: rec.server });
+    }
+  }
+
+  /**
+   * Finish a meeting once every piece of it has been heard and sent. That can take a while (NVIDIA
+   * Parakeet was still downloading when the call began, it's catching up, or the network is down):
+   * meanwhile the server hears that this computer is still on it, so it doesn't wrap the meeting up
+   * early. After `hearingWaitMs` it stops waiting and the notes are written from what arrived.
+   * @param {{ botId: string, meetingId: string, server: string }} rec
+   */
+  async finishWhenHeard(rec) {
+    if (this.finishing.has(rec.meetingId)) return;
+    this.finishing.add(rec.meetingId);
+    const t0 = Date.now();
+    try {
+      while (this.uploads.size(rec.meetingId) > 0) {
+        if (Date.now() - t0 > this.limits.hearingWaitMs) {
+          this.log(`finish: gave up waiting for ${this.uploads.size(rec.meetingId)} piece(s) of ${rec.meetingId}`);
+          this.uploads.drop(rec.meetingId);
+          break;
+        }
+        await this.keepHearing(rec, true);
+        await this.uploads.drain(rec.meetingId, this.limits.hearingPingMs);
+      }
+      // The server stopped it, or it was deleted or unpaired meanwhile: nothing to finish.
+      if (this.uploads.isDropped(rec.meetingId) && Date.now() - t0 <= this.limits.hearingWaitMs) return;
+      await this.finishMeeting(rec);
+      this.log(`finish: ${rec.meetingId} was heard in full after the call (${Math.round((Date.now() - t0) / 1000)} s)`);
+      // The bubble may be long gone: say when the notes are ready.
+      if (this.lastRec?.meetingId !== rec.meetingId || this.state.phase !== "saving") void this.pollNotes(rec.meetingId, rec);
+    } finally {
+      this.finishing.delete(rec.meetingId);
+      this.hearingPings.delete(rec.meetingId);
+    }
+  }
+
+  /**
+   * The server hears that this computer is still hearing the meeting (at most every `hearingPingMs`).
+   * @param {{ botId: string, meetingId: string }} rec
+   * @param {boolean} [now]  without waiting for pieces to look stuck
+   */
+  async keepHearing(rec, now = false) {
+    if (!this.api.keepHearing) return;
+    const last = this.hearingPings.get(rec.meetingId) ?? 0;
+    if (Date.now() - last < this.limits.hearingPingMs) return;
+    if (!now && this.uploads.oldestAge(rec.meetingId) < this.limits.hearingStuckMs) return;
+    this.hearingPings.set(rec.meetingId, Date.now());
+    await this.api.keepHearing(rec.botId, rec.meetingId).catch((err) => this.log(`keep hearing: ${/** @type {any} */ (err)?.status ?? err}`));
+  }
+
+  async pollNotes(meetingId, rec = this.lastRec) {
     if (!rec || rec.meetingId !== meetingId) return;
+    // One wait per meeting: Stop starts one, and a meeting heard in full later can start another.
+    if (this.polling.has(meetingId)) return;
+    this.polling.add(meetingId);
+    try {
+      await this.waitForNotes(meetingId, rec);
+    } finally {
+      this.polling.delete(meetingId);
+    }
+  }
+
+  /** @param {string} meetingId @param {{ botId: string, meetingId: string, server: string }} rec */
+  async waitForNotes(meetingId, rec) {
     const t0 = Date.now();
     let delay = 1500;
     let slow = false;
@@ -428,7 +543,8 @@ export class Controller extends EventEmitter {
           this.dispatch({ type: "notes_failed", meetingId });
           return;
         }
-        if (meeting.status === "recording" && !refinished && Date.now() - t0 > 15_000) {
+        // Still recording after Stop: finish again (not while its last pieces are still being heard).
+        if (meeting.status === "recording" && !refinished && Date.now() - t0 > 15_000 && !this.finishing.has(meetingId) && this.uploads.size(meetingId) === 0) {
           refinished = true;
           await this.api.finish(rec.botId, meetingId, rec.server).catch(() => {});
         }
@@ -562,7 +678,9 @@ export class Controller extends EventEmitter {
     });
     this.stats.chunks++;
     // Metadata only (never audio), for the e2e test: each chunk should be a complete webm file.
-    this.stats.chunkLog.push({ track, chunk: c.chunk, startMs: Math.round(c.startMs), durationMs: Math.round(c.durationMs), silent: Boolean(c.silent), bytes: bytes.byteLength, head: bytes.subarray(0, 4).toString("hex") });
+    // `cut`: whether it ended at a pause in the talking, at the longest a chunk waits for one, or at pause/stop.
+    const cut = ["pause", "time", "stop"].includes(c.cut) ? c.cut : null;
+    this.stats.chunkLog.push({ track, chunk: c.chunk, startMs: Math.round(c.startMs), durationMs: Math.round(c.durationMs), silent: Boolean(c.silent), cut, bytes: bytes.byteLength, head: bytes.subarray(0, 4).toString("hex") });
     if (this.stats.chunkLog.length > 40) this.stats.chunkLog.shift();
     const end = c.startMs + c.durationMs;
     rec.timelineMs = Math.max(rec.timelineMs, end);
@@ -627,8 +745,9 @@ export class Controller extends EventEmitter {
     else if (this.state.phase === "asking") this.dispatch({ type: "ask_timeout" });
   }
 
-  takeNow() {
-    this.dispatch({ type: "take" });
+  /** From the tray: "Take notes now", or `inPerson` "Take notes in the room" (the mic only). */
+  takeNow({ inPerson = false } = {}) {
+    this.dispatch({ type: "take", ...(inPerson ? { inPerson: true } : {}) });
   }
 
   stopNow() {
@@ -656,6 +775,12 @@ export class Controller extends EventEmitter {
     if (now - this.pendingRetryAt >= this.limits.pendingRetryMs && this.settings.get().pending.length) {
       this.pendingRetryAt = now;
       void this.retryPending().catch((err) => this.log(`pending: ${err}`));
+    }
+    // Pieces of this meeting are waiting (NVIDIA Parakeet is on its way): it isn't abandoned, and
+    // the owner hears why there are no captions yet.
+    if (this.rec && this.ticks % 15 === 0) {
+      void this.keepHearing(this.rec);
+      this.remindWaiting();
     }
     if (phase === "asking" && !this.hovering && this.askDeadline && now >= this.askDeadline) {
       this.dispatch({ type: "ask_timeout" });
@@ -727,12 +852,10 @@ export class Controller extends EventEmitter {
       groups.get(item.meetingId).push(item);
     }
     for (const [meetingId, items] of groups) {
-      this.log(`leftovers: ${items.length} chunk(s) for ${meetingId}`);
+      this.log(`leftovers: ${items.length} piece(s) for ${meetingId}`);
       for (const it of items) this.uploads.push(it);
-      const { botId } = items[0];
-      void this.uploads.drain(meetingId, 10 * 60_000).then(async (r) => {
-        if (r.ok) await this.api.finish(botId, meetingId, server).catch(() => {});
-      });
+      // Heard and sent (NVIDIA Parakeet may still be on its way), then the notes are written.
+      void this.finishWhenHeard({ botId: items[0].botId, meetingId, server });
     }
     await this.retryPending();
   }
@@ -785,6 +908,8 @@ export class Controller extends EventEmitter {
       case "starting":
         return "Starting…";
       case "listening":
+        if (this.o.hearing?.way() === "wait") return "Taking notes (getting NVIDIA Parakeet…)";
+        if (this.rec?.inPerson) return "Taking notes in the room";
         return this.rec && this.rec.system !== "ok" && this.rec.system !== null ? "Taking notes (your mic only)" : "Taking notes";
       case "paused":
         return "Paused";

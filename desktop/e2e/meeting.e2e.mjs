@@ -9,6 +9,10 @@
  * and Chromium's fake microphone, then clicks through the bot at the bottom of the
  * screen: ask → Take notes → live captions → pause → resume → stop → notes ready,
  * then "Stop and delete", "Not now", and a call that ends on its own.
+ *
+ * Private speech is off here (BAB_PRIVATE_SPEECH=off): the pieces' audio goes to the server, whose
+ * scripted speech (DEMO_SPEECH, on in a dev server) hears the demo meeting. NVIDIA Parakeet
+ * hearing a meeting on the computer, with real speech, is e2e/meeting-parakeet.e2e.mjs.
  * Screenshots of each phase go to BAB_E2E_SHOTS (default: <tmp>/bab-desktop-e2e).
  *
  * Uses Playwright from the web app's node_modules (or a local `npm i -D playwright`).
@@ -93,6 +97,7 @@ test("pairs, notices a Zoom call, asks first, takes notes, and the notes get wri
       BAB_DETECT_SUSTAIN_MS: "1000",
       BAB_CALL_END_GRACE_MS: "3000",
       BAB_NOT_NOW_COOLDOWN_MS: "1500",
+      BAB_PRIVATE_SPEECH: "off",
     },
   });
   const logs = [];
@@ -230,9 +235,13 @@ test("pairs, notices a Zoom call, asks first, takes notes, and the notes get wri
     assert.equal(chunks[i].chunk, chunks[i - 1].chunk + 1);
     assert.ok(Math.abs(chunks[i].startMs - (chunks[i - 1].startMs + chunks[i - 1].durationMs)) <= 50, `chunk ${chunks[i].chunk} continues where ${chunks[i - 1].chunk} ended`);
   }
-  assert.ok(chunks.some((c) => Math.abs(c.durationMs - 6000) <= 400), "full chunks are about chunkMs (6 s in demo mode)");
+  // A chunk ends at a pause near chunkMs (6 s in demo mode): from 15% before it to 25% after (the beeps leave pauses).
+  const full = chunks.filter((c) => c.cut === "pause" || c.cut === "time");
+  assert.ok(full.length >= 2, `chunks that ended on their own: ${full.length}`);
+  for (const c of full) assert.ok(c.durationMs >= 6000 * 0.85 - 100 && c.durationMs <= 6000 * 1.25 + 300, `chunk ${c.chunk}: ${c.durationMs} ms (${c.cut})`);
+  assert.ok(full.some((c) => c.cut === "pause"), "chunks end at a pause in the sound when there is one");
   assert.ok(chunks.some((c) => !c.silent), "the fake mic's beeps count as sound");
-  console.log(`chunks: ${s.stats.chunkLog.map((c) => `${c.track}#${c.chunk}@${c.startMs}+${c.durationMs}${c.silent ? "(silent)" : ""}:${c.bytes}B`).join(" ")}`);
+  console.log(`chunks: ${s.stats.chunkLog.map((c) => `${c.track}#${c.chunk}@${c.startMs}+${c.durationMs}${c.silent ? "(silent)" : ""}[${c.cut}]:${c.bytes}B`).join(" ")}`);
 
   // ---- the server agrees: notes written, transcript kept, consent recorded
   const res = await web.get(`/api/bots/${botId}/meetings/${meetingId}`);
@@ -335,6 +344,7 @@ test("when the computer won't share the call's audio, it keeps going on the mic 
       BAB_DETECT_INTERVAL_MS: "700",
       BAB_DETECT_SUSTAIN_MS: "1000",
       BAB_CALL_END_GRACE_MS: "3000",
+      BAB_PRIVATE_SPEECH: "off",
       // BAB_E2E_REAL_LOOPBACK=1: try this machine's real system-audio loopback instead.
       BAB_TEST_DENY_SYSTEM_AUDIO: process.env.BAB_E2E_REAL_LOOPBACK === "1" ? "0" : "1",
     },

@@ -9,7 +9,11 @@ import { ApiError } from "./api.mjs";
 import { normalizeServer } from "./store.mjs";
 
 /** @typedef {{ id: string, name: string, avatar: string, color: string, paused: boolean, meetingsOn: boolean }} SessionBot */
-/** @typedef {{ device: { id: string, name: string }, owner: { name: string | null, plan: string }, bots: SessionBot[], meetings: { available: boolean, minutesLeft: number, chunkMs: number }, appUrl: string, demo: boolean }} DesktopSession */
+/**
+ * `meetings.local`: the server takes the lines this computer heard (NVIDIA Parakeet), which is how
+ * notes are taken; `meetings.available`: it also turns a piece's audio into text itself.
+ * @typedef {{ device: { id: string, name: string }, owner: { name: string | null, plan: string }, bots: SessionBot[], meetings: { available: boolean, local?: boolean, minutesLeft: number, chunkMs: number }, appUrl: string, demo: boolean }} DesktopSession
+ */
 
 export function deviceName() {
   const host = os.hostname().replace(/\.(local|lan|home|localdomain)$/i, "").trim();
@@ -51,6 +55,13 @@ export class Account extends EventEmitter {
     /** @type {string | null} why the owner was signed out, shown in the pairing window */
     this.signedOutReason = null;
     this.refreshing = null;
+    /** Why this computer can't hear meetings (voice/index.mjs: NVIDIA Parakeet), or null. @type {() => string | null} */
+    this.meetingProblem = () => null;
+  }
+
+  /** @param {() => string | null} fn */
+  setMeetingCheck(fn) {
+    this.meetingProblem = fn;
   }
 
   server() {
@@ -217,7 +228,11 @@ export class Account extends EventEmitter {
   whyNot() {
     if (!this.device) return "Signed out";
     if (!this.session) return this.status === "offline" ? "Can't reach Build-a-bot" : "Connecting…";
-    if (!this.session.meetings?.available) return "Meeting notes aren't set up on this server";
+    const m = this.session.meetings;
+    // Notes are taken from what this computer hears (or, failing that, what the server hears).
+    if (!m?.available && !m?.local) return "Meeting notes aren't set up on this server";
+    const cantHear = this.meetingProblem();
+    if (cantHear) return cantHear;
     const bot = this.bot();
     if (!bot) {
       const first = this.bots()[0];

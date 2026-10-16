@@ -1,12 +1,12 @@
 # Try it: a guide for reviewing Build-a-bot
 
-A walk through everything that's built, about 45 minutes end to end. It all runs on your own computer in demo mode, so no keys are needed and nothing is sent anywhere.
+A walk through everything that's built, about 40 minutes end to end. It all runs on your own computer in demo mode, so no keys are needed and nothing is sent anywhere.
 
 If something looks wrong, note the page, what you clicked and what you expected. A screenshot helps. The terminal running `npm run dev` shows server errors.
 
 ## 0. Start it
 
-You need Node 22.12 or newer. For meeting notes in the browser, use Chrome or Edge on a computer.
+You need Node 22.12 or newer. Meeting notes and voice typing are in the desktop app (step 4), which runs from this repo too.
 
 ```bash
 npm install
@@ -25,7 +25,7 @@ Open http://localhost:3000.
 | Channels (Telegram, texts, email, Slack, Discord) | Simulated: nothing really goes out | Each provider's keys (`docs/DEPLOY.md`) |
 | Sign-in emails | The magic link appears on screen | An email provider |
 | Payments | Plans switch without paying | Stripe keys |
-| Meeting transcripts | A scripted meeting plays, whatever is said (only when you run it yourself: a deployed site never makes up a transcript) | The speech server (`speech/`, run it locally with Docker) and `TRANSCRIBE_PROVIDER=nvidia`, `TRANSCRIBE_BASE_URL`, `TRANSCRIBE_API_KEY`; or a Together AI or Groq key |
+| Meeting notes | Real, in the desktop app: NVIDIA Parakeet hears the call on your computer (the same download as voice typing), and the bot's brain writes the notes (the demo brain's are simple). The website doesn't record | Nothing for speech; the real notes run on `TOKEN_FACTORY_API_KEY` |
 | Voice typing | Real, in the desktop app: NVIDIA Parakeet hears you on your computer (it downloads once, about 0.7 GB). The website doesn't listen | Nothing for speech; the AI cleanup runs on `TOKEN_FACTORY_API_KEY` (without it, the plain cleanup) |
 | Web actions | Simulated sites | `BROWSER_USE_API_KEY` |
 
@@ -89,16 +89,31 @@ Then:
 - **Activity** shows a receipt for every action.
 - **Approvals** (left sidebar) lists anything waiting on you, across bots.
 
-## 4. Meeting notes in the browser (5 min, Chrome or Edge)
+## 4. The desktop app: meeting notes (10 min)
 
-1. Open the bot's **Meetings** tab and press **Turn on meeting notes** (if you didn't pick Meetings in the builder).
-2. Press **Start taking notes**. The first time, a short consent note appears: tick it, then **Got it**.
-3. Choose **A call in another tab** (share the call's tab, with "Also share tab audio" on) or **In person, or on speaker** (the mic only). **Copy** gives you a heads-up to paste into the call's chat.
-4. Press **Start taking notes**. A small floating window opens with the bot listening: a red dot, a timer and a level meter. The tab shows live captions.
-5. Run locally in demo mode, a scripted meeting about a launch plan plays as the transcript, whatever you actually say. With `TRANSCRIBE_API_KEY` set, it's your real words. (A deployed site with no speech-to-text never plays the script: meeting notes say they're coming soon there.)
-6. After a minute, press **Stop and write notes**.
+This is the bot at the very bottom of your screen. Meeting notes are taken only here, like Granola: no bot joins the call, and the website doesn't record. Keep `npm run dev` running and, in a second terminal:
+
+```bash
+cd desktop
+npm install
+npm run dev
+```
+
+1. A Build-a-bot icon appears in the menu bar (Mac) or tray (Windows/Linux), and the pairing window opens. Its **Server** is already `http://localhost:3000`.
+2. In the web app, open the bot's **Meetings** tab. If you didn't pick Meetings in the builder, press **Turn on meeting notes**. **Get the desktop app** leads to **Bridge (your computer)** → **Desktop app** → **Get a pairing code**. Type the code into the app and press **Pair**.
+3. Under **Who takes notes**, pick your bot. NVIDIA Parakeet starts downloading (about 0.7 GB, once; voice typing uses the same one), and the window shows how far it's got.
+4. Start a call: a Zoom, Meet or Teams call, or join any meeting.
+
+   **No call handy?** Quit the app and start it pretending a Zoom call is on: `BAB_FAKE_MEETING=zoom npm run dev`. For a meeting around a table, choose **Take notes in the room** in the tray menu.
 
 **Expect:**
+- the bot peeks up from the bottom of the screen: "Want me to take notes?", with **Take notes**, **Not now**, **Don't ask in Zoom** and **Copy a heads-up**;
+- after **Take notes**, it stays at the bottom with a red dot and a timer. If Parakeet is still downloading, the bot says so ("Getting NVIDIA Parakeet (45%)…") and listens anyway: the notes come once it's here;
+- live captions, a piece at a time (tray: **Show live captions**): each piece of the call, ending at a pause, is heard on your computer, and only the lines are sent. The meeting's page on the website fills in too;
+- hover it for **Pause**, **Stop** and **Stop and delete**. The tray menu has **Take notes now** and **Take notes in the room**;
+- after **Stop**, "Notes ready", and a notification that opens the meeting in your browser.
+
+**On the website**, the meeting has:
 - a title, a summary, decisions and action items with checkboxes;
 - a searchable transcript;
 - a "Meeting notes" card in the chat.
@@ -109,32 +124,8 @@ Then ask in chat:
 
 **Also try:**
 - **Stop and delete** in the middle of a meeting: nothing is kept.
-- Close the floating window: recording stops and the notes get written. It never listens out of sight.
+- **Stop and write notes** on the meeting's page while the app is taking notes.
 - The **⋯** menu on a meeting: **Delete the transcript, keep the notes**, or delete the whole meeting.
-- Safari, or a phone: it explains that it needs Chrome or Edge on a computer, or the desktop app.
-
-## 5. The desktop app (10 min)
-
-This is the bot at the very bottom of your screen. Keep `npm run dev` running and, in a second terminal:
-
-```bash
-cd desktop
-npm install
-npm run dev
-```
-
-1. A Build-a-bot icon appears in the menu bar (Mac) or tray (Windows/Linux), and the pairing window opens. Its **Server** is already `http://localhost:3000`.
-2. In the web app, open **Bridge (your computer)** → **Desktop app** → **Get a pairing code**. Type the code into the app and press **Pair**.
-3. Under **Who takes notes**, pick your bot. If it says so, press **Turn on meeting notes**.
-4. Start a call: a Zoom, Meet or Teams call, or join any meeting.
-
-   **No call handy?** Quit the app and start it pretending a Zoom call is on: `BAB_FAKE_MEETING=zoom npm run dev`.
-
-**Expect:**
-- the bot peeks up from the bottom of the screen: "Want me to take notes?", with **Take notes**, **Not now**, **Don't ask in Zoom** and **Copy a heads-up**;
-- after **Take notes**, it stays at the bottom with a red dot and a timer;
-- hover it for **Pause**, **Stop** and **Stop and delete**. The tray menu has **Show live captions** and **Take notes now**;
-- after **Stop**, "Notes ready", and a notification that opens the meeting in your browser.
 
 ### On a Mac
 
@@ -152,7 +143,7 @@ npm run dev
 - **Windows:** Settings › Privacy › Microphone › "Let desktop apps access your microphone" must be on.
 - **Linux:** needs PulseAudio or PipeWire (`pactl`).
 
-## 6. Voice typing (5 min)
+## 5. Voice typing (5 min)
 
 Hold a key in any app and talk; what you meant is typed at your cursor, cleaned up. Saying "Hey" and your bot's name asks the bot instead.
 
@@ -160,7 +151,7 @@ It happens in the desktop app, like Wispr Flow; the website doesn't listen.
 
 **On the website:** open **Voice typing** in the left sidebar. It shows what it does, gets you the desktop app and pairs it, and keeps your words: under **Your words**, add a name it should spell your way, and what it writes instead if you've seen it get it wrong (try `Friday`, instead of `Thursday`). Add a snippet ("my booking link" → a URL) the same way. The desktop app uses the same list.
 
-**In the desktop app** (paired as in step 5):
+**In the desktop app** (paired as in step 4):
 
 1. In the tray menu, choose **Set up voice typing…** and turn it on. NVIDIA Parakeet downloads (about 0.7 GB, once; the settings window shows its progress). On a Mac, allow the **Microphone** and **Accessibility** when asked, so it can hear the key in any app and paste for you; run from source, macOS asks for the app you started it from (Terminal, VS Code…), and the settings window names it.
 2. Click into any text field (Notes, Slack, a browser), then hold **Right Option** (Mac), **Ctrl + Windows** (Windows) or **Right Ctrl** (Linux) and talk. Before Parakeet is ready, the pill says so ("Getting NVIDIA Parakeet: 45%…") rather than typing anything.
@@ -171,7 +162,7 @@ It happens in the desktop app, like Wispr Flow; the website doesn't listen.
 
 Without Accessibility on a Mac it still works: press **⌘ Shift Space** to start and stop, and paste with ⌘V.
 
-## 7. The rest of the dashboard (5 min)
+## 6. The rest of the dashboard (5 min)
 
 - **Apps & trust:**
   - per-app switches (allow / ask / off);
@@ -193,7 +184,7 @@ Without Accessibility on a Mac it still works: press **⌘ Shift Space** to star
   - **Delete my account** removes it all.
 - **`/admin`:** the operator dashboard with revenue, growth, usage and costs, as aggregates. In demo mode any signed-in user can see it; in production only `ADMIN_EMAILS`.
 
-## 8. What's simulated or not done yet
+## 7. What's simulated or not done yet
 
 **Not live yet:**
 - build-a-bot.site is live, but in demo mode until the last keys are in.
@@ -205,10 +196,11 @@ Without Accessibility on a Mac it still works: press **⌘ Shift Space** to star
   - On a deployment it shows `npx -y https://build-a-bot.site/downloads/build-a-bot-bridge-0.1.0.tgz …`: the site serves its own copy of the Bridge, so it works without the repo or anything on npm.
 
 **Meeting notes:**
+- They're in the desktop app only; the website doesn't record. NVIDIA Parakeet hears the call on your computer, so no speech-to-text key is needed.
+- Parakeet knows English and 24 European languages. Speakers on the call's side aren't told apart yet (they're "Others").
 - The Mac app isn't signed or notarized yet. That needs a Developer ID certificate and notarization credentials in CI secrets, built on a Mac.
 - FaceTime and phone calls aren't detected.
 - On Windows, detection uses the privacy registry; a small audio-session helper would be sturdier.
-- In a browser, the floating window can't be placed at the bottom of the screen (browsers don't allow it). The desktop app can.
 
 **Voice typing:**
 - It's in the desktop app only; the website doesn't listen. NVIDIA Parakeet hears you on your computer, so no speech-to-text key is needed.

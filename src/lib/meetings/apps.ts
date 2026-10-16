@@ -1,6 +1,6 @@
 /**
- * Meeting apps the bot can take notes in. The desktop app detects these; the
- * browser recorder works with any call that runs in a browser tab.
+ * Meeting apps the bot can take notes in. The desktop app notices calls in these, and in a
+ * browser tab ("browser"); "other" is a meeting it was asked to take notes in from its menu.
  */
 import type { ConnectorIcon } from "@/lib/connectors/types";
 

@@ -14,17 +14,23 @@ async function visit(page: Page, path: string) {
   expect(errors, `${path} page errors`).toEqual([]);
 }
 
-/** Turns on meeting notes, uploads one piece of audio (demo transcription) and stops. Returns the meeting id. */
+/**
+ * Turns on meeting notes and takes one the way the desktop app does (a paired computer sends the
+ * lines it heard), then stops it. Returns the meeting id.
+ */
 async function recordMeeting(page: Page, botId: string): Promise<string> {
   expect((await page.request.post(`/api/bots/${botId}/connections`, { data: { connectorId: "meetings" } })).ok()).toBeTruthy();
-  const started = await page.request.post(`/api/bots/${botId}/meetings`, { data: { app: "meet" } });
+  const code = await (await page.request.post("/api/bridge/pairing-code")).json();
+  const paired = await (await page.request.post("/api/bridge/pair", { data: { code: code.code, name: "Dana's Mac", platform: "desktop-darwin-arm64" } })).json();
+  const app = { authorization: `Bearer ${paired.token}` };
+  const started = await page.request.post(`/api/bots/${botId}/meetings`, { headers: app, data: { app: "meet" } });
   expect(started.status()).toBe(201);
   const { meeting } = await started.json();
-  const audio = await page.request.post(`/api/bots/${botId}/meetings/${meeting.id}/audio?track=mic&chunk=0&startMs=0&durationMs=6000`, {
-    headers: { "content-type": "audio/webm" },
-    data: Buffer.alloc(4000),
+  const heard = await page.request.post(`/api/bots/${botId}/meetings/${meeting.id}/audio?track=mic&chunk=0&startMs=0&durationMs=20000`, {
+    headers: app,
+    data: { heard: [{ startMs: 500, endMs: 4000, text: "Let's go through the launch plan. Sam, can you send the release notes by Friday?" }] },
   });
-  expect(audio.ok()).toBeTruthy();
+  expect(heard.ok()).toBeTruthy();
   expect((await page.request.post(`/api/bots/${botId}/meetings/${meeting.id}/finish`)).ok()).toBeTruthy();
   await expect
     .poll(async () => (await (await page.request.get(`/api/bots/${botId}/meetings/${meeting.id}`)).json()).meeting.status, { timeout: 30_000 })
@@ -97,7 +103,7 @@ test("every dashboard page renders for a signed-in owner", async ({ page }) => {
   for (const tab of ["", "/meetings", "/activity", "/tools", "/channels", "/routines", "/memory", "/settings"]) {
     await visit(page, `/app/bots/${id}${tab}`);
   }
-  // A meeting: notes on, a piece of (demo) audio, stop; then the meeting page and the chat that got the notes.
+  // A meeting: notes on, what the desktop app heard, stop; then the meeting page and the chat that got the notes.
   const meetingId = await recordMeeting(page, id);
   await visit(page, `/app/bots/${id}/meetings`);
   await visit(page, `/app/bots/${id}/meetings/${meetingId}`);
