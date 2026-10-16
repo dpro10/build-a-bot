@@ -517,6 +517,47 @@ export function setupVoice(o) {
       frontApp.dispose();
       pill.destroy();
     },
+    /**
+     * The packaged app's self-check (BAB_SMOKE=1, run by CI right after installing it): the native
+     * keyboard hook loads and runs, the pill and the settings window load, the app in front can be
+     * asked, and whether Private speech can run on this computer. Each line is "ok…" or "FAILED: …".
+     * @returns {Promise<Record<string, string>>}
+     */
+    async smoke() {
+      /** @type {Record<string, string>} */
+      const out = {};
+      const step = async (name, fn) => {
+        try {
+          out[name] = String(await fn());
+        } catch (err) {
+          out[name] = `FAILED: ${String(/** @type {any} */ (err)?.message ?? err).slice(0, 300)}`;
+        }
+      };
+      await step("keyboard hook", async () => {
+        const h = await loadHook();
+        h.start();
+        await new Promise((r) => setTimeout(r, 300));
+        h.stop();
+        return "ok";
+      });
+      await step("pill page", async () => {
+        if (!(await pill.ensure())) throw new Error("it didn't load");
+        return "ok";
+      });
+      await step("settings window", async () => {
+        await settingsWindow.show();
+        const loaded = Boolean(settingsWindow.webContents?.getURL().startsWith("bab-app://voice"));
+        settingsWindow.close();
+        if (!loaded) throw new Error("it didn't load");
+        return "ok";
+      });
+      await step("app in front", async () => {
+        const a = await frontApp.detect(8000);
+        return a ? `ok (${a.category}${a.name ? `: ${a.name}` : ""})` : "ok (nothing in front)";
+      });
+      await step("private speech", async () => (local.supported() ? `ok (${process.platform}-${process.arch})` : `ok (not on ${process.platform}-${process.arch}: the server hears)`));
+      return out;
+    },
     /** For the e2e test: a read-only look (never includes the token). */
     probe() {
       return {

@@ -24,6 +24,8 @@
  *   BAB_VOICE_ENABLE=1                  turn voice typing on at start (tests)
  *   BAB_VOICE_DEMO=<n>|command          which sample line a demo server "hears" (tests)
  *   BAB_VOICE_DEMO_FILE=<path>          …re-read from this file on every dictation
+ *   BAB_SMOKE=1                         check itself and quit: exit code 0 if all is well (CI, after
+ *                                       installing the packaged app); results in BAB_SMOKE_OUT (JSON)
  */
 import * as electron from "electron";
 import { Notification, app, clipboard, ipcMain, powerMonitor, protocol, safeStorage, screen, session, shell, systemPreferences } from "electron";
@@ -252,6 +254,24 @@ async function boot() {
   else account.once("change", () => void controller.resumeLeftovers(spool));
   detector.start();
   await voice.apply();
+  if (env.BAB_SMOKE === "1") await smoke();
+}
+
+/** BAB_SMOKE=1: the packaged app checks itself, says how it went, and quits. */
+async function smoke() {
+  /** @type {Record<string, unknown>} */
+  const results = { version: app.getVersion(), platform: `${process.platform}-${process.arch}`, packaged: app.isPackaged };
+  try {
+    results.tray = tray ? "ok" : "FAILED: no tray icon";
+    results["pairing window"] = pairing.webContents?.getURL().startsWith("bab-app://pairing") ? "ok" : "FAILED: it didn't load";
+    Object.assign(results, await voice.smoke());
+  } catch (err) {
+    results.error = `FAILED: ${/** @type {any} */ (err)?.message ?? err}`;
+  }
+  const ok = !Object.values(results).some((v) => typeof v === "string" && v.startsWith("FAILED"));
+  log(`smoke: ${ok ? "passed" : "FAILED"} ${JSON.stringify(results)}`);
+  if (env.BAB_SMOKE_OUT) fs.writeFileSync(env.BAB_SMOKE_OUT, JSON.stringify({ ok, results }, null, 2));
+  app.exit(ok ? 0 : 1);
 }
 
 // ---------------------------------------------------------------------------

@@ -14,7 +14,7 @@
     "test:e2e": "xvfb-run -a --server-args=\"-screen 0 1440x900x24\" node --test --test-concurrency=1 --test-timeout=300000 \"e2e/*.e2e.mjs\"",
     "icons": "node scripts/render-icons.mjs",
     "build:mac-helper": "bash native/macos/build.sh",
-    "dist": "npx --yes electron-builder@26 --config electron-builder.yml"
+    "dist": "npx --yes electron-builder@26.15.3 --config electron-builder.yml"
   },
   "devDependencies": {
     "electron": "44.7.2"

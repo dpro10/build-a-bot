@@ -1,0 +1,156 @@
+# The desktop app (desktop/): its tests on Linux and Windows; Private speech with NVIDIA's real
+# runtime and Parakeet on Windows and macOS, hearing speech the system's own voice says; and the
+# Windows installer, installed and checking itself. On main, the installer is published as the
+# "Desktop app (test build)" pre-release.
+name: Desktop app
+
+on:
+  push:
+    branches: [main]
+    paths: ["desktop/**", ".github/workflows/desktop.yml"]
+  pull_request:
+    paths: ["desktop/**", ".github/workflows/desktop.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ELECTRON_BUILDER: electron-builder@26.15.3
+
+jobs:
+  test:
+    name: Tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci
+      - run: npm test
+
+  private-speech:
+    name: Private speech, for real (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Someone talking (the system's own voice)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.Speech
+          $s = New-Object System.Speech.Synthesis.SpeechSynthesizer
+          $s.GetInstalledVoices() | ForEach-Object { "voice: " + $_.VoiceInfo.Name }
+          $fmt = New-Object System.Speech.AudioFormat.SpeechAudioFormatInfo(16000, [System.Speech.AudioFormat.AudioBitsPerSample]::Sixteen, [System.Speech.AudioFormat.AudioChannel]::Mono)
+          $s.SetOutputToWaveFile("$env:RUNNER_TEMP\said.wav", $fmt)
+          $s.Speak("Let's move the team meeting to next Tuesday at ten in the morning.")
+          $s.Dispose()
+          Get-Item "$env:RUNNER_TEMP\said.wav" | Select-Object Name, Length
+      - name: Someone talking (the system's own voice)
+        if: runner.os == 'macOS'
+        run: |
+          say -o "$RUNNER_TEMP/said.aiff" "Let's move the team meeting to next Tuesday at ten in the morning."
+          afconvert -f WAVE -d LEI16@16000 -c 1 "$RUNNER_TEMP/said.aiff" "$RUNNER_TEMP/said.wav"
+          ls -l "$RUNNER_TEMP/said.wav"
+      # Downloads NVIDIA's files the way the app does (about 0.7 GB), checks them, runs the engine.
+      - name: Hear it on this computer
+        working-directory: desktop
+        run: node scripts/check-private-speech.mjs "${{ runner.temp }}/private-speech" "${{ runner.temp }}/said.wav" "team meeting, tuesday"
+
+  windows-installer:
+    name: Windows installer
+    needs: test
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci
+      - name: Build it (unsigned)
+        run: npx --yes ${{ env.ELECTRON_BUILDER }} --config electron-builder.yml --win nsis --x64 --publish never
+      - name: Install it, and let the installed app check itself
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem dist\*.exe | Select-Object -First 1
+          "installer: $($setup.Name) ($([math]::Round($setup.Length / 1MB)) MB)"
+          Start-Process -FilePath $setup.FullName -ArgumentList "/S" -Wait
+          Start-Sleep -Seconds 3
+          Get-Process "Build-a-bot" -ErrorAction SilentlyContinue | Stop-Process -Force
+          $exe = "$env:LOCALAPPDATA\Programs\Build-a-bot\Build-a-bot.exe"
+          if (-not (Test-Path $exe)) {
+            Get-ChildItem "$env:LOCALAPPDATA\Programs" -Recurse -Depth 1 -ErrorAction SilentlyContinue | Select-Object FullName
+            throw "It isn't installed where it should be."
+          }
+          $env:BAB_SMOKE = "1"
+          $env:BAB_SMOKE_OUT = "$env:RUNNER_TEMP\smoke.json"
+          $env:BAB_USER_DATA = "$env:RUNNER_TEMP\bab-smoke"
+          $p = Start-Process -FilePath $exe -PassThru -Wait
+          if (Test-Path $env:BAB_SMOKE_OUT) { Get-Content $env:BAB_SMOKE_OUT } else { "no results" }
+          if ($p.ExitCode -ne 0 -or -not (Test-Path $env:BAB_SMOKE_OUT)) {
+            if (Test-Path "$env:BAB_USER_DATA\logs\main.log") { Get-Content "$env:BAB_USER_DATA\logs\main.log" -Tail 80 }
+            throw "The installed app's self-check failed (exit code $($p.ExitCode))."
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-a-bot-windows
+          path: desktop/dist/*.exe
+          if-no-files-found: error
+
+  # The latest Windows installer from main, at one address: Releases → "Desktop app (test build)".
+  publish:
+    name: Publish the test build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [windows-installer, private-speech]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-a-bot-windows
+          path: dist
+      - name: Replace the pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release delete desktop-test --yes --cleanup-tag || true
+          cat > notes.md <<'EOF'
+          The desktop app for Windows, built from main by GitHub Actions. Not signed yet: Windows
+          may say "Windows protected your PC" — click **More info**, then **Run anyway**.
+
+          It installs for you only (no admin needed) and starts from the Start menu as Build-a-bot.
+          It sits in the system tray (the ^ by the clock). See desktop/README.md for what it does.
+          EOF
+          gh release create desktop-test dist/*.exe --prerelease --target "$GITHUB_SHA" \
+            --title "Desktop app (test build, ${GITHUB_SHA::7})" --notes-file notes.md
