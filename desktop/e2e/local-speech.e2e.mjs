@@ -148,10 +148,13 @@ async function serveFiles(dir) {
 let app = null;
 let target = null;
 let files = null;
+let userData = null;
 after(async () => {
   target?.kill();
   if (app) await app.close().catch(() => {});
   files?.close();
+  // The app's folder holds its own copy of the model (0.7 GB).
+  if (userData) fs.rmSync(userData, { recursive: true, force: true });
 });
 
 test("NVIDIA Parakeet on this computer: downloaded, checked, and hearing real speech", { timeout: 600_000 }, async () => {
@@ -184,7 +187,7 @@ test("NVIDIA Parakeet on this computer: downloaded, checked, and hearing real sp
   const { code } = await (await web.post("/api/bridge/pairing-code")).json();
 
   // ---- the app, with voice typing on, downloading NVIDIA's files from here
-  const userData = fs.mkdtempSync(path.join(os.tmpdir(), "bab-local-e2e-"));
+  userData = fs.mkdtempSync(path.join(os.tmpdir(), "bab-local-e2e-"));
   const mic = path.join(userData, "mic.wav");
   const said = micFile(DICTATION, mic);
   app = await electron.launch({
