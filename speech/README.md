@@ -28,7 +28,7 @@ layer (`src/lib/transcribe`) talks to it like any other provider. It's built to 
 4. Answers in OpenAI's shape: `json` (`{text}`), `text`, or `verbose_json` with sentence-sized
    `segments` (meeting notes use them) and, when asked, `words`.
 
-Audio is handled in memory (`/dev/shm`) and deleted as soon as it's text. Nothing that was said is
+Audio is handled in memory (`/dev/shm`, when it has room) and deleted as soon as it's text. Nothing that was said is
 logged or kept: each request's log line has its time, length, model, language and status.
 
 ## Measured
