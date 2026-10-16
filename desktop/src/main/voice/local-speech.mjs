@@ -220,6 +220,12 @@ export class LocalSpeech extends EventEmitter {
     this.lastEmit = 0;
     /** Checked for an engine an earlier run left behind. */
     this.reaped = false;
+    /**
+     * Where it runs the model: "auto" (the GPU where there is one: Metal on Apple silicon) until
+     * that fails on this computer, then "cpu" from then on. Read from engine.json at the first start.
+     * @type {'auto'|'cpu'|null}
+     */
+    this.device = null;
   }
 
   get paths() {
@@ -232,6 +238,8 @@ export class LocalSpeech extends EventEmitter {
       marker: path.join(this.dir, "installed.json"),
       /** The running engine's process id, so a run of the app that was force-quit can be cleaned up after. */
       pid: path.join(this.dir, "engine.pid"),
+      /** The GPU didn't work here: run on the CPU (kept until NVIDIA's runtime changes). */
+      device: path.join(this.dir, "engine.json"),
     };
   }
 
@@ -471,17 +479,22 @@ export class LocalSpeech extends EventEmitter {
     if (this.reaped) return;
     this.reaped = true;
     let pid = 0;
+    let port = 0;
     try {
-      pid = Number(JSON.parse(await fsp.readFile(this.paths.pid, "utf8")).pid);
+      ({ pid, port } = JSON.parse(await fsp.readFile(this.paths.pid, "utf8")));
     } catch {
       return;
     }
     await fsp.rm(this.paths.pid, { force: true });
     if (!Number.isInteger(pid) || pid <= 1 || pid === process.pid) return;
+    // By what ps always prints the same: the program's name and its arguments, all plain ASCII
+    // (a folder named José can come out as "Jos?").
     const ours =
       this.platform === "win32"
         ? (await output(this.spawn, "tasklist", ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"])).trim().toLowerCase().startsWith(`"${this.exe}"`)
-        : (await output(this.spawn, "ps", ["-p", String(pid), "-o", "command="])).includes(this.paths.bin);
+        : ((cmd) => cmd.includes(`${this.exe} serve --asr-model ${path.relative(this.dir, this.paths.model)}`) && cmd.includes(`--port ${port} `))(
+            await output(this.spawn, "ps", ["-p", String(pid), "-o", "command="]),
+          );
     if (!ours) return;
     try {
       process.kill(pid);
@@ -491,7 +504,41 @@ export class LocalSpeech extends EventEmitter {
     }
   }
 
+  /** The GPU failed on this computer (it crashed or hung): the CPU from now on. */
+  useCpu(why) {
+    if (this.device === "cpu") return;
+    this.device = "cpu";
+    this.log(`local speech: the GPU didn't work here (${why}); using the CPU from now on`);
+    // Written at once (it's tiny), so it can't land in a folder that's being deleted.
+    try {
+      fs.writeFileSync(this.paths.device, JSON.stringify({ device: "cpu", runtime: this.src.runtimeSha256, why: String(why), at: new Date().toISOString() }));
+    } catch {
+      /* it tries the GPU again next time */
+    }
+  }
+
+  loadDevice() {
+    try {
+      const d = JSON.parse(fs.readFileSync(this.paths.device, "utf8"));
+      // A new runtime from NVIDIA gets another try on the GPU.
+      if (d.device === "cpu" && d.runtime === this.src.runtimeSha256) return "cpu";
+    } catch {
+      /* not decided yet */
+    }
+    return "auto";
+  }
+
   async start() {
+    try {
+      return await this.startOnce();
+    } catch (err) {
+      // It crashed on the GPU while loading: straight away, once more on the CPU.
+      if (err instanceof LocalSpeechError && err.code === "crashed" && this.lastDevice !== "cpu" && this.device === "cpu") return this.startOnce();
+      throw err;
+    }
+  }
+
+  async startOnce() {
     if (!this.isInstalled()) throw new LocalSpeechError("absent", "It isn't downloaded yet.");
     await this.reap();
     const now = Date.now();
@@ -500,8 +547,13 @@ export class LocalSpeech extends EventEmitter {
     const p = this.paths;
     this.port = await freePort();
     this.secret = randomBytes(24).toString("hex");
-    const args = ["serve", "--asr-model", p.model, "--host", "127.0.0.1", "--port", String(this.port), "--no-ui", "--device", "auto"];
-    if (fs.existsSync(p.itn)) args.push("--itn-model-dir", p.itn);
+    // Paths relative to its folder (it runs there): a native program may not open a path with
+    // letters from outside English (C:\Users\José\…) given on its command line.
+    this.device ??= this.loadDevice();
+    const device = this.device;
+    this.lastDevice = device;
+    const args = ["serve", "--asr-model", path.relative(this.dir, p.model), "--host", "127.0.0.1", "--port", String(this.port), "--no-ui", "--device", device];
+    if (fs.existsSync(p.itn)) args.push("--itn-model-dir", path.relative(this.dir, p.itn));
     const env = { ...process.env, NEMO_SPEECH_HTTP_API_KEY: this.secret };
     if (this.platform === "win32") env.PATH = `${path.dirname(p.bin)};${env.PATH ?? ""}`;
     this.stopping = false;
@@ -509,7 +561,13 @@ export class LocalSpeech extends EventEmitter {
     // In its own folder: what it writes, it writes there.
     const child = this.spawn(p.bin, args, { cwd: this.dir, env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
     this.child = child;
-    if (child.pid) void fsp.writeFile(p.pid, JSON.stringify({ pid: child.pid })).catch(() => {});
+    if (child.pid) {
+      try {
+        fs.writeFileSync(p.pid, JSON.stringify({ pid: child.pid, port: this.port }));
+      } catch {
+        /* only the clean-up after a force-quit needs it */
+      }
+    }
     const lines = (d) => {
       for (const line of String(d).split("\n")) if (ENGINE_LOG.test(line.trim())) this.log(`local speech: ${line.trim().slice(0, 200)}`);
     };
@@ -519,10 +577,11 @@ export class LocalSpeech extends EventEmitter {
       if (this.child !== child) return;
       this.child = null;
       clearTimeout(this.idleTimer);
-      void fsp.rm(p.pid, { force: true }).catch(() => {});
+      fs.rmSync(p.pid, { force: true });
       if (!this.stopping) {
         this.crashes.push(Date.now());
         this.log(`local speech: stopped on its own (${why})`);
+        if (device !== "cpu" && child.pid !== undefined) this.useCpu(`it stopped: ${why}`);
       }
       this.set(this.isInstalled() ? "installed" : "absent");
     };
@@ -548,6 +607,7 @@ export class LocalSpeech extends EventEmitter {
       await sleep(250);
     }
     await this.stop();
+    if (device !== "cpu") this.useCpu("it took too long to start");
     throw new LocalSpeechError("slow", "It took too long to start.");
   }
 

@@ -19,6 +19,8 @@ app.whenReady().then(async () => {
     title: "Target app",
     webPreferences: { contextIsolation: false, nodeIntegration: true, sandbox: false },
   });
+  // No menu bar (Windows and Linux): Alt never sends the keyboard there.
+  win.setMenu(null);
   ipcMain.on("text", (_e, text) => fs.writeFileSync(out, text));
   await win.loadURL(
     "data:text/html;charset=utf-8," +

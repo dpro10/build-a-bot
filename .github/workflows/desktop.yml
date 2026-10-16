@@ -1,7 +1,8 @@
 # The desktop app (desktop/): its tests on Linux and Windows; Private speech with NVIDIA's real
 # runtime and Parakeet on Windows and macOS, hearing speech the system's own voice says; and the
-# Windows installer, installed and checking itself. On main, the installer is published as the
-# "Desktop app (test build)" pre-release.
+# Windows installer: installed, checking itself, then voice typing end to end in the installed app
+# (the real Ctrl + Windows shortcut, Parakeet on the computer, the words pasted into another app).
+# On main, the installer is published as the "Desktop app (test build)" pre-release.
 name: Desktop app
 
 on:
@@ -76,15 +77,16 @@ jobs:
           afconvert -f WAVE -d LEI16@16000 -c 1 "$RUNNER_TEMP/said.aiff" "$RUNNER_TEMP/said.wav"
           ls -l "$RUNNER_TEMP/said.wav"
       # Downloads NVIDIA's files the way the app does (about 0.7 GB), checks them, runs the engine.
+      # In a folder named like a user's (C:\Users\José\…): letters from outside English included.
       - name: Hear it on this computer
         working-directory: desktop
-        run: node scripts/check-private-speech.mjs "${{ runner.temp }}/private-speech" "${{ runner.temp }}/said.wav" "team meeting, tuesday"
+        run: node scripts/check-private-speech.mjs "${{ runner.temp }}/José Muñoz/private-speech" "${{ runner.temp }}/said.wav" "team meeting, tuesday"
 
   windows-installer:
     name: Windows installer
     needs: test
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: desktop
@@ -98,19 +100,20 @@ jobs:
       - run: npm ci
       - name: Build it (unsigned)
         run: npx --yes ${{ env.ELECTRON_BUILDER }} --config electron-builder.yml --win nsis --x64 --publish never
+      # Installed the way an owner does it (for them only, no admin), silently: it goes to
+      # %LOCALAPPDATA%\Programs\build-a-bot-desktop.
       - name: Install it, and let the installed app check itself
         shell: pwsh
         run: |
           $setup = Get-ChildItem dist\*.exe | Select-Object -First 1
           "installer: $($setup.Name) ($([math]::Round($setup.Length / 1MB)) MB)"
-          Start-Process -FilePath $setup.FullName -ArgumentList "/S" -Wait
-          Start-Sleep -Seconds 3
-          Get-Process "Build-a-bot" -ErrorAction SilentlyContinue | Stop-Process -Force
-          $exe = "$env:LOCALAPPDATA\Programs\Build-a-bot\Build-a-bot.exe"
-          if (-not (Test-Path $exe)) {
-            Get-ChildItem "$env:LOCALAPPDATA\Programs" -Recurse -Depth 1 -ErrorAction SilentlyContinue | Select-Object FullName
-            throw "It isn't installed where it should be."
-          }
+          $inst = Start-Process -FilePath $setup.FullName -ArgumentList "/S" -PassThru
+          $inst.WaitForExit()
+          "installer exit code: $($inst.ExitCode)"
+          $exe = Get-ChildItem "$env:LOCALAPPDATA\Programs" -Filter "Build-a-bot.exe" -Recurse -Depth 2 -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $exe) { throw "It isn't installed." }
+          "installed: $exe"
+          "BAB_APP_EXE=$exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           $env:BAB_SMOKE = "1"
           $env:BAB_SMOKE_OUT = "$env:RUNNER_TEMP\smoke.json"
           $env:BAB_USER_DATA = "$env:RUNNER_TEMP\bab-smoke"
@@ -120,6 +123,30 @@ jobs:
             if (Test-Path "$env:BAB_USER_DATA\logs\main.log") { Get-Content "$env:BAB_USER_DATA\logs\main.log" -Tail 80 }
             throw "The installed app's self-check failed (exit code $($p.ExitCode))."
           }
+      - name: Someone talking (the system's own voice)
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.Speech
+          $s = New-Object System.Speech.Synthesis.SpeechSynthesizer
+          $fmt = New-Object System.Speech.AudioFormat.SpeechAudioFormatInfo(16000, [System.Speech.AudioFormat.AudioBitsPerSample]::Sixteen, [System.Speech.AudioFormat.AudioChannel]::Mono)
+          $s.SetOutputToWaveFile("$env:RUNNER_TEMP\said.wav", $fmt)
+          $s.Speak("Let's move the team meeting to next Tuesday at ten in the morning.")
+          $s.Dispose()
+      - name: Voice typing in the installed app, end to end
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+          BAB_E2E_SHOTS: ${{ runner.temp }}/shots
+        run: |
+          npm install --no-save playwright@1.56.1
+          $env:BAB_E2E_APP = $env:BAB_APP_EXE
+          $env:BAB_E2E_SPEECH_WAV = "$env:RUNNER_TEMP\said.wav"
+          node --test --test-timeout=900000 e2e/windows-voice.e2e.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-e2e-screenshots
+          path: ${{ runner.temp }}/shots
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
           name: build-a-bot-windows
