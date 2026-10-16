@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, AudioLines, MessageCircle, NotebookPen, Trash2, UserX } from "lucide-react";
+import { ArrowRight, AudioLines, MessageCircle, NotebookPen, ShieldCheck, UserX } from "lucide-react";
 import { BrandTile } from "@/components/brand/icons";
 import { BuddyMock } from "@/components/meetings/BuddyMock";
 import { meetingAppIcon } from "@/components/meetings/shared";
@@ -8,21 +8,20 @@ import { Container, Section, SectionHeader } from "../ui";
 const POINTS = [
   { icon: <UserX />, title: "No bot joins the call", body: "It listens on your computer, so nobody has to let a stranger into the meeting." },
   { icon: <NotebookPen />, title: "Notes, sent to you", body: "A summary, the decisions and who's doing what, in your chat, Telegram or email." },
-  { icon: <Trash2 />, title: "Audio is thrown away", body: "The sound becomes text, then it's deleted. Your meetings never train AI." },
+  { icon: <ShieldCheck />, title: "Heard on your computer", body: "NVIDIA Parakeet turns the call into text on your computer, so the audio never leaves it. Your meetings never train AI." },
   { icon: <MessageCircle />, title: "Ask about any meeting", body: "“What did Priya say about pricing?” Your bot searches what was said." },
 ];
 
 const APPS = ["zoom", "meet", "teams", "webex", "slack", "discord"] as const;
 
-/** `desktopApp`: the desktop app (which notices calls) can be had; otherwise notes start in the browser and it's "coming soon". */
+/** Meeting notes are taken in the desktop app. `desktopApp`: it can be had (downloads, or the repo); otherwise it's coming soon. */
 export function MeetingNotes({ desktopApp }: { desktopApp: boolean }) {
   return (
     <Section id="meetings" aria-labelledby="meetings-title" className="overflow-hidden bg-gradient-to-b from-background via-primary-soft/30 to-background-2">
       <Container>
         <SectionHeader id="meetings-title" eyebrow="Meeting notes" icon={<AudioLines />} title="It takes notes in your calls. When you say yes.">
-          {desktopApp
-            ? "When a call starts, your bot peeks up from the bottom of your screen and asks. Say yes, and it stays right there while it listens, then sends you the notes."
-            : "Start notes from your browser when a call begins. Your bot stays on your screen the whole time it listens, then sends you the notes."}
+          When a call starts, your bot peeks up from the bottom of your screen and asks. Say yes, and it stays right there while it listens, then sends you the notes.
+          {desktopApp ? " It's in the desktop app." : " Coming soon in the desktop app."}
         </SectionHeader>
 
         <div className="mt-14 grid gap-8 lg:grid-cols-2 lg:gap-10">
@@ -68,8 +67,8 @@ export function MeetingNotes({ desktopApp }: { desktopApp: boolean }) {
           </div>
           <p className="max-w-xl text-sm text-muted-foreground">
             {desktopApp
-              ? "Works with Zoom, Google Meet, Teams, Webex, Slack and more, through the desktop app or any call in a Chrome or Edge tab."
-              : "Works with any call in a Chrome or Edge tab, like Google Meet, Zoom or Teams on the web. A desktop app that notices calls is coming soon."}{" "}
+              ? "Works with Zoom, Google Meet, Teams, Webex, Slack and calls in your browser, with the desktop app for Mac and Windows, and with a meeting in the room."
+              : "Works with Zoom, Google Meet, Teams, Webex, Slack and calls in your browser, with the desktop app for Mac and Windows, coming soon."}{" "}
             <Link href="/safety#recording" className="inline-flex items-center gap-1 font-semibold text-primary hover:underline">
               How recording stays fair <ArrowRight className="size-3.5" aria-hidden="true" />
             </Link>

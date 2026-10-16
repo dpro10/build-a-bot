@@ -47,6 +47,47 @@ test("api: chunk uploads carry track/chunk/timing/silent in the query and the au
   assert.equal(f.seen[0].init.body, bytes);
 });
 
+test("api: what Parakeet heard on this computer goes as lines (JSON), never audio; the meeting is kept alive while it hears", async () => {
+  const f = fakeFetch([{ status: 200, body: { segments: [] } }, { status: 200, body: { meeting: {} } }, { status: 201, body: { meeting: { id: "mtg_2" } } }]);
+  const api = createApi({ fetch: f.fn, server: () => "http://s", token: () => "bab_dev_t" });
+  const item = { server: "http://s", botId: "bot_1", meetingId: "mtg_1", track: "mic", chunk: 2, startMs: 40000, durationMs: 20000, silent: false, mime: "audio/webm", bytes: new Uint8Array([9, 9]) };
+  const r = await api.uploadChunkText(item, [{ startMs: 500.4, endMs: 2600, text: "We ship on Friday." }]);
+  assert.equal(r.status, 200);
+  assert.equal(f.seen[0].url, "http://s/api/bots/bot_1/meetings/mtg_1/audio?track=mic&chunk=2&startMs=40000&durationMs=20000&silent=0");
+  assert.equal(f.seen[0].init.headers["content-type"], "application/json");
+  assert.deepEqual(JSON.parse(f.seen[0].init.body), { heard: [{ startMs: 500, endMs: 2600, text: "We ship on Friday." }] });
+  assert.ok(!String(f.seen[0].init.body).includes("9,9"), "no audio in it");
+
+  await api.keepHearing("bot_1", "mtg_1");
+  assert.equal(f.seen[1].init.method, "PATCH");
+  assert.deepEqual(JSON.parse(f.seen[1].init.body), { hearing: true });
+
+  // A meeting in the room says so; a call doesn't send the field at all.
+  await api.startMeeting("bot_1", { app: "other", consentNotice: false, inPerson: true });
+  assert.deepEqual(JSON.parse(f.seen[2].init.body), { app: "other", consentNotice: false, inPerson: true });
+
+  // Lines for a server this computer isn't paired with anymore go nowhere.
+  const gone = await api.uploadChunkText({ ...item, server: "http://old" }, []);
+  assert.equal(gone.status, 404);
+  assert.equal(f.seen.length, 3);
+});
+
+test("account: notes are offered when this computer can hear the call, or the server can", () => {
+  const settings = { get: () => ({ server: "http://s", botId: "bot_1" }), update: () => {} };
+  const account = new Account({ api: createApi({ fetch: async () => ({}), server: () => "http://s", token: () => null }), tokens: {}, settings });
+  account.device = { server: "http://s" };
+  const bots = [{ id: "bot_1", name: "Inky", avatar: "otto", color: "grape", paused: false, meetingsOn: true }];
+  account.session = { bots, meetings: { available: false, local: true, minutesLeft: 100, chunkMs: 20000 } };
+  assert.equal(account.whyNot(), null, "the server takes what Parakeet hears here");
+  account.setMeetingCheck(() => "Turn on Private speech to take notes");
+  assert.equal(account.whyNot(), "Turn on Private speech to take notes");
+  account.setMeetingCheck(() => null);
+  account.session = { bots, meetings: { available: false, minutesLeft: 100, chunkMs: 20000 } };
+  assert.equal(account.whyNot(), "Meeting notes aren't set up on this server", "an older server that takes neither");
+  account.session = { bots, meetings: { available: true, minutesLeft: 100, chunkMs: 20000 } };
+  assert.equal(account.whyNot(), null, "an older server that hears audio itself");
+});
+
 test("api: errors keep the server's code; network failures are status 0", async () => {
   const f = fakeFetch([{ status: 409, body: { error: "Turn on Meeting notes for Inky first.", code: "meetings_off" } }, { throw: "ECONNREFUSED" }]);
   const api = createApi({ fetch: f.fn, server: () => "http://s", token: () => "bab_dev_t" });

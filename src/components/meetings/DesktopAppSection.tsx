@@ -1,10 +1,9 @@
 /**
- * "Your computer" page: the desktop app for meeting notes, next to the Bridge.
- * What it does, where to get it (its signed download once published; until then
- * "Coming soon", or the repo in demo mode), and pairing.
+ * "Your computer" page: the desktop app, where meeting notes (and voice typing) happen, next to the
+ * Bridge. What it does, where to get it (its signed download once published; until then "Coming
+ * soon", or the repo in demo mode), and pairing.
  */
-import Link from "next/link";
-import { ArrowRight, Bell, CircleDot, Download, Hand, Laptop, Trash2 } from "lucide-react";
+import { Bell, CircleDot, Download, Hand, Laptop, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
@@ -28,7 +27,11 @@ const POINTS = [
     title: "Stays where you can see it",
     body: "While it listens, it sits at the bottom of your screen with a red dot and a timer. It never records without showing itself.",
   },
-  { icon: <Trash2 />, title: "Audio becomes text, then it's gone", body: "The sound is turned into text and thrown away. Your notes land in your chat." },
+  {
+    icon: <ShieldCheck />,
+    title: "Heard on your computer",
+    body: "NVIDIA Parakeet turns the call into text right on your computer, so the audio never leaves it. Only the words come to Build-a-bot, and your notes land in your chat.",
+  },
 ];
 
 export function DesktopAppSection({
@@ -76,18 +79,9 @@ export function DesktopAppSection({
         </div>
 
         {soon ? (
-          // Nothing to install yet: the browser recorder is the way to take notes.
-          <div className="flex flex-col gap-3 border-t border-border p-5 sm:flex-row sm:items-center sm:p-6">
-            <p className="min-w-0 flex-1 text-sm text-muted-foreground">
-              Signed downloads for Mac and Windows are coming soon. Until then, take notes from the Meetings tab in Chrome or Edge.
-            </p>
-            {bot ? (
-              <Button asChild variant="outline" className="shrink-0 self-start sm:self-auto">
-                <Link href={`/app/bots/${bot.id}/meetings`}>
-                  Open Meetings <ArrowRight />
-                </Link>
-              </Button>
-            ) : null}
+          // Nothing to install yet.
+          <div className="border-t border-border p-5 sm:p-6">
+            <p className="text-sm text-muted-foreground">Signed downloads for Mac and Windows are coming soon. Meeting notes and voice typing come with them.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-px border-t border-border bg-border md:grid-cols-2">

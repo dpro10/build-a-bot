@@ -3,7 +3,7 @@
  *  - without Stripe, nothing promises an upgrade: the bot limit says to delete one first, and
  *    Full faith and the app limit say paid plans are coming soon;
  *  - without signed downloads, the desktop app is coming soon and the bot doesn't offer it;
- *  - without speech-to-text, meeting notes are coming soon.
+ *  - so are meeting notes, which are taken in the desktop app.
  * Also: "save up to" is one number everywhere, never overstated.
  */
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -25,7 +25,7 @@ const { getDb, resetDbForTests, schema } = await import("@/lib/db");
 const { config, paidPlansOpen } = await import("@/lib/env");
 const { createBot } = await import("@/lib/bots/create");
 const { MAX_YEARLY_SAVING, PLANS, PLAN_ORDER, yearlySaving } = await import("@/lib/billing/plans");
-const { desktopApp, startMeeting } = await import("@/lib/meetings");
+const { desktopApp, meetingNotesAvailable, startMeeting } = await import("@/lib/meetings");
 const { listMeetings } = await import("@/lib/tools/builtin/meetings");
 const connectionsRoute = await import("@/app/api/bots/[botId]/connections/route");
 import type { User } from "@/lib/db/schema";
@@ -111,7 +111,7 @@ describe("the desktop app before signed downloads", () => {
     const res = await createBot(db, owner, botInput("Desky", { connectors: ["meetings"] }));
     if (!res.ok) throw new Error(res.error);
     const out = await listMeetings.run({}, { db, bot: res.bot, owner, conversationId: null, channelKind: "web", demo: false, now: new Date() });
-    expect(out).toMatchObject({ ok: true, content: "No meetings yet. The owner can start one from the Meetings tab in the app." });
+    expect(out).toMatchObject({ ok: true, content: "No meetings yet. Notes are taken with the desktop app, which is coming soon." });
   });
 
   it("offers the download once its address is set", () => {
@@ -124,12 +124,22 @@ describe("the desktop app before signed downloads", () => {
   });
 });
 
-describe("meeting notes without speech-to-text", () => {
+describe("meeting notes without the desktop app", () => {
   it("are coming soon", async () => {
     const owner = await freeOwner("usr_notes");
     const res = await createBot(db, owner, botInput("Scribe", { connectors: ["meetings"] }));
     if (!res.ok) throw new Error(res.error);
-    expect(await startMeeting(db, { bot: res.bot, owner, source: "browser" })).toMatchObject({ ok: false, status: 503, code: "unavailable", error: "Meeting notes are coming soon." });
+    expect(meetingNotesAvailable()).toBe(false);
+    expect(await startMeeting(db, { bot: res.bot, owner, source: "desktop" })).toMatchObject({ ok: false, status: 503, code: "unavailable", error: "Meeting notes are coming soon." });
+  });
+
+  it("are offered once the app can be downloaded, with no speech-to-text here", () => {
+    config.desktop.downloadUrl = "https://downloads.example.com/build-a-bot";
+    try {
+      expect(meetingNotesAvailable()).toBe(true);
+    } finally {
+      config.desktop.downloadUrl = undefined;
+    }
   });
 });
 

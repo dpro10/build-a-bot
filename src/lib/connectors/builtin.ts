@@ -147,11 +147,12 @@ export const BUILTIN_CONNECTORS: ConnectorDef[] = [
     via: [{ kind: "builtin" }],
     capabilities: [{ id: "read_meetings", label: "Read your meeting notes and transcripts", effect: "read", risk: "low" }],
     status: "beta",
-    requires: "transcription",
+    // Notes are taken in the desktop app, which hears the call on the owner's computer.
+    requires: "desktopApp",
     popular: true,
     jobs: ["meetings", "work", "calendar", "school"],
-    keywords: ["meeting", "meetings", "zoom", "google meet", "teams", "webex", "call", "transcribe", "transcript", "record", "recording", "notetaker", "whisper", "minutes", "action items"],
-    note: "It only listens after you say yes, and it stays visible at the bottom of your screen the whole time. Audio is turned into text and thrown away. Works in your browser, or with the desktop app, which notices when a call starts.",
+    keywords: ["meeting", "meetings", "zoom", "google meet", "teams", "webex", "call", "transcribe", "transcript", "record", "recording", "notetaker", "whisper", "parakeet", "minutes", "action items"],
+    note: "Comes with the desktop app, which notices when a call starts and asks first. It stays visible at the bottom of your screen while it listens. NVIDIA Parakeet turns the call into text on your computer, so the audio never leaves it.",
   },
   {
     id: "browser",

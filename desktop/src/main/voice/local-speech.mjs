@@ -1,15 +1,16 @@
 /**
- * Voice typing's ears on this computer: NVIDIA Parakeet TDT 0.6B v3, run by NVIDIA's NeMo-Speech.cpp,
- * so what the owner says never leaves the computer. Only the words go on to the server, for the
- * cleanup and "Hey {bot}".
+ * The app's ears on this computer, for voice typing and meeting notes: NVIDIA Parakeet TDT 0.6B v3,
+ * run by NVIDIA's NeMo-Speech.cpp, so what's said never leaves the computer. Only the words go on
+ * to the server (for the cleanup and "Hey {bot}", or a meeting's transcript and notes).
  *
  *  - The first time, it downloads NVIDIA's runtime for this platform (about 5 MB) and the model
  *    (714 MB) into the app's folder. Each is pinned to one version and checked against its SHA-256
  *    before it's used, and a cut-off download picks up where it stopped.
  *  - The runtime runs as `nemo-speech serve` on 127.0.0.1, on a random port, behind a random key
- *    (so other programs on the computer can't use it). It starts when voice typing is used and
- *    stops after a while unused, so the model isn't in memory all day.
- *  - A recording is sent to it in memory, as 16 kHz WAV, and never written to disk.
+ *    (so other programs on the computer can't use it). It starts when it's needed and stops after
+ *    a while unused, so the model isn't in memory all day.
+ *  - Audio is sent to it in memory, as 16 kHz WAV, and never written to disk. A dictation goes
+ *    ahead of a meeting's pieces, which are heard one at a time (with each word's time).
  *
  * Until it's ready (or if it fails), voice typing uses the server's speech-to-text as before.
  */
@@ -53,6 +54,10 @@ const FOLDER_PROBLEM = "It can't run from this Windows account's folder: its nam
 
 /** Room the download needs besides the model itself. */
 const SPARE_BYTES = 300 * 1024 * 1024;
+
+/** An engine that stops on its own this many times within the window isn't started again until it passes. */
+const MAX_CRASHES = 3;
+const CRASH_WINDOW_MS = 10 * 60_000;
 
 /**
  * The engine's own lines worth keeping in the app's log: which model and device, that it's
@@ -252,6 +257,12 @@ export class LocalSpeech extends EventEmitter {
     this.device = null;
     /** Windows: the folder as the engine can open it (see place()); undefined until asked. @type {string | null | undefined} */
     this.short = undefined;
+    /** Dictations being heard right now; pieces of a meeting wait for them. */
+    this.foreground = 0;
+    /** A dictation is on its way until then (the shortcut is down). */
+    this.foregroundUntil = 0;
+    /** Pieces of a meeting are heard one after another. @type {Promise<unknown>} */
+    this.backgroundChain = Promise.resolve();
   }
 
   /**
@@ -293,6 +304,12 @@ export class LocalSpeech extends EventEmitter {
 
   supported() {
     return Boolean(this.runtime);
+  }
+
+  /** It stopped on its own three times in the last 10 minutes, so it isn't started again for now. */
+  crashing() {
+    const now = Date.now();
+    return this.crashes.filter((t) => now - t < CRASH_WINDOW_MS).length >= MAX_CRASHES;
   }
 
   /** Both pieces are here, and they're the versions this app expects. */
@@ -617,8 +634,8 @@ export class LocalSpeech extends EventEmitter {
     if (!root) throw new LocalSpeechError("folder", FOLDER_PROBLEM);
     await this.reap();
     const now = Date.now();
-    this.crashes = this.crashes.filter((t) => now - t < 10 * 60_000);
-    if (this.crashes.length >= 3) throw new LocalSpeechError("crashing", "It keeps stopping on this computer, so voice typing uses Build-a-bot's servers for now.");
+    this.crashes = this.crashes.filter((t) => now - t < CRASH_WINDOW_MS);
+    if (this.crashes.length >= MAX_CRASHES) throw new LocalSpeechError("crashing", "It keeps stopping on this computer, so voice typing uses Build-a-bot's servers for now.");
     const p = this.paths;
     this.port = await freePort();
     this.secret = randomBytes(24).toString("hex");
@@ -721,32 +738,83 @@ export class LocalSpeech extends EventEmitter {
   /**
    * One recording (16 kHz WAV, in memory) → what was said. A dictation waits at most `startWaitMs`
    * for the engine to load (it was started when the shortcut was pressed); the next one finds it ready.
+   * Voice typing goes ahead of meeting notes: a piece of a meeting waits while a dictation is heard.
    * @param {Uint8Array} wav
    * @param {{ durationMs?: number, startWaitMs?: number }} [o]
    */
   async transcribe(wav, o = {}) {
-    const running = this.ensureRunning();
-    running.catch(() => {});
-    let timer;
+    this.foreground++;
     try {
-      await Promise.race([running, new Promise((_, reject) => (timer = setTimeout(() => reject(new LocalSpeechError("starting", "It's still starting.")), o.startWaitMs ?? 15_000)))]);
+      const running = this.ensureRunning();
+      running.catch(() => {});
+      let timer;
+      try {
+        await Promise.race([running, new Promise((_, reject) => (timer = setTimeout(() => reject(new LocalSpeechError("starting", "It's still starting.")), o.startWaitMs ?? 15_000)))]);
+      } finally {
+        clearTimeout(timer);
+      }
+      const data = await this.request(wav, "json", o.durationMs);
+      return tidyLocalText(data.text);
     } finally {
-      clearTimeout(timer);
+      this.foreground--;
+      // That dictation was heard: meeting notes can go on.
+      if (!this.foreground) this.foregroundUntil = 0;
     }
+  }
+
+  /**
+   * Voice typing is about to need the engine (the shortcut is down): pieces of a meeting wait until
+   * that dictation has been heard, or `ms` passes.
+   * @param {number} [ms]
+   */
+  expectForeground(ms = 30_000) {
+    this.foregroundUntil = Math.max(this.foregroundUntil, Date.now() + ms);
+  }
+
+  /**
+   * A piece of a meeting (16 kHz WAV, in memory) → what was said, with each word's time in the
+   * piece (for the transcript's lines). Pieces are heard one at a time, after any dictation (the
+   * owner is waiting at their cursor for those); it waits for the engine to load, as long as that
+   * takes.
+   * @param {Uint8Array} wav
+   * @param {{ durationMs?: number }} [o]
+   * @returns {Promise<{ text: string, words: Array<{ word: string, start: number, end: number }> }>}
+   */
+  transcribeTimed(wav, o = {}) {
+    const turn = this.backgroundChain.then(async () => {
+      while (this.foreground > 0 || Date.now() < this.foregroundUntil) await sleep(150);
+      await this.ensureRunning();
+      const data = await this.request(wav, "verbose_json", o.durationMs);
+      const words = (Array.isArray(data.words) ? data.words : [])
+        .map((w) => ({ word: String(w?.word ?? "").trim(), start: Number(w?.start), end: Number(w?.end) }))
+        .filter((w) => w.word && Number.isFinite(w.start) && Number.isFinite(w.end));
+      return { text: tidyLocalText(data.text), words };
+    });
+    this.backgroundChain = turn.catch(() => {});
+    return turn;
+  }
+
+  /**
+   * Ask the running engine to hear one WAV.
+   * @param {Uint8Array} wav
+   * @param {'json'|'verbose_json'} format
+   * @param {number} [durationMs]
+   */
+  async request(wav, format, durationMs = 0) {
     this.touch();
     const form = new FormData();
     form.append("file", new Blob([wav], { type: "audio/wav" }), "audio.wav");
-    form.append("response_format", "json");
+    form.append("response_format", format);
     const res = await this.localFetch(`http://127.0.0.1:${this.port}/v1/audio/transcriptions`, {
       method: "POST",
       headers: { authorization: `Bearer ${this.secret}` },
       body: form,
-      signal: AbortSignal.timeout(Math.max(30_000, (o.durationMs ?? 0) * 3)),
+      signal: AbortSignal.timeout(Math.max(30_000, durationMs * 3)),
     });
     if (!res.ok) throw new LocalSpeechError("engine", `It answered ${res.status}.`);
-    const data = /** @type {{ text?: string }} */ (await res.json());
+    const data = /** @type {{ text?: string, words?: any[] }} */ (await res.json());
     this.touch();
-    return tidyLocalText(data.text);
+    return data;
   }
 }
 

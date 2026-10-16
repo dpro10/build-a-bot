@@ -57,10 +57,14 @@ http.createServer((req, res) => {
     const body = Buffer.concat(parts).toString("latin1");
     if (mode === "broken") return send(500, { error: { message: "boom" } });
     const wav = /filename="audio\\.wav"\\r\\ncontent-type: audio\\/wav\\r\\n\\r\\nRIFF/i.test(body);
-    const json = /name="response_format"\\r\\n\\r\\njson\\r\\n/i.test(body);
-    if (!wav || !json) return send(400, { error: { message: "send a WAV file" } });
+    const format = (/name="response_format"\\r\\n\\r\\n(json|verbose_json)\\r\\n/i.exec(body) || [])[1];
+    if (!wav || !format) return send(400, { error: { message: "send a WAV file" } });
     console.log('INFO: Proto String: tokenizer_grammar:  "tokenizer.ascii_proto"');
     console.error("decoded: Let's meet at 3.30 on Friday");
+    if (format === "verbose_json") {
+      const words = [["Let's", 0.1, 0.3], ["meet", 0.3, 0.5], ["at", 0.5, 0.6], ["3.30", 0.6, 0.9], ["on", 0.9, 1.0], ["Friday.", 1.0, 1.4]];
+      return send(200, { text: " Let's meet at 3.30 on Friday. ", duration: 1.5, language: "", task: "transcribe", words: words.map(([word, start, end]) => ({ word, start, end, confidence: 1 })) });
+    }
     send(200, { text: " Let's meet at 3.30 on Friday,   or 03:45.  " });
   });
 }).listen(Number(flag("--port")), flag("--host"));
@@ -492,6 +496,33 @@ test("runs it on 127.0.0.1 behind a key of its own, and tidies what it heard", a
   assert.equal(local.crashes.length, 0, "stopping it isn't a crash");
 });
 
+test("a meeting's pieces are heard with each word's time, one at a time, after any dictation", async (t) => {
+  const order = [];
+  const { local, engineRuns } = await setup(t, {
+    localFetch: (url, init) => {
+      if (String(url).endsWith("/v1/audio/transcriptions")) order.push(init.body.get("response_format"));
+      return fetch(url, init);
+    },
+  });
+  await local.install();
+  // The shortcut is down: a dictation is coming, and the owner is waiting at their cursor.
+  local.expectForeground(10_000);
+  const first = local.transcribeTimed(wav(1.5), { durationMs: 1500 });
+  const second = local.transcribeTimed(wav(1.5), { durationMs: 1500 });
+  await new Promise((r) => setTimeout(r, 300));
+  assert.deepEqual(order, [], "the meeting's pieces wait for the dictation");
+  assert.equal(await local.transcribe(wav(), { durationMs: 500 }), "Let's meet at 3:30 on Friday, or 3:45.");
+  const [a, b] = await Promise.all([first, second]);
+  assert.deepEqual(order, ["json", "verbose_json", "verbose_json"]);
+  assert.equal(a.text, "Let's meet at 3:30 on Friday.");
+  assert.deepEqual(a.words[0], { word: "Let's", start: 0.1, end: 0.3 });
+  assert.deepEqual(
+    b.words.map((w) => w.word),
+    ["Let's", "meet", "at", "3.30", "on", "Friday."],
+  );
+  assert.equal(engineRuns().length, 1, "one engine for voice typing and meetings");
+});
+
 test("its log keeps what it's doing, never its chatter or what was said", async (t) => {
   const { local, logs } = await setup(t);
   await local.install();
@@ -597,9 +628,13 @@ test("a runtime that keeps crashing (on the GPU, then on the CPU) is given up on
     ["auto", "cpu", "cpu"],
   );
   assert.equal(local.state, "installed");
+  assert.equal(local.crashing(), true, "meeting notes hear it too: their pieces go to a server that hears audio, or wait");
   await assert.rejects(local.ensureRunning(), (e) => e instanceof LocalSpeechError && e.code === "crashing");
   await assert.rejects(local.transcribe(wav()), (e) => e instanceof LocalSpeechError && e.code === "crashing");
   assert.equal(spawned.length, 3, "it wasn't started a fourth time");
+  // Ten minutes on, it gets another try.
+  local.crashes = local.crashes.map((at) => at - 10 * 60_000);
+  assert.equal(local.crashing(), false);
 });
 
 test("the GPU failing on this computer moves it to the CPU, at once and from then on", async (t) => {

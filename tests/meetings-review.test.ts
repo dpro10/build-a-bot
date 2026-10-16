@@ -49,7 +49,7 @@ async function makeBot(owner: User, opts: { subscription?: boolean } = {}): Prom
 }
 
 async function recorded(bot: Bot, owner: User, chunks = 6): Promise<Meeting> {
-  const started = await startMeeting(db, { bot, owner, source: "browser", app: "zoom" });
+  const started = await startMeeting(db, { bot, owner, source: "desktop", app: "zoom" });
   if (!started.ok) throw new Error(started.error);
   for (let c = 0; c < chunks; c++) {
     for (const track of ["mic", "system"] as const) {
@@ -322,7 +322,7 @@ describe("meeting minutes", () => {
   it("count the audio that was transcribed, even if a recorder keeps restarting its timeline", async () => {
     const owner = await newOwner("usr_minutes");
     const bot = await makeBot(owner);
-    const started = await startMeeting(db, { bot, owner, source: "browser", app: "zoom" });
+    const started = await startMeeting(db, { bot, owner, source: "desktop", app: "zoom" });
     if (!started.ok) throw new Error(started.error);
     // Ten 60-second pieces, all claiming to start at 0:00 (an honest recorder never overlaps its own track).
     for (let c = 0; c < 10; c++) {
@@ -338,7 +338,7 @@ describe("meeting minutes", () => {
   it("an honest two-track recording still counts once (wall-clock), with silent pieces", async () => {
     const owner = await newOwner("usr_minutes_honest");
     const bot = await makeBot(owner);
-    const started = await startMeeting(db, { bot, owner, source: "browser", app: "zoom" });
+    const started = await startMeeting(db, { bot, owner, source: "desktop", app: "zoom" });
     if (!started.ok) throw new Error(started.error);
     for (let c = 0; c < 8; c++) {
       for (const track of ["mic", "system"] as const) {
@@ -444,7 +444,7 @@ describe("meeting settings changed during a recording", () => {
     const { setPaused, markNoticeCopied } = await import("@/lib/meetings");
     const owner = await newOwner("usr_clobber");
     const bot = await makeBot(owner);
-    const started = await startMeeting(db, { bot, owner, source: "browser", app: "zoom" });
+    const started = await startMeeting(db, { bot, owner, source: "desktop", app: "zoom" });
     if (!started.ok) throw new Error(started.error);
     const stale = started.meeting; // what a PATCH read before the uploads below finished
     for (let c = 0; c < 2; c++) {
@@ -460,7 +460,7 @@ describe("meeting settings changed during a recording", () => {
     const m = await row(stale.id);
     expect(m.durationSec).toBeGreaterThanOrEqual(180);
     expect(m.title).toBe("Weekly sync");
-    expect(m.meta).toMatchObject({ renamed: true, consent: { noticeCopied: true, via: "browser" }, transcribedBy: "demo/demo" });
+    expect(m.meta).toMatchObject({ renamed: true, consent: { noticeCopied: true, via: "desktop" }, transcribedBy: "demo/demo" });
     expect((m.meta as { pausedAt?: string }).pausedAt).toBeUndefined();
   });
 });
@@ -469,14 +469,14 @@ describe("a recording replaced by a new one", () => {
   it("is handed back so its notes get written now, not at the next rescue", async () => {
     const owner = await newOwner("usr_replaced");
     const bot = await makeBot(owner);
-    const first = await startMeeting(db, { bot, owner, source: "browser", app: "zoom" });
+    const first = await startMeeting(db, { bot, owner, source: "desktop", app: "zoom" });
     if (!first.ok) throw new Error(first.error);
     expect(first.replaced).toEqual([]);
     const r = await addChunk(db, { meeting: first.meeting, owner, track: "mic", chunk: 0, startMs: 0, durationMs: 6000, audio: AUDIO, mime: "audio/webm" });
     if (!r.ok) throw new Error(r.error);
 
     // The same browser starts again (the tab was closed mid-call).
-    const second = await startMeeting(db, { bot, owner, source: "browser", app: "zoom" });
+    const second = await startMeeting(db, { bot, owner, source: "desktop", app: "zoom" });
     if (!second.ok) throw new Error(second.error);
     expect(second.replaced).toEqual([first.meeting.id]);
     expect((await row(first.meeting.id)).status).toBe("processing");

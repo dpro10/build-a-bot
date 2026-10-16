@@ -38,10 +38,12 @@ import { createApi } from "./api.mjs";
 import { BuddyWindow } from "./buddy-window.mjs";
 import { CaptureWindow } from "./capture-window.mjs";
 import { Controller } from "./controller.mjs";
+import { Decoder } from "./decoder-window.mjs";
 import { Detector } from "./detect/index.mjs";
 import { createTracker } from "./detect/tracker.mjs";
 import { SCHEME } from "./local-pages.mjs";
 import { createLogger } from "./log.mjs";
+import { meetingSender } from "./meeting-speech.mjs";
 import { PairingWindow } from "./pairing-window.mjs";
 import { Spool } from "./spool.mjs";
 import { DEFAULT_SERVER, Settings, TokenStore, normalizeServer } from "./store.mjs";
@@ -73,7 +75,14 @@ protocol.registerSchemesAsPrivileged([{ scheme: SCHEME, privileges: { standard: 
 
 /** @type {ReturnType<typeof createLogger>} */
 let log = (m) => console.log(m);
-let settings, tokens, api, account, spool, uploads, buddy, capture, controller, pairing, detector, tray, voice;
+let settings, tokens, api, account, spool, uploads, buddy, capture, decoder, controller, pairing, detector, tray, voice;
+/**
+ * NVIDIA Parakeet for meeting notes, filled in once voice typing (which owns the engine) is set up:
+ * how each piece is heard, and what the bot says while it's on its way.
+ */
+const hearing = { way: () => "server", waitNote: () => null, ensure() {}, warm() {} };
+/** How a meeting's pieces are sent (meeting-speech.mjs), once the engine is set up. */
+let pieces = null;
 const notifications = new Set();
 
 if (!app.requestSingleInstanceLock()) {
@@ -111,8 +120,11 @@ async function boot() {
   api = createApi({ fetch: (url, init) => apiSession.fetch(url, init), server: () => account?.server() ?? null, token: () => account?.token() ?? null });
   account = new Account({ api, tokens, settings, log });
   spool = new Spool(path.join(userData, "spool"));
+  decoder = new Decoder({ log });
   uploads = new UploadQueue({
-    send: (item) => api.uploadChunk(item),
+    // The lines NVIDIA Parakeet heard in each piece, on this computer (or its audio, for a server that hears it).
+    send: (item) => (pieces ? pieces.send(item) : api.uploadChunk(item)),
+    ready: (item) => (pieces ? pieces.ready(item) : true),
     spool,
     log,
     onUploaded: (item, body) => controller?.onUploaded(item, body),
@@ -139,6 +151,7 @@ async function boot() {
     writeClipboard: (t) => clipboard.writeText(t),
     systemAudioMode: () => (env.BAB_SYSTEM_AUDIO === "off" ? "off" : "loopback"),
     ensureMicAccess,
+    hearing,
     limits: {
       askTimeoutMs: num(env.BAB_ASK_TIMEOUT_MS, undefined),
       notNowCooldownMs: num(env.BAB_NOT_NOW_COOLDOWN_MS, undefined),
@@ -163,10 +176,23 @@ async function boot() {
     onChange: () => {
       tray?.update();
       voice?.pushState();
+      // The pairing window says how far NVIDIA Parakeet's download has got.
+      if (voice) pairing.send(pairingState());
     },
     log,
   });
   if (env.BAB_VOICE_ENABLE === "1") settings.updateVoice({ enabled: true, introduced: true });
+  // Meeting notes hear with the same NVIDIA Parakeet (and the same Private speech setting).
+  Object.assign(hearing, voice.meetings);
+  account.setMeetingCheck(() => voice.meetings.problem());
+  pieces = meetingSender({
+    api,
+    way: () => voice.meetings.way(),
+    takesText: () => account.session?.meetings?.local === true,
+    toWav: (bytes, mime) => decoder.toWav16k(bytes, mime),
+    hear: (wav, o) => voice.meetings.hear(wav, o),
+    log,
+  });
 
   const sustain = num(env.BAB_DETECT_SUSTAIN_MS, null);
   detector = new Detector({
@@ -197,6 +223,8 @@ async function boot() {
     tray.update();
     pairing.send(pairingState());
     voice.pushState();
+    // A bot takes notes here: get NVIDIA Parakeet now, so the first call's notes don't wait for it.
+    if (account.bots().some((b) => b.meetingsOn)) voice.meetings.ensure();
   });
   account.on("signed-out", (reason) => {
     // Unsent audio from the old pairing goes too (from memory as well as the spool):
@@ -242,6 +270,7 @@ async function boot() {
         readyToQuit = true;
         buddy.destroy();
         capture.destroy();
+        decoder.close();
         tray.destroy();
         app.quit();
       });
@@ -366,6 +395,7 @@ function pairingState() {
     botId: account.bot()?.id ?? null,
     trayWord: process.platform === "darwin" ? "menu bar" : "tray",
     voice: voice.trayInfo(),
+    hearing: account.bots().some((b) => b.meetingsOn) ? voice.meetings.line() : null,
   };
 }
 
@@ -396,6 +426,7 @@ function trayModel() {
 
 function onTrayClick(id, checked) {
   if (id === "take") controller.takeNow();
+  else if (id === "take-room") controller.takeNow({ inPerson: true });
   else if (id === "stop") controller.stopNow();
   else if (id === "pause") controller.dispatch({ type: "pause" });
   else if (id === "resume") controller.dispatch({ type: "resume" });
@@ -542,6 +573,7 @@ function exposeTestProbe() {
         caption: controller.caption,
         stats: controller.stats,
         uploads: uploads.stats,
+        pieces: pieces?.stats ?? null,
         spoolFiles: spool.list().length,
         tray: trayModel().status,
         voice: voice.probe(),

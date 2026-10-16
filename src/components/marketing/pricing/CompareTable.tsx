@@ -37,7 +37,11 @@ function groups(): Group[] {
       rows: [
         { label: "Apps per bot", hint: "built-ins don't count", cells: per((p) => n(p.limits.connectors)) },
         { label: "Routines", hint: "morning briefs, check-ins", cells: per((p) => n(p.limits.routines)) },
-        { label: "Meeting notes", hint: "hours per month", cells: per((p) => (p.limits.meetingMinutes ? n(Math.round((p.limits.meetingMinutes / 60) * 10) / 10) : false)) },
+        {
+          label: "Meeting notes",
+          hint: available("desktopApp") ? "hours per month, with the desktop app" : "hours per month; with the desktop app (coming soon)",
+          cells: per((p) => (p.limits.meetingMinutes ? n(Math.round((p.limits.meetingMinutes / 60) * 10) / 10) : false)),
+        },
         {
           label: "Voice typing",
           hint: available("desktopApp") ? "words per month, in any app" : "words per month; in any app with the desktop app (coming soon)",
