@@ -41,6 +41,6 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string }>) {
     console.error(`[channels] ${kind} ${action} failed:`, err);
     return apiError(502, `Something went wrong with ${CHANNEL_BY_KIND[kind].name}. Try again in a moment.`);
   }
-  if (!result.ok) return apiError(result.status ?? 400, result.error);
+  if (!result.ok) return apiError(result.status ?? 400, result.error, result.code ? { code: result.code } : {});
   return json({ ok: true, ...(result.data ?? {}) });
 }

@@ -6,7 +6,6 @@
 import { AVATARS, type AvatarId, type ColorwayId } from "@/lib/avatars";
 import type { TrustLevel } from "@/lib/trust";
 import { CHANNEL_BY_KIND, channelAvailability, isChannelKind, type ChannelKind, type LiveFlags } from "@/lib/channels/catalog";
-import { PLANS, planAllowsChannel, type PlanId } from "@/lib/billing/plans";
 import { getConnector } from "@/lib/connectors";
 import { INCLUDED_MODELS, PROVIDER_BY_ID, type ProviderId } from "@/lib/models/catalog";
 import { isJobId, JOB_BY_ID } from "@/lib/jobs";
@@ -56,7 +55,7 @@ export type BuilderState = {
 
 export const DEFAULT_MODEL = INCLUDED_MODELS.find((m) => m.default)!.id;
 
-/** Apps that count toward the plan's limit: third-party apps from the catalog plus your own MCP servers. */
+/** Apps that count toward the fair-use limit: third-party apps from the catalog plus your own MCP servers. */
 export function countedApps(connectors: string[], customMcp: unknown[]): number {
   return connectors.filter((id) => {
     const def = getConnector(id);
@@ -68,7 +67,6 @@ export function countedApps(connectors: string[], customMcp: unknown[]): number 
 export type BuilderContext = {
   demo: boolean;
   live: LiveFlags;
-  plan: PlanId;
   /** Built-ins and apps this server can't offer yet (see comingSoonConnectors). */
   comingSoon: string[];
   /** The signed-in account's email, for the Email channel. */
@@ -77,7 +75,7 @@ export type BuilderContext = {
 
 /**
  * Channels a recipe or a saved draft may bring. Demo mode keeps them all (it simulates what
- * isn't set up); otherwise one that's coming soon, or that needs a plan nobody can buy yet, is left out.
+ * isn't set up); otherwise one that's coming soon here is left out.
  */
 export function usableChannels(channels: unknown, ctx: BuilderContext): ChannelKind[] {
   const kinds = Array.isArray(channels) ? channels.filter(isChannelKind) : [];
@@ -85,9 +83,7 @@ export function usableChannels(channels: unknown, ctx: BuilderContext): ChannelK
     if (kind === "web") return false;
     if (ctx.demo) return true;
     const availability = channelAvailability(CHANNEL_BY_KIND[kind], ctx.demo, ctx.live);
-    if (availability === "soon") return false;
-    // Anyone can join a waitlist.
-    return availability === "waitlist" || Boolean(ctx.live.stripe) || planAllowsChannel(PLANS[ctx.plan], kind);
+    return availability !== "soon";
   });
 }
 
@@ -139,19 +135,13 @@ export function initialState(recipe: (RecipeData & { slug?: string }) | null | u
   };
 }
 
-/** An included model from a tier the plan doesn't have (Plus or Pro). Demo mode has every tier. */
-export function modelLocked(modelId: string, plan: PlanId, demo: boolean): boolean {
-  const m = INCLUDED_MODELS.find((x) => x.id === modelId);
-  return !demo && Boolean(m) && !PLANS[plan].includedModels.includes(m!.tier);
-}
-
-/** A saved draft on top of a fresh state, keeping only what works here: its channels and apps, and a model the plan has. */
+/** A saved draft on top of a fresh state, keeping only what works here: its channels and apps, and a model we still serve. */
 export function withDraft(base: BuilderState, draft: Partial<BuilderState>, ctx: BuilderContext): BuilderState {
   const brain = draft.brain ?? base.brain;
   return {
     ...base,
     ...draft,
-    brain: brain.kind === "included" && modelLocked(brain.model, ctx.plan, ctx.demo) ? { ...brain, model: DEFAULT_MODEL } : brain,
+    brain: brain.kind === "included" && !INCLUDED_MODELS.some((m) => m.id === brain.model) ? { ...brain, model: DEFAULT_MODEL } : brain,
     brief: draft.brief ?? base.brief,
     role: isRoleId(draft.role) ? draft.role : base.role,
     ageConfirmed: false,

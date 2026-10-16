@@ -1,13 +1,13 @@
 /**
  * Brains a bot can run on.
  *
- *  included      Open-weight models we serve through Nebius Token Factory (we pay; plan limits apply).
+ *  included      Open-weight models we serve through Nebius Token Factory (paid from the owner's credit, at cost).
  *  byok          The owner's own API key (encrypted at rest, never shown again).
  *  subscription  The owner's own Claude / ChatGPT plan, run by their own CLI on their own
  *                computer through the Bridge (vendor rules: docs/DECISIONS.md).
  *
- * Prices are USD per 1M tokens (input / output) and are used for receipts and
- * plan-cost estimates; providers' own bills are authoritative.
+ * Prices are USD per 1M tokens (input / output). For included models they are what Token Factory
+ * charges, and what the owner pays (at cost); for the owner's own key, an estimate (their bill is authoritative).
  */
 
 export type ThinkingControl =
@@ -30,8 +30,6 @@ export type ModelDef = {
   reasoning?: boolean;
   tools: boolean;
   default?: boolean;
-  /** Plan needed when we pay (included models only). */
-  plan?: "free" | "plus" | "pro";
   /** Env var that can override `id` without a code change (included models). */
   envOverride?: string;
   /** How to steer thinking (Token Factory models differ; docs/research/integrations-2026-10-14.md). */
@@ -91,7 +89,6 @@ export const INCLUDED_MODELS: ModelDef[] = [
     reasoning: true,
     tools: true,
     default: true,
-    plan: "free",
     region: "eu-north1",
     thinking: { style: "reasoning_effort", off: "none", levels: ["none", "high"] },
   },
@@ -106,7 +103,6 @@ export const INCLUDED_MODELS: ModelDef[] = [
     priceIn: 0.1,
     priceOut: 0.3,
     tools: true,
-    plan: "free",
     region: "eu-north1",
     thinking: { style: "none" },
   },
@@ -121,7 +117,6 @@ export const INCLUDED_MODELS: ModelDef[] = [
     priceOut: 0.6,
     reasoning: true,
     tools: true,
-    plan: "free",
     thinking: { style: "reasoning_effort", off: null, levels: ["low", "medium", "high"] },
   },
   {
@@ -136,7 +131,6 @@ export const INCLUDED_MODELS: ModelDef[] = [
     priceOut: 0.9,
     reasoning: true,
     tools: true,
-    plan: "plus",
     region: "us-central1",
     thinking: { style: "template_toggle" },
   },
@@ -151,7 +145,6 @@ export const INCLUDED_MODELS: ModelDef[] = [
     priceOut: 0.28,
     reasoning: true,
     tools: true,
-    plan: "plus",
     thinking: { style: "reasoning_effort", off: "none", levels: ["none", "low", "high", "max"] },
   },
   {
@@ -164,7 +157,6 @@ export const INCLUDED_MODELS: ModelDef[] = [
     priceIn: 0.2,
     priceOut: 0.6,
     tools: true,
-    plan: "plus",
     thinking: { style: "none" },
   },
   {
@@ -178,7 +170,6 @@ export const INCLUDED_MODELS: ModelDef[] = [
     priceOut: 0.5,
     reasoning: true,
     tools: true,
-    plan: "plus",
     thinking: { style: "reasoning_effort", off: null, levels: ["low", "high", "max"] },
   },
   {
@@ -192,7 +183,6 @@ export const INCLUDED_MODELS: ModelDef[] = [
     priceOut: 1.2,
     reasoning: true,
     tools: true,
-    plan: "plus",
   },
   {
     id: "nvidia/Nemotron-3-Ultra-550b-a55b",
@@ -206,7 +196,6 @@ export const INCLUDED_MODELS: ModelDef[] = [
     priceOut: 3,
     reasoning: true,
     tools: true,
-    plan: "pro",
     region: "us-central1",
     thinking: { style: "reasoning_effort", off: "none", levels: ["none", "high"] },
   },
@@ -221,7 +210,6 @@ export const INCLUDED_MODELS: ModelDef[] = [
     priceOut: 3.5,
     reasoning: true,
     tools: true,
-    plan: "pro",
     thinking: { style: "reasoning_effort", off: "none", levels: ["none", "low", "high", "max"] },
   },
   {
@@ -235,7 +223,6 @@ export const INCLUDED_MODELS: ModelDef[] = [
     priceOut: 4.4,
     reasoning: true,
     tools: true,
-    plan: "pro",
     thinking: { style: "reasoning_effort", off: null, levels: ["low", "high", "max"] },
   },
   {
@@ -249,7 +236,6 @@ export const INCLUDED_MODELS: ModelDef[] = [
     priceOut: 15,
     reasoning: true,
     tools: true,
-    plan: "pro",
     thinking: { style: "reasoning_effort", off: "none", levels: ["none", "low", "medium", "high", "max"] },
   },
   {
@@ -263,7 +249,6 @@ export const INCLUDED_MODELS: ModelDef[] = [
     priceOut: 3,
     reasoning: true,
     tools: true,
-    plan: "pro",
   },
 ];
 

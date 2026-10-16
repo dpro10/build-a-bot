@@ -8,7 +8,7 @@
  *   network / 5xx / 429 / 503 "retry" → try again with backoff; the chunk waits in the
  *                    spool so a blip (or quitting) doesn't lose it. Re-sending the same
  *                    (track, chunk) is safe: the server answers duplicates from what it has.
- *   402 limit      → stop recording (minutes used up)
+ *   402 limit      → stop recording (out of credit for the server to hear it)
  *   409 not_recording, 403, 404 → stop (the meeting ended or moved elsewhere)
  *   401            → stop (this computer was unpaired)
  *   422 too_long   → stop (4-hour cap)

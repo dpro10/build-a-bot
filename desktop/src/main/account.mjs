@@ -8,11 +8,11 @@ import os from "node:os";
 import { ApiError } from "./api.mjs";
 import { normalizeServer } from "./store.mjs";
 
-/** @typedef {{ id: string, name: string, avatar: string, color: string, paused: boolean, meetingsOn: boolean }} SessionBot */
+/** @typedef {{ id: string, name: string, avatar: string, color: string, paused: boolean, meetingsOn: boolean, notesNeedCredit?: boolean }} SessionBot */
 /**
  * `meetings.local`: the server takes the lines this computer heard (NVIDIA Parakeet), which is how
  * notes are taken; `meetings.available`: it also turns a piece's audio into text itself.
- * @typedef {{ device: { id: string, name: string }, owner: { name: string | null, plan: string }, bots: SessionBot[], meetings: { available: boolean, local?: boolean, minutesLeft: number, chunkMs: number }, appUrl: string, demo: boolean }} DesktopSession
+ * @typedef {{ device: { id: string, name: string }, owner: { name: string | null, plan?: string }, credit?: { balanceMicros: number }, bots: SessionBot[], meetings: { available: boolean, local?: boolean, credit?: boolean, minutesLeft: number, chunkMs: number }, appUrl: string, demo: boolean }} DesktopSession
  */
 
 export function deviceName() {
@@ -239,7 +239,11 @@ export class Account extends EventEmitter {
       return first ? `Turn on meeting notes for ${first.name}` : "Make a bot first";
     }
     if (bot.paused) return `${bot.name} is paused`;
-    if ((this.session.meetings.minutesLeft ?? 1) <= 0) return "No meeting minutes left this month";
+    // People pay for what they use: notes written by an included model need credit (their own AI is free).
+    // An older server says minutesLeft instead.
+    const outOfCredit =
+      typeof this.session.meetings.credit === "boolean" ? !this.session.meetings.credit && bot.notesNeedCredit !== false : (this.session.meetings.minutesLeft ?? 1) <= 0;
+    if (outOfCredit) return "Out of credit: add some to take notes";
     return null;
   }
 }

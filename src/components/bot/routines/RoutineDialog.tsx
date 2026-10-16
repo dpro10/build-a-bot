@@ -1,7 +1,6 @@
 "use client";
 import * as React from "react";
-import Link from "next/link";
-import { CalendarClock, Sparkles } from "lucide-react";
+import { CalendarClock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { FieldHint, Input, Label, Textarea } from "@/components/ui/input";
@@ -10,7 +9,6 @@ import { Select } from "@/components/ui/select";
 import { toast } from "@/components/ui/toaster";
 import { api, ApiError } from "@/lib/client/api";
 import { cn } from "@/lib/utils";
-import { PAID_PLANS_SOON } from "@/lib/billing/plans";
 import type { Schedule } from "@/lib/db/schema";
 import { zonedParts, zonedToUtc, whenLabel } from "@/components/bot/activity/time";
 import { radioKeyDown, radioTabIndex } from "@/components/bot/activity/radio-keys";
@@ -154,8 +152,6 @@ export function RoutineDialog({
   autoHint,
   initial,
   editing,
-  planName,
-  paidPlans,
   onSaved,
 }: {
   open: boolean;
@@ -169,15 +165,13 @@ export function RoutineDialog({
   initial: RoutineForm;
   /** The schedule being edited; omit to create. */
   editing?: ScheduleView | null;
-  planName: string;
-  /** Paid plans can be bought here; otherwise the routine limit says they're coming soon, with no link. */
-  paidPlans: boolean;
   onSaved: (row: ScheduleView, created: boolean) => void;
 }) {
   const [f, setF] = React.useState<RoutineForm>(initial);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [upgrade, setUpgrade] = React.useState<string | null>(null);
+  /** The error is the fair-use limit on routines (turning one off makes room), not a failure. */
+  const [full, setFull] = React.useState(false);
   const [now, setNow] = React.useState(() => new Date());
   const alertRef = React.useRef<HTMLDivElement>(null);
 
@@ -190,7 +184,7 @@ export function RoutineDialog({
     if (open) {
       setF(initial);
       setError(null);
-      setUpgrade(null);
+      setFull(false);
       setNow(new Date());
     }
   }, [open, initial]);
@@ -216,7 +210,7 @@ export function RoutineDialog({
     if ("error" in res) return setError(res.error);
     setSaving(true);
     setError(null);
-    setUpgrade(null);
+    setFull(false);
     try {
       let row: ScheduleView;
       if (editing) {
@@ -237,8 +231,8 @@ export function RoutineDialog({
       onSaved(row, !editing);
       onOpenChange(false);
     } catch (err) {
-      if (err instanceof ApiError && err.upgrade) {
-        setUpgrade(err.upgrade);
+      if (err instanceof ApiError && err.code === "fair_use") {
+        setFull(true);
         setError(err.message);
       } else {
         setError((err as Error).message || "Couldn't save that.");
@@ -467,26 +461,8 @@ export function RoutineDialog({
             </div>
 
             {error ? (
-              <div ref={alertRef} role="alert" className={cn("rounded-2xl px-4 py-3 text-sm", upgrade ? "bg-primary-soft text-foreground" : "bg-danger-soft text-danger")}>
-                {upgrade ? (
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                    <div className="flex min-w-0 flex-1 items-start gap-2">
-                      <Sparkles className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
-                      <span>
-                        {paidPlans
-                          ? `${error} Upgrade to ${upgrade === "pro" ? "Pro" : "Plus"} for more, or turn one of your ${planName} routines off.`
-                          : `${error} Turn one of your ${planName} routines off to make room. ${PAID_PLANS_SOON}`}
-                      </span>
-                    </div>
-                    {paidPlans ? (
-                      <Button asChild size="sm">
-                        <Link href="/app/billing">See plans</Link>
-                      </Button>
-                    ) : null}
-                  </div>
-                ) : (
-                  error
-                )}
+              <div ref={alertRef} role="alert" className={cn("rounded-2xl px-4 py-3 text-sm", full ? "bg-primary-soft text-foreground" : "bg-danger-soft text-danger")}>
+                {error}
               </div>
             ) : null}
           </DialogBody>

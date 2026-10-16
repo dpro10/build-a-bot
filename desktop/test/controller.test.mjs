@@ -296,6 +296,9 @@ test("server refusals become plain words with the right place to fix them", asyn
   assert.deepEqual(env.opened, ["https://app.example/app/bots/bot_1/tools#meetings"]);
   assert.equal(startError({ status: 0, code: "network" }, "Inky").message, "I can't reach Build-a-bot right now. Check your internet and try again.");
   assert.equal(startError({ status: 402, code: "limit" }, "Inky").openTarget, "billing");
+  const broke = startError({ status: 402, code: "no_credit", message: "You're out of credit. Add credit in Credit & usage, or switch me to your own AI key or subscription in Settings → Brain (that's free here)." }, "Inky");
+  assert.deepEqual(broke, { message: "You're out of credit. Add credit in Credit & usage, or switch me to your own AI key or subscription in Settings → Brain (that's free here).", openTarget: "billing" });
+  assert.equal(startError({ status: 0, code: "no_credit" }, "Inky").message, "You're out of credit. Add some to take notes.");
   assert.equal(startError({ status: 401 }, "Inky").openTarget, "pair");
   env.c.dispose();
 });

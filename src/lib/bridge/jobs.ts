@@ -89,7 +89,7 @@ export async function runViaBridge(
     emit({
       type: "notice",
       tone: "info",
-      text: `${paired ? "Your computer is asleep" : "Your computer isn't paired yet"}, so I'm using the free brain for now (you opted in).`,
+      text: `${paired ? "Your computer is asleep" : "Your computer isn't paired yet"}, so I'm using an open model we run for now (you opted in; it's paid from your credit).`,
     });
     const fallbackBot: Bot = { ...bot, brain: { kind: "included", provider: "nebius", model: "nvidia/Nemotron-3_5-Lightning", effort: "low" } };
     return runTurn({ ...input, bot: fallbackBot, message: null, directive: input.directive });
@@ -181,7 +181,7 @@ export async function runViaBridge(
   const text = device
     ? `On it — thinking with ${brain.cli === "claude" ? "your Claude" : "your ChatGPT"} on ${device.name}…`
     : paired
-      ? `My brain lives on your computer, and it's asleep right now. I'll answer as soon as it's back online. (You can let me fall back to the free brain in Settings → Brain.)`
+      ? `My brain lives on your computer, and it's asleep right now. I'll answer as soon as it's back online. (You can let me fall back to an open model we run, paid from your credit, in Settings → Brain.)`
       : `Pair your computer to start: open Bridge (your computer)${input.channelKind === "web" ? "" : ` at ${appUrl()}/app/bridge`}.`;
   emit({ type: "status", state: device ? "thinking" : "waiting", label: device ? "Thinking on your computer" : "Waiting for your computer" });
   // Never paired: the chat links the sentence to the Bridge page.

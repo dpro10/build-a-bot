@@ -74,6 +74,6 @@ export async function POST(req: Request) {
     styles: d.styles !== "0",
     demoSample: sample,
   });
-  if (!out.ok) return apiError(out.status, out.error, { code: out.code, upgrade: out.upgrade });
+  if (!out.ok) return apiError(out.status, out.error, { code: out.code });
   return json({ ...out.result, usage: out.usage, simulated: out.simulated, ms: out.ms });
 }

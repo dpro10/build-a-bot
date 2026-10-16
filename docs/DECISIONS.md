@@ -116,7 +116,9 @@ The "Cookbook on the inside" proposal stays open. v1 is a standalone Next.js app
   - A receipt for every action (append-only in the database).
 - Owners can fine-tune each app's capabilities (allow / ask / off). An owner's "allow" never relaxes the injection guard.
 
-## Build choice (Claude; Diego to confirm): pricing
+## Build choice (superseded on 2026-10-16): pricing
+
+Replaced by *Decision: no plans; people pay for what they use, at cost* below. Kept for the record:
 
 | | Free | Plus | Pro |
 |---|---|---|---|
@@ -179,7 +181,7 @@ Cost basis: Nemotron 3.5 Lightning ≈ $0.0004 a turn; Tavily $0.008 a search af
 
 ## Build choice: an operator dashboard
 
-- `/admin` shows aggregates only: revenue estimate, people, bots, messages, brains, trust levels, channels, top apps, approvals, included-model spend and waitlists.
+- `/admin` shows aggregates only: credit sold against what was used at cost (since 2026-10-16; it was a revenue estimate), people, bots, messages, brains, trust levels, channels, top apps, approvals, included-model spend and waitlists.
 - It is locked to `ADMIN_EMAILS`. In demo mode without that variable, any signed-in user can see it.
 
 ## Build choice: abuse limits
@@ -228,7 +230,7 @@ Built (research: `docs/research/meetings-2026-10-14.md`):
 - **Speech-to-text:** any OpenAI-compatible endpoint. The default is Groq's Whisper large-v3 turbo (about $0.04 per audio hour), with Together AI as an automatic fallback. Nebius Token Factory has no speech-to-text model.
 - **Notes:** the bot writes a summary, decisions and action items with a tool-free model call, then sends them to the web chat and the owner's best channel. Bots on the owner's own Claude/ChatGPT plan write them on the owner's computer.
 - **The bot's meeting tools** (list, read, search) count as outside content, so a line said in a call can't make it email anyone without the owner's tap (tested under Full faith).
-- **Limits:** Free 2 hours, Plus 15 hours, Pro 50 hours a month. That costs us about $0.09 / $0.69 / $2.30 a month on Groq. Meetings are capped at 4 hours, and recording stops after 15 minutes of silence.
+- **Limits:** Free 2 hours, Plus 15 hours, Pro 50 hours a month. That costs us about $0.09 / $0.69 / $2.30 a month on Groq. Meetings are capped at 4 hours, and recording stops after 15 minutes of silence. (Since 2026-10-16 there are no plans: a meeting heard on the computer is free, and its notes are paid from credit.)
 
 ## Build choice (Claude; Diego to confirm): meeting-notes safety rules
 
@@ -283,7 +285,7 @@ Diego asked: "Is vercel the right software to use for this? or AWS or google or 
 Diego: "I want build-a-bot up and running soon. Not just simulated. We need to move quick. I want to start sending this link out to real users who can start testing it soon, but i dont want them to run into any issues."
 
 - **What testers get:** real email sign-in, chat, web search, Telegram, apps through Composio, meeting notes, Discord and Slack. Anything not set up shows "coming soon"; nothing is simulated.
-- **Sign-ups:** anyone with the link. Free-plan limits cap what each person can cost.
+- **Sign-ups:** anyone with the link. The starter credit caps what each person can cost (since 2026-10-16; before, the Free plan's limits did).
 - **Deploys:** Claude merges and deploys tested fixes without asking, until launch.
 - **Domain:** build-a-bot.site for the site and the sign-in emails (Resend).
 
@@ -292,7 +294,7 @@ Diego: "I want build-a-bot up and running soon. Not just simulated. We need to m
 Accounts are free and a browser cookie makes one, so per-account limits alone don't bound the cost of the included brain and web search.
 
 - **Before an email is confirmed:** 5 included-brain messages (Diego's call, 2026-10-15; it was 30). Then the bot asks the person to sign in by email (free) to keep going.
-- **Monthly searches per plan** (50 on Free) are now enforced. Before, they were counted but never checked.
+- **Monthly searches per plan** (50 on Free) are now enforced. Before, they were counted but never checked. (Since 2026-10-16, each lookup is paid from credit at Tavily's $0.008 instead.)
 - **Daily ceilings for the whole site**, per UTC day:
   - 3,000 included-brain turns (`INCLUDED_DAILY_LIMIT`);
   - 300 paid web lookups (`SEARCH_DAILY_LIMIT`), counting searches, news and page reading.
@@ -331,7 +333,7 @@ Built (Claude; Diego to confirm the details):
 Diego: "Honestly like 5 free messages before confirming email, we want people with accounts and we want to make some dough. ill let original beta testers use it for free at first."
 
 - Someone without a confirmed email gets **5** included-brain messages (`ANONYMOUS_INCLUDED_MESSAGES`), then the bot asks them to sign in by email to keep going.
-- The first beta testers stay on the Free plan. Paid plans open when Stripe is set up; until then Plus and Pro show "Coming soon" with a waitlist.
+- The first beta testers stay on the Free plan. Paid plans open when Stripe is set up; until then Plus and Pro show "Coming soon" with a waitlist. (Superseded on 2026-10-16: there are no plans; everyone pays for what they use, and every account starts with $1 of credit.)
 
 ## Decision: memory that works on any brain, and "Bring my memories" (Diego, 2026-10-15)
 
@@ -377,7 +379,7 @@ Built (Claude; Diego to confirm the details):
   - The builder's first screen has "Or start with a ready-made bot". One tap fills in every step, and anything can still change.
   - The landing page and Explore now lead with the tutor and the job applier.
   - Settings → What it helps with → Role switches roles, or goes back to a general assistant.
-- **Each role's recipe fits the Free plan:** at most 2 routines and 3 apps, and no sign-ins needed except the job applier's optional Gmail.
+- **Each role's recipe is small:** at most 2 routines and 3 apps (what the Free plan allowed, before plans were removed on 2026-10-16), and no sign-ins needed except the job applier's optional Gmail.
 - **What the job applier can't do yet:**
   - It finds jobs, tailors cover letters, tracks applications in a note, reminds you to follow up, and runs mock interviews.
   - Filling in application forms uses web actions, which aren't live yet (no Browser Use key). Until then it hands over everything ready to paste, with the link.
@@ -406,14 +408,14 @@ Built (Claude; Diego to confirm the details):
   - **Your bot is in it.** "Hey Otto, remind me to call Mom at 5" asks the bot instead of typing. The answer shows in the pill with Paste, Copy, Reply and Open chat, and it's in the chat later. "Type it instead" covers the times it wasn't meant for the bot.
   - **It knows your world.** Speech-to-text and the cleanup get the owner's dictionary, their name, their bots' names and the names their bots remember (Ana, Austin…), so names come out right without setup.
   - **Private by design.** The mic is on only while the key is held, and the pill shows the whole time. Neither the audio nor the text is stored on the server; only a word count. The history stays on the computer, encrypted. Only the kind of app ("chat") and, for apps on the built-in list, its name ("Slack") are sent; an app it doesn't recognize stays nameless. Never screenshots or window contents (Wispr's screenshots drew criticism).
-  - **Included in the plans:** 8,000 words a month on Free (about Wispr's free 2,000 a week), unlimited on Plus and Pro. Wispr charges about $12–15 a month for dictation alone.
+  - **Included in the plans:** 8,000 words a month on Free (about Wispr's free 2,000 a week), unlimited on Plus and Pro. Wispr charges about $12–15 a month for dictation alone. (Since 2026-10-16: no word limit; hearing on the computer is free, and the AI cleanup, a fraction of a cent, is paid from credit.)
 - **The cleanup** (`src/lib/dictation/`):
   - A plain pass always runs: fillers, stutters, spoken "new line" and "new paragraph", and "scratch that".
   - Then an AI pass on Groq's `openai/gpt-oss-120b` with low reasoning (same Groq key and provider as speech-to-text, Zero Data Retention), falling back to our Token Factory model. `DICTATION_POLISH` and `DICTATION_POLISH_MODEL` change it.
   - It is told never to answer what it's given ("Can you write me a poem?" stays a question), with worked examples. Its answer is used only if it still says what was said: checks for answering, adding words, dropping too much, a question turned into an answer, and lost snippet markers. Otherwise the plain cleanup is typed.
   - Each app gets its style: casual in chats, proper in email, exact in code and terminals.
 - **The dictionary:** words (with "it writes instead"), and snippets (say a phrase, it types a link or an address). Shared by the web and the desktop app. Fixing a dictation in the desktop history suggests the misheard names to add.
-- **Limits and cost:** about $0.0003 a dictation. Free: 8,000 words a month. Every plan: at most 3,000 dictations a day and 60 a minute. The whole site: 20,000 dictations a day (`DICTATION_DAILY_LIMIT`).
+- **Limits and cost:** about $0.0003 a dictation. Free: 8,000 words a month (gone since 2026-10-16). Everyone: at most 3,000 dictations a day and 60 a minute. The whole site: 20,000 dictations a day (`DICTATION_DAILY_LIMIT`).
 - **Tested:** unit tests for the rules, the pipeline against a fake Groq, the routes, and the desktop's timing, keys, paste and controller. An e2e under Xvfb holds a real key, records, and pastes into another app.
 - **Not tested yet: macOS and Windows.** Diego, please try it on your Mac (`cd desktop && npm install && npm start`, then "Set up voice typing" in the menu bar). In development, macOS lists the app as "Electron" under Accessibility.
 - **Later:**
@@ -503,7 +505,7 @@ What this settles (built by Claude):
 - **The first call doesn't wait for the download.** Pairing with a bot whose meeting notes are on gets Parakeet right away (without voice typing). The pairing window says how far the download has got. If a call starts before it's here, the bot still listens and says so ("Getting NVIDIA Parakeet (45%). I'm listening, and I'll write your notes once it's here."), again every couple of minutes, and says when it's caught up; the pieces wait on the computer (the spool) and are heard once it's ready. The notes are written only after every piece is in (not from part of the meeting), and meanwhile the app tells the server the meeting is still being heard (`PATCH { hearing: true }`), so it isn't wrapped up as abandoned.
 - **One setting for both: Private speech.** Turned off (or where Parakeet can't run, or while its engine keeps stopping), a server with speech-to-text of its own gets the pieces' audio instead, as before; one without it can't take notes, and the app says why ("Turn on Private speech to take notes"), or the pieces wait until the engine runs again. Nothing is ever made up.
 - **In the room:** "Take notes in the room" in the app's menu takes notes from the mic only (lines labeled "Room"), which only the browser recorder could do before.
-- **What it costs us:** no speech-to-text; one notes call per meeting on the bot's brain. Plan minutes stay as they are (Free 2 hours, Plus 15, Pro 50), Diego's call to change.
+- **What it costs us:** no speech-to-text; one notes call per meeting on the bot's brain. (Plan minutes went away with the plans on 2026-10-16: the notes are paid from credit, about $0.001 an hour on Nemotron 3.5 Lightning.)
 - **Not covered:** Parakeet knows English and 24 European languages; a meeting in another language isn't heard well. Speakers on the call's side aren't told apart yet (they're "Others"). A word can still be cut at a piece's edge when nobody pauses for the 7 seconds around it (rare).
 
 ## Decision: a Windows app, tested on real Windows (Diego, 2026-10-16)
@@ -530,12 +532,40 @@ What this settles (built by Claude; Diego to confirm the details):
   - Checked NVIDIA's files: the Windows engine brings its own Visual C++ runtime, and the Mac engine uses only macOS's own libraries (macOS 13.3 or later). Nothing else needs installing.
 - **Not covered by CI:** NVIDIA's Metal engine on a real Mac's GPU, Windows on ARM (the x64 app runs there under Windows' emulation, untested), and a Windows account with administrator-only apps in front (Windows doesn't let a normal app paste into those).
 
+## Decision: no plans; people pay for what they use, at cost (Diego, 2026-10-16)
+
+Diego: "since I'm submitting this in a hackathon, I don't want to make plans because I don't want to make money necessarily while it's in the hackathon. People should just pay for their usage, and I'll be happy breaking even at first."
+
+- **No Free, Plus or Pro.** Every account gets everything: every included model, Full faith, texts and calls (once Twilio is set up), as many apps and routines as fair use allows.
+- **Prepaid credit, at cost.** An account's balance is its starter credit, plus the credit it added (the `credits` table), minus what everything it used cost (`usage.cost_micros`, recorded as it happens). Each price is what the service charges us, with nothing added (`src/lib/billing/prices.ts`, and `/pricing`):
+
+| What | Price |
+|---|---|
+| A message on an included model | Token Factory's per-token price: about $0.00042 for a typical message on Nemotron 3.5 Lightning (5,000 tokens in, 500 out), $0.0065 on Nemotron 3 Ultra |
+| A web search, the news, or reading a page | $0.008 (Tavily) |
+| A text someone sends the bot / one the bot sends | $0.0083 / $0.0125 a segment (Twilio, US, with carrier fees) |
+| A phone call | $0.05 a minute (Twilio: the line, plus hearing what's said) |
+| A task in the cloud browser | what Browser Use reports it cost (else $0.01) |
+| Speech heard on the computer (voice typing, meeting notes) | free |
+| A recording heard on our server instead | what the speech service charges |
+| A bot on your own AI key, or your Claude or ChatGPT subscription | free here (fair use: 100,000 messages a month) |
+
+- **Starter credit:** $1 for every account (`STARTER_CREDIT_USD`; 0 turns it off), about 2,400 messages on Nemotron 3.5 Lightning, so testers and hackathon judges can try everything without a card. An account without a confirmed email still gets only 5 messages on an included model. Bot creation (which makes anonymous accounts) is rate-limited, so the starter credit is what one person can cost us.
+- **Adding credit:** $5, $10 or $20 through Stripe Checkout, as one-time payments (no products or prices to set up in Stripe). Stripe's fee (2.9% + 30¢) goes on top, so the credit is all theirs: $5.46, $10.61 or $20.91 on the card. The webhook adds it once per Checkout session, however often it arrives. Credit never expires. Without Stripe, adding credit says "Coming soon"; in demo mode it's added without paying, up to $20 an account (the live site runs in demo mode with the real models' keys, so this bounds what one account can cost us).
+- **Refunds (Claude's default, Diego to confirm):** unused credit someone added is refunded to their card when they ask, less Stripe's fee (Stripe doesn't return it). Starter credit isn't cashable. The terms, the privacy policy and Credit & usage say so, and deleting an account says to ask first.
+- **Running out:** nothing is charged on its own. Whatever costs money checks for credit first: a turn on an included model, a lookup, a text or a call, a cloud-browser task, a recording heard on our server, voice typing's AI cleanup, editing by voice, meeting notes written by an included model. The owner hears "You're out of credit…" with how to add some or switch the bot to their own AI; people who message the bot hear "I can't answer right now". A balance can dip a fraction of a cent below zero, because a message's cost is known only once it's answered; the next credit added covers it.
+- **Fair use instead of plan limits:** 10 bots per account, 200 apps and 200 switched-on routines per bot, 100,000 messages a month on your own AI. The site-wide daily ceilings stay (`INCLUDED_DAILY_LIMIT`, `SEARCH_DAILY_LIMIT`, `DICTATION_DAILY_LIMIT`).
+- **Where people see it:** the pricing page lists every price, at cost; Credit & usage (`/app/billing`) shows the balance, adds credit, and lists this month's use, credit added and the prices; the sidebar shows the balance; the builder's review step says what the bot will cost; each model shows its price per message.
+- **Breaking even:** `/admin` shows credit sold against what everything used cost.
+- **Kept from before:** the plan columns stay in the database, unused, so no data is dropped; old receipts that say "Paid by: Your plan" still read that way.
+- **Accounts from before this change:** what they already used was recorded all along (`usage.cost_micros`), so it counts against their $1 starter credit. Someone who used more than $1 starts at zero or a little below, and adds credit (free, in demo mode) to keep going.
+
 ## Build choice (Claude; Diego to confirm): what real testers see (2026-10-14)
 
 Outside demo mode nothing is simulated. Anything without its service set up says **"Coming soon"** and can't be picked or set up:
 
 - **Channels:** texts and calls until Twilio is set up; the email channel and the bot's own inbox until there's a brand-free mail domain (`BOT_EMAIL_DOMAIN`) with an inbound provider. The Resend key for sign-in no longer turns bot email on. The working channels are web, Telegram, Discord and Slack.
-- **Paid plans:** until Stripe is set up. Plus and Pro show "Coming soon" with a waitlist, `plan:plus` and `plan:pro` on `/admin`. At the Free bot limit, the builder says so before step 1.
+- **Adding credit:** until Stripe is set up, Credit & usage says "Coming soon", and the $1 of starter credit is what there is (there are no plans since 2026-10-16). Old `plan:plus` and `plan:pro` waitlist sign-ups show on `/admin` as "(from before)".
 - **The desktop app, and with it meeting notes and voice typing:** until there's a signed download (`NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL`). In demo mode the pages say how to run it from the repo.
 - **Web actions:** until Browser Use is set up. The same goes for web search and news without their keys.
 - **Copy and recipes:** the home page, metadata and recipes only promise what works. Recipes drop channels that aren't available, so all ten featured ones can be made.
@@ -671,7 +701,7 @@ Diego: "I really like that front desk for businesses idea. Lets hold on to it." 
 ## Open questions (updated 2026-10-14)
 
 1. First users: tinkerers or everyday iPhone users? (unchanged)
-2. Pricing: confirm or change the table above. Is Full faith a paid feature?
+2. Pricing: decided on 2026-10-16, pay for what you use at cost (see that decision). Still Diego's call: the starter credit ($1), refunding unused credit when someone asks, and when, if ever, to add a margin.
 3. Web actions: confirm Browser Use Cloud (see above), then test with a live key on about 10 real forms before turning it on for everyone.
 4. Buy a brand-free domain for bot inboxes; Twilio A2P registration; Composio plan. (The Bridge no longer needs npm: since 2026-10-14 the site serves its own copy and the app shows `npx -y {APP_URL}/downloads/build-a-bot-bridge-<version>.tgz`. The bare npm name stays unclaimed, and nothing points at it.)
 5. Trademark clearance before brand spend (unchanged).

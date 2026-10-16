@@ -3,7 +3,6 @@
  * data and by the client to read API responses.
  */
 import { CHANNEL_BY_KIND, isChannelKind, type ChannelDef, type ChannelKind } from "@/lib/channels/catalog";
-import { getPlan, planAllowsChannel } from "@/lib/billing/plans";
 
 export type ChannelStatus = "active" | "pending" | "needs_setup" | "disabled" | "error" | "waitlist";
 
@@ -20,7 +19,6 @@ export type ChannelView = {
   hasCredential: boolean;
   error: string | null;
   simulated: boolean;
-  locked: boolean;
   /** What the owner typed in the builder (their phone or email), to prefill verification. */
   pendingOwnerAddress: string | null;
   username: string | null;
@@ -42,7 +40,7 @@ export function toChannelView(row: {
   config?: unknown;
 }): ChannelView | null {
   if (!isChannelKind(row.kind)) return null;
-  const c = (row.config ?? {}) as { simulated?: boolean; locked?: boolean; pendingOwnerAddress?: unknown; username?: unknown; via?: unknown };
+  const c = (row.config ?? {}) as { simulated?: boolean; pendingOwnerAddress?: unknown; username?: unknown; via?: unknown };
   return {
     id: row.id,
     kind: row.kind,
@@ -53,7 +51,6 @@ export function toChannelView(row: {
     hasCredential: Boolean(row.credentialId),
     error: row.error ?? null,
     simulated: Boolean(c.simulated),
-    locked: Boolean(c.locked),
     pendingOwnerAddress: typeof c.pendingOwnerAddress === "string" ? c.pendingOwnerAddress : null,
     username: typeof c.username === "string" ? c.username : null,
     via: c.via === "app" || c.via === "own" ? c.via : null,
@@ -62,18 +59,6 @@ export function toChannelView(row: {
 
 export function channelDef(kind: ChannelKind): ChannelDef {
   return CHANNEL_BY_KIND[kind];
-}
-
-/** Plan name a channel needs, when the owner's plan doesn't include it (and we're not in demo mode). */
-export function planGate(kind: ChannelKind, planId: string, demo: boolean): string | null {
-  if (demo) return null;
-  const def = CHANNEL_BY_KIND[kind];
-  if (planAllowsChannel(getPlan(planId), kind)) return null;
-  return def.minPlan === "pro" ? "Pro" : "Plus";
-}
-
-export function minPlanLabel(def: ChannelDef): string | null {
-  return def.minPlan === "free" ? null : def.minPlan === "pro" ? "Pro" : "Plus";
 }
 
 /** "+15125550123" → "+1 (512) 555-0123" (other countries stay as typed). */

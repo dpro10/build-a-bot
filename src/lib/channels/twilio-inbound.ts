@@ -18,7 +18,7 @@ export async function readTwilioForm(req: Request): Promise<{ params: Record<str
 }
 
 /**
- * Which bot is this for? A Pro bot's own number (To) wins; on the shared number we
+ * Which bot is this for? A bot's own number (To), if it has one, wins; on the shared number we
  * match the caller to the bot whose owner verified that phone. "@Name ..." picks a bot.
  */
 export async function routeTwilio(db: Db, kind: "sms" | "voice", to: string, from: string, text?: string): Promise<{ channel: Channel; text?: string } | null> {

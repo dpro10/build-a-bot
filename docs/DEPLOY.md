@@ -31,7 +31,7 @@ The app is one Next.js project plus a Postgres database. Recommended: **Vercel +
 | What | Env | Notes |
 |---|---|---|
 | Included open models | `TOKEN_FACTORY_API_KEY` | Nebius Token Factory. If Token Factory renames a model, override with `TF_MODEL_*` without a deploy. |
-| Web search & reader | `TAVILY_API_KEY` | 1,000 free credits/month, then $0.008/credit. Searches are metered per plan. |
+| Web search & reader | `TAVILY_API_KEY` | 1,000 free credits/month, then $0.008/credit. Each lookup is paid from the owner's credit at $0.008 (there are no plans). |
 | Managed app sign-in | `COMPOSIO_API_KEY` | One-click sign-in for about 70 apps (Google, Microsoft, Slack, GitHub, Dropbox, HubSpot, Zoom…). Composio makes each app's auth config on first use. Apps Composio has no OAuth app of its own for (X, Spotify, Shopify, PayPal, Xero…; `src/lib/connectors/composio-auth.ts`) stay "Coming soon" until you register an app with the vendor, add it in Composio and set `COMPOSIO_AUTH_CONFIG_<TOOLKIT>`. **Turn on callback identity verification** (Composio: Settings → General → Configuration, verifier URL `{APP_URL}/api/connectors/composio/verify`): without it, someone could send a person their own sign-in link and attach that person's account to their bot. Consent screens say "Composio"; for launch, register your own Google/Microsoft apps (Google's Gmail scopes need its verification and a CASA assessment). |
 | MCP servers needing a pre-registered app | `MCP_OAUTH_CLIENTS` | JSON map of issuer/host → client id/secret, once you register Build-a-bot with that vendor. |
 | Meeting notes and voice typing | `NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL` | Both are only in the desktop app, which hears them on the user's computer with NVIDIA Parakeet: no speech-to-text is needed on the server. Until signed downloads are published (this URL), a real server shows both as "Coming soon". |
@@ -49,13 +49,15 @@ Own-key (BYOK) and subscription brains need nothing from you.
 | **Slack** | **One click (recommended):** create the shared app from `docs/slack-app-manifest.json` (api.slack.com/apps → Create New App → From a manifest; it uses `https://build-a-bot.site`, so change the URLs if `APP_URL` differs). Set `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET` and `SLACK_SIGNING_SECRET` from Basic Information, redeploy, then in Slack: Event Subscriptions → Retry if the URL isn't verified yet, and Manage Distribution → Activate Public Distribution so other workspaces can add it. Owners then click **Add to Slack**, pick a workspace and click Allow. Each person reaches only their own bot, which answers with its own name and face. Slack must reach `APP_URL` without a redirect. **Without these keys,** each owner makes their bot its own Slack app from a manifest link in the app. |
 | **Discord** | Create an application. `DISCORD_APPLICATION_ID`, `DISCORD_PUBLIC_KEY`, `DISCORD_BOT_TOKEN`. Once those are live, set the Interactions Endpoint URL to `{APP_URL}/api/webhooks/discord` (Discord checks it right away). The server registers `/ask` and `/link` by itself, and again every 6 hours; `npm run discord:register` does it on demand. |
 
-## 6. Billing (Stripe)
+## 6. Credit (Stripe)
 
-1. Create two products (Plus, Pro) with monthly and yearly prices; set `STRIPE_PRICE_PLUS_MONTHLY`, `STRIPE_PRICE_PLUS_YEARLY`, `STRIPE_PRICE_PRO_MONTHLY`, `STRIPE_PRICE_PRO_YEARLY` and `STRIPE_SECRET_KEY`.
-2. Webhook → `{APP_URL}/api/webhooks/stripe` with `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`; set `STRIPE_WEBHOOK_SECRET`.
-3. Turn on the customer portal (cancel, switch plans, update card).
+There are no plans: people pay for what they use, at cost, from prepaid credit (`docs/DECISIONS.md`). Every account starts with `STARTER_CREDIT_USD` of credit (default 1; 0 turns it off). Adding credit is a one-time Stripe Checkout payment of $5, $10 or $20, with Stripe's fee on top: no products, prices or customer portal to set up.
 
-Until `STRIPE_SECRET_KEY` is set, Plus and Pro say "Coming soon" everywhere (pricing, the home page, Plan & usage) and offer a waitlist (`plan:plus` / `plan:pro` in the admin dashboard's Waitlists). Someone at the Free bot limit is told before the builder's first step.
+1. Set `STRIPE_SECRET_KEY` (a restricted key needs write access to Checkout Sessions and Customers).
+2. Add a webhook endpoint → `{APP_URL}/api/webhooks/stripe` with the events `checkout.session.completed` and `checkout.session.async_payment_succeeded`; set `STRIPE_WEBHOOK_SECRET` to its signing secret.
+3. Try it with a test card (4242 4242 4242 4242) in test mode: Credit & usage → Add $5 → the balance goes up by $5.00 once the webhook lands (a few seconds).
+
+Until `STRIPE_SECRET_KEY` is set, Credit & usage says adding credit is coming soon, and the starter credit is what there is. Refunds are by hand, from the Stripe dashboard, when someone asks (refund the credit they haven't used; Stripe keeps its fee), then record it with a negative `credits` row (`kind: "refund"`) so the balance matches.
 
 ## 7. Before launch
 
@@ -70,4 +72,4 @@ Until `STRIPE_SECRET_KEY` is set, Plus and Pro say "Coming soon" everywhere (pri
   - a lawyer reviews the consent flow and transcript retention;
   - if server speech-to-text is set up as a fallback, check that provider's data-retention and training terms;
   - sign and notarize the desktop app (Apple Developer Program for Mac, a code-signing certificate for Windows) and publish its downloads. See `desktop/README.md`. Then set `NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL` to the download page: until it's set, the site shows the desktop app, and with it meeting notes and voice typing, as "Coming soon".
-- [ ] Smoke test: build a bot, chat, approve an action, STOP from a channel, a reminder fires, upgrade with a Stripe test card.
+- [ ] Smoke test: build a bot, chat, approve an action, STOP from a channel, a reminder fires, add credit with a Stripe test card.

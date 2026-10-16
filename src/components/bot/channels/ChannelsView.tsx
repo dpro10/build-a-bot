@@ -13,17 +13,14 @@ import { useHashTarget } from "@/components/bot/tools/use-hash-target";
 import { AddChannelGrid } from "./AddChannelGrid";
 import { ChannelCard } from "./ChannelCard";
 import type { ActionData, ChannelCtx } from "./context";
-import { channelDef, isWaitingForOwner, planGate, sortChannels, toChannelView, type ChannelView } from "./model";
+import { channelDef, isWaitingForOwner, sortChannels, toChannelView, type ChannelView } from "./model";
 
 type Row = Parameters<typeof toChannelView>[0];
 
 export type ChannelsProps = {
   bot: { id: string; name: string };
   channels: ChannelView[];
-  planId: string;
   demo: boolean;
-  /** Paid plans can be bought here (Stripe, or switched freely in demo mode). */
-  plansOnSale: boolean;
   ownerEmail: string | null;
   botEmail: string | null;
   /** The integration behind each channel is usable here (live, or simulated in demo mode). */
@@ -39,7 +36,7 @@ export type ChannelsProps = {
 const POLL_MS = 4000;
 const EXPECT_MS = 4 * 60_000;
 
-export function ChannelsView({ bot, channels: initial, planId, demo, plansOnSale, ownerEmail, botEmail, availability, joined: initialJoined, slackOneClick, flash }: ChannelsProps) {
+export function ChannelsView({ bot, channels: initial, demo, ownerEmail, botEmail, availability, joined: initialJoined, slackOneClick, flash }: ChannelsProps) {
   const router = useRouter();
   const [channels, setChannels] = React.useState<ChannelView[]>(() => sortChannels(initial));
   const [joined, setJoined] = React.useState<Set<ChannelKind>>(() => new Set(initialJoined));
@@ -81,15 +78,15 @@ export function ChannelsView({ bot, channels: initial, planId, demo, plansOnSale
         return await api<ActionData>(`/api/bots/${bot.id}/channels`, { body: { kind, action, ...(payload ? { payload } : {}) } });
       } catch (err) {
         const message = err instanceof Error ? err.message : "Something went wrong. Try again.";
-        if (err instanceof ApiError && err.status === 402 && plansOnSale) {
-          toast.error(message, { action: { label: "See plans", onClick: () => router.push("/app/billing") } });
+        if (err instanceof ApiError && err.code === "no_credit") {
+          toast.error(message, { action: { label: "Add credit", onClick: () => router.push("/app/billing") } });
         } else {
           toast.error(message);
         }
         return null;
       }
     },
-    [bot.id, router, plansOnSale],
+    [bot.id, router],
   );
 
   const expect = React.useCallback((kind: ChannelKind) => setExpecting((e) => ({ ...e, [kind]: Date.now() + EXPECT_MS })), []);
@@ -111,8 +108,8 @@ export function ChannelsView({ bot, channels: initial, planId, demo, plansOnSale
   }, [waiting, refresh]);
 
   const ctx: ChannelCtx = React.useMemo(
-    () => ({ botId: bot.id, botName: bot.name, demo, plansOnSale, ownerEmail, botEmail, slackOneClick, run, refresh, expect }),
-    [bot.id, bot.name, demo, plansOnSale, ownerEmail, botEmail, slackOneClick, run, refresh, expect],
+    () => ({ botId: bot.id, botName: bot.name, demo, ownerEmail, botEmail, slackOneClick, run, refresh, expect }),
+    [bot.id, bot.name, demo, ownerEmail, botEmail, slackOneClick, run, refresh, expect],
   );
 
   // Back from Slack (once, even when effects run twice in development).
@@ -160,17 +157,11 @@ export function ChannelsView({ bot, channels: initial, planId, demo, plansOnSale
   };
 
   const have = new Set(channels.map((c) => c.kind));
-  const planGates: Partial<Record<ChannelKind, string>> = {};
-  for (const c of CHANNELS) {
-    const gate = planGate(c.kind, planId, demo);
-    if (gate) planGates[c.kind] = gate;
-  }
-  // Ready to add first, then plan upgrades, waitlists, and what's coming.
+  // Ready to add first, then waitlists, then what's coming.
   const rank = (k: ChannelKind) => {
     const def = channelDef(k);
-    if (def.availability === "soon" || (def.availability !== "waitlist" && availability[k] === false)) return 3;
-    if (def.availability === "waitlist") return 2;
-    return planGates[k] ? 1 : 0;
+    if (def.availability === "soon" || (def.availability !== "waitlist" && availability[k] === false)) return 2;
+    return def.availability === "waitlist" ? 1 : 0;
   };
   const toAdd = CHANNELS.map((c) => c.kind)
     .filter((k) => !have.has(k))
@@ -217,7 +208,6 @@ export function ChannelsView({ bot, channels: initial, planId, demo, plansOnSale
                 key={ch.id}
                 channel={ch}
                 ctx={ctx}
-                planBadge={ch.kind === "web" ? null : !demo && (ch.locked || planGates[ch.kind]) ? (planGates[ch.kind] ?? (channelDef(ch.kind).minPlan === "pro" ? "Pro" : "Plus")) : null}
                 available={ch.kind === "web" || availability[ch.kind] !== false}
                 highlighted={target === ch.kind}
                 joined={joined.has(ch.kind)}
@@ -231,8 +221,6 @@ export function ChannelsView({ bot, channels: initial, planId, demo, plansOnSale
           <Section id="add-channel" title="Add a channel" icon={<Plus />} description="More ways to reach it. Each one proves it's really you before it takes your instructions.">
             <AddChannelGrid
               kinds={toAdd}
-              planGates={planGates}
-              plansOnSale={plansOnSale}
               availability={availability}
               joined={joined}
               ownerEmail={ownerEmail}

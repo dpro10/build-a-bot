@@ -165,11 +165,6 @@ export function TrustDial({ initial = "full" }: { initial?: TrustLevel }) {
             <h3 className="font-display text-2xl font-bold tracking-tight">{def.name}</h3>
             <p className="text-sm text-muted-foreground">{def.short}</p>
           </div>
-          {def.minPlan !== "free" ? (
-            <span className="rounded-full bg-primary px-2.5 py-1 text-xs font-bold text-primary-foreground">{def.minPlan === "plus" ? "Plus" : "Pro"} plan</span>
-          ) : (
-            <span className="rounded-full bg-success-soft px-2.5 py-1 text-xs font-bold text-success">Every plan</span>
-          )}
         </div>
         <p className="mt-4 text-[15px] leading-relaxed">{def.long}</p>
         {def.dailyActions > 0 ? (

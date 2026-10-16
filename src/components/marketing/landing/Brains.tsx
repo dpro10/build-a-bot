@@ -2,7 +2,8 @@ import { ArrowRight, Laptop, Lock, ShieldCheck } from "lucide-react";
 import { Avatar } from "@/components/avatar";
 import { BrandTile, type IconSpec } from "@/components/brand/icons";
 import { INCLUDED_MODELS, OPENAI_MARK, PROVIDERS, SUBSCRIPTIONS } from "@/lib/models/catalog";
-import { PLANS, PLAN_ORDER, type PlanId } from "@/lib/billing/plans";
+import { starterCreditMicros } from "@/lib/billing/credit";
+import { formatMicros, perMessageMicros } from "@/lib/billing/prices";
 import { cn } from "@/lib/utils";
 import { Container, Section, SectionHeader } from "../ui";
 import { brandOrLetter } from "../icons";
@@ -21,16 +22,11 @@ const FAMILIES: Family[] = [
   { name: "Hermes", match: /hermes/i, icon: { letter: "H", color: "6D28D9" } },
 ];
 
-/** The cheapest plan whose included brains cover a model tier (matches the server's check). */
-function planForTier(tier: "fast" | "balanced" | "smart"): PlanId {
-  return PLAN_ORDER.find((id) => PLANS[id].includedModels.includes(tier)) ?? "pro";
-}
-
+/** Each family we host, with what a typical message costs on its cheapest model (at cost). */
 function familyRows() {
   return FAMILIES.map((f) => {
     const models = INCLUDED_MODELS.filter((m) => f.match.test(m.label) || f.match.test(m.id));
-    const plans = models.map((m) => planForTier(m.tier));
-    const from = PLAN_ORDER.find((p) => plans.includes(p)) ?? "pro";
+    const from = Math.min(...models.map(perMessageMicros));
     return { ...f, models, from };
   }).filter((f) => f.models.length > 0);
 }
@@ -110,7 +106,7 @@ function SubscriptionCard() {
         </li>
         <li className="flex gap-2 text-muted-foreground">
           <ArrowRight className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-          <span>Works while your computer is awake. When it sleeps, your bot waits, or uses the free brain if you opt in.</span>
+          <span>Works while your computer is awake. When it sleeps, your bot waits, or uses an open model we run (from your credit) if you opt in.</span>
         </li>
       </ul>
     </Card>
@@ -156,43 +152,33 @@ function ApiKeyCard() {
 
 function IncludedCard() {
   const rows = familyRows();
-  const tiers = PLAN_ORDER.map((plan) => ({ plan, families: rows.filter((f) => f.from === plan) })).filter((t) => t.families.length > 0);
+  const dflt = INCLUDED_MODELS.find((m) => m.default) ?? INCLUDED_MODELS[0];
+  const starter = starterCreditMicros();
   return (
     <Card highlight>
-      <div aria-hidden="true" className="flex flex-col gap-2.5 rounded-2xl border border-border/70 bg-background-2 p-4">
-        {tiers.map((t, i) => (
-          <div key={t.plan} className="flex items-start gap-2.5">
-            <span
-              className={cn(
-                "mt-1 w-11 shrink-0 rounded-full py-0.5 text-center text-[11px] font-bold",
-                t.plan === "free" ? "bg-success-soft text-success" : "bg-primary-soft text-primary",
-              )}
-            >
-              {i === 0 ? PLANS[t.plan].name : `+${PLANS[t.plan].name}`}
-            </span>
-            <div className="flex flex-wrap gap-1.5">
-              {t.families.map((f) => (
-                <span key={f.name} className="inline-flex items-center gap-1.5 rounded-full bg-card py-1 pr-2.5 pl-1 text-[13px] font-semibold shadow-soft ring-1 ring-border">
-                  <BrandTile icon={f.icon} size={20} />
-                  {f.name}
-                </span>
-              ))}
-            </div>
-          </div>
+      <div aria-hidden="true" className="flex flex-wrap gap-1.5 rounded-2xl border border-border/70 bg-background-2 p-4">
+        {rows.map((f) => (
+          <span key={f.name} className="inline-flex items-center gap-1.5 rounded-full bg-card py-1 pr-2.5 pl-1 text-[13px] font-semibold shadow-soft ring-1 ring-border">
+            <BrandTile icon={f.icon} size={20} />
+            {f.name}
+            <span className="font-medium text-muted-foreground tabular-nums">{formatMicros(f.from)}</span>
+          </span>
         ))}
       </div>
       <CardTitle
         kicker="Option 3"
         title="Included open models"
-        badge={<span className="rounded-full bg-success px-2.5 py-1 text-xs font-bold text-success-foreground shadow-soft">Free to start</span>}
+        badge={<span className="rounded-full bg-success px-2.5 py-1 text-xs font-bold text-success-foreground shadow-soft">At cost</span>}
       >
-        No key, no subscription, no problem. Use open models we host through Nebius Token Factory: {rows.map((r) => r.name).join(", ")}.
+        No key, no subscription, no problem. Use open models we host through Nebius Token Factory: {rows.map((r) => r.name).join(", ")}. You pay
+        Token Factory&apos;s price per message, with nothing added.
       </CardTitle>
       <ul className="mt-4 flex flex-col gap-2 text-sm">
         <li className="flex gap-2">
           <ShieldCheck className="mt-0.5 size-4 shrink-0 text-success" aria-hidden="true" />
           <span>
-            <span className="font-semibold">Fast models on Free.</span> Bigger, smarter ones come with Plus and Pro.
+            <span className="font-semibold">About {formatMicros(perMessageMicros(dflt))} a message</span> on {dflt.label}.
+            {starter > 0 ? ` Every account starts with ${formatMicros(starter)} of credit.` : ""}
           </span>
         </li>
         <li className="flex gap-2 text-muted-foreground">

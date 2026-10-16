@@ -301,6 +301,8 @@ const CHANGED_TEXT: Record<string, string> = {
 };
 
 const PAID_BY: Record<string, string> = {
+  credit: "Your credit, at cost",
+  // Receipts from before there was credit.
   plan: "Your plan",
   "owner's key": "Your own API key",
   "your subscription": "Your subscription",

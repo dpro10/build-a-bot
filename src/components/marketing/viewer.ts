@@ -9,14 +9,14 @@ import { unstable_rethrow } from "next/navigation";
 import { getUser, isAnonymous } from "@/lib/auth/session";
 
 /** `email` is their confirmed address (null until they've signed in with one). */
-export type Viewer = { id: string; anonymous: boolean; plan: string; email: string | null };
+export type Viewer = { id: string; anonymous: boolean; email: string | null };
 
 export const getViewer = cache(async (): Promise<Viewer | null> => {
   try {
     const user = await getUser();
     if (!user) return null;
     const anonymous = isAnonymous(user);
-    return { id: user.id, anonymous, plan: user.plan, email: anonymous ? null : user.email };
+    return { id: user.id, anonymous, email: anonymous ? null : user.email };
   } catch (err) {
     unstable_rethrow(err);
     return null;

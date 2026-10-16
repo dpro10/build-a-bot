@@ -3,6 +3,7 @@ import { getDb } from "@/lib/db";
 import { handleInbound, loadBotAndOwner, seenBefore } from "@/lib/channels/inbound";
 import { readTwilioForm, routeTwilio, twiml } from "@/lib/channels/twilio-inbound";
 import { recordUsage } from "@/lib/billing/usage";
+import { UNIT_PRICES } from "@/lib/billing/prices";
 
 export const maxDuration = 300;
 
@@ -18,7 +19,9 @@ export async function POST(req: Request) {
     const loaded = await loadBotAndOwner(db, routed.channel.botId);
     if (!loaded) return;
     const isOwner = routed.channel.ownerAddress === params.From;
-    await recordUsage(db, loaded.owner.id, { smsSegments: Number(params.NumSegments ?? 1) });
+    // Twilio charges for texts that come in too, per segment.
+    const segments = Math.max(1, Number(params.NumSegments ?? 1) || 1);
+    await recordUsage(db, loaded.owner.id, { smsSegments: segments, costMicros: segments * UNIT_PRICES.textIn });
     await handleInbound({
       db,
       bot: loaded.bot,

@@ -11,7 +11,7 @@ Diego (2026-10-15): "im in the nvidia x nebius hackathon and the more we create 
 | Rule | Build-a-bot |
 | - | - |
 | Runs on Nebius Token Factory or Nebius AI Cloud (a runtime call to Token Factory, or deployed on Serverless AI) | Yes. Every included brain, the meeting notes, and voice typing's cleanup are Token Factory calls. The optional speech server (for computers that can't run Parakeet) runs as a Nebius Serverless AI endpoint (`speech/README.md`). |
-| Uses at least one NVIDIA open model | Yes, five: Nemotron 3.5 Lightning (the default brain), Nemotron 3 Super (Plus), Nemotron 3 Ultra (Pro), Parakeet TDT 0.6B v3 (speech, on the user's own computer through NVIDIA NeMo-Speech.cpp) and Nemotron 3.5 ASR (the speech server's other languages). |
+| Uses at least one NVIDIA open model | Yes, five: Nemotron 3.5 Lightning (the default brain), Nemotron 3 Super and Nemotron 3 Ultra (for harder jobs), Parakeet TDT 0.6B v3 (speech, on the user's own computer through NVIDIA NeMo-Speech.cpp) and Nemotron 3.5 ASR (the speech server's other languages). |
 | New, or "significantly updated" during the submission period (from August 26) | New: the first commit is 2026-10-13. |
 | More than one entry | Allowed if each is "unique and substantially different". Diego's other entry (the Nemotron worker in cookbook-dispatch) is a different product. |
 | Public repository with an open-source license shown on the repo page | **Not yet.** `dpro10/build-a-bot` is private, with no license. Diego decides (below). |
@@ -34,12 +34,13 @@ Diego (2026-10-15): "im in the nvidia x nebius hackathon and the more we create 
 3. **What judges can use:** the site is still in demo mode. Options:
    - leave demo mode on (the included Nemotron brain is real, sign-in links show on screen, channels are simulated);
    - or finish real mode first (the beta checklist in DECISIONS).
+   - Either way it's free to try: there are no plans (Diego, 2026-10-16: people pay for what they use, at cost), and every account starts with $1 of credit, about 2,400 messages on Nemotron 3.5 Lightning. In demo mode, judges can add more credit for free from Credit & usage. `STARTER_CREDIT_USD` raises the starter credit if judges need more.
 4. **Who records the video**, and whether Diego appears in it.
 
 ## For the judges (testing instructions draft)
 
 1. Open [build-a-bot.site](https://build-a-bot.site) and click **Build your bot**. No account is needed to build one.
-2. Pick a face and a name, keep **Nemotron 3.5 Lightning** as the brain, add a couple of apps, choose **Ask me first**, and finish. The bot greets you.
+2. Pick a face and a name, keep **Nemotron 3.5 Lightning** as the brain, add a couple of apps, choose **Ask me first**, and finish. The bot greets you. Every account starts with $1 of credit, so nothing needs a card; **Credit & usage** shows what each message cost, at Token Factory's price.
 3. Ask it something that needs the web ("what's the weather in Austin this weekend and anything fun to do?"), then something that needs a yes from you ("email Sam that I'm running late"): it asks first.
 4. **Voice typing:** in the desktop app: pair it, turn on voice typing, and let it download NVIDIA Parakeet (about 0.7 GB, once). Then hold the shortcut in any app and talk; the pill says *private* when it was heard on the computer. On Windows, judges can install the test build from the repository's Releases, **Desktop app (test build)**: the repository is private, so they need access to it (or share the installer with them another way). It isn't signed, so the browser may ask to Keep it and Windows warns (More info → Run anyway); on a Mac, run it from the repository (`cd desktop && npm install && npm start`) until there's a signed Mac app. On the web, **Voice typing** shows what it does, gets you the app and pairs it.
 5. **Meeting notes:** in the same app, with meeting notes on for the bot (its **Meetings** tab). Start a Zoom, Meet or Teams call, or choose **Take notes in the room** in the app's menu. The bot asks first, stays at the bottom of the screen with live captions, and when you stop, the notes (a summary, decisions, action items) are in the **Meetings** tab and in chat. Ask the bot "what did we decide?".
@@ -49,7 +50,7 @@ Diego (2026-10-15): "im in the nvidia x nebius hackathon and the more we create 
 | Time | On screen | Said |
 | - | - | - |
 | 0:00 | The landing page | "Everyone wants their own AI assistant. Most people can't build one, and the ones you can buy can't do much, or can do too much. This is Build-a-bot." |
-| 0:15 | The builder: face, name, brain | "Pick a face, give it a name, and choose its brain. By default that's NVIDIA Nemotron 3.5 Lightning on Nebius Token Factory: fast and cheap enough to include for free. Bigger jobs can use Nemotron 3 Super or Ultra." |
+| 0:15 | The builder: face, name, brain | "Pick a face, give it a name, and choose its brain. By default that's NVIDIA Nemotron 3.5 Lightning on Nebius Token Factory: fast, and so cheap that a message costs a twenty-fifth of a cent. There are no plans: you pay what the models cost, nothing more. Bigger jobs can use Nemotron 3 Super or Ultra." |
 | 0:35 | Apps and trust | "Give it your apps: Gmail, calendar, GitHub, about 190 of them. Then decide how much it does on its own. A policy engine enforces that in code, not in the prompt." |
 | 0:55 | Chat: a web question, then an email that needs approval | "It searches the web with Tavily. When it wants to send something, it asks first, and every action leaves a receipt." |
 | 1:15 | Telegram on a phone | "It lives where you talk: Telegram, texts, email, Slack, Discord." |
@@ -65,7 +66,7 @@ Diego (2026-10-15): "im in the nvidia x nebius hackathon and the more we create 
 **What it does:** Build-a-bot lets anyone make a personal AI agent in about a minute: pick one of five characters, name it, choose a brain, give it apps, decide how much it can do on its own, and talk to it on Telegram, texts, email, Slack, Discord or the web. It remembers what matters, keeps reminders and routines, reaches out first with a daily check-in, takes meeting notes, and types for you by voice in any app on your computer.
 
 **How we built it:**
-- **NVIDIA Nemotron on Nebius Token Factory** runs the included brains. Nemotron 3.5 Lightning is the default, chosen because it's fast and cheap enough (about $4–5 a month per active bot) to include on the free plan; Nemotron 3 Super and Ultra serve the paid plans' harder jobs.
+- **NVIDIA Nemotron on Nebius Token Factory** runs the included brains. Nemotron 3.5 Lightning is the default, chosen because it's fast and cheap: about $0.0004 for a typical message. There are no plans: people pay for what they use at Token Factory's price, with nothing added, and every account starts with $1 of credit. Nemotron 3 Super and Ultra take the harder jobs.
 - **NVIDIA Parakeet TDT 0.6B v3 on the user's own computer** turns speech into text for voice typing and meeting notes. The desktop app downloads NVIDIA's NeMo-Speech.cpp runtime and the model once (about 0.7 GB, each checked against NVIDIA's published hash) and runs it on 127.0.0.1 behind a random key: on the GPU with Metal on Apple silicon, on the CPU elsewhere. For voice typing, only the words go to the server, to be cleaned up by Nemotron. For a meeting, each piece of the call (about 20 seconds, ending at a pause) is heard with each word's time, and only the transcript lines go to the server, where Nemotron writes the notes. The audio never leaves the computer, and there's no speech server to pay for.
 - **The same models in the cloud, as a fallback:** Parakeet and Nemotron 3.5 ASR on NeMo-Speech.cpp in our own container for a Nebius Serverless AI endpoint, behind an OpenAI-compatible API, for computers that can't run Parakeet.
 - **Tavily** is the bots' web search and page reader.
@@ -101,5 +102,5 @@ Diego (2026-10-15): "im in the nvidia x nebius hackathon and the more we create 
 
 **What worked well:**
 - Token Factory's OpenAI-compatible API meant one client for every included model.
-- Nemotron 3.5 Lightning's price made a free plan possible.
+- Nemotron 3.5 Lightning's price made pay-as-you-go at cost possible: $1 of starter credit is about 2,400 messages.
 - Parakeet was word-perfect on our test clips, about 5× faster than real time on four CPU cores, and never invented words in silence.

@@ -13,8 +13,8 @@ import { connectVia, connectorUsable } from "@/lib/connectors/availability";
 import type { AppKind } from "@/lib/connectors/types";
 import { INCLUDED_MODELS, PROVIDER_BY_ID, type ProviderId } from "@/lib/models/catalog";
 import { briefParts, JOB_BY_ID, type BriefPart } from "@/lib/jobs";
-import { PAID_PLANS_SOON, getPlan, planAllowsChannel, planAllowsTrust } from "@/lib/billing/plans";
-import { available, demoMode, live, paidPlansOpen } from "@/lib/env";
+import { FAIR_USE } from "@/lib/billing/prices";
+import { available, demoMode, live } from "@/lib/env";
 import { storeCredential } from "@/lib/channels/secrets";
 import { computeNextRun, isValidTimeZone } from "@/lib/scheduler/time";
 import { canonicalResource } from "@/lib/connectors/mcp/oauth";
@@ -97,43 +97,24 @@ type ParsedInput = z.infer<typeof createBotSchema>;
 export type CreateBotInput = Omit<ParsedInput, "customMcp"> & { customMcp?: ParsedInput["customMcp"] };
 
 export type CreateBotResult =
-  | { ok: true; bot: Bot; notes: string[]; upgrade?: "plus" | "pro" }
+  | { ok: true; bot: Bot; notes: string[] }
   | { ok: false; error: string; status?: number };
 
 export async function createBot(db: Db, owner: User, input: CreateBotInput): Promise<CreateBotResult> {
-  const plan = getPlan(owner.plan);
+  // No plans: everyone gets every model, trust level and channel, and pays for what they use.
+  // A fair-use cap on bots keeps one account from running away with the servers.
   const [{ n }] = await db.select({ n: count() }).from(schema.bots).where(eq(schema.bots.ownerId, owner.id));
-  if (n >= plan.limits.bots) {
-    const next = paidPlansOpen ? "Upgrade to make more." : `To make another, delete ${plan.limits.bots === 1 ? "it" : "one"} first. ${PAID_PLANS_SOON}`;
-    return { ok: false, status: 402, error: `The ${plan.name} plan includes ${plan.limits.bots} bot${plan.limits.bots === 1 ? "" : "s"}. ${next}` };
+  if (n >= FAIR_USE.bots) {
+    return { ok: false, status: 409, error: `You can have up to ${FAIR_USE.bots} bots. To make another, delete one first.` };
   }
 
   const notes: string[] = [];
-  let upgrade: "plus" | "pro" | undefined;
-
-  // Trust: honor the pick; plans gate Full faith (demo mode lets everyone try it).
-  let trust: TrustLevel = input.trust;
-  if (!planAllowsTrust(plan, trust) && !demoMode) {
-    trust = "trusted";
-    upgrade = "plus";
-    notes.push(
-      paidPlansOpen
-        ? "Full faith is part of Plus. Your bot starts as a Trusted helper; upgrade anytime to switch."
-        : `Full faith is part of Plus. ${PAID_PLANS_SOON} Your bot starts as a Trusted helper.`,
-    );
-  }
+  const trust: TrustLevel = input.trust;
 
   // Brain.
   let brain: BrainConfig;
   if (input.brain.kind === "included") {
-    const def = INCLUDED_MODELS.find((m) => m.id === input.brain.model) ?? INCLUDED_MODELS.find((m) => m.default)!;
-    const tier = def.tier;
-    const allowed = plan.includedModels.includes(tier) || demoMode;
-    const model = allowed ? def : INCLUDED_MODELS.find((m) => m.default)!;
-    if (!allowed) {
-      upgrade = upgrade ?? (tier === "smart" ? "pro" : "plus");
-      notes.push(`${def.label} is part of ${tier === "smart" ? "Pro" : "Plus"}. Starting on ${model.label}.`);
-    }
+    const model = INCLUDED_MODELS.find((m) => m.id === input.brain.model) ?? INCLUDED_MODELS.find((m) => m.default)!;
     brain = { kind: "included", provider: "nebius", model: model.id, effort: input.brain.effort ?? "low" };
   } else if (input.brain.kind === "byok") {
     const provider = input.brain.provider as ProviderId;
@@ -203,7 +184,7 @@ export async function createBot(db: Db, owner: User, input: CreateBotInput): Pro
   // Connections (built-ins from jobs are added too, unless the list is already exact).
   const connectorIds = new Set(input.connectors);
   if (!input.exactConnectors) for (const j of jobs) for (const b of JOB_BY_ID[j as keyof typeof JOB_BY_ID]?.builtins ?? []) connectorIds.add(b);
-  const thirdPartyLimit = plan.limits.connectors;
+  const thirdPartyLimit = FAIR_USE.appsPerBot;
   let thirdParty = 0;
   const added: string[] = [];
   for (const connectorId of connectorIds) {
@@ -217,8 +198,7 @@ export async function createBot(db: Db, owner: User, input: CreateBotInput): Pro
       continue;
     }
     if (thirdParty >= thirdPartyLimit && !demoMode) {
-      upgrade = upgrade ?? "plus";
-      notes.push(`The ${plan.name} plan connects ${thirdPartyLimit} apps. ${def.name} was skipped — ${paidPlansOpen ? "upgrade to add more." : PAID_PLANS_SOON.toLowerCase()}`);
+      notes.push(`A bot can connect up to ${thirdPartyLimit} apps. ${def.name} was skipped.`);
       continue;
     }
     thirdParty++;
@@ -247,10 +227,7 @@ export async function createBot(db: Db, owner: User, input: CreateBotInput): Pro
   // Custom MCP servers: added now, signed in to from Apps & trust.
   for (const server of input.customMcp ?? []) {
     if (thirdParty >= thirdPartyLimit && !demoMode) {
-      upgrade = upgrade ?? "plus";
-      notes.push(
-        `The ${plan.name} plan connects ${thirdPartyLimit} apps. ${server.name || new URL(server.url).host} was skipped — ${paidPlansOpen ? "upgrade to add more." : PAID_PLANS_SOON.toLowerCase()}`,
-      );
+      notes.push(`A bot can connect up to ${thirdPartyLimit} apps. ${server.name || new URL(server.url).host} was skipped.`);
       continue;
     }
     thirdParty++;
@@ -273,8 +250,8 @@ export async function createBot(db: Db, owner: User, input: CreateBotInput): Pro
     const tz = input.timezone && isValidTimeZone(input.timezone) ? input.timezone : owner.timezone || "UTC";
     let made = 0;
     for (const r of recipe.routines) {
-      if (made >= plan.limits.routines && !demoMode) {
-        notes.push(`The ${plan.name} plan includes ${plan.limits.routines} routines; the rest of this recipe's routines were skipped.`);
+      if (made >= FAIR_USE.routines && !demoMode) {
+        notes.push(`You can have up to ${FAIR_USE.routines} routines on; the rest of this recipe's routines were skipped.`);
         break;
       }
       const sched = { type: "daily" as const, time: r.time, ...(r.days?.length ? { days: r.days } : {}) };
@@ -339,12 +316,6 @@ export async function createBot(db: Db, owner: User, input: CreateBotInput): Pro
       notes.push(comingSoonNote(def));
       continue;
     }
-    if (!planAllowsChannel(plan, kind) && !demoMode) {
-      upgrade = upgrade ?? (def.minPlan === "pro" ? "pro" : "plus");
-      notes.push(`${def.name} ${def.plural ? "are" : "is"} part of ${def.minPlan === "pro" ? "Pro" : "Plus"}. ${live.stripe ? "Upgrade to turn it on." : "Paid plans are coming soon."}`);
-      await db.insert(schema.channels).values({ id: newId("chn"), botId: id, kind, status: "needs_setup", config: { locked: true } }).onConflictDoNothing();
-      continue;
-    }
     const ownerAddress = def.needs === "phone" ? phone : def.needs === "email" ? email : null;
     // In demo mode with nothing configured, channels run simulated so the whole flow can be seen.
     const simulated = demoMode && def.requires ? !available(def.requires) || !(live as Record<string, boolean>)[def.requires] : false;
@@ -372,7 +343,7 @@ export async function createBot(db: Db, owner: User, input: CreateBotInput): Pro
     detail: { avatar: bot.avatar, trust, brain: { kind: brain.kind, provider: brain.provider, model: brain.model }, channels: input.channels, connectors: [...connectorIds] },
   });
 
-  return { ok: true, bot, notes, upgrade };
+  return { ok: true, bot, notes };
 }
 
 /** A featured recipe, or a public one someone published. */

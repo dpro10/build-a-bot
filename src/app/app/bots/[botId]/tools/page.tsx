@@ -3,10 +3,9 @@ import { notFound } from "next/navigation";
 import { getDb } from "@/lib/db";
 import { requireUser } from "@/lib/auth/session";
 import { getBotSetup, getOwnedBot } from "@/lib/data";
-import { getPlan, planAllowsTrust } from "@/lib/billing/plans";
 import { comingSoonConnectors } from "@/lib/connectors/availability";
-import { demoMode, live, paidPlansOpen } from "@/lib/env";
-import { isTrustLevel, type TrustLevel } from "@/lib/trust";
+import { live } from "@/lib/env";
+import { isTrustLevel } from "@/lib/trust";
 import { AppsTrustView } from "@/components/bot/tools/AppsTrustView";
 import { toConnectionView } from "@/components/bot/tools/model";
 
@@ -28,8 +27,6 @@ export default async function ToolsPage({
   const sp = await searchParams;
   const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? null;
 
-  const plan = getPlan(user.plan);
-  const planBadges: Partial<Record<TrustLevel, string>> = !demoMode && !planAllowsTrust(plan, "full") ? { full: "Plus" } : {};
   const errorParam = first(sp.connect_error) ?? first(sp.error);
 
   return (
@@ -42,8 +39,6 @@ export default async function ToolsPage({
         limits: bot.limits ?? {},
       }}
       connections={connections.map(toConnectionView)}
-      planBadges={planBadges}
-      paidPlans={paidPlansOpen}
       composioLive={live.composio}
       comingSoon={comingSoonConnectors()}
       timezone={user.timezone || "UTC"}

@@ -9,7 +9,7 @@ export async function GET() {
   const bots = await a.db.select().from(schema.bots).where(eq(schema.bots.ownerId, a.user.id));
   const ids = bots.map((b) => b.id);
   const any = ids.length ? ids : ["-"];
-  const [messages, receipts, memories, notes, schedules, connections, channels, approvals, contacts, meetings, dictionary] = await Promise.all([
+  const [messages, receipts, memories, notes, schedules, connections, channels, approvals, contacts, meetings, dictionary, credits, usage] = await Promise.all([
     a.db.select().from(schema.messages).where(inArray(schema.messages.botId, any)),
     a.db.select().from(schema.receipts).where(inArray(schema.receipts.botId, any)),
     a.db.select().from(schema.memories).where(inArray(schema.memories.botId, any)),
@@ -21,6 +21,8 @@ export async function GET() {
     a.db.select().from(schema.contacts).where(inArray(schema.contacts.botId, any)),
     a.db.select().from(schema.meetings).where(eq(schema.meetings.ownerId, a.user.id)),
     a.db.select().from(schema.dictionary).where(eq(schema.dictionary.ownerId, a.user.id)),
+    a.db.select().from(schema.credits).where(eq(schema.credits.userId, a.user.id)),
+    a.db.select().from(schema.usage).where(eq(schema.usage.userId, a.user.id)),
   ]);
   const meetingIds = meetings.length ? meetings.map((m) => m.id) : ["-"];
   const transcripts = await a.db.select().from(schema.meetingSegments).where(inArray(schema.meetingSegments.meetingId, meetingIds));
@@ -41,6 +43,9 @@ export async function GET() {
     meetings: meetings.map((m) => ({ ...m, transcript: transcripts.filter((t) => t.meetingId === m.id && t.text) })),
     /** Voice typing: your words and snippets. What you dictated is never kept, so it isn't here. */
     dictionary,
+    /** Credit you added, and what you used each month (cost_micros: what it cost, in millionths of a dollar). */
+    credits: credits.map(({ stripeSessionId: _x, ...c }) => c),
+    usage,
   };
   return new Response(JSON.stringify(data, null, 2), {
     headers: { "content-type": "application/json", "content-disposition": 'attachment; filename="build-a-bot-export.json"' },

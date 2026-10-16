@@ -1,20 +1,22 @@
 import Link from "next/link";
 import { ArrowRight, Check } from "lucide-react";
-import { PlanCards } from "@/components/marketing/pricing/PlanCards";
-import { CompareTable } from "@/components/marketing/pricing/CompareTable";
+import { PayAsYouGo } from "@/components/marketing/pricing/PayAsYouGo";
+import { PriceList, defaultIncludedModel } from "@/components/billing/PriceList";
+import { billingFaq } from "@/components/billing/faq";
 import { Faq, type FaqItem } from "@/components/marketing/Faq";
 import { FinalCta } from "@/components/marketing/landing/FinalCta";
 import { Container, Section, SectionHeader } from "@/components/marketing/ui";
 import { getViewer } from "@/components/marketing/viewer";
-import { PLANS } from "@/lib/billing/plans";
-import { demoMode, live, paidPlansOpen } from "@/lib/env";
+import { starterCreditMicros } from "@/lib/billing/credit";
+import { UNIT_PRICES, formatMicros, perMessageMicros } from "@/lib/billing/prices";
 import { contactLink, pageMetadata } from "@/lib/site";
+
+const model = defaultIncludedModel();
+const starter = starterCreditMicros();
 
 export const metadata = pageMetadata({
   title: "Pricing",
-  description: paidPlansOpen
-    ? `Start free. Plus is $${PLANS.plus.priceMonthly}/month and Pro is $${PLANS.pro.priceMonthly}/month, with calls, texts, Full faith mode and smarter included models. Your own key or subscription never uses your included messages.`
-    : "Start free: one bot, open models, web search and your apps. Plus and Pro are coming soon. Your own key or subscription never uses your included messages.",
+  description: `No plans: pay for what your bot uses, at cost. About ${formatMicros(perMessageMicros(model))} a message on ${model.label} and ${formatMicros(UNIT_PRICES.lookup)} a web lookup, and free on your own AI key or Claude or ChatGPT subscription.${starter > 0 ? ` Every account starts with ${formatMicros(starter)} of credit.` : ""}`,
   path: "/pricing",
 });
 
@@ -23,61 +25,7 @@ export default async function PricingPage() {
   const contact = contactLink("Billing question");
 
   const faq: FaqItem[] = [
-    {
-      q: "What counts as a message?",
-      a: (
-        <p>
-          One message is one thing you (or someone you&apos;ve approved) send your bot that it answers, on any channel. Routines, morning briefs, its
-          greeting and follow-ups after you approve something don&apos;t count.
-        </p>
-      ),
-    },
-    {
-      q: "Do messages on my own key or subscription count?",
-      a: (
-        <p>
-          Not against your included messages. When your bot runs on your own API key or your Claude or ChatGPT plan, those messages have their own,
-          much larger fair-use allowance ({PLANS.free.limits.byoMessages.toLocaleString("en-US")} a month on Free). Your AI provider bills you
-          directly for API usage; we don&apos;t mark it up.
-        </p>
-      ),
-    },
-    {
-      q: "What happens if I hit a limit?",
-      a: (
-        <p>
-          No overage charges, ever. Your bot tells you it&apos;s reached the month&apos;s limit and pauses that one thing until your next month starts.
-          {paidPlansOpen ? " You can upgrade any time, or switch it" : " You can switch it"} to your own key or subscription to keep going.
-        </p>
-      ),
-    },
-    paidPlansOpen
-      ? {
-          q: "Can I cancel any time?",
-          a: (
-            <p>
-              Yes, from Plan &amp; usage in the app, in a couple of taps. Your plan stays active until the end of the period you paid for, then your
-              account moves to Free. Your bots and their history stay put.
-            </p>
-          ),
-        }
-      : {
-          q: "When can I get Plus or Pro?",
-          a: <p>They&apos;re coming soon. Join the waitlist on either plan above and we&apos;ll email you when it&apos;s ready.</p>,
-        },
-    {
-      q: "Is there a free trial?",
-      a: (
-        <p>
-          Free is free for as long as you like, with no card needed.
-          {paidPlansOpen ? " Upgrade when your bot needs more messages, calls, texts or Full faith." : null}
-        </p>
-      ),
-    },
-    {
-      q: "What currency are prices in?",
-      a: <p>All prices are in US dollars. Taxes may be added where they apply.</p>,
-    },
+    ...billingFaq("pricing").map((f) => ({ q: f.q, a: <p>{f.a}</p> })),
     {
       q: "Who do I talk to about billing?",
       a: contact.isEmail ? (
@@ -86,7 +34,7 @@ export default async function PricingPage() {
         </p>
       ) : (
         <p>
-          Reach us from <Link href={contact.href}>{contact.label}</Link> in the app, where you can also manage your plan.
+          Reach us from <Link href={contact.href}>{contact.label}</Link> in the app, where you can also see your credit and what you&apos;ve used.
         </p>
       ),
     },
@@ -98,13 +46,14 @@ export default async function PricingPage() {
         <div className="aurora" aria-hidden="true" />
         <Container className="relative pt-16 pb-6 text-center sm:pt-20">
           <h1 className="mx-auto max-w-3xl font-display text-[2.6rem] leading-[1.02] font-extrabold tracking-[-0.035em] text-balance sm:text-6xl">
-            Simple plans. <span className="mk-gradient-text">Bring your own brain for free.</span>
+            Pay for what you use. <span className="mk-gradient-text">At cost.</span>
           </h1>
           <p className="mx-auto mt-5 max-w-2xl text-lg text-pretty text-muted-foreground sm:text-xl">
-            Start free and upgrade when your bot gets busy. Messages on your own API key or Claude or ChatGPT plan never use your included ones.
+            No plans and no subscription. Your bot&apos;s thinking, web lookups, texts and calls cost exactly what the services charge us, with nothing
+            added. On your own AI, it&apos;s free here.
           </p>
           <ul className="mx-auto mt-6 flex max-w-2xl flex-wrap justify-center gap-x-5 gap-y-2 text-sm text-muted-foreground">
-            {["No card to start", ...(paidPlansOpen ? ["Cancel any time"] : []), "No overage charges"].map((t) => (
+            {["No card to start", "Nothing added to any price", "Credit never expires"].map((t) => (
               <li key={t} className="inline-flex items-center gap-1.5">
                 <Check className="size-4 text-success" aria-hidden="true" /> {t}
               </li>
@@ -113,33 +62,37 @@ export default async function PricingPage() {
         </Container>
       </section>
 
-      <Section aria-labelledby="plans-title" className="pt-8 sm:pt-10">
+      <Section aria-labelledby="how-title" className="pt-8 sm:pt-10">
         <Container>
-          <h2 id="plans-title" className="sr-only">
-            Plans
+          <h2 id="how-title" className="sr-only">
+            How paying works
           </h2>
-          <PlanCards signedIn={Boolean(viewer)} currentPlan={viewer?.plan} paidPlans={paidPlansOpen} email={viewer?.email ?? null} />
-          {viewer ? (
-            <p className="mt-6 text-center text-sm text-muted-foreground">
-              You&apos;re signed in.{" "}
-              <Link href="/app/billing" className="font-semibold text-primary hover:underline">
-                {paidPlansOpen ? "Manage your plan and usage" : "See your plan and usage"}
+          <PayAsYouGo />
+          <p className="mt-8 text-center text-sm text-muted-foreground">
+            {viewer ? (
+              <>
+                You&apos;re signed in.{" "}
+                <Link href="/app/billing" className="font-semibold text-primary hover:underline">
+                  See your credit and usage
+                </Link>
+                .
+              </>
+            ) : (
+              <Link href="/build" className="inline-flex items-center gap-1 font-semibold text-primary hover:underline">
+                Build your bot <ArrowRight className="size-4" />
               </Link>
-              .
-            </p>
-          ) : null}
+            )}
+          </p>
         </Container>
       </Section>
 
-      <Section id="compare" aria-labelledby="compare-title" className="bg-background-2">
-        <Container className="max-w-5xl">
-          <SectionHeader id="compare-title" eyebrow="Compare" title="Every feature, side by side." />
-          <div className="mt-12">
-            <CompareTable />
-          </div>
-          <p className="mt-4 text-center text-xs text-muted-foreground">
-            {live.twilio || demoMode ? "Calls and texts use US & Canada numbers to start." : "Calls, texts and email are coming soon."} WhatsApp and iMessage are on the waitlist.
-          </p>
+      <Section id="prices" aria-labelledby="prices-title" className="bg-background-2">
+        <Container className="max-w-4xl">
+          <SectionHeader id="prices-title" eyebrow="Every price" title="What things cost.">
+            Each price is what the service charges us, and the same numbers run the meter, so this page can&apos;t drift from your bill.
+          </SectionHeader>
+          <PriceList full className="mt-12" />
+          <p className="mt-4 text-center text-xs text-muted-foreground">Prices in US dollars. Texts and calls use US and Canada numbers to start.</p>
         </Container>
       </Section>
 

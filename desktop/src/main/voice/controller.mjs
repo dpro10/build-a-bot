@@ -44,7 +44,7 @@ export function voiceError(err) {
   if (e.status === 401) return { message: "This computer was unpaired. Pair it again to use voice typing.", actions: ["pair"] };
   // Nothing can hear it: this server doesn't turn recordings into text, and Parakeet can't yet (why is in the message).
   if (e.code === "on-device") return { message: e.message || "Voice typing can't hear you yet.", actions: e.actions ?? [] };
-  if (e.status === 402 || e.code === "limit") return { message: e.message || "You've used this month's voice typing.", actions: ["upgrade"] };
+  if (e.status === 402 || e.code === "no_credit" || e.code === "limit") return { message: e.message || "You're out of credit. Add some to keep going.", actions: ["upgrade"] };
   if (e.code === "unavailable") return { message: "Voice typing isn't set up on this server yet.", actions: [] };
   if (e.code === "daily") return { message: e.message || "That's a lot of voice typing for one day. It resets tomorrow.", actions: [] };
   if (e.code === "busy" || e.status === 503) return { message: "Speech-to-text is busy right now.", actions: ["retry"] };

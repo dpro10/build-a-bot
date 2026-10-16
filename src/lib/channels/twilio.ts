@@ -1,6 +1,6 @@
 /**
- * Twilio: SMS and phone calls. One shared number to start (env TWILIO_PHONE_NUMBER);
- * Pro bots can get their own. Calls use <Gather input="speech"> turns, so the whole
+ * Twilio: SMS and phone calls. One shared number to start (env TWILIO_PHONE_NUMBER); a bot
+ * with a number of its own is routed by it. Calls use <Gather input="speech"> turns, so the whole
  * voice loop runs on ordinary serverless webhooks (no WebSocket server needed).
  */
 import crypto from "node:crypto";

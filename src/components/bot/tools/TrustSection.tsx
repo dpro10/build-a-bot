@@ -1,10 +1,8 @@
 "use client";
 import * as React from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, Hand, Rocket, ShieldCheck } from "lucide-react";
 import type { ConnectorDef } from "@/lib/connectors";
-import { PAID_PLANS_SOON } from "@/lib/billing/plans";
 import { TRUST, type TrustLevel } from "@/lib/trust";
 import { TrustPicker, trustPreview } from "@/components/catalog/TrustPicker";
 import { isBuiltin } from "@/components/catalog/connector-meta";
@@ -43,17 +41,12 @@ export function TrustSection({
   trust,
   onTrustChange,
   apps,
-  planBadges,
-  paidPlans,
 }: {
   botId: string;
   botName: string;
   trust: TrustLevel;
   onTrustChange: (level: TrustLevel) => void;
   apps: ConnectorDef[];
-  planBadges: Partial<Record<TrustLevel, string>>;
-  /** Paid plans can be bought here; otherwise the prompt says they're coming soon, with no link. */
-  paidPlans: boolean;
 }) {
   const router = useRouter();
   const [saving, setSaving] = React.useState(false);
@@ -63,7 +56,6 @@ export function TrustSection({
     const t = setTimeout(() => setJustSaved(false), 2200);
     return () => clearTimeout(t);
   }, [justSaved]);
-  const [upgradeFor, setUpgradeFor] = React.useState<TrustLevel | null>(null);
   const [confirmFull, setConfirmFull] = React.useState(false);
 
   const saves = useSerialSaves();
@@ -72,7 +64,6 @@ export function TrustSection({
 
   const save = (level: TrustLevel) => {
     onTrustChange(level);
-    setUpgradeFor(null);
     setSaving(true);
     saves.enqueue("trust", async () => {
       try {
@@ -87,18 +78,13 @@ export function TrustSection({
         if (saves.hasPending("trust")) return;
         setSaving(false);
         onTrustChange(confirmed.current);
-        if (err instanceof ApiError && err.status === 402) setUpgradeFor(level);
-        else toast.error(err instanceof Error ? err.message : "Couldn't change that. Try again.");
+        toast.error(err instanceof ApiError || err instanceof Error ? err.message : "Couldn't change that. Try again.");
       }
     });
   };
 
   const choose = (level: TrustLevel) => {
     if (level === trust) return;
-    if (planBadges[level]) {
-      setUpgradeFor(level);
-      return;
-    }
     if (level === "full") {
       setConfirmFull(true);
       return;
@@ -134,33 +120,7 @@ export function TrustSection({
             </>
           ) : null}
         </span>
-        {upgradeFor ? (
-          <div className="mb-4 flex animate-fade-up flex-col gap-3 rounded-2xl border border-primary/25 bg-gradient-to-br from-primary-soft to-card p-4 sm:flex-row sm:items-center">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
-              <Rocket className="size-5" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="font-semibold">{TRUST[upgradeFor].name} is part of {planBadges[upgradeFor] ?? "Plus"}</div>
-              <p className="text-sm text-muted-foreground">
-                {paidPlans
-                  ? `Let ${botName} send, post and update across your apps without waiting for a tap. Every action still gets a receipt, and hard limits always apply.`
-                  : `${PAID_PLANS_SOON} Until then, ${TRUST.trusted.name} handles routine stuff on its own and asks before anything big.`}
-              </p>
-            </div>
-            <div className="flex shrink-0 gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setUpgradeFor(null)}>
-                {paidPlans ? "Not now" : "Got it"}
-              </Button>
-              {paidPlans ? (
-                <Button asChild size="sm">
-                  <Link href="/app/billing">See {planBadges[upgradeFor] ?? "Plus"}</Link>
-                </Button>
-              ) : null}
-            </div>
-          </div>
-        ) : null}
-
-        <TrustPicker value={trust} onChange={choose} apps={apps} botName={botName} planBadges={planBadges} />
+        <TrustPicker value={trust} onChange={choose} apps={apps} botName={botName} />
 
         <Dialog open={confirmFull} onOpenChange={setConfirmFull}>
           <DialogContent>

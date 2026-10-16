@@ -8,7 +8,6 @@ import * as React from "react";
 import { Check, Hand, ShieldCheck, X } from "lucide-react";
 import type { ConnectorDef } from "@/lib/connectors";
 import { HARD_LIMITS, TRUST, TRUST_LEVELS, type TrustLevel } from "@/lib/trust";
-import { Badge } from "@/components/ui/badge";
 import { isBuiltin } from "./connector-meta";
 import { cn } from "@/lib/utils";
 
@@ -45,7 +44,6 @@ export function TrustPicker({
   onChange,
   apps = [],
   botName = "Your bot",
-  planBadges = {},
   className,
 }: {
   value: TrustLevel;
@@ -53,8 +51,6 @@ export function TrustPicker({
   /** Apps the bot has; makes the preview concrete ("Send email in Gmail"). */
   apps?: ConnectorDef[];
   botName?: string;
-  /** Levels the owner's plan doesn't include yet, e.g. { full: "Plus" }. */
-  planBadges?: Partial<Record<TrustLevel, string>>;
   className?: string;
 }) {
   const index = TRUST_LEVELS.indexOf(value);
@@ -97,7 +93,7 @@ export function TrustPicker({
                 <span className="text-2xl leading-none" aria-hidden>
                   {t.emoji}
                 </span>
-                {planBadges[id] ? <Badge tone="accent">{planBadges[id]}</Badge> : active ? <Check className="size-4 text-primary" strokeWidth={3} /> : null}
+                {active ? <Check className="size-4 text-primary" strokeWidth={3} /> : null}
               </span>
               <span className="mt-1 font-display text-[15px] font-semibold leading-tight">{t.name}</span>
               <span className="text-xs leading-snug text-muted-foreground">{t.short}</span>

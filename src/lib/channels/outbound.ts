@@ -11,6 +11,9 @@ import { and, eq } from "drizzle-orm";
 import { schema, type Db } from "@/lib/db";
 import type { Bot, Channel, User } from "@/lib/db/schema";
 import { demoMode } from "@/lib/env";
+import { hasCredit } from "@/lib/billing/credit";
+import { UNIT_PRICES } from "@/lib/billing/prices";
+import { recordUsage } from "@/lib/billing/usage";
 import { newId, sortableId, truncate } from "@/lib/utils";
 import type { ChannelKind } from "./catalog";
 
@@ -27,7 +30,8 @@ export type OutboundMessage = {
   replyTo?: string;
 };
 
-export type DeliveryResult = { status: "sent" | "simulated" | "failed"; providerId?: string; error?: string };
+/** `code` "no_credit": a text or call that didn't go out because the owner is out of credit. */
+export type DeliveryResult = { status: "sent" | "simulated" | "failed"; providerId?: string; error?: string; code?: "no_credit" };
 
 export type ChannelAdapter = {
   /** Is this adapter configured for this bot's channel row? */
@@ -47,6 +51,22 @@ const adapters: Partial<Record<ChannelKind, () => Promise<ChannelAdapter>>> = {
 export function aiLabel(bot: Bot, owner: Pick<User, "name" | "email">): string {
   const ownerName = owner.name || owner.email?.split("@")[0] || "its owner";
   return `— Sent by ${bot.name}, ${ownerName}'s AI assistant`;
+}
+
+/** Channels that cost money to send on (Twilio texts and calls). */
+const PAID_KINDS = new Set<ChannelKind>(["sms", "voice"]);
+
+/**
+ * How many segments a text is billed as: 160 characters (153 each once split), or 70 (67) when
+ * it has anything outside plain ASCII, like an emoji. Long texts are cut at 1,550 characters.
+ */
+export function smsSegments(text: string): number {
+  const t = text.slice(0, 1550);
+  const unicode = /[^\x00-\x7f]/.test(t);
+  const single = unicode ? 70 : 160;
+  const each = unicode ? 67 : 153;
+  const n = [...t].length;
+  return n <= single ? 1 : Math.ceil(n / each);
 }
 
 export async function deliver(
@@ -77,11 +97,19 @@ export async function deliver(
     result = { status: "failed", error: `No adapter for ${kind}` };
   } else {
     const adapter = await load();
-    if (adapter.isLive(channel)) {
+    if (adapter.isLive(channel) && PAID_KINDS.has(kind) && !(await hasCredit(db, bot.ownerId))) {
+      // A text or call costs money (Twilio, at cost): nothing goes out without credit.
+      result = { status: "failed", code: "no_credit", error: "Out of credit: add credit in Credit & usage to send texts and calls." };
+    } else if (adapter.isLive(channel)) {
       try {
         result = await adapter.send({ db, bot, channel }, finalMsg);
       } catch (err) {
         result = { status: "failed", error: (err as Error).message?.slice(0, 300) ?? "send failed" };
+      }
+      // A text the bot sent is charged per segment, as Twilio does (a call, by its minutes, when it ends).
+      if (kind === "sms" && result.status === "sent") {
+        const segments = smsSegments(finalMsg.text);
+        await recordUsage(db, bot.ownerId, { smsSegments: segments, costMicros: segments * UNIT_PRICES.textOut });
       }
     } else if (demoMode) {
       result = { status: "simulated" };

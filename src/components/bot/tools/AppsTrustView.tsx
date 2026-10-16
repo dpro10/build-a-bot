@@ -40,9 +40,6 @@ type Row = Parameters<typeof toConnectionView>[0];
 export type AppsTrustProps = {
   bot: { id: string; name: string; trust: TrustLevel; jobs: string[]; limits: LimitsView };
   connections: ConnectionView[];
-  planBadges: Partial<Record<TrustLevel, string>>;
-  /** Paid plans can be bought here; otherwise plan prompts say they're coming soon, with no link. */
-  paidPlans: boolean;
   composioLive: boolean;
   /** Built-ins and apps this server can't offer yet: "Coming soon", never added or listed as working. */
   comingSoon: string[];
@@ -51,7 +48,7 @@ export type AppsTrustProps = {
   flash: { connected: boolean; error: string | null };
 };
 
-export function AppsTrustView({ bot, connections: initial, planBadges, paidPlans, composioLive, comingSoon, timezone, flash }: AppsTrustProps) {
+export function AppsTrustView({ bot, connections: initial, composioLive, comingSoon, timezone, flash }: AppsTrustProps) {
   const botId = bot.id;
   const soon = React.useMemo(() => new Set(comingSoon), [comingSoon]);
   const [trust, setTrust] = React.useState<TrustLevel>(bot.trust);
@@ -346,7 +343,7 @@ export function AppsTrustView({ bot, connections: initial, planBadges, paidPlans
           </p>
         </header>
 
-        <TrustSection botId={botId} botName={bot.name} trust={trust} onTrustChange={setTrust} apps={pickerApps} planBadges={planBadges} paidPlans={paidPlans} />
+        <TrustSection botId={botId} botName={bot.name} trust={trust} onTrustChange={setTrust} apps={pickerApps} />
 
         <Section id="limits" title="Limits" icon={<SlidersHorizontal />} description="Guardrails that hold at every trust level.">
           <LimitsCard botId={botId} botName={bot.name} trust={trust} limits={limits} timezone={timezone} onSaved={setLimits} />
@@ -467,7 +464,6 @@ export function AppsTrustView({ bot, connections: initial, planBadges, paidPlans
         trust={trust}
         spendCapUsd={spendCapUsd}
         composioLive={composioLive}
-        paidPlans={paidPlans}
         comingSoon={comingSoon}
         onAdded={(conn) => {
           setConnections((list) => (list.some((c) => c.id === conn.id) ? list.map((c) => (c.id === conn.id ? conn : c)) : [...list, conn]));

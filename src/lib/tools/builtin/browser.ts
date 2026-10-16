@@ -17,6 +17,8 @@ import { schema } from "@/lib/db";
 import type { Recipient } from "@/lib/policy/engine";
 import type { ApprovalPreview, ToolApprovalExtras } from "@/lib/agent/run";
 import { rateLimit } from "@/lib/safety/ratelimit";
+import { checkSpend, recordUsage } from "@/lib/billing/usage";
+import { UNIT_PRICES } from "@/lib/billing/prices";
 import { truncate } from "@/lib/utils";
 import { providerById, webActionsProvider, type WebActionsProvider, type WebFormPreview } from "@/lib/web-actions";
 import {
@@ -68,6 +70,23 @@ async function withinDailyLimit(ctx: ToolContext, provider: WebActionsProvider):
   return (await rateLimit(ctx.db, `web-actions:${ctx.bot.id}`, DAILY_LIVE_WEB_ACTIONS, 86_400)).ok;
 }
 
+/** Why a real cloud-browser task can't start (it costs money, paid from credit), or null. */
+async function spendRefusal(ctx: ToolContext, provider: WebActionsProvider): Promise<string | null> {
+  if (provider.simulated) return null;
+  const spend = await checkSpend(ctx.db, ctx.owner, "webTask");
+  return spend.ok ? null : spend.message;
+}
+
+/**
+ * A real cloud-browser task is charged what Browser Use charged for it (it reports the cost); one
+ * that failed without saying is charged just the start of a task.
+ */
+async function chargeWebTask(ctx: ToolContext, provider: WebActionsProvider, res: { ok: boolean; costUsd?: number }): Promise<void> {
+  if (provider.simulated) return;
+  const reported = res.ok && typeof res.costUsd === "number" && Number.isFinite(res.costUsd) && res.costUsd >= 0 ? Math.round(res.costUsd * 1_000_000) : null;
+  await recordUsage(ctx.db, ctx.owner.id, { costMicros: reported ?? UNIT_PRICES.webTask });
+}
+
 /** Extra fields the agent loop honors (see ToolApprovalExtras in src/lib/agent/run.ts). */
 function withApprovalExtras<T extends AnyToolSpec>(spec: T, extras: ToolApprovalExtras): T & ToolApprovalExtras {
   return Object.assign(spec, extras);
@@ -102,8 +121,11 @@ export const webBrowse = defineTool({
     const refusal = refuseRead(target.url, args.task);
     if (refusal) return { ok: false, error: refusal };
     if (!(await withinDailyLimit(ctx, provider))) return { ok: false, error: DAILY_LIMIT };
+    const broke = await spendRefusal(ctx, provider);
+    if (broke) return { ok: false, error: broke };
 
     const res = await provider.read({ url: target.url.toString(), site: target.site, task: args.task, signal: ctx.signal });
+    await chargeWebTask(ctx, provider, res);
     if (!res.ok) return { ok: false, error: res.error };
     return {
       ok: true,
@@ -186,6 +208,8 @@ export const webFormFill = withApprovalExtras(
       const refusal = refuseForm(target.url, resolved.fields, args.instructions);
       if (refusal) return { ok: false, error: refusal };
       if (!(await withinDailyLimit(ctx, provider))) return { ok: false, error: DAILY_LIMIT };
+      const broke = await spendRefusal(ctx, provider);
+      if (broke) return { ok: false, error: broke };
 
       const res = await provider.fill({
         url: target.url.toString(),
@@ -194,6 +218,7 @@ export const webFormFill = withApprovalExtras(
         instructions: args.instructions,
         signal: ctx.signal,
       });
+      await chargeWebTask(ctx, provider, res);
       if (!res.ok) return { ok: false, error: res.error };
 
       // Check what the browser says it typed, in code, before anyone can send it.
@@ -337,6 +362,7 @@ export const webFormSubmit = withApprovalExtras(
         fields: session.fields,
         signal: ctx.signal,
       });
+      await chargeWebTask(ctx, provider, res);
       await recordSubmitResult(ctx.db, session.id, {
         at: new Date().toISOString(),
         ok: res.ok,

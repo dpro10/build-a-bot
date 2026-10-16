@@ -7,7 +7,8 @@
  *   names their bots remember.
  * - When the AI answers instead of cleaning up, is slow or fails, the plain cleanup is typed.
  * - "Hey Otto, …" is a request for the bot, not text.
- * - Words count toward the plan, and the Free plan's words run out.
+ * - Words are counted, with no limit. Hearing a recording here and the AI cleanup are paid from
+ *   credit; without any, a recording waits, and words heard on the computer type with the plain cleanup.
  * - Nothing that was said is stored.
  */
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -76,7 +77,7 @@ const base = { mime: "audio/webm", durationMs: 3200, speechMs: 2600, polish: tru
 beforeAll(async () => {
   await resetDbForTests();
   db = await getDb();
-  [owner] = await db.insert(schema.users).values({ id: "usr_diego", email: "diego@example.com", name: "Diego Prozzi", emailVerifiedAt: new Date(), timezone: "UTC", plan: "free" }).returning();
+  [owner] = await db.insert(schema.users).values({ id: "usr_diego", email: "diego@example.com", name: "Diego Prozzi", emailVerifiedAt: new Date(), timezone: "UTC" }).returning();
   await db.insert(schema.bots).values({ id: "bot_otto", ownerId: owner.id, name: "Otto", handle: "otto-diego", avatar: "otto", color: "grape", brain: { kind: "included", provider: "nebius", model: "nvidia/Nemotron-3_5-Lightning" }, jobs: [], trust: "ask" } as never);
   await db.insert(schema.memories).values([
     { id: "mem_1", botId: "bot_otto", text: "Diego's sister is Ana; she lives in Austin", source: "bot" },
@@ -108,7 +109,7 @@ describe("voice typing, end to end", () => {
     if (!out.ok) return;
     expect(out.result).toMatchObject({ kind: "text", text: "I talked to Prozzi about the GitHub launch. Let's meet at 3.", polished: true, words: 12 });
     expect(out.simulated).toBe(false);
-    expect(out.usage).toEqual({ words: 12, limit: 8000 });
+    expect(out.usage).toEqual({ words: 12, limit: null });
 
     // Speech-to-text heard their words: the dictionary, their name, their bot, what the bot remembers.
     const prompt = String(calls.stt[0].get("prompt"));
@@ -208,19 +209,23 @@ describe("voice typing, end to end", () => {
     expect(calls.llm).toHaveLength(0);
   });
 
-  it("counts words toward the plan, and the Free plan's words run out", async () => {
-    const used = (await getUsage(db, owner.id)).dictationWords;
-    expect(used).toBeGreaterThan(20);
-    await db.update(schema.usage).set({ dictationWords: 8000 }).where(eq(schema.usage.userId, owner.id));
+  it("counts the words; without credit a recording waits, and words heard on the computer type plainly", async () => {
+    const usage = await getUsage(db, owner.id);
+    expect(usage.dictationWords).toBeGreaterThan(20);
+    expect(usage.costMicros).toBeGreaterThan(0); // speech-to-text and cleanups were paid from credit
+    await db.update(schema.usage).set({ costMicros: 1_000_001 }).where(eq(schema.usage.userId, owner.id)); // past the starter dollar
     fakeGroq([], []);
     const out = await dictate(db, owner, { ...base, audio: audio() });
-    expect(out).toMatchObject({ ok: false, status: 402, code: "limit", upgrade: "plus" });
-    if (!out.ok) expect(out.error).toContain("8,000 words of voice typing on the Free plan");
-    // Plus has no monthly cap.
-    const plus = { ...owner, plan: "plus" };
-    fakeGroq([{ text: "Still typing." }], []);
-    const more = await dictate(db, plus, { ...base, audio: audio(), polish: false });
-    expect(more.ok && more.usage).toEqual({ words: 8002, limit: null });
+    expect(out).toEqual({ ok: false, status: 402, code: "no_credit", error: "You're out of credit. Adding credit is coming soon." });
+    expect(calls.stt).toHaveLength(0);
+    // Heard on the computer: free here, typed with the plain cleanup (the AI pass costs money).
+    fakeGroq([], [{ text: "<cleaned>Should not be used.</cleaned>" }]);
+    const local = await dictate(db, owner, { ...base, heard: "um so the the meeting moved to friday we should tell everyone" });
+    expect(local.ok && local.result).toMatchObject({ kind: "text", polished: false });
+    expect(local.ok && local.usage.limit).toBeNull();
+    expect(local.ok && local.usage.words).toBeGreaterThan(usage.dictationWords);
+    expect(calls.llm).toHaveLength(0);
+    await db.update(schema.usage).set({ costMicros: usage.costMicros }).where(eq(schema.usage.userId, owner.id));
   });
 
   it("stores nothing that was said", async () => {

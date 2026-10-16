@@ -123,12 +123,12 @@ describe("a bot on your Claude or ChatGPT plan", () => {
     expect(await computerFor(db, bot)).toBe("online");
   });
 
-  it("one that falls back to the free brain isn't waiting on the computer, and says why it's using the free brain", async () => {
+  it("one that falls back to an included model isn't waiting on the computer, and says why it's using one", async () => {
     const owner = await person("usr_fallback");
     const bot = await planBot(owner, "included");
     expect(await computerFor(db, bot)).toBeNull();
     const { res, notices } = await greet(bot, owner);
     expect(res.status).toBe("ok");
-    expect(notices.map((n) => n.text)).toEqual(["Your computer isn't paired yet, so I'm using the free brain for now (you opted in)."]);
+    expect(notices.map((n) => n.text)).toEqual(["Your computer isn't paired yet, so I'm using an open model we run for now (you opted in; it's paid from your credit)."]);
   });
 });

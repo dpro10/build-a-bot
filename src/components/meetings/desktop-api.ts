@@ -48,7 +48,7 @@ export type BuddyState = {
   caption?: { speaker: string; text: string; at: number } | null;
   /** done / error text. */
   message?: string;
-  /** Meeting minutes left on the plan (shown when low). */
+  /** Meeting minutes the account can record now (0 when the notes need credit and there's none left). */
   minutesLeft?: number | null;
   /** Owner can copy a heads-up for the call chat. */
   consentNote?: string;
