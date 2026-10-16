@@ -131,6 +131,19 @@ function run(spawnImpl, cmd, args) {
   });
 }
 
+/** Run a program and give back what it printed (empty if it fails). */
+function output(spawnImpl, cmd, args) {
+  return new Promise((resolve) => {
+    let out = "";
+    const child = spawnImpl(cmd, args, { stdio: ["ignore", "pipe", "ignore"], windowsHide: true });
+    child.stdout?.on("data", (d) => {
+      if (out.length < 10_000) out += d;
+    });
+    child.on("error", () => resolve(""));
+    child.on("close", () => resolve(out));
+  });
+}
+
 /** The folder (at most three levels down) that has `bin/nemo-speech`. */
 async function findRuntimeRoot(dir, exe, depth = 0) {
   if (fs.existsSync(path.join(dir, "bin", exe))) return dir;
@@ -205,6 +218,8 @@ export class LocalSpeech extends EventEmitter {
     this.idleTimer = null;
     this.abort = null;
     this.lastEmit = 0;
+    /** Checked for an engine an earlier run left behind. */
+    this.reaped = false;
   }
 
   get paths() {
@@ -215,6 +230,8 @@ export class LocalSpeech extends EventEmitter {
       model: path.join(this.dir, "models", LOCAL_MODEL.file),
       downloads: path.join(this.dir, "downloads"),
       marker: path.join(this.dir, "installed.json"),
+      /** The running engine's process id, so a run of the app that was force-quit can be cleaned up after. */
+      pid: path.join(this.dir, "engine.pid"),
     };
   }
 
@@ -445,8 +462,38 @@ export class LocalSpeech extends EventEmitter {
     return this.starting;
   }
 
+  /**
+   * An engine left running by a run of the app that couldn't stop it (force-quit, crashed): stop it,
+   * so it doesn't hold the model in memory for nothing. Only if that process is still our engine
+   * (a process id can be reused by another program).
+   */
+  async reap() {
+    if (this.reaped) return;
+    this.reaped = true;
+    let pid = 0;
+    try {
+      pid = Number(JSON.parse(await fsp.readFile(this.paths.pid, "utf8")).pid);
+    } catch {
+      return;
+    }
+    await fsp.rm(this.paths.pid, { force: true });
+    if (!Number.isInteger(pid) || pid <= 1 || pid === process.pid) return;
+    const ours =
+      this.platform === "win32"
+        ? (await output(this.spawn, "tasklist", ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"])).trim().toLowerCase().startsWith(`"${this.exe}"`)
+        : (await output(this.spawn, "ps", ["-p", String(pid), "-o", "command="])).includes(this.paths.bin);
+    if (!ours) return;
+    try {
+      process.kill(pid);
+      this.log("local speech: stopped an engine left running by an earlier run");
+    } catch {
+      /* already gone */
+    }
+  }
+
   async start() {
     if (!this.isInstalled()) throw new LocalSpeechError("absent", "It isn't downloaded yet.");
+    await this.reap();
     const now = Date.now();
     this.crashes = this.crashes.filter((t) => now - t < 10 * 60_000);
     if (this.crashes.length >= 3) throw new LocalSpeechError("crashing", "It keeps stopping on this computer, so voice typing uses Build-a-bot's servers for now.");
@@ -462,6 +509,7 @@ export class LocalSpeech extends EventEmitter {
     // In its own folder: what it writes, it writes there.
     const child = this.spawn(p.bin, args, { cwd: this.dir, env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
     this.child = child;
+    if (child.pid) void fsp.writeFile(p.pid, JSON.stringify({ pid: child.pid })).catch(() => {});
     const lines = (d) => {
       for (const line of String(d).split("\n")) if (ENGINE_LOG.test(line.trim())) this.log(`local speech: ${line.trim().slice(0, 200)}`);
     };
@@ -471,6 +519,7 @@ export class LocalSpeech extends EventEmitter {
       if (this.child !== child) return;
       this.child = null;
       clearTimeout(this.idleTimer);
+      void fsp.rm(p.pid, { force: true }).catch(() => {});
       if (!this.stopping) {
         this.crashes.push(Date.now());
         this.log(`local speech: stopped on its own (${why})`);
