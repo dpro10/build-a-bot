@@ -10,6 +10,7 @@ import { toast } from "@/components/ui/toaster";
 import { useBotLive } from "./live-state";
 import { TRUST, isTrustLevel } from "@/lib/trust";
 import { roleBadge } from "@/lib/roles";
+import { CallButton } from "@/components/call/CallPanel";
 import { cn } from "@/lib/utils";
 import type { AvatarId, ColorwayId } from "@/lib/avatars";
 
@@ -27,9 +28,12 @@ const TABS = [
 export function BotHeader({
   bot,
   brain,
+  callable = false,
 }: {
   bot: { id: string; name: string; avatar: string; color: string; trust: string; status: string; role?: string | null };
   brain: string;
+  /** Voice calls are set up on this server (the voice server). */
+  callable?: boolean;
 }) {
   const live = useBotLive();
   const router = useRouter();
@@ -113,6 +117,7 @@ export function BotHeader({
             </Link>
           </div>
         </div>
+        {callable ? <CallButton bot={bot} disabled={live.paused} /> : null}
         <Button
           variant={live.paused ? "primary" : "danger-soft"}
           size="md"

@@ -25,6 +25,8 @@ export type ChatMessage = {
   selection?: string;
   /** Notes from a meeting (shown with a header and a link to the meeting page). */
   meeting?: { id: string; app?: string; inPerson?: boolean; gone?: boolean };
+  /** A voice call with the bot (shown as a card with its transcript). */
+  call?: { kind: "web" | "phone"; durationS: number; latencyP50Ms: number | null; turns: { role: "caller" | "bot"; text: string; interrupted?: boolean }[] };
 };
 
 /**
@@ -94,6 +96,18 @@ export function toChatMessage(m: {
     proactive: Boolean(m.meta?.proactive) && m.role === "assistant" && m.meta?.trigger !== "greeting" && m.meta?.trigger !== "approval",
     via: typeof m.meta?.via === "string" ? (m.meta.via as string) : undefined,
     selection: m.role === "user" && typeof m.meta?.selection === "string" && m.meta.selection.trim() ? (m.meta.selection as string) : undefined,
+    ...(m.meta?.kind === "call" && Array.isArray(m.meta.turns)
+      ? {
+          call: {
+            kind: m.meta.callKind === "phone" ? ("phone" as const) : ("web" as const),
+            durationS: Number(m.meta.durationS) || 0,
+            latencyP50Ms: typeof m.meta.latencyP50Ms === "number" ? m.meta.latencyP50Ms : null,
+            turns: (m.meta.turns as { role?: string; text?: string; interrupted?: boolean }[])
+              .filter((t) => (t.role === "caller" || t.role === "bot") && typeof t.text === "string")
+              .map((t) => ({ role: t.role as "caller" | "bot", text: t.text as string, ...(t.interrupted ? { interrupted: true } : {}) })),
+          },
+        }
+      : {}),
     ...(m.meta?.kind === "meeting_notes" && typeof m.meta.meetingId === "string"
       ? {
           meeting: {

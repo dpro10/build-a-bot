@@ -21,6 +21,13 @@ export const UNIT_PRICES = {
   textOut: 12_500,
   /** Twilio (US): about $0.01 a minute on a call, plus $0.02 each time it listens for speech (about twice a minute). */
   callMinute: 50_000,
+  /**
+   * A call answered by our voice server (NVIDIA speech on our own machine, so no per-use speech fees):
+   * Twilio's $0.0085 a minute for an incoming call to a local number, plus $0.0044 for the audio stream.
+   */
+  callMinuteStreamIn: 12_900,
+  /** …and $0.014 a minute when the bot calls out, plus the stream. */
+  callMinuteStreamOut: 18_400,
   /** Browser Use Cloud: $0.01 to start a task in the cloud browser… */
   webTask: 10_000,
   /** …and about $0.006 for each step it takes. A task is charged what Browser Use reports it cost. */

@@ -96,7 +96,7 @@ export async function getUsage(db: Db, userId: string, when = new Date()) {
  * What's about to cost money (or, for your own AI, use our servers). Texts, calls, speech heard on
  * our server and voice typing's AI cleanup check `hasCredit` directly (credit.ts).
  */
-export type SpendKind = "included" | "ownBrain" | "lookup" | "webTask";
+export type SpendKind = "included" | "ownBrain" | "lookup" | "webTask" | "call";
 
 export type SpendCheck = { ok: true } | { ok: false; code: "no_credit" | "sign_in" | "fair_use"; message: string };
 

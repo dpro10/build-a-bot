@@ -92,6 +92,11 @@ export const config = {
     /** Shared number for SMS + voice until a bot gets its own (Pro). E.164. */
     phoneNumber: v("TWILIO_PHONE_NUMBER"),
     voice: v("TWILIO_VOICE") ?? "Polly.Joanna-Neural",
+    /**
+     * Hand calls to the voice server over Twilio Media Streams (<Connect><Stream>). Trial accounts
+     * can't stream, so it's off until TWILIO_MEDIA_STREAMS=1 (after upgrading the account).
+     */
+    mediaStreams: v("TWILIO_MEDIA_STREAMS") === "1" || v("TWILIO_MEDIA_STREAMS") === "true",
   },
   email: {
     agentmailKey: v("AGENTMAIL_API_KEY"),
@@ -120,6 +125,12 @@ export const config = {
   },
   /** The desktop app for meeting notes (desktop/): where its signed downloads are. Unset = "Coming soon". */
   desktop: { downloadUrl: v("NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL") },
+  /**
+   * The voice server (voice/): calls with a bot, by phone or in the browser, heard and spoken by
+   * NVIDIA's open speech models. VOICE_SERVER_URL is its https:// address; the secret is shared
+   * with it (it signs its requests to /api/calls/*, the app signs call tokens for it).
+   */
+  voice: { serverUrl: v("VOICE_SERVER_URL")?.replace(/\/$/, ""), secret: v("VOICE_SERVER_SECRET") },
   cronSecret: v("CRON_SECRET"),
 };
 
@@ -155,6 +166,8 @@ export const live = {
   stripe: Boolean(config.stripe.secretKey),
   /** Signed downloads of the desktop app are published (demo mode shows how to run it from the repo instead). */
   desktopApp: Boolean(config.desktop.downloadUrl),
+  /** Voice calls with bots: the voice server's address and its shared secret (32+ characters). */
+  voiceServer: Boolean(config.voice.serverUrl && config.voice.secret && config.voice.secret.length >= 32),
 };
 
 /** Integration is usable: live, or simulated because we're in demo mode. */
