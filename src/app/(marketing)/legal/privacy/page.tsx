@@ -35,7 +35,11 @@ const SUBPROCESSORS: { name: string; purpose: string; data: string }[] = [
   { name: "Nebius Token Factory", purpose: "The included open models", data: "Messages and context, when your bot uses an included model (and dictated text, when voice typing's cleanup runs there)" },
   { name: "Your chosen AI provider", purpose: "Your own API key, if you add one", data: "Messages and context, sent to that provider only" },
   { name: "Tavily", purpose: "Web search", data: "Search queries" },
-  { name: "Nebius AI Cloud (our speech server, running NVIDIA's open speech models), with Together AI as a backup", purpose: "Turning meeting audio, and voice typing that isn't heard on your computer, into text", data: "Audio, only while it's turned into text" },
+  {
+    name: "Nebius AI Cloud (our speech server, running NVIDIA's open speech models), with Together AI as a backup",
+    purpose: "Turning speech into text only when your computer can't (if Private speech is off, or Parakeet can't run on it)",
+    data: "Audio, only while it's turned into text",
+  },
   { name: "Composio", purpose: "Sign-in and actions for many apps", data: "App tokens and the actions your bot takes in those apps" },
   { name: "Twilio", purpose: "Phone calls and texts", data: "Phone numbers, texts, call speech and transcripts" },
   { name: "AgentMail and Resend", purpose: "Your bot's email address and sign-in emails", data: "Email addresses and email content" },
@@ -71,7 +75,7 @@ export default function PrivacyPage() {
             </li>
             <li>API keys and app logins are encrypted at rest and never shown again.</li>
             <li>Your Claude or ChatGPT login never leaves your computer.</li>
-            <li>Meeting notes only listen after you say yes. The audio becomes text and isn&apos;t kept.</li>
+            <li>Meeting notes only listen after you say yes, in the desktop app, which turns the call into text on your own computer. The audio never reaches our servers.</li>
             <li>Voice typing only listens while you hold its key, and the desktop app turns your voice into text on your own computer. Neither the audio nor what you dictate is kept on our servers: we count the words, that&apos;s all.</li>
             <li>
               You can export everything or delete your account from your <Link href="/app/account">Account page</Link>.
@@ -101,8 +105,9 @@ export default function PrivacyPage() {
           <p>
             If you use meeting notes: the transcript of each meeting you said yes to, the notes your bot writes from it, and a record of when you
             said yes and whether you shared the heads-up. Lines are labeled by microphone (&ldquo;You&rdquo;, &ldquo;Others&rdquo; or &ldquo;Room&rdquo;),
-            never by recognizing voices. The audio is turned into text as it arrives and isn&apos;t stored on our servers. If an upload fails, the desktop
-            app keeps that bit of audio on your own computer until it&apos;s sent, then deletes it.
+            never by recognizing voices. The desktop app turns the call into text on your own computer, with NVIDIA&apos;s Parakeet speech model, and
+            sends only the words. Each piece of audio waits on your computer only until it&apos;s been heard (or while the app is offline), then it&apos;s
+            deleted. If Private speech is off, or Parakeet can&apos;t run on your computer, the audio is sent to be turned into text, and isn&apos;t stored.
           </p>
           <h3>Voice typing</h3>
           <p>

@@ -1,19 +1,21 @@
 /**
- * Meeting notes: the bot listens to a meeting only after the owner says yes
- * (in the desktop app's pop-up or the browser recorder), transcribes it in
- * ~30-second chunks as it goes, then writes notes when it ends.
+ * Meeting notes: the desktop app notices a call and asks; only after the owner says yes does it
+ * listen. NVIDIA Parakeet turns each ~20-second piece of the call into text on the owner's own
+ * computer, and only those lines come here. When the meeting ends, the bot writes the notes.
  *
- *   start → audio chunks (mic = the owner, system = everyone else) → live transcript
+ *   start → lines heard on the computer (mic = the owner, system = everyone else) → live transcript
  *   → finish → notes by the bot's own brain (src/lib/meetings/notes.ts) → sent to the owner
  *
- * Audio is transcribed in memory and thrown away; only the text is kept, and the
- * owner can delete any meeting.
+ * The audio never leaves the computer. A server with speech-to-text of its own also takes the
+ * audio of a piece from an app that can't run Parakeet (it's turned into text in memory and thrown
+ * away); one without never makes words up. Only the text is kept, and the owner can delete any
+ * meeting.
  */
 import { and, asc, desc, eq, gt, ilike, inArray, lt, ne, or, sql } from "drizzle-orm";
 import { schema, type Db } from "@/lib/db";
 import type { Bot, Meeting, MeetingSegment, User } from "@/lib/db/schema";
 import { checkLimit, recordUsage } from "@/lib/billing/usage";
-import { config, demoMode, paidPlansOpen } from "@/lib/env";
+import { config, demoMode, demoSpeech, paidPlansOpen } from "@/lib/env";
 import { PAID_PLANS_SOON, type PlanId } from "@/lib/billing/plans";
 import { receipt } from "@/lib/agent/run";
 import { transcribe, transcriptionAvailable, TranscriptionError } from "@/lib/transcribe";
@@ -21,8 +23,8 @@ import { newId, sortableId, truncate } from "@/lib/utils";
 import { defaultMeetingTitle, isMeetingApp, meetingAppName, type MeetingAppId } from "./apps";
 
 export const MEETINGS_CONNECTOR = "meetings";
-/** How long each uploaded piece of audio is. Shorter in demo mode so the scripted transcript shows up quickly. */
-export const CHUNK_MS = demoMode ? 6_000 : 20_000;
+/** How long each piece of a call is. Shorter with scripted speech (tests) so the script shows up quickly. */
+export const CHUNK_MS = demoSpeech ? 6_000 : 20_000;
 export const CHUNK_MAX_BYTES = 8 * 1024 * 1024;
 export const CHUNK_MAX_MS = 5 * 60_000;
 export const MAX_MEETING_MS = 4 * 3600_000;
@@ -41,6 +43,14 @@ export type DesktopApp = { status: "download"; url: string } | { status: "repo" 
 export function desktopApp(): DesktopApp {
   if (config.desktop.downloadUrl) return { status: "download", url: config.desktop.downloadUrl };
   return demoMode ? { status: "repo" } : { status: "soon" };
+}
+
+/**
+ * Meeting notes can be taken here: they happen in the desktop app (it hears the call on the
+ * computer), so they're offered wherever the app can be had. Otherwise they're "Coming soon".
+ */
+export function meetingNotesAvailable(): boolean {
+  return desktopApp().status !== "soon";
 }
 
 export type MeetingView = {
@@ -181,7 +191,8 @@ export async function startMeeting(
   input: {
     bot: Bot;
     owner: User;
-    source: "browser" | "desktop";
+    /** Notes are taken in the desktop app ("browser" is for meetings recorded before it was the only way). */
+    source: "desktop";
     app?: string;
     title?: string;
     deviceId?: string | null;
@@ -193,7 +204,7 @@ export async function startMeeting(
 ): Promise<{ ok: true; meeting: Meeting; replaced: string[] } | MeetingFailure> {
   const { bot, owner } = input;
   if (bot.status === "paused") return { ok: false, status: 409, code: "paused", error: `${bot.name} is paused. Resume it to take notes.` };
-  if (!transcriptionAvailable()) return { ok: false, status: 503, code: "unavailable", error: "Meeting notes are coming soon." };
+  if (!meetingNotesAvailable()) return { ok: false, status: 503, code: "unavailable", error: "Meeting notes are coming soon." };
   if (!(await meetingsEnabled(db, bot.id))) {
     return { ok: false, status: 409, code: "meetings_off", error: `Turn on Meeting notes for ${bot.name} first.` };
   }
@@ -219,7 +230,7 @@ export async function startMeeting(
     } else return { ok: false, status: 409, code: "already_recording", meetingId: m.id, error: `${bot.name} is already taking notes in another meeting.` };
   }
 
-  const app: MeetingAppId = isMeetingApp(input.app) ? input.app : input.source === "browser" ? "browser" : "other";
+  const app: MeetingAppId = isMeetingApp(input.app) ? input.app : "other";
   const now = new Date();
   const [meeting] = await db
     .insert(schema.meetings)
@@ -249,6 +260,34 @@ export async function startMeeting(
   return { ok: true, meeting, replaced };
 }
 
+/** A line heard in one piece of a call, its times within that piece. */
+export type HeardLine = { startMs: number; endMs: number; text: string };
+export const HEARD_MAX_LINES = 300;
+export const HEARD_MAX_CHARS = 30_000;
+/** The label kept with the meeting for lines heard on the owner's computer. */
+export const HEARD_ON_DEVICE = "nvidia/parakeet-tdt-0.6b-v3 (on the computer)";
+
+/**
+ * What the desktop app heard in one piece of a call (NVIDIA Parakeet, on the owner's computer):
+ * tidied, kept within the piece and in time order. Empty lines are dropped.
+ */
+export function cleanHeard(lines: HeardLine[], durationMs: number): HeardLine[] {
+  const out: HeardLine[] = [];
+  let chars = 0;
+  for (const line of lines.slice(0, HEARD_MAX_LINES)) {
+    // Control characters (nothing a speech model writes) become spaces.
+    // eslint-disable-next-line no-control-regex
+    const text = String(line.text ?? "").replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 2000);
+    if (!text) continue;
+    chars += text.length;
+    if (chars > HEARD_MAX_CHARS) break;
+    const startMs = Math.min(Math.max(0, Math.round(Number(line.startMs) || 0)), durationMs);
+    const endMs = Math.min(Math.max(startMs, Math.round(Number(line.endMs) || 0)), durationMs);
+    out.push({ startMs, endMs, text });
+  }
+  return out.sort((a, b) => a.startMs - b.startMs);
+}
+
 export type ChunkInput = {
   meeting: Meeting;
   owner: User;
@@ -256,19 +295,28 @@ export type ChunkInput = {
   chunk: number;
   startMs: number;
   durationMs: number;
-  audio: ArrayBuffer;
-  mime: string;
-  /** The recorder measured no sound in this chunk: skip speech-to-text (saves money, avoids phantom lines). */
+  /** What the desktop app heard in this piece, on the computer: no audio comes here. */
+  heard?: HeardLine[];
+  /** The piece's audio, from an app that can't hear it itself; only a server with speech-to-text takes it. */
+  audio?: ArrayBuffer;
+  mime?: string;
+  /** The recorder measured no sound in this chunk: nothing to hear (saves work, avoids phantom lines). */
   silent?: boolean;
 };
 
 export async function addChunk(db: Db, input: ChunkInput): Promise<{ ok: true; segments: MeetingSegment[]; duplicate?: boolean; warning?: string } | MeetingFailure> {
   const { meeting, owner, track, chunk } = input;
+  const audio = input.heard ? null : (input.audio ?? new ArrayBuffer(0));
   if (meeting.status !== "recording") return { ok: false, status: 409, code: "not_recording", error: "This meeting isn't recording anymore." };
   if (!Number.isInteger(chunk) || chunk < 0 || chunk > 5000) return { ok: false, status: 422, error: "Bad chunk number" };
   if (input.startMs < 0 || input.startMs > MAX_MEETING_MS) return { ok: false, status: 422, code: "too_long", error: "Meetings can be up to 4 hours." };
   if (input.durationMs < 1 || input.durationMs > CHUNK_MAX_MS) return { ok: false, status: 422, error: "Chunks must be under 5 minutes" };
-  if (input.audio.byteLength > CHUNK_MAX_BYTES) return { ok: false, status: 413, error: "Audio chunk too large" };
+  if (audio && audio.byteLength > CHUNK_MAX_BYTES) return { ok: false, status: 413, error: "Audio chunk too large" };
+  // Audio to hear needs speech-to-text here; without it nothing is made up (the app hears it itself).
+  const toHear = Boolean(audio && !input.silent && audio.byteLength >= 800);
+  if (toHear && !transcriptionAvailable()) {
+    return { ok: false, status: 503, code: "unavailable", error: "This server doesn't turn recordings into text: the desktop app hears meetings on your computer." };
+  }
 
   // Retries are free: a chunk that was already transcribed returns what we have.
   const existing = await db
@@ -283,9 +331,14 @@ export async function addChunk(db: Db, input: ChunkInput): Promise<{ ok: true; s
   let segments: { startMs: number; endMs: number; text: string }[] = [];
   let warning: string | undefined;
   let provider: string | undefined;
-  /** Audio that went through speech-to-text (what it costs us), for the plan's minutes. */
+  /** Audio that was heard (on the computer, or by speech-to-text here), for the plan's minutes. */
   let heardMs = 0;
-  if (!input.silent && input.audio.byteLength >= 800) {
+  if (input.heard) {
+    segments = cleanHeard(input.heard, input.durationMs);
+    provider = HEARD_ON_DEVICE;
+    // Lines count as heard even in a piece marked silent: there was speech in it after all.
+    heardMs = segments.length || !input.silent ? input.durationMs : 0;
+  } else if (audio && toHear) {
     const recent = await db
       .select({ text: schema.meetingSegments.text })
       .from(schema.meetingSegments)
@@ -294,8 +347,8 @@ export async function addChunk(db: Db, input: ChunkInput): Promise<{ ok: true; s
       .limit(4);
     try {
       const result = await transcribe({
-        audio: input.audio,
-        mime: input.mime,
+        audio,
+        mime: input.mime ?? "audio/webm",
         durationMs: input.durationMs,
         prompt: recent.reverse().map((r) => r.text).join(" ") || undefined,
         track,
@@ -493,6 +546,21 @@ export async function staleRecordings(db: Db, now = new Date()): Promise<Meeting
     const pausedAt = (m.meta as { pausedAt?: string } | null)?.pausedAt;
     return !pausedAt || now.getTime() - Date.parse(pausedAt) > MAX_MEETING_MS;
   });
+}
+
+/**
+ * The desktop app is still hearing this meeting on the computer (NVIDIA Parakeet was still
+ * downloading when the call started, or it's catching up): it isn't abandoned, so it isn't
+ * wrapped up before the rest of what was said arrives.
+ */
+export async function keepHearing(db: Db, meeting: Meeting): Promise<Meeting> {
+  if (meeting.status !== "recording") return meeting;
+  const [updated] = await db
+    .update(schema.meetings)
+    .set({ meta: metaMerge({ hearingAt: new Date().toISOString() }), updatedAt: new Date() })
+    .where(and(eq(schema.meetings.id, meeting.id), eq(schema.meetings.status, "recording")))
+    .returning();
+  return updated ?? meeting;
 }
 
 /** The owner paused (or resumed) the recording; a paused meeting isn't wrapped up as abandoned. */

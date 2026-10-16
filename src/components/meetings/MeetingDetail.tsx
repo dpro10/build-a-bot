@@ -37,7 +37,6 @@ import { toast } from "@/components/ui/toaster";
 import { useNow, whenLabel } from "@/components/bot/activity/time";
 import { api, ApiError } from "@/lib/client/api";
 import { cn } from "@/lib/utils";
-import type { BotFace } from "./RecorderSetup";
 import { TranscriptList } from "./Transcript";
 import {
   ACTIONS_SECTION,
@@ -50,11 +49,11 @@ import {
   meetingExport,
   mergeSegments,
   noteSections,
-  recordingHere,
   speakerName,
   STATUS,
   statusOf,
   SUMMARY_SECTION,
+  type BotFace,
   type MeetingView,
   type SegmentView,
 } from "./shared";
@@ -87,20 +86,12 @@ export function MeetingDetail({
   const [m, setM] = React.useState(initialMeeting);
   const [segments, setSegments] = React.useState(initialSegments);
   const [query, setQuery] = React.useState("");
-  const [here, setHere] = React.useState(false);
   const [busy, setBusy] = React.useState<null | "stop" | "rewrite" | "delete" | "transcript">(null);
   const [confirm, setConfirm] = React.useState<null | "meeting" | "transcript">(null);
   const now = useNow(serverNow, 30_000);
   const status = statusOf(m);
   const listHref = `/app/bots/${botId}/meetings`;
   const ask = (text: string) => `/app/bots/${botId}?ask=${encodeURIComponent(text)}`;
-
-  React.useEffect(() => {
-    if (m.status !== "recording") return;
-    setHere(recordingHere(m.id));
-    const t = setInterval(() => setHere(recordingHere(m.id)), 5000);
-    return () => clearInterval(t);
-  }, [m.status, m.id]);
 
   // Follow along while it's recording or the notes are being written.
   const working = m.status === "recording" || m.status === "processing";
@@ -267,7 +258,7 @@ export function MeetingDetail({
               <span className="inline-flex items-center gap-1.5">
                 {m.inPerson ? <Users className="size-4" aria-hidden /> : m.source === "desktop" ? <Laptop className="size-4" aria-hidden /> : <Globe className="size-4" aria-hidden />}
                 {m.inPerson ? "In person" : m.appName}
-                {m.source === "desktop" ? " · desktop app" : !m.inPerson && m.app !== "browser" ? " · in your browser" : ""}
+                {m.source === "desktop" ? " · desktop app" : ""}
               </span>
               <Badge tone={STATUS[status].tone}>{STATUS[status].label}</Badge>
             </div>
@@ -322,14 +313,12 @@ export function MeetingDetail({
           }
         >
           <div className="font-semibold">
-            {bot.name} is taking notes {m.source === "desktop" ? "with the desktop app" : here ? "in this browser" : "in another browser"}
+            {bot.name} is taking notes{m.source === "desktop" ? " with the desktop app" : ""}
           </div>
           <p className="text-sm text-muted-foreground">
             {m.source === "desktop"
-              ? `Use ${bot.name} at the bottom of your screen to pause or stop. The transcript fills in below as people talk.`
-              : here
-                ? `Use the floating ${bot.name} to pause or stop. The transcript fills in below as people talk.`
-                : "The transcript fills in below as people talk."}
+              ? `Use ${bot.name} at the bottom of your screen to pause or stop. The transcript fills in below as it's heard on your computer.`
+              : "The transcript fills in below as people talk."}
           </p>
         </Banner>
       ) : status === "writing" ? (

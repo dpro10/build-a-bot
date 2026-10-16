@@ -3,13 +3,13 @@
 Anyone makes their own AI agent in about a minute: pick a face, give it a name, choose a brain (or connect the AI subscription they already pay for), give it their apps, decide how much it can do on its own, and talk to it anywhere — calls, texts, email, Telegram, Discord, Slack. It can also sit in on their calls and take the notes, and type for them by voice in any app.
 
 - **Site:** [build-a-bot.site](https://build-a-bot.site), live on Vercel + Supabase since 2026-10-14, still in demo mode until the last keys are in (`docs/DECISIONS.md` → *Live*).
-- **Status (2026-10-15):** the whole product is built (the website, the dashboard, and a desktop app for meeting notes and voice typing) and runs locally in demo mode with zero keys. `docs/DEPLOY.md` lists what each integration needs.
+- **Status (2026-10-16):** the whole product is built (the website, the dashboard, and a desktop app for meeting notes and voice typing) and runs locally in demo mode with zero keys. Meeting notes and voice typing are only in the desktop app, which hears them on the user's own computer. `docs/DEPLOY.md` lists what each integration needs.
 - **Reviewing it?** Start with [`docs/TRY-IT.md`](docs/TRY-IT.md): how to run both apps, what to click, and what's simulated.
 
 ## Built on NVIDIA and Nebius
 
 - **The brains:** NVIDIA Nemotron on **Nebius Token Factory**. Nemotron 3.5 Lightning is every new bot's default: fast, and cheap enough (about $4–5 a month per active bot) to include on the free plan. Nemotron 3 Super and Nemotron 3 Ultra take the harder jobs on Plus and Pro. Token Factory also runs the other included open models, and the AI cleanup for voice typing.
-- **The ears:** NVIDIA **Parakeet TDT 0.6B v3** and **Nemotron 3.5 ASR** turn speech into text for voice typing and meeting notes. They run on NVIDIA's NeMo-Speech.cpp in our own server (`speech/`), built to deploy as a **Nebius Serverless AI** endpoint.
+- **The ears:** NVIDIA **Parakeet TDT 0.6B v3** turns speech into text on the user's own computer, for voice typing and meeting notes. The desktop app runs it on NVIDIA's NeMo-Speech.cpp, so the audio never leaves the computer. Our own speech server (`speech/`: Parakeet and **Nemotron 3.5 ASR** on NeMo-Speech.cpp, built to deploy as a **Nebius Serverless AI** endpoint) is optional, for computers where Parakeet can't run.
 - **Web search:** Tavily.
 - A possible entry in the Nebius × NVIDIA Global AI Hackathon (due October 30): [`docs/HACKATHON.md`](docs/HACKATHON.md).
 
@@ -79,12 +79,13 @@ Web chat, phone calls and texts (Twilio), email (its own brand-free address), Te
 
 ### Meeting notes (beta)
 
-- The desktop app (`desktop/`) notices when a call starts in Zoom, Meet, Teams, Webex, Slack, Discord and more. The bot peeks up from the very bottom of the screen: "Want me to take notes?"
+- **In the desktop app** (`desktop/`), like Granola: no bot joins the call. It notices when a call starts in Zoom, Meet, Teams, Webex, Slack, Discord and more. The bot peeks up from the very bottom of the screen: "Want me to take notes?" For a meeting in the room, *Take notes in the room* is in the app's menu.
 - While it listens it stays there with a red dot, a timer, a level meter and live captions. Pause, Stop and "Stop and delete" are one click away.
+- **Heard on your computer:** NVIDIA Parakeet turns the call into text on the computer, about 20 seconds at a time, and only the lines are sent. The audio never leaves the computer.
 - Afterwards it writes a summary, decisions and action items, sends them to you, and answers questions about past meetings ("What did we decide?").
-- The Meetings tab does the same in Chrome or Edge, with the bot in a floating window.
+- The **Meetings** tab on the website has the meetings and their notes (search, action items to tick off, export), and gets you the app. The website itself never records.
 - Until signed downloads are published (`NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL`), a real server shows the desktop app as "Coming soon"; demo mode shows how to run it from this repo.
-- It never records without a yes, only listens while it's on screen, and throws the audio away once it's text. Transcripts are kept 90 days by default; notes stay until deleted.
+- It never records without a yes, only listens while it's on screen, and throws each piece of audio away once it's text. Transcripts are kept 90 days by default; notes stay until deleted.
 
 ### Voice typing (beta)
 
@@ -132,7 +133,8 @@ npm run build
 npm run test:e2e       # Playwright on a phone and a desktop: builder → chat → approval → STOP,
                        # meetings, every page loads, axe accessibility scans (light and dark)
 cd desktop
-npm test               # detection on each OS, the call state machine, the safety rules, uploads
+npm test               # detection on each OS, the call state machine, the safety rules, uploads,
+                       # hearing on the computer, voice typing
 npm run test:e2e       # the real Electron app against the dev server (Linux, under xvfb)
 cd ../speech
 npm test               # the speech server: auth, audio formats, language routing, limits, the log
@@ -155,9 +157,9 @@ axe finds no serious WCAG 2.2 AA problems on the main public and dashboard pages
   - `tools`, `connectors`, `channels`, `bridge`, `billing`, `scheduler`, `db`.
   - `meetings` and `transcribe`: meeting notes and speech-to-text.
   - `web-actions`: the cloud browser.
-- `src/components`: the UI, including `avatar` (the five characters) and `meetings` (the recorder and the bot at the bottom of the screen).
-- `desktop/`: the desktop app for meeting notes (Electron). Its README covers permissions, building and signing.
-- `speech/`: our speech-to-text server: NVIDIA Parakeet and Nemotron on NVIDIA NeMo-Speech.cpp, for a Nebius Serverless AI endpoint. Its README covers deploying it and what it costs.
+- `src/components`: the UI, including `avatar` (the five characters) and `meetings` (the meetings, their notes, and the bot the desktop app shows at the bottom of the screen).
+- `desktop/`: the desktop app for meeting notes and voice typing (Electron), with NVIDIA Parakeet on the computer. Its README covers permissions, building and signing.
+- `speech/`: our optional speech-to-text server: NVIDIA Parakeet and Nemotron on NVIDIA NeMo-Speech.cpp, for a Nebius Serverless AI endpoint. Its README covers deploying it and what it costs.
 - `bridge/`: the Bridge, which runs a subscription brain on the owner's computer.
 - `tests/` and `e2e/`: unit and end-to-end tests.
 - `docs/`:
@@ -208,12 +210,11 @@ The current list is in `docs/DECISIONS.md`.
 3. **Web actions:** confirm Browser Use Cloud, then test with a live key on about 10 real forms before turning it on for everyone.
 4. **Before launch:** a brand-free domain for bot inboxes, Twilio A2P 10DLC registration, and a Composio plan. The Bridge needs nothing on npm: the site serves its own copy.
 5. **Trademark clearance** before spending on the brand.
-6. **Meeting notes before launch:**
+6. **Meeting notes and voice typing before launch:**
    - a lawyer's look at the consent flow and retention;
-   - the speech server on Nebius (`speech/README.md`) and a Together AI key for its backup;
-   - signing and notarizing the Mac app (a Developer ID certificate and notarization credentials in CI secrets, built on a Mac or a macOS runner);
+   - signed downloads, since both are only in the app: signing and notarizing the Mac app (a Developer ID certificate and notarization credentials in CI secrets, built on a Mac or a macOS runner), and signing the Windows installer;
    - whether the desktop app and the Bridge become one app.
-7. **Meeting notes, next:** transcription on the owner's own key or on the device, and meeting titles from the calendar.
+7. **Meeting notes, next:** meeting titles from the calendar, telling the call's speakers apart, and languages beyond Parakeet's 25.
 
 ## Ground rules
 
@@ -237,7 +238,7 @@ These hold whatever gets built next.
 **Costs:**
 - **Model:** Nemotron 3.5 Lightning on Token Factory cost $0.06 per million input tokens and $0.24 per million output (checked for the hackathon). That's about $4 to $5 a month per active bot.
 - **Search:** Tavily includes 1,000 free credits a month, then $0.008 per credit; it's free for students.
-- **Speech-to-text:** NVIDIA Parakeet and Nemotron on our own speech server (`speech/`), a Nebius Serverless AI endpoint: about $190 a month for an 8-vCPU machine, whatever the volume. Backup: NVIDIA Parakeet on Together AI, $0.0015 per audio minute.
+- **Speech-to-text:** nothing: the desktop app hears voice typing and meetings on the user's computer (NVIDIA Parakeet). The optional speech server (`speech/`), a Nebius Serverless AI endpoint, would be about $190 a month for an 8-vCPU machine, whatever the volume. Its backup: NVIDIA Parakeet on Together AI, $0.0015 per audio minute.
 - **Reachability:** Token Factory, Tavily and the cloud-browser hosts all work on Diego's network. Kimi, DeepSeek and Together AI (the speech-to-text backup) are blocked there; the app calls Together from its server, so only local testing is affected.
 
 **Name:**

@@ -5,7 +5,7 @@ import { authDevice } from "@/lib/bridge/auth";
 import { getPlan } from "@/lib/billing/plans";
 import { getUsage } from "@/lib/billing/usage";
 import { appUrl, demoMode, demoSpeech } from "@/lib/env";
-import { CHUNK_MS, MEETINGS_CONNECTOR } from "@/lib/meetings";
+import { CHUNK_MS, MEETINGS_CONNECTOR, meetingNotesAvailable } from "@/lib/meetings";
 import { dictationUsage, speechToTextAvailable, voiceEditAvailable, voicePolishAvailable } from "@/lib/dictation";
 import { transcriptionAvailable, transcriptionSetup } from "@/lib/transcribe";
 
@@ -37,7 +37,13 @@ export async function GET(req: Request) {
       meetingsOn: on.some((c) => c.botId === b.id && c.status !== "disabled"),
     })),
     meetings: {
-      available: transcriptionAvailable(),
+      /**
+       * This server turns a meeting's audio into text itself, for an app that can't hear it on the
+       * computer. Without it, notes are taken only with what the app heard (and nothing is made up).
+       */
+      available: meetingNotesAvailable() && transcriptionAvailable(),
+      /** Meeting notes are taken here, from what the app heard on the computer (NVIDIA Parakeet): only the lines are sent. */
+      local: meetingNotesAvailable(),
       minutesLeft: Math.max(0, plan.limits.meetingMinutes - Math.floor(usage.meetingSeconds / 60)),
       chunkMs: CHUNK_MS,
     },

@@ -3,11 +3,15 @@
  * the database, so client components only import its types).
  */
 import type { MeetingView, SegmentView } from "@/lib/meetings";
-import { MEETING_APPS, isMeetingApp, type MeetingAppId } from "@/lib/meetings/apps";
+import { MEETING_APPS, isMeetingApp } from "@/lib/meetings/apps";
+import type { AvatarId, ColorwayId } from "@/lib/avatars";
 import { BRAND_ICONS } from "@/lib/icons.generated";
 import type { ConnectorIcon } from "@/lib/connectors/types";
 
 export type { MeetingView, SegmentView };
+
+/** A bot as the meeting pages show it. */
+export type BotFace = { name: string; avatar: AvatarId; color: ColorwayId };
 
 /** "0:42", "12:05", "1:02:09" */
 export function clock(ms: number): string {
@@ -38,9 +42,6 @@ export function meetingAppIcon(app: string | null | undefined, inPerson = false)
 export function meetingAppName(app: string | null | undefined): string {
   return MEETING_APPS[isMeetingApp(app) ? app : "other"].name;
 }
-
-/** Apps people pick from when they start notes in the browser. */
-export const BROWSER_CALL_APPS: MeetingAppId[] = ["meet", "zoom", "teams", "webex", "slack", "discord", "whatsapp", "other"];
 
 export type MeetingStatusKey = "recording" | "writing" | "waiting" | "ready" | "failed";
 
@@ -172,52 +173,5 @@ export async function copyText(text: string): Promise<boolean> {
     } catch {
       return false;
     }
-  }
-}
-
-/** The once-per-owner "before I take notes on calls" acknowledgment (per bot; this browser only for now). */
-function consentKey(ownerId: string, botId: string) {
-  return `bab-meetings-consent:${ownerId}:${botId}`;
-}
-
-export function hasConsent(ownerId: string, botId: string): boolean {
-  try {
-    return Boolean(window.localStorage.getItem(consentKey(ownerId, botId)));
-  } catch {
-    return false;
-  }
-}
-
-export function saveConsent(ownerId: string, botId: string) {
-  try {
-    window.localStorage.setItem(consentKey(ownerId, botId), new Date().toISOString());
-  } catch {
-    /* private mode: they'll see the sheet again next time */
-  }
-}
-
-/**
- * Which meeting this browser is recording right now, refreshed every few seconds by the
- * recorder, so other pages (any tab) can say "it's listening in this browser".
- */
-const ACTIVE_KEY = "bab-recording";
-
-export function markRecordingHere(meetingId: string | null) {
-  try {
-    if (meetingId) window.localStorage.setItem(ACTIVE_KEY, JSON.stringify({ meetingId, at: Date.now() }));
-    else window.localStorage.removeItem(ACTIVE_KEY);
-  } catch {
-    /* ignore */
-  }
-}
-
-export function recordingHere(meetingId: string): boolean {
-  try {
-    const raw = window.localStorage.getItem(ACTIVE_KEY);
-    if (!raw) return false;
-    const v = JSON.parse(raw) as { meetingId?: string; at?: number };
-    return v.meetingId === meetingId && Date.now() - (v.at ?? 0) < 45_000;
-  } catch {
-    return false;
   }
 }

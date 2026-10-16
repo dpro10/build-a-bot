@@ -129,9 +129,10 @@ export function reduce(state, event, ctx = {}) {
       if (s.phase === "asking" && s.call) {
         start(s, fx, s.call);
       } else if (s.phase === "idle" || s.phase === "done" || s.phase === "error") {
-        // "Take notes now" from the tray: the owner chose; use the call we can see, if any.
-        const first = Object.entries(s.calls)[0];
-        start(s, fx, first ? { key: first[0], app: first[1] } : { key: null, app: "other" });
+        // From the tray: the owner chose. "Take notes in the room": the mic only, no call.
+        // "Take notes now": the call we can see, if any.
+        const first = event.inPerson ? null : Object.entries(s.calls)[0];
+        start(s, fx, first ? { key: first[0], app: first[1] } : { key: null, app: "other" }, Boolean(event.inPerson));
       }
       break;
     }
@@ -320,8 +321,8 @@ function mayAsk(s, key, app, ctx, now) {
   return true;
 }
 
-/** @param {CallState} s */
-function start(s, fx, call) {
+/** @param {CallState} s @param {boolean} [inPerson]  a meeting in the room: the mic only */
+function start(s, fx, call, inPerson = false) {
   s.phase = "starting";
   s.call = call;
   s.meetingId = null;
@@ -333,7 +334,7 @@ function start(s, fx, call) {
   s.noticeSent = s.noticeCopied;
   // One prompt per call: once the owner has answered for this call, don't ask again during it.
   if (call.key) s.snoozed[call.key] = true;
-  fx.push({ type: "start", app: call.app, consentNotice: s.noticeCopied });
+  fx.push({ type: "start", app: call.app, consentNotice: s.noticeCopied, ...(inPerson ? { inPerson: true } : {}) });
 }
 
 /** @param {CallState} s */

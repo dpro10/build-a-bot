@@ -1,8 +1,9 @@
 /**
- * The upload spool: a small folder where an audio chunk waits only when an upload
- * failed (a network blip) or the app is quitting with uploads pending. Each file is
- * deleted as soon as its upload succeeds (or the meeting is discarded). This is the
- * only place audio is ever written on this computer.
+ * The upload spool: a small folder where a piece of a meeting waits only when it can't be sent
+ * yet: NVIDIA Parakeet is still on its way (it hears meetings on this computer), an upload failed
+ * (a network blip), or the app is quitting with pieces pending. Each file is deleted as soon as
+ * the piece is sent (as the lines heard in it, or as audio to a server that hears it), or the
+ * meeting is discarded. This is the only place audio is ever written on this computer.
  *
  *   <userData>/spool/<meetingId>/<track>-<chunk>.webm   the audio
  *   <userData>/spool/<meetingId>/<track>-<chunk>.json   where it belongs

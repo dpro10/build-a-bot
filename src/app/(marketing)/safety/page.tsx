@@ -221,19 +221,19 @@ export default function SafetyPage() {
 
         <DocSection id="recording" title="Meeting notes: only when you say yes" icon={<AudioLines />}>
           <p>
-            Your bot can take notes in your calls and meetings. It never records on its own: it asks, and it only listens after you say yes. There
-            is no setting that makes it record automatically.
+            Your bot can take notes in your calls and meetings, with the desktop app. It never records on its own: it asks, and it only listens after
+            you say yes. There is no setting that makes it record automatically, and the website never listens.
           </p>
           <ul>
             <li>
-              <strong>It&apos;s always on your screen while it listens.</strong> With the desktop app, it sits at the bottom of your screen with a red dot
-              and a timer. In the browser, it floats in its own little window, and closing that window stops the recording. It never records without
-              showing itself.
+              <strong>It&apos;s always on your screen while it listens.</strong> It sits at the bottom of your screen with a red dot and a timer. If it
+              can&apos;t stay on screen, or your screen locks, it stops. It never records without showing itself.
             </li>
             <li>
-              <strong>Audio is thrown away.</strong> The sound is turned into text, and the audio is deleted once your notes are written. Your meetings
-              are never used to train AI, and we don&apos;t make voiceprints: lines are labeled by which microphone they came from, not by recognizing
-              anyone&apos;s voice.
+              <strong>The audio stays on your computer.</strong> NVIDIA Parakeet turns the call into text right there, and only the words come to
+              Build-a-bot for your notes. Each piece of audio is deleted from your computer once it&apos;s been heard. Your meetings are never used to
+              train AI, and we don&apos;t make voiceprints: lines are labeled by which microphone they came from, not by recognizing anyone&apos;s
+              voice.
             </li>
             <li>
               <strong>You can delete any meeting,</strong> or just its transcript and keep the notes. Transcripts are deleted after 90 days unless you

@@ -6,9 +6,7 @@ import { getOwnedBot, listBridgeDevices } from "@/lib/data";
 import { getPlan } from "@/lib/billing/plans";
 import { getUsage } from "@/lib/billing/usage";
 import { DEVICE_ONLINE_MS } from "@/lib/bridge/jobs";
-import { ownerName } from "@/lib/agent/prompt";
-import { DEFAULT_TRANSCRIPT_DAYS, desktopApp, listMeetings, meetingsEnabled, meetingView } from "@/lib/meetings";
-import { transcriptionAvailable } from "@/lib/transcribe";
+import { DEFAULT_TRANSCRIPT_DAYS, desktopApp, listMeetings, meetingNotesAvailable, meetingsEnabled, meetingView } from "@/lib/meetings";
 import { paidPlansOpen } from "@/lib/env";
 import { safeTimeZone } from "@/components/bot/activity/time";
 import { MeetingsView } from "@/components/meetings/MeetingsView";
@@ -37,13 +35,11 @@ export default async function MeetingsPage({ params }: { params: Promise<{ botId
         <MeetingsView
           botId={botId}
           bot={{ name: bot.name, avatar: bot.avatar as AvatarId, color: bot.color as ColorwayId, paused: bot.status === "paused" }}
-          ownerId={user.id}
-          ownerName={ownerName(user)}
           timezone={safeTimeZone(user.timezone)}
           serverNow={now.toISOString()}
           initialMeetings={rows.map(meetingView)}
           enabled={enabled}
-          available={transcriptionAvailable()}
+          available={meetingNotesAvailable()}
           plan={{ id: plan.id, name: plan.name, minutes: plan.limits.meetingMinutes }}
           paidPlans={paidPlansOpen}
           desktopApp={desktopApp()}
