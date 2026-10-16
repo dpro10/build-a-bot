@@ -615,3 +615,4 @@ Diego: "I really like that front desk for businesses idea. Lets hold on to it." 
    - **The long tail through Zapier's MCP server**, where the owner connects their own Zapier account, or a second sign-in provider for apps Composio lacks.
    - Count clicks on "Coming soon" apps to see what testers want first.
 9. Voice typing before launch: Diego tests it on his Mac; the speech server on Nebius (`TRANSCRIBE_PROVIDER=nvidia`) turns it on for real; the signed Mac and Windows apps ship it to everyone.
+10. The Nebius × NVIDIA hackathon (due 2026-10-30, 10am PT): enter Build-a-bot as a second entry? It qualifies except for one requirement: the repository must be public with an open-source license. Diego decides that, the track (Personal AI suggested), what judges can use, and the video. Draft write-up, video script, checklist and feedback: `docs/HACKATHON.md`.
