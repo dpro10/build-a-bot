@@ -285,6 +285,29 @@ test("a computer NVIDIA has no runtime for says so, and never downloads anything
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+test("a folder named with letters from outside English: kept as is where the engine opens it, else Windows' short name", async () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), "bab-local-"));
+  const dir = path.join(base, "José Muñoz", "speech");
+  if (process.platform === "win32") {
+    // As on a Windows computer (where NVIDIA's engine can't open such a path, even relative).
+    const local = new LocalSpeech({ dir, platform: "win32", arch: "x64" });
+    const place = await local.place();
+    if (place === null) {
+      assert.equal(local.blocked(), true, "no short names on this drive: it says it can't run here");
+    } else {
+      assert.match(place, /^[\x20-\x7e]+$/, "plain ASCII");
+      fs.writeFileSync(path.join(dir, "marker"), "same folder");
+      assert.equal(fs.readFileSync(path.join(place, "marker"), "utf8"), "same folder");
+      assert.equal(local.blocked(), false);
+    }
+  } else {
+    const local = new LocalSpeech({ dir, platform: process.platform, arch: "x64" });
+    assert.equal(await local.place(), dir, "macOS and Linux open it as it is");
+    assert.equal(local.blocked(), false);
+  }
+  fs.rmSync(base, { recursive: true, force: true });
+});
+
 // ---------------------------------------------------------------------------
 // Getting it
 // ---------------------------------------------------------------------------
@@ -320,7 +343,7 @@ test("downloads NVIDIA's runtime, its number rules and the model, checks them, a
   // The settings window heard about it as it went.
   assert.equal(states[0].state, "downloading");
   assert.equal(states.at(-1).state, "installed");
-  assert.deepEqual(local.status(), { state: "installed", supported: true, received: 0, total: 0, error: null, model: "NVIDIA Parakeet", bytes: 400_000 });
+  assert.deepEqual(local.status(), { state: "installed", supported: true, blocked: false, received: 0, total: 0, error: null, model: "NVIDIA Parakeet", bytes: 400_000 });
 
   // Already here: nothing to download, and the next run of the app knows it.
   const before = server.requests.length;
@@ -443,7 +466,7 @@ test("runs it on 127.0.0.1 behind a key of its own, and tidies what it heard", a
   assert.equal(args[args.indexOf("--host") + 1], "127.0.0.1");
   assert.equal(args[args.indexOf("--port") + 1], String(local.port));
   assert.equal(args[args.indexOf("--itn-model-dir") + 1], path.relative(dir, local.paths.itn));
-  assert.equal(args[args.indexOf("--device") + 1], "auto");
+  assert.equal(args[args.indexOf("--device") + 1], "cpu", "NVIDIA's Linux, Windows and Intel Mac runtimes are CPU-only");
   assert.ok(args.includes("--no-ui"));
   assert.equal(args.join(" ").includes(local.secret), false);
 
@@ -537,8 +560,11 @@ test("stops after a while unused, so the model isn't in memory all day", async (
   assert.equal(await local.transcribe(wav()), "Let's meet at 3:30 on Friday, or 3:45.");
 });
 
+// Apple silicon's runtime has a GPU (Metal): these run the engine as there.
+const APPLE_SILICON = { platform: "darwin", arch: "arm64" };
+
 test("a runtime that keeps crashing (on the GPU, then on the CPU) is given up on: the server hears the owner instead", async (t) => {
-  const { local, spawned } = await setup(t, { mode: "crash" });
+  const { local, spawned } = await setup(t, { mode: "crash", ...APPLE_SILICON });
   await local.install();
   // The GPU, then at once the CPU; then the CPU again.
   for (let i = 0; i < 2; i++) await assert.rejects(local.ensureRunning(), (e) => e instanceof LocalSpeechError && e.code === "crashed");
@@ -553,12 +579,12 @@ test("a runtime that keeps crashing (on the GPU, then on the CPU) is given up on
 });
 
 test("the GPU failing on this computer moves it to the CPU, at once and from then on", async (t) => {
-  const { local, make, engineRuns, logs } = await setup(t, { mode: "gpu-crash" });
+  const { local, make, engineRuns, logs } = await setup(t, { mode: "gpu-crash", ...APPLE_SILICON });
   await local.install();
   assert.equal(await local.transcribe(wav()), "Let's meet at 3:30 on Friday, or 3:45.", "this dictation is still heard here");
   const devices = () => engineRuns().map((r) => r.args[r.args.indexOf("--device") + 1]);
   assert.deepEqual(devices(), ["auto", "cpu"]);
-  assert.ok(logs.some((m) => /the GPU didn't work here \(it stopped: 3\); using the CPU from now on/.test(m)), logs.join("\n"));
+  assert.ok(logs.some((m) => /it didn't start on the GPU \(it stopped: 3\); using the CPU from now on/.test(m)), logs.join("\n"));
   assert.equal(JSON.parse(fs.readFileSync(local.paths.device, "utf8")).device, "cpu");
   await local.stop();
   // The next run of the app goes straight to the CPU…

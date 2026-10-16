@@ -174,9 +174,10 @@
     const langName = (LANGUAGES.find(([code]) => code === s.options.language) || [])[1] || "That language";
     bar.hidden = !(l.on && l.state === "downloading");
     bar.value = pct;
-    $("local-retry").hidden = !(l.on && l.state === "error");
+    $("local-retry").hidden = !(l.on && l.state === "error" && !l.blocked);
     $("local-remove").hidden = !(l.state === "installed" || l.state === "ready" || l.state === "starting");
     if (!l.on) status.textContent = "Off: your voice goes to Build-a-bot's servers to be turned into text, and is thrown away there.";
+    else if (l.blocked) status.textContent = "It can't run from this Windows account's folder yet (its name has letters from outside English), so Build-a-bot's servers hear you, and throw your voice away once it's text.";
     else if (l.state === "downloading") status.textContent = l.total ? `Getting NVIDIA Parakeet: ${pct}% (${MB(l.received)} of ${MB(l.total)} MB). Until it's done, Build-a-bot's servers hear you.` : "Getting NVIDIA Parakeet…";
     else if (l.state === "error") status.textContent = `${l.error || "It didn't download."} Until then, Build-a-bot's servers hear you.`;
     else if (l.state === "absent") status.textContent = "It downloads when voice typing is on.";

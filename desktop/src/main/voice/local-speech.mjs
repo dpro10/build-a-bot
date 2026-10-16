@@ -34,7 +34,7 @@ const RELEASE = "https://github.com/NVIDIA/NeMo-Speech.cpp/releases/download/v0.
 
 /** NeMo-Speech.cpp 0.2.0 for each platform (the hashes NVIDIA publishes with the release). */
 export const RUNTIMES = Object.freeze({
-  "darwin-arm64": { file: "nemo-speech-0.2.0-macos-aarch64-metal.tar.gz", sha256: "5cb02ba7c04f0b5585ce5cde9c830be5f0b7dfb4c83083c500109c381b4f2da9", itn: true },
+  "darwin-arm64": { file: "nemo-speech-0.2.0-macos-aarch64-metal.tar.gz", sha256: "5cb02ba7c04f0b5585ce5cde9c830be5f0b7dfb4c83083c500109c381b4f2da9", itn: true, gpu: true },
   "darwin-x64": { file: "nemo-speech-0.2.0-macos-x86_64-cpu.tar.gz", sha256: "d52c318d8197511d4f7eee02bcf05511f7e91b300555a130b562e571695a0f39", itn: true },
   "win32-x64": { file: "nemo-speech-0.2.0-windows-x86_64-cpu.zip", sha256: "82c80451086e86194aba9af19f800da77cd66d1c28d993d0efceffd6cdb49bb8", itn: false },
   "linux-x64": { file: "nemo-speech-0.2.0-linux-x86_64-cpu.tar.gz", sha256: "f396057150f1b774935c7414fd32ebc04195a795a34120d78d8c9ecefa1b7507", itn: true },
@@ -48,6 +48,8 @@ export const LOCAL_LANGUAGES = new Set([
   "bg", "cs", "da", "de", "el", "en", "es", "et", "fi", "fr", "hr", "hu", "it",
   "lt", "lv", "mt", "nl", "pl", "pt", "ro", "ru", "sk", "sl", "sv", "uk",
 ]);
+
+const FOLDER_PROBLEM = "It can't run from this Windows account's folder: its name has letters from outside English, and Windows keeps no short name for it.";
 
 /** Room the download needs besides the model itself. */
 const SPARE_BYTES = 300 * 1024 * 1024;
@@ -128,6 +130,27 @@ function run(spawnImpl, cmd, args) {
     });
     child.on("error", reject);
     child.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`${cmd} exited with ${code}: ${err.trim().slice(0, 300)}`))));
+  });
+}
+
+/** Plain ASCII, which every program can open as a path. */
+const ascii = (s) => /^[\x20-\x7e]*$/.test(s);
+
+/**
+ * Windows: a folder's short name (C:\Users\JOS~1\…), plain ASCII where its long name isn't, or
+ * null when Windows keeps none for it (short names can be turned off for a drive).
+ */
+function shortPath(spawnImpl, dir) {
+  return new Promise((resolve) => {
+    let out = "";
+    const child = spawnImpl(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-Command", "(New-Object -ComObject Scripting.FileSystemObject).GetFolder($env:BAB_SHORT_OF).ShortPath"],
+      { env: { ...process.env, BAB_SHORT_OF: dir }, stdio: ["ignore", "pipe", "ignore"], windowsHide: true },
+    );
+    child.stdout?.on("data", (d) => (out += d));
+    child.on("error", () => resolve(null));
+    child.on("close", (code) => resolve(code === 0 && out.trim() ? out.trim() : null));
   });
 }
 
@@ -221,11 +244,36 @@ export class LocalSpeech extends EventEmitter {
     /** Checked for an engine an earlier run left behind. */
     this.reaped = false;
     /**
-     * Where it runs the model: "auto" (the GPU where there is one: Metal on Apple silicon) until
-     * that fails on this computer, then "cpu" from then on. Read from engine.json at the first start.
+     * Where it runs the model, with a runtime that has a GPU (Metal on Apple silicon): "auto" (the
+     * GPU) until that fails on this computer, then "cpu" from then on. Read from engine.json at
+     * the first start. The other runtimes are CPU-only.
      * @type {'auto'|'cpu'|null}
      */
     this.device = null;
+    /** Windows: the folder as the engine can open it (see place()); undefined until asked. @type {string | null | undefined} */
+    this.short = undefined;
+  }
+
+  /**
+   * The folder as a path NVIDIA's engine can open. Its Windows build can't open files in a folder
+   * whose name has letters from outside English (C:\Users\José\…), even given relative to it: it
+   * gets Windows' short name for the folder instead (C:\Users\JOS~1\…), plain ASCII. Null when
+   * Windows keeps no short name there: then it can't run on this computer.
+   */
+  async place() {
+    if (this.platform !== "win32" || ascii(this.dir)) return this.dir;
+    if (this.short === undefined) {
+      await fsp.mkdir(this.dir, { recursive: true });
+      const short = await shortPath(this.spawn, this.dir);
+      this.short = short && ascii(short) ? short : null;
+      this.log(`local speech: the folder's name isn't plain ASCII; ${this.short ? "using its short name" : "Windows keeps no short name for it"}`);
+    }
+    return this.short;
+  }
+
+  /** It can't run here (Windows, a folder it can't open; see place()). */
+  blocked() {
+    return this.short === null;
   }
 
   get paths() {
@@ -267,7 +315,7 @@ export class LocalSpeech extends EventEmitter {
       received += f.received;
       total += f.total;
     }
-    return { state: this.state, supported: this.supported(), received, total, error: this.error, model: LOCAL_MODEL.label, bytes: this.src.modelBytes };
+    return { state: this.state, supported: this.supported(), blocked: this.blocked(), received, total, error: this.error, model: LOCAL_MODEL.label, bytes: this.src.modelBytes };
   }
 
   /** @param {LocalState} state */
@@ -313,6 +361,7 @@ export class LocalSpeech extends EventEmitter {
   async doInstall() {
     const p = this.paths;
     this.error = null;
+    if (!(await this.place())) throw new LocalSpeechError("folder", FOLDER_PROBLEM);
     this.abort = new AbortController();
     this.files = new Map([["model", { received: 0, total: this.src.modelBytes }]]);
     this.set("downloading");
@@ -496,19 +545,36 @@ export class LocalSpeech extends EventEmitter {
             await output(this.spawn, "ps", ["-p", String(pid), "-o", "command="]),
           );
     if (!ours) return;
+    const alive = () => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
     try {
       process.kill(pid);
-      this.log("local speech: stopped an engine left running by an earlier run");
     } catch {
-      /* already gone */
+      return;
     }
+    // Gone before the new one loads the model, so the two don't share the memory for it.
+    for (let i = 0; i < 50 && alive(); i++) await sleep(100);
+    if (alive()) {
+      try {
+        process.kill(pid, "SIGKILL");
+      } catch {
+        /* gone just now */
+      }
+    }
+    this.log("local speech: stopped an engine left running by an earlier run");
   }
 
-  /** The GPU failed on this computer (it crashed or hung): the CPU from now on. */
+  /** It failed on the GPU on this computer (it crashed or hung): the CPU from now on. */
   useCpu(why) {
     if (this.device === "cpu") return;
     this.device = "cpu";
-    this.log(`local speech: the GPU didn't work here (${why}); using the CPU from now on`);
+    this.log(`local speech: it didn't start on the GPU (${why}); using the CPU from now on`);
     // Written at once (it's tiny), so it can't land in a folder that's being deleted.
     try {
       fs.writeFileSync(this.paths.device, JSON.stringify({ device: "cpu", runtime: this.src.runtimeSha256, why: String(why), at: new Date().toISOString() }));
@@ -540,6 +606,8 @@ export class LocalSpeech extends EventEmitter {
 
   async startOnce() {
     if (!this.isInstalled()) throw new LocalSpeechError("absent", "It isn't downloaded yet.");
+    const root = await this.place();
+    if (!root) throw new LocalSpeechError("folder", FOLDER_PROBLEM);
     await this.reap();
     const now = Date.now();
     this.crashes = this.crashes.filter((t) => now - t < 10 * 60_000);
@@ -547,19 +615,22 @@ export class LocalSpeech extends EventEmitter {
     const p = this.paths;
     this.port = await freePort();
     this.secret = randomBytes(24).toString("hex");
-    // Paths relative to its folder (it runs there): a native program may not open a path with
-    // letters from outside English (C:\Users\José\…) given on its command line.
-    this.device ??= this.loadDevice();
-    const device = this.device;
+    const device = this.runtime?.gpu ? (this.device ??= this.loadDevice()) : "cpu";
     this.lastDevice = device;
+    // It runs in its own folder (as place() gives it), with paths relative to it.
+    const bin = path.join(root, path.relative(this.dir, p.bin));
     const args = ["serve", "--asr-model", path.relative(this.dir, p.model), "--host", "127.0.0.1", "--port", String(this.port), "--no-ui", "--device", device];
     if (fs.existsSync(p.itn)) args.push("--itn-model-dir", path.relative(this.dir, p.itn));
     const env = { ...process.env, NEMO_SPEECH_HTTP_API_KEY: this.secret };
-    if (this.platform === "win32") env.PATH = `${path.dirname(p.bin)};${env.PATH ?? ""}`;
+    if (this.platform === "win32") {
+      // Its DLLs sit next to it; and its temporary files go in its folder too, not the user's.
+      env.PATH = `${path.dirname(bin)};${env.PATH ?? ""}`;
+      await fsp.mkdir(path.join(this.dir, "tmp"), { recursive: true });
+      env.TEMP = env.TMP = path.join(root, "tmp");
+    }
     this.stopping = false;
     this.set("starting");
-    // In its own folder: what it writes, it writes there.
-    const child = this.spawn(p.bin, args, { cwd: this.dir, env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    const child = this.spawn(bin, args, { cwd: root, env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
     this.child = child;
     if (child.pid) {
       try {
