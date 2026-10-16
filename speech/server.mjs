@@ -12,8 +12,9 @@
  *   - Bearer-key auth, upload and length limits, and a queue so a burst gets "busy" (the app
  *     then uses its backup) instead of a slow pile-up.
  *
- * Privacy: audio is handled in memory (or /dev/shm) and deleted as soon as it's text. Nothing
- * that was said is logged or kept: the request log has times, lengths, the model and the language.
+ * Privacy: audio is handled in memory (ffmpeg's files go in /dev/shm when it has room, else the
+ * temp folder) and deleted as soon as it's text. Nothing that was said is logged or kept: the
+ * request log has times, lengths, the model and the language.
  */
 import http from "node:http";
 import { spawn } from "node:child_process";

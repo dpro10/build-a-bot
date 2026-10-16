@@ -5,8 +5,7 @@
  * what Build-a-bot's speech-to-text layer speaks.
  */
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { mkdtemp, readFile, rm, statfs, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -98,9 +97,19 @@ export function wavInfo(buf) {
   return null;
 }
 
-/** A private folder in RAM when there is one (/dev/shm), so the audio never touches a disk. */
+/**
+ * A private folder in RAM (/dev/shm) when it has room, so the audio doesn't touch a disk. Docker
+ * gives containers only 64 MB there by default (Nebius endpoints get 16 GiB), and a long recording
+ * as WAV is about 2 MB a minute, so a small one falls back to the temp folder.
+ */
 async function scratchDir() {
-  const base = existsSync("/dev/shm") ? "/dev/shm" : os.tmpdir();
+  let base = os.tmpdir();
+  try {
+    const fs = await statfs("/dev/shm");
+    if (fs.bavail * fs.bsize > 512 * 1024 * 1024) base = "/dev/shm";
+  } catch {
+    // No /dev/shm here.
+  }
   return mkdtemp(path.join(base, "speech-"));
 }
 
