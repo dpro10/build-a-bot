@@ -276,7 +276,7 @@ Diego asked: "Is vercel the right software to use for this? or AWS or google or 
 - **Cloudflare later, all free:** Turnstile on bot creation; Email Routing for bots' inboxes; Workers AI Whisper as the transcription fallback.
 - **Public demo.** Diego: "anyone can open it, only i have the admin account."
   - The walkthrough runs in demo mode on a public URL; the admin is Diego's Gmail.
-  - Demo mode shows sign-in links on screen, so admin emails also need `ADMIN_SIGNIN_CODE`, a code Diego sets on the server.
+  - Demo mode with no email provider shows sign-in links on screen, so admin emails also need `ADMIN_SIGNIN_CODE`, a code Diego sets on the server. Once email is set up, links only go by email (since 2026-10-16, see the security review).
   - Other demo accounts can still be claimed by anyone, so testers shouldn't paste real API keys or connect real accounts until real email sign-in (Resend + a verified domain) is set up.
 - **Brain:** Diego adds his own Token Factory and Tavily keys in Vercel; keys never go through chat or the repo.
 
@@ -643,6 +643,13 @@ A code review of the server and the desktop app. Each fix has a test that fails 
 6. **Long meetings:** notes for a meeting near 4 hours may exceed Vercel's 300-second function limit. Housekeeping writes notes inside the cron tick.
 
 **Fixed 2026-10-15: an open redirect after sign-in.** `safeNext` let `/\evil.example` through, which browsers read as `//evil.example`, so `/login?next=/\evil.example` could send a signed-in person to another site. It now refuses backslashes and control characters (tested). In the same change, a signed-out link into the app (the site's "Try voice typing", an email, the desktop app) keeps its page through sign-in: `src/proxy.ts` sends it to `/login?next=<that page>`. Before, everyone came back to `/app`.
+
+**Fixed 2026-10-16: a demo server with email set up showed sign-in links on screen.** A review on 2026-10-15 found it (Cookbook open thread).
+- **The hole:** in demo mode, when a sign-in email failed for any reason, the page showed the real link, for any address. The admin's address was included, because the admin code is asked only when there's no email provider. Using up Resend's daily quota would make every send fail, so anyone could have signed in as anyone on the live site.
+- **The fix:** once email is set up, the link only ever goes to the inbox, demo mode or not. A failed send says "We couldn't send the email just now". Demo servers with no email provider still show the link, as before.
+- **Tests:** `tests/signin-demo-email.test.ts`, which fail on the old code.
+- **Why now:** accounts hold credit now, so a takeover can spend money.
+- **Still for Diego:** turn `DEMO_MODE` off in production, as decided on 2026-10-14. That takes demo mode's other shortcuts off the live site: simulated apps, and credit added for free.
 
 ## Gotchas found while building
 
