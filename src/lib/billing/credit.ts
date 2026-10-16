@@ -5,9 +5,10 @@
  * money check for credit first; a balance can dip a little below zero (a message's cost is only
  * known once it's answered), and the next one waits until credit is added.
  */
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { schema, type Db } from "@/lib/db";
 import { newId } from "@/lib/utils";
+import { DEMO_CREDIT_CAP_USD } from "./prices";
 
 /** Credit every account starts with, so it can be tried without a card. STARTER_CREDIT_USD changes it (0: none). */
 export function starterCreditMicros(): number {
@@ -74,15 +75,30 @@ export async function addCredit(
   return rows.length > 0;
 }
 
+/** Demo credit an account has been given (demo mode adds up to DEMO_CREDIT_CAP_USD of it). */
+export async function demoCreditMicros(db: Db, userId: string): Promise<number> {
+  const [row] = await db
+    .select({ v: sql<string>`coalesce(sum(${schema.credits.amountMicros}), 0)` })
+    .from(schema.credits)
+    .where(and(eq(schema.credits.userId, userId), eq(schema.credits.kind, "demo")));
+  return Number(row?.v ?? 0);
+}
+
 /**
  * Someone who built a bot before signing in, signing in to the account they already had: the
  * credit the first account added and didn't use moves over with its bots. Its starter credit
  * doesn't (the account it joins has its own), and neither does what it used.
+ *
+ * Before signing in, credit can only be added in demo mode (a card needs an email first), so it's
+ * demo credit, and it moves only as far as the account it joins can still get demo credit:
+ * otherwise signing in from one throwaway account after another would pile it up past the cap.
  */
 export async function carryCredit(db: Db, fromUserId: string, toUserId: string): Promise<void> {
   const c = await getCredit(db, fromUserId);
-  const left = c.addedMicros - Math.max(0, c.spentMicros - c.starterMicros);
-  if (left > 0) await addCredit(db, { userId: toUserId, kind: "gift", amountMicros: left, note: "moved from the account made before signing in" });
+  const unused = c.addedMicros - Math.max(0, c.spentMicros - c.starterMicros);
+  const room = DEMO_CREDIT_CAP_USD * 1_000_000 - (await demoCreditMicros(db, toUserId));
+  const moved = Math.min(unused, room);
+  if (moved > 0) await addCredit(db, { userId: toUserId, kind: "demo", amountMicros: moved, note: "moved from before you signed in" });
 }
 
 /** Credit added to an account, newest first (for Credit & usage). */

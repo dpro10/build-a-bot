@@ -57,7 +57,16 @@ There are no plans: people pay for what they use, at cost, from prepaid credit (
 2. Add a webhook endpoint → `{APP_URL}/api/webhooks/stripe` with the events `checkout.session.completed` and `checkout.session.async_payment_succeeded`; set `STRIPE_WEBHOOK_SECRET` to its signing secret.
 3. Try it with a test card (4242 4242 4242 4242) in test mode: Credit & usage → Add $5 → the balance goes up by $5.00 once the webhook lands (a few seconds).
 
-Until `STRIPE_SECRET_KEY` is set, Credit & usage says adding credit is coming soon, and the starter credit is what there is. Refunds are by hand, from the Stripe dashboard, when someone asks (refund the credit they haven't used; Stripe keeps its fee), then record it with a negative `credits` row (`kind: "refund"`) so the balance matches.
+Until `STRIPE_SECRET_KEY` is set, Credit & usage says adding credit is coming soon, and the starter credit is what there is (in demo mode, credit is added for free instead, up to $20 an account).
+
+Refunds are by hand, when someone asks. Refund the credit they haven't used from the Stripe dashboard (Stripe keeps its fee). Then record it so their balance matches, in Supabase's SQL editor (here, $4.50 for the account `usr_…`):
+
+```sql
+insert into credits (id, user_id, kind, amount_micros, note)
+values ('cr_refund_' || gen_random_uuid(), 'usr_…', 'refund', -4500000, 'refunded in Stripe');
+```
+
+A paid Checkout for an account deleted before Stripe confirmed it adds no credit; the server log says `[billing] paid Checkout session … refund it in Stripe`.
 
 ## 7. Before launch
 
