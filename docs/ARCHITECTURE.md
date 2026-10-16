@@ -10,7 +10,7 @@ Build-a-bot is one Next.js 16 app (App Router, TypeScript) with Postgres behind 
                  handleInbound / chat route (SSE)
                                ▼
    ┌──────────────────── runTurn (src/lib/agent/run.ts) ────────────────────┐
-   │ owner commands (STOP/START/HELP) → paused? → plan limits → brain       │
+   │ owner commands (STOP/START/HELP) → paused? → credit / fair use → brain │
    │ → [model ⇄ tools]×8, each tool call → policy engine → allow/ask/deny   │
    │ → approvals (tap to run) → receipts → AI disclosure / crisis footer    │
    └────────────────────────────────┬───────────────────────────────────────┘
@@ -38,7 +38,7 @@ Build-a-bot is one Next.js 16 app (App Router, TypeScript) with Postgres behind 
 | `src/app/desktop` | Pages the desktop app shows (the buddy at the bottom of the screen) |
 | `src/lib/mcp-server` | The bot's tools as an MCP server |
 | `src/lib/scheduler` | Reminders and routines (time zones, next-run math, the tick) |
-| `src/lib/billing` | Plans, usage metering, Stripe |
+| `src/lib/billing` | Prices (at cost), credit, usage metering, Stripe top-ups |
 | `src/lib/db` | Drizzle schema, Postgres/PGlite, migrations in `drizzle/` |
 | `src/components` | UI kit, avatars, builder, catalog, chat, dashboard sections |
 
@@ -57,7 +57,7 @@ Main tables: `users`, `sessions`, `bots`, `connections` (a bot's apps + per-capa
 `runTurn` (`src/lib/agent/run.ts`) is the only way a bot does anything. Every caller uses it: the web chat (streams events over SSE), channel webhooks, the scheduler, approval follow-ups and the first greeting.
 
 1. **Owner commands** (STOP, START, HELP) are handled before any model call. STOP pauses the bot from any channel; while paused nothing runs, not even reads.
-2. **Limits**: the owner's plan meters included messages, searches, voice minutes and texts (`src/lib/billing/usage.ts`).
+2. **Credit**: a turn on an included model needs credit left; on the owner's own AI, a monthly fair-use limit applies (`checkSpend` in `src/lib/billing/usage.ts`). What the turn cost (tokens at Token Factory's price, lookups at Tavily's) is recorded as it happens.
 3. **Brain** (`src/lib/agent/brain.ts`): included models on Nebius Token Factory, the owner's API key (12 providers + any OpenAI-compatible endpoint), or the owner's subscription via the Bridge. Thinking knobs differ per model family (`includedRequestOptions`); reasoning models get generous `max_tokens`.
 4. **Tools** (`src/lib/tools/registry.ts`): built-ins + the bot's apps (MCP or Composio), capped at 48 and filtered by trust (Look only never even sees action tools).
 5. **Every tool call goes through the policy engine** and gets a receipt. "Ask" creates an approval (24-hour expiry) the owner can tap from the web or any channel; approving runs the exact stored call.
@@ -93,7 +93,7 @@ A role makes a bot a specialist: a tutor, a job applier, a language partner, a f
   - The bot's jobs come after the role as extras.
 - **First message:** `greetingDirective` asks the role's `firstAsk` instead of offering ideas. The chat's starter chips list the role's ideas first.
 - **Recipes:**
-  - Each role has a featured recipe (`FEATURED_RECIPES`, with `role`): face, built-ins, routines, Free-plan sized.
+  - Each role has a featured recipe (`FEATURED_RECIPES`, with `role`): face, built-ins, routines, kept small (at most 2 routines and 3 apps).
   - `createBot` takes the builder's `role`, or the recipe's when none is sent.
   - `botToRecipe` keeps the role when a bot is shared.
 - **UI:**
@@ -182,7 +182,7 @@ POST …/finish  →  the bot writes notes  →  web chat + the owner's best cha
 - **Hearing it on the computer** (`desktop/src/main/meeting-speech.mjs`, `decoder-window.mjs`, `voice/local-speech.mjs`): the same Parakeet engine and "Private speech" setting as voice typing. The upload queue holds a piece until it can be heard; the notes are written only once every piece is in, and while pieces wait the app sends `PATCH { hearing: true }` so the server doesn't wrap the meeting up as abandoned. The desktop session says what the server takes: `meetings.local` (lines heard on the computer) and `meetings.available` (audio it hears itself).
 - **Notes** (`src/lib/meetings/notes.ts`): one model call with no tools, the transcript wrapped as untrusted content, so a hostile line in a call can only skew the notes. Meetings over about an hour are summarized in parts first. Bots on the owner's own Claude/ChatGPT plan write their notes on the owner's computer, as a Bridge job that reads the transcript through the bot's tools.
 - **Tools:** `list_meetings`, `read_meeting`, `search_meetings`. All three taint the run, so a transcript can't get the bot to email a stranger without the owner's tap, even under Full faith (tested).
-- **Limits:** meeting minutes per plan (wall-clock time, counted once across both tracks); 4 hours per meeting; one recording per bot at a time; the scheduler wraps up recordings whose recorder vanished (20 minutes without audio), gives notes that never finished an honest ending, and deletes transcripts past each bot's retention (90 days by default; the notes stay).
+- **Limits:** no minutes cap: hearing a call on the computer is free, and the notes on an included model need credit (a recording heard on our server instead needs it too); minutes are counted (wall-clock time, once across both tracks) for Credit & usage; 4 hours per meeting; one recording per bot at a time; the scheduler wraps up recordings whose recorder vanished (20 minutes without audio), gives notes that never finished an honest ending, and deletes transcripts past each bot's retention (90 days by default; the notes stay).
 - **Consent:** never before the owner says yes, no auto-record, and only while the bot is visible (the desktop app's window at the bottom of the screen). Each meeting records who said yes, when, and whether the heads-up was copied for the call.
 - **The buddy** (`src/components/meetings/Buddy.tsx`): `/desktop/buddy` is what the desktop app shows in its transparent, always-on-top window; its contract is `src/components/meetings/desktop-api.ts`.
 
@@ -200,7 +200,7 @@ desktop app (desktop/src/main/voice)
             │  + the kind of app in front (chat, email, code…), language, the owner's switches
             ▼
 POST /api/voice/dictate  (JSON { heard }, or a raw audio body; the app's device token)
-   1. limits: words a month per plan, 3,000 dictations a day, 60 a minute, the site's daily ceiling
+   1. limits: credit for a recording heard on the server (words heard on the computer need none), 3,000 dictations a day, 60 a minute, the site's daily ceiling
    2. speech-to-text, unless the computer already did it (NVIDIA Parakeet on our speech server;
       Whisper providers get the owner's words and bots' names as a prompt)
    3. guards: too little speech → nothing; silence turned into "Thank you." or the prompt echoed → nothing
@@ -225,7 +225,7 @@ keeps a word count, never the words
 - **"Hey {bot}"** goes into the bot's web conversation like a typed message (`meta.via = "voice"`), with a directive to answer briefly, so it runs through `runTurn`, the policy engine and approvals like everything else, and shows up in the chat later.
   - **With a selection** (Shift held), the selected text goes along (`meta.selection`, shown in the chat bubble). The model reads it wrapped as `<untrusted_content>` (`src/lib/agent/selection.ts`, for included brains and the Bridge alike), and the run is tainted while it's in that conversation's history, so the injection guard asks before a send to anyone new, even under Full faith.
 - **Auth:** the desktop app's device token (the same pairing as the Bridge) for talking, editing and asking; the web session (same-origin checked for writes) only for the dictionary: `src/lib/dictation/auth.ts`.
-- **Limits:** `usage.dictationWords` (Free 8,000 words a month; Plus and Pro unlimited), counted when text is typed, never for commands or nothing heard. The per-owner daily cap and the site ceiling (`DICTATION_DAILY_LIMIT`) keep "unlimited" from being a blank check.
+- **Limits:** no word limit. `usage.dictationWords` is counted when text is typed, never for commands or nothing heard. What costs money is paid from credit: a recording heard on the server, and the AI cleanup (without credit, the plain cleanup is typed). The per-owner daily cap and the site ceiling (`DICTATION_DAILY_LIMIT`) keep it from being a blank check.
 - **The desktop half:** a keyboard hook (`uiohook-napi`) hears the shortcut anywhere (a pure state machine: hold, tap, double tap for hands-free, chords left alone); the pill is a small focus-less window; the text is pasted with the clipboard (snapshot → paste → put back) and real key presses. It works out the app's kind locally and sends only that. History is encrypted on the computer. See `desktop/README.md`.
 
 ## The bot as an MCP server
@@ -238,7 +238,12 @@ Reminders and routines are rows in `schedules` with a next-run time computed in 
 
 ## Billing
 
-Plans live in `src/lib/billing/plans.ts`; limits are enforced in code. Stripe Checkout and the customer portal handle payment; the webhook keeps `users.plan` in sync. In demo mode, plans switch instantly from the billing page.
+There are no plans: people pay for what they use, at cost (`docs/DECISIONS.md`).
+
+- **Prices** (`src/lib/billing/prices.ts`, safe for the browser): what each service charges us, with nothing added. Included models are charged per token at their Token Factory price (`models/catalog.ts`); lookups, texts, calls and cloud-browser tasks have per-use prices. The pricing page, Credit & usage and the builder all read the same numbers.
+- **Credit** (`src/lib/billing/credit.ts`): balance = starter credit (`STARTER_CREDIT_USD`) + the `credits` table (top-ups, demo credit, refunds) − `usage.cost_micros` (what everything cost, recorded as it happens, in millionths of a dollar).
+- **Before anything that costs money**, `checkSpend` (`usage.ts`) checks for credit: a turn on an included model, a lookup, a text or call (`channels/outbound.ts`), a cloud-browser task, a recording heard on our server, voice typing's AI cleanup, editing by voice, meeting notes on an included model. Your own AI has a monthly fair-use limit instead, and an account without a confirmed email gets 5 included messages. Fair use also caps bots (10), apps and routines (200 per bot).
+- **Adding credit** (`stripe.ts`): a one-time Stripe Checkout payment of $5, $10 or $20 with Stripe's fee on top (`topUpChargeCents`). The webhook (`checkout.session.completed`, `checkout.session.async_payment_succeeded`) adds the credit once per session (a unique index on the session id). In demo mode, `/api/billing/demo` adds it without paying.
 
 ## Demo mode
 
@@ -246,13 +251,13 @@ Plans live in `src/lib/billing/plans.ts`; limits are enforced in code. Stripe Ch
 - **A scripted brain** (`src/lib/llm/demo.ts`) that calls the real tools, so the policy engine, approvals and receipts all run for real. It answers every job's starter ideas, and does its time math on the owner's clock.
 - **Simulated apps and channels** with sample data: an inbox with a phishing email, a week of calendar, a few PRs.
 - **A scripted meeting** and **sample dictations** for a recording sent to the server, only when you run it yourself (or tests, `DEMO_SPEECH=1`; the pill says *demo*). A deployed site never makes up speech: without a speech-to-text key, a recording isn't turned into text there, and meeting notes and voice typing work with what the desktop app hears on the computer.
-- **Instant plan switching.**
+- **Free credit:** Add $5, $10 or $20 in Credit & usage, without paying.
 
 Every flow in the product can be tried with zero keys when you run it yourself, and nothing real is sent or charged. `docs/TRY-IT.md` walks through it.
 
 ## Testing
 
-- `npm test`: the policy engine, scheduler math, the receipts trigger, and the full agent pipeline on in-memory Postgres (greeting, STOP/START, reminders, phishing detection, the injection guard under Full faith, approvals, Look only, strangers can't drive the bot, append-only receipts), and meeting notes end to end (chunks → transcript → notes → tools, device tokens, plan limits, stale recordings, notes on the owner's computer, a transcript that tries to make the bot email a stranger), and memory (which memories each brain size gets in a real turn, Bring my memories against a stand-in model and line by line, remember/recall/forget, the pin cap), and voice typing (the text rules on real-world transcripts, the pipeline against a fake Groq: prompts, guards, the AI cleanup's checks and timeouts, snippets, commands, limits; the routes and the dictionary).
+- `npm test`: the policy engine, scheduler math, the receipts trigger, and the full agent pipeline on in-memory Postgres (greeting, STOP/START, reminders, phishing detection, the injection guard under Full faith, approvals, Look only, strangers can't drive the bot, append-only receipts), and meeting notes end to end (chunks → transcript → notes → tools, device tokens, out of credit, stale recordings, notes on the owner's computer, a transcript that tries to make the bot email a stranger), and memory (which memories each brain size gets in a real turn, Bring my memories against a stand-in model and line by line, remember/recall/forget, the pin cap), and voice typing (the text rules on real-world transcripts, the pipeline against a fake Groq: prompts, guards, the AI cleanup's checks and timeouts, snippets, commands, limits; the routes and the dictionary).
 - `npm run test:e2e` (after `npm run build`; it starts `next start` on port 3100 with its own database), on a phone and a desktop:
   - the builder to a live chat, an approval and STOP;
   - Bring my memories: paste, untick, save, pin;

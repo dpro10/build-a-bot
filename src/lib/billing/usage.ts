@@ -1,11 +1,16 @@
 /**
- * Monthly usage counters and plan-limit checks. One row per user per UTC month.
+ * Monthly usage counters (one row per user per UTC month), with what it all cost us
+ * (`costMicros`, which credit pays for), and the check before anything that costs money.
  */
 import { eq, sql } from "drizzle-orm";
 import { schema, type Db } from "@/lib/db";
 import type { User } from "@/lib/db/schema";
+import { creditOpen } from "@/lib/env";
 import { periodKey } from "@/lib/utils";
-import { getPlan, type Plan } from "./plans";
+import { hasCredit, outOfCreditMessage } from "./credit";
+import { ANONYMOUS_INCLUDED_MESSAGES, FAIR_USE } from "./prices";
+
+export { ANONYMOUS_INCLUDED_MESSAGES };
 
 export type UsageDelta = Partial<{
   messages: number;
@@ -87,53 +92,40 @@ export async function getUsage(db: Db, userId: string, when = new Date()) {
   );
 }
 
-export type LimitKind = "includedMessages" | "byoMessages" | "searches" | "voiceMinutes" | "smsSegments" | "meetingMinutes" | "dictationWords";
+/**
+ * What's about to cost money (or, for your own AI, use our servers). Texts, calls, speech heard on
+ * our server and voice typing's AI cleanup check `hasCredit` directly (credit.ts).
+ */
+export type SpendKind = "included" | "ownBrain" | "lookup" | "webTask";
 
-export type LimitCheck =
-  | { ok: true; plan: Plan }
-  | { ok: false; plan: Plan; kind: LimitKind; used: number; limit: number; message: string; /** Over the allowance for accounts without a confirmed email. */ signIn?: boolean };
+export type SpendCheck = { ok: true } | { ok: false; code: "no_credit" | "sign_in" | "fair_use"; message: string };
 
-/** Included-brain messages an account gets before it confirms an email (accounts are free to make). */
-export const ANONYMOUS_INCLUDED_MESSAGES = 5;
-
-export async function checkLimit(db: Db, owner: Pick<User, "id" | "plan" | "emailVerifiedAt">, kind: LimitKind): Promise<LimitCheck> {
-  const plan = getPlan(owner.plan);
-  const u = await getUsage(db, owner.id);
-  const used =
-    kind === "includedMessages"
-      ? u.includedMessages
-      : kind === "byoMessages"
-        ? u.messages - u.includedMessages
-        : kind === "searches"
-          ? u.searches
-          : kind === "voiceMinutes"
-            ? Math.ceil(u.voiceSeconds / 60)
-            : kind === "meetingMinutes"
-              ? Math.floor(u.meetingSeconds / 60)
-              : kind === "dictationWords"
-                ? u.dictationWords
-                : u.smsSegments;
-  const signIn = kind === "includedMessages" && !owner.emailVerifiedAt;
-  const limit = signIn ? Math.min(plan.limits[kind], ANONYMOUS_INCLUDED_MESSAGES) : plan.limits[kind];
-  if (used < limit) return { ok: true, plan };
-  if (signIn && limit < plan.limits[kind]) {
-    return { ok: false, plan, kind, used, limit, signIn, message: `You've used the ${limit} free messages you get before signing in. Sign in with your email (it's free) to keep going.` };
+/**
+ * Can this account do something that costs money? There are no plans: people pay for what they
+ * use (prices.ts), so the answer is whether there's credit left. Two guard rails stay: an account
+ * that hasn't confirmed an email gets a few messages on an included model, and messages on your own
+ * AI key have a generous monthly fair-use limit (they're free here, but use our servers).
+ */
+export async function checkSpend(db: Db, owner: Pick<User, "id" | "emailVerifiedAt">, kind: SpendKind): Promise<SpendCheck> {
+  if (kind === "ownBrain") {
+    const u = await getUsage(db, owner.id);
+    if (u.messages - u.includedMessages < FAIR_USE.ownBrainMessages) return { ok: true };
+    return {
+      ok: false,
+      code: "fair_use",
+      message: `You've sent ${FAIR_USE.ownBrainMessages.toLocaleString("en-US")} messages on your own AI this month, the fair-use limit. It resets on the 1st.`,
+    };
   }
-  const labels: Record<LimitKind, string> = {
-    includedMessages: "messages on included brains",
-    byoMessages: "messages",
-    searches: "web searches",
-    voiceMinutes: "call minutes",
-    smsSegments: "texts",
-    meetingMinutes: "minutes of meeting notes",
-    dictationWords: "words of voice typing",
-  };
-  return {
-    ok: false,
-    plan,
-    kind,
-    used,
-    limit,
-    message: `You've used all ${limit.toLocaleString()} ${labels[kind]} on the ${plan.name} plan this month.`,
-  };
+  if (kind === "included" && !owner.emailVerifiedAt) {
+    const u = await getUsage(db, owner.id);
+    if (u.includedMessages >= ANONYMOUS_INCLUDED_MESSAGES) {
+      return {
+        ok: false,
+        code: "sign_in",
+        message: `You've used the ${ANONYMOUS_INCLUDED_MESSAGES} free messages you get before signing in. Sign in with your email (it's free) to keep going.`,
+      };
+    }
+  }
+  if (await hasCredit(db, owner.id)) return { ok: true };
+  return { ok: false, code: "no_credit", message: outOfCreditMessage({ canAdd: creditOpen, ownBrain: kind === "included" }) };
 }

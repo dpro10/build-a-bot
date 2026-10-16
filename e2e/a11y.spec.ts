@@ -142,7 +142,7 @@ async function scanBuilder(page: Page, theme: string) {
   await scanHere(page, `${theme} build: brain (plan)`);
   await page.getByRole("radio", { name: /Your own API key/ }).click();
   await scanHere(page, `${theme} build: brain (own key)`);
-  await page.getByRole("radio", { name: /Free open models/ }).click();
+  await page.getByRole("radio", { name: /Open models we run/ }).click();
   await next();
   await page.getByRole("button", { name: /Meetings/ }).first().click();
   await scanHere(page, `${theme} build: apps`);

@@ -19,9 +19,10 @@ import { toolJsonSchema, type AnyToolSpec, type ToolContext, type ToolSource } f
 import { botEmailAddress } from "@/lib/tools/builtin";
 import type { LlmMessage, LlmToolCall, LlmUsage } from "@/lib/llm/types";
 import { LlmError } from "@/lib/llm/types";
-import { available, demoMode, paidPlansOpen } from "@/lib/env";
+import { available, config, demoMode } from "@/lib/env";
 import { estimateCostMicros } from "@/lib/models/catalog";
-import { checkLimit, recordUsage } from "@/lib/billing/usage";
+import { checkSpend, recordUsage } from "@/lib/billing/usage";
+import { UNIT_PRICES } from "@/lib/billing/prices";
 import { underDailyCeiling } from "@/lib/billing/ceiling";
 import {
   CRISIS_FOOTER,
@@ -181,7 +182,7 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
     return finish(input, text, "paused", emit, { parts: [] });
   }
 
-  // 4. Brain + plan limits. A turn that can't run says why once, in its reply (which channels get too);
+  // 4. Brain + credit. A turn that can't run says why once, in its reply (which channels get too);
   // the "done" status tells the chat it wasn't answered.
   const brain = await resolveBrain(db, bot);
   if (brain.kind === "unavailable") {
@@ -196,22 +197,26 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
     const { runViaBridge } = await import("@/lib/bridge/jobs");
     return runViaBridge(notesInContext ? { ...input, startTainted: true } : input, brain);
   }
-  const limit = await checkLimit(db, owner, brain.included ? "includedMessages" : "byoMessages");
-  if (!limit.ok && input.message?.author === "owner") {
-    // What helps: the owner's own brain gets around the included brain's limit; upgrading, only where paid plans are sold.
-    const advice = brain.included
-      ? `${paidPlansOpen ? "Upgrade your plan, or switch" : "Switch"} me to your own AI key or subscription in Settings → Brain to keep going.`
-      : paidPlansOpen
-        ? "Upgrade your plan to keep going."
-        : "";
-    const text = limit.signIn ? limit.message : `${limit.message} ${advice}`.trim();
+  // What it costs: an included model is paid from the owner's credit (at cost); their own AI is
+  // free here, within a monthly fair-use limit.
+  // Out of credit stops everything on our dime: the owner's messages, routines and other people's
+  // messages alike (other people aren't told about the owner's account).
+  const spend = await checkSpend(db, owner, brain.included ? "included" : "ownBrain");
+  if (!spend.ok) {
+    // A routine or check-in (nothing to answer) says so once a day, not every time it fires.
+    if (!input.message && (await saidToday(db, conversation.id, spend.message))) {
+      emit({ type: "status", state: "done" });
+      emit({ type: "done", messageId: null, text: "", status: "limited" });
+      return { status: "limited", text: "", messageId: null, approvals: [] };
+    }
+    const text = input.message?.author === "contact" ? "I can't answer right now. Please try again later." : spend.message;
     return finish(input, text, "limited", emit, { parts: [] });
   }
   // The whole site's daily ceiling on the included brain (see billing/ceiling.ts).
   if (brain.included && !(await underDailyCeiling(db, "included"))) {
     const forOwner = input.message?.author !== "contact";
     const text = forOwner
-      ? "So many people are trying Build-a-bot today that the free brain has reached its daily limit. It resets at midnight UTC. To keep going now, switch me to your own AI key or subscription in Settings → Brain."
+      ? "So many people are trying Build-a-bot today that the open models we run have reached today's limit. It resets at midnight UTC. To keep going now, switch me to your own AI key or subscription in Settings → Brain."
       : "I can't answer right now. Please try again later.";
     return finish(input, text, "limited", emit, { parts: [] });
   }
@@ -401,8 +406,8 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
     includedMessages: input.message && brain.included ? 1 : 0,
     tokensIn: usage.inputTokens,
     tokensOut: usage.outputTokens,
-    searches: state.searches,
     actions: state.actions,
+    // Web lookups were charged as they happened (executeToolCall).
     costMicros: brain.included ? costMicros : 0,
   });
   await receipt(
@@ -417,7 +422,7 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
       inputTokens: usage.inputTokens,
       outputTokens: usage.outputTokens,
       cachedInputTokens: usage.cachedInputTokens ?? 0,
-      paidBy: brain.included ? "plan" : "owner's key",
+      paidBy: brain.included ? "credit" : "owner's key",
     },
     brain.included ? costMicros : 0,
   );
@@ -482,7 +487,7 @@ export async function executeToolCall(
     };
   }
 
-  // Allowed: run it (paid lookups only while the plan and today's ceiling allow).
+  // Allowed: run it (paid lookups only while there's credit and today's ceiling allows).
   let output;
   const refusal = PAID_LOOKUPS.has(spec.name) ? await lookupRefusal(ctx, spec.name) : null;
   if (refusal) {
@@ -494,6 +499,11 @@ export async function executeToolCall(
       output = { ok: false as const, error: truncate(errorMessage(err), 400) };
     }
     if (spec.name === "web_search" || spec.name === "news_headlines") state.searches++;
+    // A lookup Tavily answered costs a credit: counted and charged now, whoever asked (a turn here,
+    // the Bridge, or another AI app through the bot's MCP server).
+    if (PAID_LOOKUPS.has(spec.name) && output.ok && config.tavily.apiKey) {
+      await recordUsage(db, ctx.owner.id, { searches: spec.name === "read_webpage" ? 0 : 1, costMicros: UNIT_PRICES.lookup });
+    }
   }
   if (spec.taints ?? spec.effect === "read") state.tainted = true;
   if (spec.effect !== "read") state.actions++;
@@ -717,14 +727,32 @@ export function newRunState(tainted = false): RunState {
   return { tainted, parts: [], approvals: [], searches: 0, actions: 0 };
 }
 
-/** Tools that cost us per call (web search and page reading). */
+/** The bot already said this in the conversation in the last day (a disclosure line may follow it). */
+async function saidToday(db: Db, conversationId: string, text: string): Promise<boolean> {
+  const since = new Date(Date.now() - 24 * 3600_000);
+  const [row] = await db
+    .select({ id: schema.messages.id })
+    .from(schema.messages)
+    .where(
+      and(
+        eq(schema.messages.conversationId, conversationId),
+        eq(schema.messages.author, "bot"),
+        gte(schema.messages.createdAt, since),
+        sql`starts_with(${schema.messages.text}, ${text})`,
+      ),
+    )
+    .limit(1);
+  return Boolean(row);
+}
+
+/** Tools that cost per call (web search, news and page reading: Tavily). */
 const PAID_LOOKUPS = new Set(["web_search", "news_headlines", "read_webpage"]);
 
 /** Why a paid lookup can't run now (the model hears it and says so), or null. */
 async function lookupRefusal(ctx: ToolContext, name: string): Promise<string | null> {
-  if (name !== "read_webpage") {
-    const plan = await checkLimit(ctx.db, ctx.owner, "searches");
-    if (!plan.ok) return `${plan.message} Answer from what you already know, and say you couldn't search.`;
+  if (config.tavily.apiKey) {
+    const spend = await checkSpend(ctx.db, ctx.owner, "lookup");
+    if (!spend.ok) return `${spend.message} Answer from what you already know, and say you couldn't look it up.`;
   }
   if (!(await underDailyCeiling(ctx.db, "search"))) {
     return "Web lookups have reached today's limit for everyone (it resets at midnight UTC). Answer from what you already know, and say you couldn't look it up.";

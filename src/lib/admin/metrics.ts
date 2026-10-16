@@ -7,7 +7,7 @@ import { and, count, desc, eq, gt, sql } from "drizzle-orm";
 import { schema, type Db } from "@/lib/db";
 import type { User } from "@/lib/db/schema";
 import { demoMode } from "@/lib/env";
-import { PLANS, type PlanId } from "@/lib/billing/plans";
+import { starterCreditMicros } from "@/lib/billing/credit";
 import { periodKey } from "@/lib/utils";
 
 export function adminEmails(): string[] {
@@ -41,12 +41,19 @@ export async function adminMetrics(db: Db) {
     })
     .from(schema.users);
 
-  const plans = await db
-    .select({ plan: schema.users.plan, status: schema.users.planStatus, n: count() })
-    .from(schema.users)
-    .groupBy(schema.users.plan, schema.users.planStatus);
-  const paying = plans.filter((p) => p.plan !== "free" && (p.status === "active" || p.status === "trialing"));
-  const mrr = paying.reduce((sum, p) => sum + (PLANS[p.plan as PlanId]?.priceMonthly ?? 0) * n(p.n), 0);
+  // No plans: people pay for what they use, at cost. Credit paid for with a card, against what
+  // everything used cost (the goal is to break even; starter credit is what's given away).
+  const monthStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1));
+  const [sold] = await db
+    .select({
+      creditMicros: sql<number>`coalesce(sum(${schema.credits.amountMicros}) filter (where ${schema.credits.kind} = 'topup'), 0)`,
+      paidCents: sql<number>`coalesce(sum(${schema.credits.paidCents}) filter (where ${schema.credits.kind} = 'topup'), 0)`,
+      monthCreditMicros: sql<number>`coalesce(sum(${schema.credits.amountMicros}) filter (where ${schema.credits.kind} = 'topup' and ${schema.credits.createdAt} >= ${monthStart}), 0)`,
+      buyers: sql<number>`count(distinct ${schema.credits.userId}) filter (where ${schema.credits.kind} = 'topup')`,
+      demoMicros: sql<number>`coalesce(sum(${schema.credits.amountMicros}) filter (where ${schema.credits.kind} = 'demo'), 0)`,
+    })
+    .from(schema.credits);
+  const [spentAll] = await db.select({ costMicros: sql<number>`coalesce(sum(${schema.usage.costMicros}), 0)` }).from(schema.usage);
 
   const [bots] = await db
     .select({
@@ -147,9 +154,20 @@ export async function adminMetrics(db: Db) {
 
   return {
     users: { total: n(users.total), signedUp: n(users.signedUp), new7: n(users.new7) },
-    plans: plans.map((p) => ({ plan: p.plan, status: p.status, n: n(p.n) })),
-    paying: paying.reduce((s, p) => s + n(p.n), 0),
-    mrr,
+    credit: {
+      /** Credit people paid for (top-ups), all time and this month. */
+      soldUsd: n(sold.creditMicros) / 1_000_000,
+      soldThisMonthUsd: n(sold.monthCreditMicros) / 1_000_000,
+      /** What their cards were charged; the difference is Stripe's fee, passed through. */
+      paidUsd: n(sold.paidCents) / 100,
+      buyers: n(sold.buyers),
+      /** Added without paying, in demo mode. */
+      demoUsd: n(sold.demoMicros) / 1_000_000,
+      /** What everything used cost, all time (at cost: what people's credit paid for). */
+      usedUsd: n(spentAll.costMicros) / 1_000_000,
+      /** Starter credit each account gets. */
+      starterUsd: starterCreditMicros() / 1_000_000,
+    },
     bots: { total: n(bots.total), active7: n(bots.active7), active1: n(bots.active1), paused: n(bots.paused) },
     brains,
     models: models.slice(0, 8),

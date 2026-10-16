@@ -75,8 +75,8 @@ describe("bots' own inboxes", () => {
 });
 
 describe("recipes and drafts in the builder", () => {
-  const live: BuilderContext = { demo: false, live: LIVE_SITE, plan: "free", comingSoon: unavailableConnectors(false, LIVE_SITE), ownerEmail: "dana@example.com" };
-  const demo: BuilderContext = { demo: true, live: {}, plan: "free", comingSoon: [], ownerEmail: null };
+  const live: BuilderContext = { demo: false, live: LIVE_SITE, comingSoon: unavailableConnectors(false, LIVE_SITE), ownerEmail: "dana@example.com" };
+  const demo: BuilderContext = { demo: true, live: {}, comingSoon: [], ownerEmail: null };
   const noKey = { apiKey: "", keyStatus: "idle" as const };
 
   it("outside demo mode, every featured recipe can be made: channels that aren't set up are left out", () => {
@@ -114,11 +114,10 @@ describe("recipes and drafts in the builder", () => {
     expect(withDraft(initialState(null, demo), { channels: ["sms", "web", "fax" as never] }, demo).channels).toEqual(["sms"]);
   });
 
-  it("a channel on a paid plan nobody can buy yet stays out; with Stripe it can come along", () => {
+  it("texts and calls come along once they're set up here (they're paid from credit, not a plan)", () => {
+    expect(usableChannels(["sms", "telegram", "whatsapp"], live)).toEqual(["telegram", "whatsapp"]);
     const withTwilio = { ...live, live: { ...LIVE_SITE, twilio: true } };
-    expect(usableChannels(["sms", "telegram", "whatsapp"], withTwilio)).toEqual(["telegram", "whatsapp"]);
-    expect(usableChannels(["sms", "telegram"], { ...withTwilio, live: { ...withTwilio.live, stripe: true } })).toEqual(["sms", "telegram"]);
-    expect(usableChannels(["sms", "telegram"], { ...withTwilio, plan: "plus" })).toEqual(["sms", "telegram"]);
+    expect(usableChannels(["sms", "voice", "telegram", "whatsapp"], withTwilio)).toEqual(["sms", "voice", "telegram", "whatsapp"]);
   });
 });
 

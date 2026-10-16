@@ -3,7 +3,7 @@ import { schema } from "@/lib/db";
 import { apiError, authedBot, json, parseJson, sameOrigin, type RouteCtx } from "@/lib/api";
 import { listSchedules } from "@/lib/data";
 import { computeNextRun, describeSchedule } from "@/lib/scheduler/time";
-import { getPlan } from "@/lib/billing/plans";
+import { FAIR_USE } from "@/lib/billing/prices";
 import { demoMode } from "@/lib/env";
 import { newId } from "@/lib/utils";
 import { and, count, eq } from "drizzle-orm";
@@ -40,9 +40,8 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string }>) {
   );
   if (!parsed.ok) return parsed.res;
   if (parsed.data.kind === "routine" && !demoMode) {
-    const plan = getPlan(a.user.plan);
     const [{ n }] = await a.db.select({ n: count() }).from(schema.schedules).where(and(eq(schema.schedules.botId, botId), eq(schema.schedules.kind, "routine"), eq(schema.schedules.active, true)));
-    if (n >= plan.limits.routines) return apiError(402, `The ${plan.name} plan includes ${plan.limits.routines} routines.`, { upgrade: "plus" });
+    if (n >= FAIR_USE.routines) return apiError(409, `A bot can have up to ${FAIR_USE.routines} routines on. Turn one off to make room.`, { code: "fair_use" });
   }
   const tz = a.user.timezone || "UTC";
   const nextRunAt = computeNextRun(parsed.data.schedule, tz, new Date());

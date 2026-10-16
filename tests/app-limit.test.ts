@@ -1,7 +1,7 @@
 /**
- * Apps & trust outside demo mode: the plan's apps-per-bot limit holds after the bot is made
- * (built-ins and switched-off apps don't count), and an app whose sign-in can't be reached
- * says so plainly.
+ * Apps & trust outside demo mode: the fair-use limit on apps per bot holds after the bot is made
+ * (built-ins and switched-off apps don't count; there are no plans), and an app whose sign-in
+ * can't be reached says so plainly.
  */
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { and, eq } from "drizzle-orm";
@@ -19,7 +19,7 @@ vi.mock("@/lib/auth/session", async (importOriginal) => ({
 
 const { getDb, resetDbForTests, schema } = await import("@/lib/db");
 const { createBot } = await import("@/lib/bots/create");
-const { PLANS } = await import("@/lib/billing/plans");
+const { FAIR_USE } = await import("@/lib/billing/prices");
 const connectionsRoute = await import("@/app/api/bots/[botId]/connections/route");
 const connectRoute = await import("@/app/api/bots/[botId]/connections/[connectionId]/connect/route");
 import type { Bot, User } from "@/lib/db/schema";
@@ -37,7 +37,7 @@ async function addApp(botId: string, connectorId: string) {
 beforeAll(async () => {
   await resetDbForTests();
   db = await getDb();
-  [owner] = await db.insert(schema.users).values({ id: "usr_free", email: "free@example.com", emailVerifiedAt: new Date(), timezone: "UTC", plan: "free" }).returning();
+  [owner] = await db.insert(schema.users).values({ id: "usr_apps", email: "apps@example.com", emailVerifiedAt: new Date(), timezone: "UTC" }).returning();
   session.user = owner;
 });
 
@@ -68,16 +68,25 @@ async function makeBot(): Promise<Bot> {
   return res.bot;
 }
 
-describe("apps on the Free plan", () => {
-  it("connects as many apps as the plan says; built-ins and switched-off apps don't count", async () => {
-    expect(PLANS.free.limits.connectors).toBe(3);
+describe("apps per bot", () => {
+  it("connects up to the fair-use limit; built-ins and switched-off apps don't count", async () => {
+    expect(FAIR_USE.appsPerBot).toBe(200);
     const bot = await makeBot();
     for (const app of ["notion", "linear", "todoist"]) expect((await addApp(bot.id, app)).status).toBe(200);
-    expect((await addApp(bot.id, "wikipedia")).status).toBe(200); // a built-in
+    // Fill it up with the owner's own MCP servers (they count too), straight into the table.
+    const servers = Array.from({ length: FAIR_USE.appsPerBot - 3 }, (_, i) => ({
+      id: `con_srv${i}`,
+      botId: bot.id,
+      connectorId: `custom_mcp:mcp.example.com/s${i}`,
+      status: "needs_auth",
+      mode: "mcp",
+    }));
+    await db.insert(schema.connections).values(servers);
+    expect((await addApp(bot.id, "wikipedia")).status).toBe(200); // a built-in, at the limit
 
-    const fourth = await addApp(bot.id, "calendly");
-    expect(fourth.status).toBe(402);
-    expect(fourth.data.error).toBe("The Free plan connects 3 apps. Paid plans are coming soon.");
+    const over = await addApp(bot.id, "calendly");
+    expect(over.status).toBe(409);
+    expect(over.data).toMatchObject({ error: "A bot can connect up to 200 apps. Remove one to add another.", code: "fair_use" });
 
     // Asking for one it already has isn't a new app.
     expect((await addApp(bot.id, "notion")).status).toBe(200);

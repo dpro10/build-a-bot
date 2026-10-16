@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { Bot, Brain, CalendarClock, Check, Clock, MessageCircle, Puzzle, ShieldCheck, Sparkles, Sun, UserRound } from "lucide-react";
+import { Bot, Brain, CalendarClock, Check, Clock, Info, MessageCircle, Puzzle, ShieldCheck, Sun, UserRound, Wallet } from "lucide-react";
 import { Avatar } from "@/components/avatar";
 import { BrandTile } from "@/components/brand/icons";
 import { channelIcon } from "@/components/catalog/channel-icon";
@@ -11,11 +11,11 @@ import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { AVATARS, COLORWAYS } from "@/lib/avatars";
-import { PLANS, planAllowsChannel, type PlanId } from "@/lib/billing/plans";
+import { FAIR_USE, UNIT_PRICES, formatMicros, perMessageMicros } from "@/lib/billing/prices";
 import { CHANNEL_BY_KIND } from "@/lib/channels/catalog";
 import { appKinds, getConnector, type ConnectorDef } from "@/lib/connectors";
 import { briefParts, type BriefPart } from "@/lib/jobs";
-import { INCLUDED_MODELS } from "@/lib/models/catalog";
+import { INCLUDED_MODELS, PROVIDER_BY_ID } from "@/lib/models/catalog";
 import { TRUST } from "@/lib/trust";
 import { ROLE_BY_ID } from "@/lib/roles";
 import type { RecipeData } from "@/lib/recipes";
@@ -25,23 +25,27 @@ import { brainSummary, colorwayTint } from "../BotPreview";
 import { countedApps, type BuilderState, type StepId } from "../state";
 import { StepHeading } from "./StepHeading";
 
-/** What the server will adjust because of the owner's plan (it does the same checks). */
-export function planAdjustments(s: BuilderState, plan: PlanId, demo: boolean): string[] {
-  if (demo) return [];
-  const p = PLANS[plan];
-  const out: string[] = [];
-  if (s.trust === "full" && !p.trust.includes("full")) out.push("Full faith is part of Plus — it starts as a Trusted helper.");
-  if (s.brain.kind === "included") {
-    const brain = s.brain;
-    const m = INCLUDED_MODELS.find((x) => x.id === brain.model);
-    if (m && !p.includedModels.includes(m.tier)) out.push(`${m.label} is part of ${m.tier === "smart" ? "Pro" : "Plus"} — it starts on ${INCLUDED_MODELS.find((x) => x.default)!.label}.`);
+/** What running it costs, in a sentence or two: there are no plans, so this is the whole story (prices.ts). */
+export function costLine(s: BuilderState): string {
+  const parts: string[] = [];
+  const brain = s.brain;
+  if (brain.kind === "included") {
+    const m = INCLUDED_MODELS.find((x) => x.id === brain.model) ?? INCLUDED_MODELS.find((x) => x.default)!;
+    parts.push(`About ${formatMicros(perMessageMicros(m))} a message on ${m.label}, paid from your credit at cost.`);
+  } else if (brain.kind === "byok") {
+    parts.push(`Free here: ${PROVIDER_BY_ID[brain.provider]?.name ?? "your provider"} bills you for the thinking.`);
+  } else {
+    parts.push(`Free here: it thinks on your ${brain.subscription === "claude" ? "Claude" : "ChatGPT"} subscription, on your computer.`);
   }
-  for (const kind of s.channels) {
-    const def = CHANNEL_BY_KIND[kind];
-    if (def && def.availability === "available" && !planAllowsChannel(p, kind)) out.push(`${def.name} ${def.plural ? "are" : "is"} part of ${def.minPlan === "pro" ? "Pro" : "Plus"} — ready to switch on when you upgrade.`);
-  }
-  if (countedApps(s.connectors, s.customMcp) > p.limits.connectors) out.push(`${p.name} connects ${p.limits.connectors} apps per bot — the first ${p.limits.connectors} are added now.`);
-  return out;
+  if (s.connectors.includes("web_search") || s.connectors.includes("news") || s.connectors.includes("web_reader")) parts.push(`Each web lookup is ${formatMicros(UNIT_PRICES.lookup)}.`);
+  if (s.channels.includes("sms") || s.channels.includes("voice")) parts.push("Texts and calls are paid from credit too.");
+  return parts.join(" ");
+}
+
+/** What the server will adjust (it does the same check): only the fair-use limit on apps is left. */
+export function adjustmentsFor(s: BuilderState, demo: boolean): string[] {
+  if (demo || countedApps(s.connectors, s.customMcp) <= FAIR_USE.appsPerBot) return [];
+  return [`A bot can connect up to ${FAIR_USE.appsPerBot} apps. The first ${FAIR_USE.appsPerBot} are added now.`];
 }
 
 const BRIEF_TIMES = Array.from({ length: 13 }, (_, i) => {
@@ -76,7 +80,6 @@ export function ReviewStep({
   onBrief,
   onAge,
   goTo,
-  plan,
   demo,
   timezone,
   atBotLimit,
@@ -87,7 +90,6 @@ export function ReviewStep({
   onBrief: (v: BuilderState["brief"]) => void;
   onAge: (v: boolean) => void;
   goTo: (step: StepId) => void;
-  plan: PlanId;
   demo: boolean;
   timezone: string;
   atBotLimit: boolean;
@@ -100,7 +102,7 @@ export function ReviewStep({
   const brain = brainSummary(s);
   const trust = TRUST[s.trust];
   const channels = ["web", ...s.channels].map((k) => CHANNEL_BY_KIND[k as keyof typeof CHANNEL_BY_KIND]).filter(Boolean);
-  const adjustments = planAdjustments(s, plan, demo);
+  const adjustments = adjustmentsFor(s, demo);
 
   return (
     <div className="flex flex-col gap-6">
@@ -166,6 +168,14 @@ export function ReviewStep({
           </Row>
           <Row icon={<Clock className="size-4" />} label="Time" onEdit={null}>
             <span className="text-muted-foreground">{timezone.replace(/_/g, " ")} (from your device)</span>
+          </Row>
+          <Row icon={<Wallet className="size-4" />} label="Cost" onEdit={null}>
+            <span className="text-muted-foreground">
+              {costLine(s)}{" "}
+              <Link href="/pricing" target="_blank" className="font-semibold text-primary hover:underline">
+                Prices
+              </Link>
+            </span>
           </Row>
         </dl>
       </div>
@@ -249,28 +259,15 @@ export function ReviewStep({
       </div>
 
       {adjustments.length ? (
-        <div className="rounded-3xl border border-accent/60 bg-accent/15 p-4 text-sm">
-          <div className="mb-1.5 flex items-center gap-2 font-semibold">
-            <Sparkles className="size-4" /> On the {PLANS[plan].name} plan
-          </div>
-          <ul className="flex flex-col gap-1 text-foreground/80">
-            {adjustments.map((x) => (
-              <li key={x}>• {x}</li>
-            ))}
-          </ul>
-          <Link href="/pricing" target="_blank" className="mt-2 inline-block font-semibold text-primary hover:underline">
-            See plans
-          </Link>
+        <div className="flex items-start gap-2 rounded-3xl border border-accent/60 bg-accent/15 p-4 text-sm text-foreground/80">
+          <Info className="mt-0.5 size-4 shrink-0" />
+          <span>{adjustments.join(" ")}</span>
         </div>
       ) : null}
 
       {atBotLimit ? (
         <div className="rounded-3xl border border-danger/30 bg-danger-soft p-4 text-sm text-danger">
-          Your {PLANS[plan].name} plan includes {PLANS[plan].limits.bots} bot{PLANS[plan].limits.bots === 1 ? "" : "s"}, and you&apos;ve made {PLANS[plan].limits.bots === 1 ? "it" : "them all"}.{" "}
-          <Link href="/app/billing" className="font-semibold underline">
-            Upgrade to make another
-          </Link>
-          .
+          You have {FAIR_USE.bots} bots, the most one account can have. To make another, delete one first, in its Settings.
         </div>
       ) : null}
 

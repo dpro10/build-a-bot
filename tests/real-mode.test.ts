@@ -25,8 +25,8 @@ const { getDb, resetDbForTests, schema } = await import("@/lib/db");
 const { createBot } = await import("@/lib/bots/create");
 const { runTurn } = await import("@/lib/agent/run");
 const { ensureConversation } = await import("@/lib/channels/outbound");
-const { checkLimit, recordUsage } = await import("@/lib/billing/usage");
-const { PLANS } = await import("@/lib/billing/plans");
+const { checkSpend, recordUsage } = await import("@/lib/billing/usage");
+const { FAIR_USE } = await import("@/lib/billing/prices");
 const { buildToolset } = await import("@/lib/tools/registry");
 const { webSearch } = await import("@/lib/tools/builtin/web");
 const { comingSoonConnectors } = await import("@/lib/connectors/availability");
@@ -123,7 +123,7 @@ const json = (data: unknown): Handler => () => Response.json(data);
 beforeAll(async () => {
   await resetDbForTests();
   db = await getDb();
-  [owner] = await db.insert(schema.users).values({ id: "usr_live", email: "live@example.com", emailVerifiedAt: new Date(), timezone: "UTC", plan: "pro" }).returning();
+  [owner] = await db.insert(schema.users).values({ id: "usr_live", email: "live@example.com", emailVerifiedAt: new Date(), timezone: "UTC" }).returning();
   session.user = owner;
 });
 
@@ -265,11 +265,11 @@ describe("what isn't set up is said plainly, once", () => {
     return { res, notices: events.filter((e) => e.type === "notice") };
   }
 
-  it("without Token Factory, the free brain is coming soon", async () => {
+  it("without Token Factory, the open models we run are coming soon", async () => {
     const bot = await makeBot("Thinker");
     const { res, notices } = await say(bot, owner, "hi");
     expect(res.status).toBe("unavailable");
-    expect(res.text).toBe("I can't think right now. The free brain is coming soon. Until then, switch me to your own AI key or subscription in Settings → Brain.");
+    expect(res.text).toBe("I can't think right now. The open models we run are coming soon. Until then, switch me to your own AI key or subscription in Settings → Brain.");
     expect(notices).toEqual([]);
   });
 
@@ -280,9 +280,9 @@ describe("what isn't set up is said plainly, once", () => {
     expect(!out.ok && out.error).toMatch(/^Web search is coming soon\. Answer from what you already know/);
   });
 
-  it("a plan limit doesn't offer an upgrade while paid plans aren't sold", async () => {
-    const [free] = await db.insert(schema.users).values({ id: "usr_free_limit", email: "free@example.com", emailVerifiedAt: new Date(), timezone: "UTC", plan: "free" }).returning();
-    const made = await createBot(db, free, {
+  it("the fair-use limit on your own AI says when it resets, and nothing about credit", async () => {
+    const [keyed] = await db.insert(schema.users).values({ id: "usr_fair_use", email: "keyed@example.com", emailVerifiedAt: new Date(), timezone: "UTC" }).returning();
+    const made = await createBot(db, keyed, {
       avatar: "otto",
       color: "grape",
       name: "Keyed",
@@ -296,13 +296,14 @@ describe("what isn't set up is said plainly, once", () => {
       timezone: "UTC",
     });
     if (!made.ok) throw new Error(made.error);
-    await recordUsage(db, free.id, { messages: PLANS.free.limits.byoMessages });
-    const limit = await checkLimit(db, free, "byoMessages");
-    if (limit.ok) throw new Error("expected the plan's limit to be reached");
-    const { res, notices } = await say(made.bot, free, "hi");
+    await recordUsage(db, keyed.id, { messages: FAIR_USE.ownBrainMessages });
+    const limit = await checkSpend(db, keyed, "ownBrain");
+    if (limit.ok) throw new Error("expected the fair-use limit to be reached");
+    expect(limit.code).toBe("fair_use");
+    const { res, notices } = await say(made.bot, keyed, "hi");
     expect(res.status).toBe("limited");
-    // The limit, and nothing about upgrading (or switching to its own key: it's on one).
-    expect(res.text).toBe(limit.message);
+    // The limit, and nothing about credit (or switching to its own key: it's on one).
+    expect(res.text).toBe("You've sent 100,000 messages on your own AI this month, the fair-use limit. It resets on the 1st.");
     expect(notices).toEqual([]);
   });
 });

@@ -21,5 +21,5 @@ export async function POST(req: Request) {
   const user = await getOrCreateUser({ timezone: parsed.data.timezone });
   const result = await createBot(db, user, parsed.data);
   if (!result.ok) return apiError(result.status ?? 400, result.error);
-  return json({ id: result.bot.id, notes: result.notes, upgrade: result.upgrade ?? null });
+  return json({ id: result.bot.id, notes: result.notes });
 }

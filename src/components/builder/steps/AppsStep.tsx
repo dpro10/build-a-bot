@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { FieldHint, Input, Label } from "@/components/ui/input";
-import { PAID_PLANS_SOON, PLANS, type PlanId } from "@/lib/billing/plans";
+import { FAIR_USE } from "@/lib/billing/prices";
 import { ALL_CONNECTORS, getConnector, type ConnectorDef } from "@/lib/connectors";
 import { JOBS, JOB_BY_ID } from "@/lib/jobs";
 import { cn } from "@/lib/utils";
@@ -23,9 +23,7 @@ export function AppsStep({
   onJobs,
   onConnectors,
   onCustomMcp,
-  plan,
   demo,
-  paidPlans,
   comingSoon,
 }: {
   botName: string;
@@ -35,15 +33,13 @@ export function AppsStep({
   onJobs: (jobs: string[], connectors: string[]) => void;
   onConnectors: (connectors: string[]) => void;
   onCustomMcp: (servers: { url: string; name?: string }[]) => void;
-  plan: PlanId;
   demo: boolean;
-  paidPlans: boolean;
   /** Built-ins this server can't run yet. */
   comingSoon: string[];
 }) {
   const [mcpOpen, setMcpOpen] = React.useState(false);
   const name = botName.trim() || "your bot";
-  const limit = PLANS[plan].limits.connectors;
+  const limit = FAIR_USE.appsPerBot;
   const thirdParty = countedApps(connectors, customMcp);
   const overLimit = !demo && thirdParty > limit;
 
@@ -102,9 +98,10 @@ export function AppsStep({
           <h2 id="apps-heading" className="font-display text-lg font-semibold">
             Apps
           </h2>
-          {!demo ? (
+          {thirdParty > 0 ? (
             <span className={cn("text-sm", overLimit ? "font-semibold text-warning" : "text-muted-foreground")}>
-              {thirdParty} of {limit} apps on {PLANS[plan].name}
+              {thirdParty} app{thirdParty === 1 ? "" : "s"}
+              {overLimit ? ` of ${limit}` : ""}
             </span>
           ) : null}
         </div>
@@ -112,8 +109,7 @@ export function AppsStep({
           <div className="flex items-start gap-2 rounded-2xl bg-warning-soft px-3.5 py-2.5 text-sm text-warning">
             <Info className="mt-0.5 size-4 shrink-0" />
             <span>
-              {PLANS[plan].name} connects {limit} apps per bot. The first {limit} will be added now
-              {paidPlans ? `; upgrade to ${plan === "free" ? "Plus" : "Pro"} anytime to add the rest.` : `. ${PAID_PLANS_SOON}`}
+              A bot can connect up to {limit} apps. The first {limit} will be added now.
             </span>
           </div>
         ) : null}

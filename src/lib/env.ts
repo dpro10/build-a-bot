@@ -113,15 +113,10 @@ export const config = {
     publicKey: v("DISCORD_PUBLIC_KEY"),
     botToken: v("DISCORD_BOT_TOKEN"),
   },
+  /** Stripe, for adding credit (one-time payments: no products or prices to set up). */
   stripe: {
     secretKey: v("STRIPE_SECRET_KEY"),
     webhookSecret: v("STRIPE_WEBHOOK_SECRET"),
-    prices: {
-      plus_monthly: v("STRIPE_PRICE_PLUS_MONTHLY"),
-      plus_yearly: v("STRIPE_PRICE_PLUS_YEARLY"),
-      pro_monthly: v("STRIPE_PRICE_PRO_MONTHLY"),
-      pro_yearly: v("STRIPE_PRICE_PRO_YEARLY"),
-    },
   },
   /** The desktop app for meeting notes (desktop/): where its signed downloads are. Unset = "Coming soon". */
   desktop: { downloadUrl: v("NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL") },
@@ -167,5 +162,8 @@ export function available(key: keyof typeof live): boolean {
   return live[key] || demoMode;
 }
 
-/** Plus and Pro can be bought (Stripe), or switched to without paying in demo mode. Otherwise they're "Coming soon". */
-export const paidPlansOpen = available("stripe");
+/**
+ * Credit can be added: with Stripe, or without paying in demo mode. Otherwise adding credit is
+ * "Coming soon" (and the starter credit is what there is).
+ */
+export const creditOpen = available("stripe");

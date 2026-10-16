@@ -1,156 +1,169 @@
 import type { Metadata } from "next";
-import { ChevronDown, TriangleAlert } from "lucide-react";
+import Link from "next/link";
+import { ChevronDown, Gift, Sparkles, TriangleAlert } from "lucide-react";
 import { getDb } from "@/lib/db";
 import { isAnonymous, requireUser } from "@/lib/auth/session";
-import { PLANS, getPlan } from "@/lib/billing/plans";
+import { creditHistory, getCredit } from "@/lib/billing/credit";
+import { about, creditTone, formatCents, formatMicros, perMessageMicros } from "@/lib/billing/prices";
 import { demoMode, live } from "@/lib/env";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { PageContainer, PageHeader, SectionHeading } from "@/components/account/PageHeader";
-import { UsageMeters } from "@/components/account/UsageMeters";
-import { CheckoutNotice, ManageBillingButton, PlanPicker, type BillingMode } from "@/components/account/BillingClient";
+import { UsageSummary } from "@/components/account/UsageSummary";
+import { AddCredit, CheckoutNotice, type CreditMode } from "@/components/account/CreditClient";
+import { PriceList, defaultIncludedModel } from "@/components/billing/PriceList";
+import { billingFaq } from "@/components/billing/faq";
 import { periodLabels, safeTimeZone, usageNumbers } from "@/components/account/billing-shared";
+import { cn } from "@/lib/utils";
 
-export const metadata: Metadata = { title: "Plan & usage" };
-
-const STATUS: Record<string, { label: string; tone: "success" | "primary" | "warning" | "neutral" }> = {
-  active: { label: "Active", tone: "success" },
-  trialing: { label: "Free trial", tone: "primary" },
-  past_due: { label: "Payment due", tone: "warning" },
-  canceled: { label: "Canceled", tone: "neutral" },
-};
+export const metadata: Metadata = { title: "Credit & usage" };
 
 const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 
-export default async function BillingPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ checkout?: string | string[]; success?: string | string[]; canceled?: string | string[] }>;
-}) {
+const KIND_LABEL: Record<string, string> = {
+  topup: "Added with a card",
+  demo: "Demo credit (nothing charged)",
+  gift: "Credit from Build-a-bot",
+  refund: "Refunded",
+};
+
+export default async function BillingPage({ searchParams }: { searchParams: Promise<{ checkout?: string | string[] }> }) {
   const user = await requireUser("/app/billing");
   const db = await getDb();
-  const [{ used, period }, sp] = await Promise.all([usageNumbers(db, user.id), searchParams]);
-  const plan = getPlan(user.plan);
+  const [{ used, period }, credit, history, sp] = await Promise.all([usageNumbers(db, user.id), getCredit(db, user.id), creditHistory(db, user.id, 20), searchParams]);
   const labels = periodLabels(period);
-  const mode: BillingMode = live.stripe ? "stripe" : demoMode ? "demo" : "off";
-  const status = STATUS[user.planStatus] ?? { label: user.planStatus, tone: "neutral" as const };
-
+  const tz = safeTimeZone(user.timezone);
+  const mode: CreditMode = live.stripe ? "stripe" : demoMode ? "demo" : "off";
   const checkoutParam = first(sp.checkout);
-  const checkout =
-    checkoutParam === "success" || first(sp.success) === "1"
-      ? "success"
-      : checkoutParam === "cancel" || checkoutParam === "canceled" || first(sp.canceled) === "1"
-        ? "cancel"
-        : null;
+  const checkout = checkoutParam === "success" ? "success" : checkoutParam === "cancel" ? "cancel" : null;
+  const dflt = defaultIncludedModel();
+  const balance = credit.balanceMicros;
+  const tone = creditTone(balance);
+  const day = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: tz });
 
-  const renews =
-    user.planRenewsAt && plan.id !== "free"
-      ? user.planRenewsAt.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: safeTimeZone(user.timezone) })
-      : null;
-  const priceLine =
-    plan.priceMonthly === 0
-      ? "Free forever. No card needed."
-      : `$${plan.priceMonthly} a month${renews ? ` · ${user.planStatus === "canceled" ? "ends" : "renews"} ${renews}` : ""}`;
-  const canManage = mode === "stripe" && Boolean(user.stripeCustomerId || user.stripeSubscriptionId);
-
-  const faqs: { q: string; a: React.ReactNode }[] = [
-    {
-      q: "What counts as a message?",
-      a: "One message is one thing you send your bot (or someone you've let reach it) that it answers — however many apps, searches or steps it takes. Reminders, routines and the follow-up after you approve something don't count.",
-    },
-    {
-      q: "Do messages on my own key or subscription count?",
-      a: `Not against your included messages. Those only cover answers from the open models we run for you. On your own API key, your provider bills you and a generous fair-use limit applies (${PLANS.free.limits.byoMessages.toLocaleString("en-US")} a month on Free, ${PLANS.plus.limits.byoMessages.toLocaleString("en-US")} on Plus, ${PLANS.pro.limits.byoMessages.toLocaleString("en-US")} on Pro). Bots that think with your own Claude or ChatGPT subscription through the Bridge don't count at all.`,
-    },
-    {
-      q: "How do phone calls and texts work?",
-      a: !(live.twilio || demoMode)
-        ? "They're coming soon, on Plus and Pro. Until then, talk to your bot on the web, Telegram, Discord or Slack."
-        : `Calls and texts start on Plus (${PLANS.plus.limits.voiceMinutes} call minutes and ${PLANS.plus.limits.smsSegments} texts a month; Pro gets ${PLANS.pro.limits.voiceMinutes} and ${PLANS.pro.limits.smsSegments.toLocaleString("en-US")}). Call minutes add up across all your calls. Texts count in segments of about 160 characters (70 with emoji), so a long text can count as two or three.`,
-    },
-    {
-      q: "What happens if I run out?",
-      a: `No surprise charges. Your bot tells you it hit the limit and that part waits until ${labels.reset}. ${mode === "off" ? "To keep going sooner, switch" : "You can upgrade anytime, or switch"} a bot to your own key or subscription in its Settings → Brain${mode === "off" ? "." : " to keep going."}`,
-    },
-    {
-      q: "When does my usage reset?",
-      a: `On the 1st of every month (UTC). Your next reset is ${labels.reset}.`,
-    },
-    mode === "off"
-      ? {
-          q: "Can I switch plans?",
-          a: "Not yet: Plus and Pro are coming soon. Join a waitlist above and we'll email you when they're ready. Your bots and their memories stay whichever plan you're on.",
-        }
-      : {
-          q: "Can I cancel or switch plans?",
-          a:
-            mode === "stripe"
-              ? "Anytime, from Manage billing. If you cancel, you keep your plan until the end of the period you paid for, then move to Free. Your bots and their memories stay."
-              : "In this demo, switch freely with the buttons above. Nothing is charged, and your bots keep everything they know.",
-        },
-  ];
+  const faqs = billingFaq("app");
 
   return (
     <PageContainer>
-      <PageHeader title="Plan & usage" description="What you're on, what you've used this month, and what each plan includes." />
-      <CheckoutNotice status={checkout} planName={plan.name} />
+      <PageHeader
+        title="Credit & usage"
+        description="No plans and no subscription. You pay for what your bots use, at cost: what each service charges us, with nothing added."
+      />
+      <CheckoutNotice status={checkout} />
 
-      {user.planStatus === "past_due" ? (
-        <div role="alert" className="mb-6 flex items-start gap-3 rounded-3xl border border-warning/40 bg-warning-soft p-4 sm:p-5">
-          <TriangleAlert className="mt-0.5 size-5 shrink-0 text-warning" aria-hidden />
-          <div className="flex-1 text-sm">
-            <div className="font-semibold">Your last payment didn&apos;t go through</div>
-            <p className="text-foreground/80">Update your card in Manage billing to keep {plan.name}.</p>
-          </div>
-          {canManage ? <ManageBillingButton className="shrink-0" /> : null}
-        </div>
-      ) : null}
-
-      <section aria-labelledby="your-plan" className="mb-12 overflow-hidden rounded-3xl border border-border bg-card shadow-soft">
-        <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+      <section aria-labelledby="credit-title" className="mb-12 overflow-hidden rounded-3xl border border-border bg-card shadow-soft">
+        <div className="grid gap-8 p-5 sm:p-6 lg:grid-cols-[1fr_1.1fr] lg:items-start">
           <div className="min-w-0">
-            <div className="text-xs font-bold tracking-[0.12em] text-muted-foreground uppercase">Your plan</div>
-            <div className="mt-1 flex flex-wrap items-center gap-2.5">
-              <h2 id="your-plan" className="font-display text-3xl font-bold">
-                {plan.name}
-              </h2>
-              <Badge tone={status.tone}>{status.label}</Badge>
+            <h2 id="credit-title" className="text-xs font-bold tracking-[0.12em] text-muted-foreground uppercase">
+              Credit left
+            </h2>
+            <div
+              id="credit-balance"
+              className={cn(
+                "mt-1 font-display text-5xl font-bold tracking-tight tabular-nums",
+                tone === "danger" ? "text-danger" : tone === "warning" ? "text-warning" : "text-foreground",
+              )}
+            >
+              {formatMicros(balance)}
             </div>
-            <p className="mt-0.5 text-sm text-muted-foreground">{priceLine}</p>
+            {balance > 0 ? (
+              <p className="mt-1.5 text-sm text-muted-foreground">
+                About {about(balance / Math.max(1, perMessageMicros(dflt)))} messages on {dflt.label}
+                {tone === "warning" ? ". Running low." : "."}
+              </p>
+            ) : (
+              <p role="alert" className="mt-2 flex items-start gap-2 rounded-2xl bg-danger-soft px-3 py-2.5 text-sm text-danger">
+                <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+                <span>
+                  You&apos;re out of credit. Bots on included models wait until you add some, or switch one to your own AI in its Settings → Brain (that&apos;s
+                  free here).
+                </span>
+              </p>
+            )}
+            <dl className="mt-5 grid grid-cols-3 gap-2">
+              {[
+                { k: "Starter credit", v: formatMicros(credit.starterMicros) },
+                { k: "Added", v: formatMicros(credit.addedMicros) },
+                { k: "Used", v: formatMicros(credit.spentMicros) },
+              ].map((x) => (
+                <div key={x.k} className="rounded-2xl bg-background-2/70 px-3 py-2.5">
+                  <dt className="text-[11px] font-medium text-muted-foreground">{x.k}</dt>
+                  <dd className="font-display text-base font-bold tabular-nums">{x.v}</dd>
+                </div>
+              ))}
+            </dl>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {canManage ? <ManageBillingButton /> : null}
-            <Button asChild variant={plan.id === "pro" ? "outline" : "soft"}>
-              <a href="#plans">
-                {plan.id === "pro" ? "Compare plans" : mode === "off" ? "See plans" : "See upgrades"} <ChevronDown />
-              </a>
-            </Button>
+          <div className="min-w-0">
+            <h3 className="mb-3 font-display text-lg font-semibold">Add credit</h3>
+            <AddCredit mode={mode} anonymous={isAnonymous(user)} />
           </div>
-        </div>
-        <div className="border-t border-border bg-background-2/50 p-5 sm:p-6">
-          <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-            <h3 className="font-display text-lg font-semibold">This month</h3>
-            <p className="text-sm text-muted-foreground">
-              {labels.month} · resets {labels.reset}
-            </p>
-          </div>
-          <UsageMeters plan={plan} used={used} resetLabel={labels.reset} paidPlans={mode !== "off"} callsAndTexts={live.twilio || demoMode} />
         </div>
       </section>
 
-      <section id="plans" aria-labelledby="plans-title" className="mb-12 scroll-mt-6">
+      <section aria-labelledby="month-title" className="mb-12">
         <SectionHeading
-          id="plans-title"
-          title="Plans"
-          description={mode === "off" ? "Plus and Pro are coming soon. Your bots keep everything they know." : "Change anytime. Your bots keep everything they know."}
+          id="month-title"
+          title={`${labels.month} so far`}
+          description={
+            <>
+              Spent this month: <strong className="font-semibold text-foreground tabular-nums">{formatMicros(used.costMicros)}</strong>. The counts start over on{" "}
+              {labels.reset}; credit carries over.
+            </>
+          }
         />
-        <PlanPicker
-          current={plan.id}
-          mode={mode}
-          anonymous={isAnonymous(user)}
-          hasSubscription={Boolean(user.stripeSubscriptionId)}
-          email={isAnonymous(user) ? null : user.email}
+        <UsageSummary used={used} callsAndTexts={live.twilio || demoMode} />
+      </section>
+
+      <section aria-labelledby="history-title" className="mb-12">
+        <SectionHeading id="history-title" title="Credit added" />
+        <ul className="divide-y divide-border overflow-hidden rounded-3xl border border-border bg-card shadow-soft">
+          {history.map((h) => (
+            <li key={h.id} className="flex items-center justify-between gap-4 px-5 py-3.5 sm:px-6">
+              <div className="min-w-0">
+                <div className="text-sm font-medium">{KIND_LABEL[h.kind] ?? "Credit"}</div>
+                <div className="text-xs text-muted-foreground">
+                  {day(h.createdAt)}
+                  {h.paidCents ? ` · card charged ${formatCents(h.paidCents)}` : ""}
+                </div>
+              </div>
+              <div className={cn("shrink-0 font-display text-base font-bold tabular-nums", h.amountMicros < 0 ? "text-muted-foreground" : "text-success")}>
+                {h.amountMicros < 0 ? formatMicros(h.amountMicros) : `+${formatMicros(h.amountMicros)}`}
+              </div>
+            </li>
+          ))}
+          {credit.starterMicros > 0 ? (
+            <li className="flex items-center justify-between gap-4 px-5 py-3.5 sm:px-6">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span className="flex size-7 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary" aria-hidden>
+                  <Gift className="size-4" />
+                </span>
+                <div className="min-w-0">
+                  <div className="text-sm font-medium">Starter credit, to try everything</div>
+                  <div className="text-xs text-muted-foreground">{day(user.createdAt)}</div>
+                </div>
+              </div>
+              <div className="shrink-0 font-display text-base font-bold text-success tabular-nums">+{formatMicros(credit.starterMicros)}</div>
+            </li>
+          ) : null}
+          {history.length === 0 && credit.starterMicros === 0 ? (
+            <li className="px-5 py-4 text-sm text-muted-foreground sm:px-6">Nothing yet.</li>
+          ) : null}
+        </ul>
+      </section>
+
+      <section aria-labelledby="prices-title" className="mb-12">
+        <SectionHeading
+          id="prices-title"
+          title="What things cost"
+          description={
+            <>
+              At cost: what each service charges us, with nothing added.{" "}
+              <Link href="/pricing" className="font-medium text-primary hover:underline">
+                See every price
+              </Link>
+              .
+            </>
+          }
         />
+        <PriceList />
       </section>
 
       <section aria-labelledby="faq-title">
@@ -166,6 +179,9 @@ export default async function BillingPage({
             </details>
           ))}
         </div>
+        <p className="mt-6 flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground">
+          <Sparkles className="size-3.5 text-primary" aria-hidden /> Prices in US dollars.
+        </p>
       </section>
     </PageContainer>
   );

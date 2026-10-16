@@ -9,7 +9,6 @@ import type { Bot, Channel, User } from "@/lib/db/schema";
 import { appUrl, config, demoMode, live } from "@/lib/env";
 import { numericCode, pairingCode } from "@/lib/crypto";
 import { isEmail, newId, normalizePhone, UnreachableError } from "@/lib/utils";
-import { getPlan, planAllowsChannel } from "@/lib/billing/plans";
 import { botEmailAddress } from "@/lib/tools/builtin";
 import { CHANNEL_BY_KIND, channelUsable, comingSoonNote, type ChannelKind } from "./catalog";
 import { deliver } from "./outbound";
@@ -21,7 +20,12 @@ import { sendEmailRaw } from "./email";
 import { connectTelegramToken, startManagedTelegram } from "./telegram-setup";
 import { rateLimit } from "@/lib/safety/ratelimit";
 
-export type SetupResult = { ok: true; data?: Record<string, unknown> } | { ok: false; error: string; status?: number };
+export type SetupResult = { ok: true; data?: Record<string, unknown> } | { ok: false; error: string; status?: number; code?: string };
+
+/** A delivery that failed, as a setup error (out of credit is a 402 the page can offer "Add credit" for). */
+function failedDelivery(res: { error?: string; code?: string }, fallback: string): SetupResult {
+  return res.code === "no_credit" ? { ok: false, error: res.error ?? fallback, status: 402, code: "no_credit" } : { ok: false, error: res.error ?? fallback };
+}
 
 async function ensureChannel(db: Db, bot: Bot, kind: ChannelKind): Promise<Channel> {
   const [existing] = await db.select().from(schema.channels).where(and(eq(schema.channels.botId, bot.id), eq(schema.channels.kind, kind))).limit(1);
@@ -119,8 +123,6 @@ export async function channelAction(
 ): Promise<SetupResult> {
   const def = CHANNEL_BY_KIND[kind];
   if (!def) return { ok: false, error: "Unknown channel" };
-  const plan = getPlan(owner.plan);
-
   if (action === "waitlist") {
     const email = String(payload.email ?? owner.email ?? "").trim().toLowerCase();
     if (!isEmail(email)) return { ok: false, error: "Add an email so we can tell you when it's ready." };
@@ -133,10 +135,6 @@ export async function channelAction(
   }
   // Not offered yet, or its service isn't set up on this server (demo mode simulates it).
   if (!channelUsable(def, demoMode, live)) return { ok: false, error: comingSoonNote(def) };
-  if (!planAllowsChannel(plan, kind) && !demoMode) {
-    const planName = def.minPlan === "pro" ? "Pro" : "Plus";
-    return { ok: false, error: `${def.name} ${def.plural ? "are" : "is"} part of ${planName}.${live.stripe ? "" : " Paid plans are coming soon."}`, status: 402 };
-  }
 
   const channel = await ensureChannel(db, bot, kind);
 
@@ -175,7 +173,7 @@ export async function channelAction(
   if (action === "test") {
     if (!channel.ownerAddress || channel.status !== "active") return { ok: false, error: "Finish setting this channel up first." };
     const res = await deliver(db, bot, kind, { to: channel.ownerAddress, text: `Hi! It's ${bot.name}, testing ${def.name}. 👋`, toOwner: true }, { owner, channel });
-    return res.status === "failed" ? { ok: false, error: res.error ?? "Couldn't send" } : { ok: true, data: { status: res.status } };
+    return res.status === "failed" ? failedDelivery(res, "Couldn't send") : { ok: true, data: { status: res.status } };
   }
 
   switch (kind) {
@@ -258,7 +256,7 @@ export async function channelAction(
       if (action === "call_me" && kind === "voice") {
         if (!channel.ownerAddress) return { ok: false, error: "Verify your phone first." };
         const res = await deliver(db, bot, "voice", { to: channel.ownerAddress, text: `Just calling to say hi. Call me back at this number anytime.`, toOwner: true }, { owner, channel });
-        return res.status === "failed" ? { ok: false, error: res.error ?? "Call failed" } : { ok: true, data: { status: res.status } };
+        return res.status === "failed" ? failedDelivery(res, "Call failed") : { ok: true, data: { status: res.status } };
       }
       break;
     }

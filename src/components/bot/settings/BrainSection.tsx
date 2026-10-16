@@ -10,8 +10,9 @@ import { Input } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
 import { toast } from "@/components/ui/toaster";
-import { api, ApiError } from "@/lib/client/api";
+import { api } from "@/lib/client/api";
 import { INCLUDED_MODELS, PROVIDERS, PROVIDER_BY_ID, SUBSCRIPTIONS, contextLabel, type ModelDef, type ProviderId } from "@/lib/models/catalog";
+import { formatMicros, perMessageMicros } from "@/lib/billing/prices";
 import { cn } from "@/lib/utils";
 import { ago } from "@/components/bot/activity/time";
 import { FieldGroup, SettingsSection, useApiErrorToast } from "./ui";
@@ -34,7 +35,6 @@ const TIERS: { id: Tier; label: string; blurb: string }[] = [
   { id: "balanced", label: "Balanced", blurb: "Smarter, still quick" },
   { id: "smart", label: "Smart", blurb: "Best for long, careful work" },
 ];
-const PLAN_FOR_TIER: Record<Tier, string> = { fast: "Free", balanced: "Plus", smart: "Pro" };
 
 const EFFORT_HINT = {
   low: "Answers right away.",
@@ -77,9 +77,6 @@ export function BrainSection({
   initial,
   label,
   keyHint,
-  plan,
-  demo,
-  paidPlans,
   demoBrain,
   devices,
   serverNow,
@@ -90,11 +87,6 @@ export function BrainSection({
   /** brainLabel() of `initial`, from the server. */
   label: string;
   keyHint: string | null;
-  plan: { id: string; name: string; includedModels: string[] };
-  /** Demo mode: any model can be tried, whatever the plan. */
-  demo: boolean;
-  /** Plus and Pro can be bought here (or are simulated in demo mode). */
-  paidPlans: boolean;
   demoBrain: boolean;
   devices: BridgeDeviceView[];
   serverNow: string;
@@ -107,7 +99,6 @@ export function BrainSection({
   );
   const [tab, setTab] = React.useState<BrainValue["kind"]>(initial.kind);
   const [saving, setSaving] = React.useState(false);
-  const [upgrade, setUpgrade] = React.useState<string | null>(null);
 
   // Included
   const [model, setModel] = React.useState(initial.kind === "included" ? initial.model : (INCLUDED_MODELS.find((m) => m.default)?.id ?? INCLUDED_MODELS[0].id));
@@ -135,7 +126,6 @@ export function BrainSection({
 
   const patch = async (brain: Record<string, unknown>, success: string) => {
     setSaving(true);
-    setUpgrade(null);
     try {
       const res = await api<{ bot: { brain: BrainValue } }>(`/api/bots/${botId}`, { method: "PATCH", body: { brain } });
       setCurrent(res.bot.brain);
@@ -143,7 +133,6 @@ export function BrainSection({
       router.refresh();
       return true;
     } catch (err) {
-      if (err instanceof ApiError && err.upgrade) setUpgrade(err.message);
       onError(err);
       return false;
     } finally {
@@ -237,10 +226,7 @@ export function BrainSection({
         <Segmented
           aria-label="Kind of brain"
           value={tab}
-          onChange={(t) => {
-            setTab(t);
-            setUpgrade(null);
-          }}
+          onChange={(t) => setTab(t)}
           options={[
             { value: "included", label: "Included" },
             { value: "byok", label: "API key" },
@@ -252,23 +238,20 @@ export function BrainSection({
         {tab === "included" ? (
           <div className="flex flex-col gap-5">
             <p className="text-sm text-muted-foreground">
-              Open models we run for you. Nothing to set up; your plan covers the messages.
-              {demoBrain ? " In this demo, answers come from a stand-in brain." : ""}
-              {!paidPlans && TIERS.some((t) => !plan.includedModels.includes(t.id)) ? " Paid plans are coming soon." : ""}
+              Open models we run for you on Nebius Token Factory. Nothing to set up: each message is paid from your credit at Token Factory&apos;s
+              price, with nothing added. Prices are for a typical message.
+              {demoBrain ? " In this demo, answers come from a stand-in brain." : ""}{" "}
+              <Link href="/app/billing" className="font-medium text-primary hover:underline">
+                Credit &amp; usage
+              </Link>
             </p>
             {TIERS.map((tier) => {
               const models = INCLUDED_MODELS.filter((m) => m.tier === tier.id);
-              const locked = !plan.includedModels.includes(tier.id);
-              // Outside demo mode a model from a plan you don't have can't be picked.
-              const blocked = locked && !demo;
               return (
                 <div key={tier.id} className="flex flex-col gap-2">
                   <div className="flex items-baseline gap-2">
                     <h4 className="text-sm font-semibold">{tier.label}</h4>
-                    <span className="text-xs text-muted-foreground">
-                      {tier.blurb}
-                      {locked ? ` · with ${PLAN_FOR_TIER[tier.id]}${tier.id === "balanced" ? " and Pro" : ""}` : ""}
-                    </span>
+                    <span className="text-xs text-muted-foreground">{tier.blurb}</span>
                   </div>
                   <div role="radiogroup" aria-label={`${tier.label} models`} className="grid gap-2 sm:grid-cols-2">
                     {models.map((m, i) => (
@@ -278,12 +261,7 @@ export function BrainSection({
                         tabIndex={radioTabIndex(model === m.id, i, models.some((x) => x.id === model))}
                         selected={model === m.id}
                         current={current.kind === "included" && current.model === m.id}
-                        lockedPlan={locked ? PLAN_FOR_TIER[tier.id] : null}
-                        disabled={blocked}
-                        onSelect={() => {
-                          setModel(m.id);
-                          setUpgrade(null);
-                        }}
+                        onSelect={() => setModel(m.id)}
                       />
                     ))}
                   </div>
@@ -303,7 +281,7 @@ export function BrainSection({
                 className="self-start"
               />
             </FieldGroup>
-            <SaveRow upgrade={upgrade}>
+            <SaveRow>
               <Button onClick={saveIncluded} loading={saving} disabled={isCurrentIncluded}>
                 {isCurrentIncluded ? (
                   <>
@@ -317,7 +295,7 @@ export function BrainSection({
           </div>
         ) : tab === "byok" ? (
           <div className="flex flex-col gap-5">
-            <p className="text-sm text-muted-foreground">Use your own account with an AI company. You pay them directly; messages don&apos;t count toward your plan.</p>
+            <p className="text-sm text-muted-foreground">Use your own account with an AI company. You pay them directly, and it&apos;s free here.</p>
             <div role="radiogroup" aria-label="Provider" className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
               {PROVIDERS.map((p, i) => {
                 const on = provider === p.id;
@@ -435,7 +413,7 @@ export function BrainSection({
                 </div>
               ) : null}
             </div>
-            <SaveRow upgrade={upgrade}>
+            <SaveRow>
               <Button onClick={saveByok} loading={saving || keyState.state === "checking"} disabled={isCurrentByok}>
                 {isCurrentByok ? (
                   <>
@@ -589,7 +567,7 @@ export function BrainSection({
                 Use a Gemini key
               </Button>
             </div>
-            <SaveRow upgrade={upgrade} note="Scheduled routines on a subscription brain run at most 10 times a day, to keep use personal.">
+            <SaveRow note="Scheduled routines on a subscription brain run at most 10 times a day, to keep use personal.">
               <Button onClick={saveSub} loading={saving} disabled={isCurrentSub}>
                 {isCurrentSub ? (
                   <>
@@ -615,18 +593,9 @@ function pickModel(def: (typeof PROVIDERS)[number], current: string): string {
   return def.models.find((m) => m.default)?.id ?? def.models[0]?.id ?? OTHER;
 }
 
-function SaveRow({ children, upgrade, note }: { children: React.ReactNode; upgrade: string | null; note?: string }) {
+function SaveRow({ children, note }: { children: React.ReactNode; note?: string }) {
   return (
     <div className="flex flex-col gap-3 border-t border-border pt-4">
-      {upgrade ? (
-        <div className="flex flex-col gap-3 rounded-2xl border border-primary/20 bg-primary-soft/60 p-3.5 text-sm sm:flex-row sm:items-center">
-          <Sparkles className="size-4 shrink-0 text-primary" aria-hidden />
-          <span className="min-w-0 flex-1">{upgrade} Upgrade to use it.</span>
-          <Button asChild size="sm">
-            <Link href="/app/billing">See plans</Link>
-          </Button>
-        </div>
-      ) : null}
       <div className="flex flex-wrap items-center justify-end gap-3">
         {note ? <span className="mr-auto text-xs text-muted-foreground">{note}</span> : null}
         {children}
@@ -640,16 +609,12 @@ function ModelCard({
   tabIndex,
   selected,
   current,
-  lockedPlan,
-  disabled,
   onSelect,
 }: {
   m: ModelDef;
   tabIndex: 0 | -1;
   selected: boolean;
   current: boolean;
-  lockedPlan: string | null;
-  disabled?: boolean;
   onSelect: () => void;
 }) {
   const ctx = contextLabel(m.context);
@@ -658,29 +623,22 @@ function ModelCard({
       type="button"
       role="radio"
       aria-checked={selected}
-      disabled={disabled}
       tabIndex={tabIndex}
       onKeyDown={radioKeyDown}
       onClick={onSelect}
       className={cn(
         "flex flex-col gap-1 rounded-2xl border p-3.5 text-left transition",
-        selected ? "border-primary bg-primary-soft/60 ring-4 ring-primary/10" : "border-border bg-card",
-        disabled ? "cursor-not-allowed opacity-60" : !selected && "hover:border-foreground/20 hover:bg-muted/40",
+        selected ? "border-primary bg-primary-soft/60 ring-4 ring-primary/10" : "border-border bg-card hover:border-foreground/20 hover:bg-muted/40",
       )}
     >
       <span className="flex items-center gap-2">
         <span className="min-w-0 flex-1 truncate font-semibold">{m.label}</span>
-        {current ? (
-          <Badge tone="success">In use</Badge>
-        ) : lockedPlan ? (
-          <Badge tone="accent">
-            <Lock /> {lockedPlan}
-          </Badge>
-        ) : null}
+        {current ? <Badge tone="success">In use</Badge> : null}
       </span>
       <span className="text-xs text-muted-foreground">by {m.maker ?? "an open lab"}</span>
       <span className="text-sm text-foreground">{m.blurb}</span>
       <span className="mt-1 flex flex-wrap gap-1.5">
+        <span className="rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-semibold text-primary tabular-nums">≈ {formatMicros(perMessageMicros(m))} a message</span>
         {ctx ? <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">{ctx} context</span> : null}
         {m.reasoning ? <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">Can think step by step</span> : null}
       </span>

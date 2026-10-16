@@ -15,7 +15,7 @@ import { Button, Spinner } from "@/components/ui/button";
 import { toast } from "@/components/ui/toaster";
 import { api, ApiError } from "@/lib/client/api";
 import { AVATARS } from "@/lib/avatars";
-import { PLANS, type PlanId } from "@/lib/billing/plans";
+import { FAIR_USE } from "@/lib/billing/prices";
 import type { LiveFlags } from "@/lib/channels/catalog";
 import type { RecipeData } from "@/lib/recipes";
 import { isRoleId, ROLE_BY_ID } from "@/lib/roles";
@@ -32,11 +32,8 @@ import { ReviewStep } from "./steps/ReviewStep";
 import { TrustStep } from "./steps/TrustStep";
 
 export type BuilderProps = {
-  plan: PlanId;
   demo: boolean;
-  /** Paid plans can be bought (or switched to in demo mode); otherwise plan notes say they're coming soon. */
-  paidPlans: boolean;
-  /** Which integrations this server has keys for (channels and paid plans). */
+  /** Which integrations this server has keys for (channels). */
   live: LiveFlags;
   /** Built-ins and apps this server can't offer yet (shown as "Coming soon"). */
   comingSoon: string[];
@@ -45,6 +42,8 @@ export type BuilderProps = {
   signedIn: boolean;
   /** The signed-in account's email, so the Email channel doesn't ask for it again. */
   ownerEmail: string | null;
+  /** Credit every account starts with ("$1.00"), or null when there's none. */
+  starterCredit: string | null;
 };
 
 /**
@@ -65,9 +64,9 @@ function currentEntry(): StepEntry | null {
   return typeof s?.babStep === "number" ? { babStep: s.babStep, babPrev: s.babPrev ?? null } : null;
 }
 
-export function Builder({ plan, demo, paidPlans, live, comingSoon, recipe, botCount, signedIn, ownerEmail }: BuilderProps) {
+export function Builder({ demo, live, comingSoon, recipe, botCount, signedIn, ownerEmail, starterCredit }: BuilderProps) {
   const router = useRouter();
-  const ctx = React.useMemo<BuilderContext>(() => ({ demo, live, plan, comingSoon, ownerEmail }), [demo, live, plan, comingSoon, ownerEmail]);
+  const ctx = React.useMemo<BuilderContext>(() => ({ demo, live, comingSoon, ownerEmail }), [demo, live, comingSoon, ownerEmail]);
   const [state, setState] = React.useState<BuilderState>(() => initialState(recipe, ctx));
   const [stepIndex, setStepIndex] = React.useState(0);
   const [maxReached, setMaxReached] = React.useState(recipe ? STEPS.length - 1 : 0);
@@ -82,9 +81,9 @@ export function Builder({ plan, demo, paidPlans, live, comingSoon, recipe, botCo
   const topRef = React.useRef<HTMLDivElement>(null);
 
   const step = STEPS[stepIndex].id;
-  const atBotLimit = botCount >= PLANS[plan].limits.bots;
-  // How many apps the plan connects (demo mode connects them all).
-  const appLimit = demo ? undefined : PLANS[plan].limits.connectors;
+  const atBotLimit = botCount >= FAIR_USE.bots;
+  // How many apps one bot connects (fair use; demo mode connects them all).
+  const appLimit = demo ? undefined : FAIR_USE.appsPerBot;
   const error = stepError(step, state, { apiKey, keyStatus });
 
   const update = React.useCallback((patch: Partial<BuilderState>) => {
@@ -281,7 +280,7 @@ export function Builder({ plan, demo, paidPlans, live, comingSoon, recipe, botCo
           : b.kind === "subscription"
             ? { kind: "subscription", subscription: b.subscription, model: b.model, whenOffline: b.whenOffline }
             : { kind: "byok", provider: b.provider, model: b.model, apiKey: apiKey.trim(), ...(b.provider === "custom" && b.baseUrl ? { baseUrl: b.baseUrl } : {}) };
-      const res = await api<{ id: string; notes: string[]; upgrade: string | null }>("/api/bots", {
+      const res = await api<{ id: string; notes: string[] }>("/api/bots", {
         body: {
           avatar: state.avatar,
           color: state.color,
@@ -317,8 +316,7 @@ export function Builder({ plan, demo, paidPlans, live, comingSoon, recipe, botCo
     } catch (err) {
       setCreating(null);
       const e = err as ApiError;
-      if (e.status === 402) toast.error(e.message, paidPlans ? { action: { label: "See plans", onClick: () => router.push("/app/billing") } } : undefined);
-      else toast.error(e.message || "Couldn't create your bot. Try again.");
+      toast.error(e.message || "Couldn't create your bot. Try again.");
     }
   };
 
@@ -418,11 +416,10 @@ export function Builder({ plan, demo, paidPlans, live, comingSoon, recipe, botCo
         {!recipe && step === "face" ? <ReadyMade /> : null}
         {atBotLimit && step === "face" ? (
           <div className="mt-4 rounded-2xl border border-warning/30 bg-warning-soft px-4 py-2.5 text-sm text-warning">
-            Your {PLANS[plan].name} plan includes {PLANS[plan].limits.bots} bot{PLANS[plan].limits.bots === 1 ? "" : "s"} and you&apos;ve made {PLANS[plan].limits.bots === 1 ? "it" : "them all"}.{" "}
-            <Link href="/app/billing" className="font-semibold underline">
-              {demo ? "Switch plans (demo)" : "Upgrade"}
-            </Link>{" "}
-            to make another — or keep going and upgrade at the end.
+            You have {FAIR_USE.bots} bots, the most one account can have. To make another, delete one first, in its Settings.{" "}
+            <Link href="/app?all=1" className="font-semibold underline">
+              Your bots
+            </Link>
           </div>
         ) : null}
       </div>
@@ -459,9 +456,8 @@ export function Builder({ plan, demo, paidPlans, live, comingSoon, recipe, botCo
               keyStatus={keyStatus}
               keyMessage={keyMessage}
               onValidate={() => void validateRef.current()}
-              plan={plan}
               demo={demo}
-              paidPlans={paidPlans}
+              starterCredit={starterCredit}
               botName={name}
             />
           ) : null}
@@ -474,14 +470,12 @@ export function Builder({ plan, demo, paidPlans, live, comingSoon, recipe, botCo
               onJobs={(jobs, connectors) => update({ jobs, connectors })}
               onConnectors={(connectors) => update({ connectors })}
               onCustomMcp={(customMcp) => update({ customMcp })}
-              plan={plan}
               demo={demo}
-              paidPlans={paidPlans}
               comingSoon={comingSoon}
             />
           ) : null}
           {step === "trust" ? (
-            <TrustStep botName={name} trust={state.trust} onTrust={(trust) => update({ trust })} connectors={state.connectors} plan={plan} demo={demo} paidPlans={paidPlans} />
+            <TrustStep botName={name} trust={state.trust} onTrust={(trust) => update({ trust })} connectors={state.connectors} />
           ) : null}
           {step === "channels" ? (
             <ChannelsStep
@@ -492,7 +486,6 @@ export function Builder({ plan, demo, paidPlans, live, comingSoon, recipe, botCo
               onPhone={(phone) => update({ phone })}
               email={state.email}
               onEmail={(email) => update({ email })}
-              plan={plan}
               demo={demo}
               live={live}
             />
@@ -504,7 +497,6 @@ export function Builder({ plan, demo, paidPlans, live, comingSoon, recipe, botCo
               onBrief={(brief) => update({ brief })}
               onAge={(ageConfirmed) => update({ ageConfirmed })}
               goTo={(id: StepId) => goTo(STEPS.findIndex((s) => s.id === id))}
-              plan={plan}
               demo={demo}
               timezone={timezone}
               atBotLimit={atBotLimit}

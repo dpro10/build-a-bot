@@ -8,7 +8,6 @@ import { CHANNEL_BY_KIND, channelUsable, isChannelKind, type ChannelKind } from 
 import { connectionName, getConnector } from "@/lib/connectors";
 import { connectorUsable } from "@/lib/connectors/availability";
 import { demoMode, live } from "@/lib/env";
-import { planGate } from "@/components/bot/channels/model";
 
 const MAX_CHIPS = 5;
 
@@ -27,9 +26,9 @@ export async function SetupChecklist({ botId }: { botId: string }) {
   }
   for (const c of channels) {
     if (c.kind === "web" || c.status === "active" || c.status === "disabled" || c.status === "waitlist" || !isChannelKind(c.kind)) continue;
-    // Only what can be finished here: not a channel that's coming soon, or one their plan doesn't include.
+    // Only what can be finished here: not a channel that's coming soon.
     const def = CHANNEL_BY_KIND[c.kind];
-    if (!channelUsable(def, demoMode, live) || planGate(c.kind, user.plan, demoMode)) continue;
+    if (!channelUsable(def, demoMode, live)) continue;
     todo.push({ label: `Set up ${def.name}`, href: `/app/bots/${botId}/channels#${c.kind}` });
   }
   for (const c of connections) {

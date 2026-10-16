@@ -43,7 +43,7 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string }>) {
     inPerson: parsed.data.inPerson,
     consentNotice: parsed.data.consentNotice,
   });
-  if (!res.ok) return apiError(res.status, res.error, { code: res.code, upgrade: res.upgrade, meetingId: res.meetingId });
+  if (!res.ok) return apiError(res.status, res.error, { code: res.code, meetingId: res.meetingId });
   // A recording this one replaced (a crash, a quit) gets its notes now, not at the next rescue.
   if (res.replaced.length) {
     after(async () => {

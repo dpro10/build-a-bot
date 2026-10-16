@@ -95,10 +95,10 @@ test("your words: add one with how it's misheard, and it's used", async ({ page 
 test("the site tells people about it", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Talk instead of type. In any app." })).toBeVisible();
-  await expect(page.getByText("8,000 words a month free. Unlimited on Plus and Pro.")).toBeVisible();
+  await expect(page.getByText("No word limits. Hearing you is free on your computer; the AI cleanup costs a fraction of a cent.")).toBeVisible();
   await page.goto("/pricing");
-  await expect(page.getByText("Unlimited voice typing").first()).toBeVisible();
-  await expect(page.getByText("8,000 words of voice typing a month").first()).toBeVisible();
+  await expect(page.getByRole("region", { name: "Looking things up and getting things done" }).getByText("Voice typing's AI cleanup")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Free here" }).getByText("Speech heard on your computer")).toBeVisible();
 
   // Signed out, "Get the desktop app" goes to sign-in, which then comes back to the Voice typing page.
   await page.goto("/");

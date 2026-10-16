@@ -6,11 +6,11 @@ import { cn, joinList } from "@/lib/utils";
 import { Container, Section, SectionHeader } from "../ui";
 import { channelIcon } from "../icons";
 
-function PlanBadge({ def }: { def: ChannelDef }) {
+/** Texts and calls cost money (Twilio, at cost); talking anywhere else is free. */
+function ChannelBadge({ def }: { def: ChannelDef }) {
   if (def.availability === "waitlist") return <span className="rounded-full bg-warning-soft px-2 py-0.5 text-[11px] font-bold text-warning">Waitlist</span>;
   if (def.availability === "beta") return <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold text-muted-foreground">Beta</span>;
-  if (def.minPlan === "plus") return <span className="rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-bold text-primary">Plus</span>;
-  if (def.minPlan === "pro") return <span className="rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-bold text-primary">Pro</span>;
+  if (def.kind === "sms" || def.kind === "voice") return <span className="rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-bold text-primary">At cost</span>;
   return <span className="rounded-full bg-success-soft px-2 py-0.5 text-[11px] font-bold text-success">Free</span>;
 }
 
@@ -84,7 +84,7 @@ export function Channels() {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                       <span className="font-semibold">{def.name}</span>
-                      <PlanBadge def={def} />
+                      <ChannelBadge def={def} />
                     </div>
                     <p className="mt-0.5 text-sm leading-snug text-muted-foreground">{def.description}</p>
                     {def.note ? <p className="mt-1 text-xs text-muted-foreground">{def.note}</p> : null}

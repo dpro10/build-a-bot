@@ -73,17 +73,14 @@ export function FieldGroup({ label, hint, htmlFor, children, className }: { labe
   );
 }
 
-/** Toast an API error; when the server suggests a plan, offer the way there. */
+/** Toast an API error; when it's for want of credit, offer the way to add some. */
 export function useApiErrorToast() {
   const router = useRouter();
   return React.useCallback(
     (err: unknown, fallback = "Couldn't save that. Try again.") => {
       const message = err instanceof Error && err.message ? err.message : fallback;
-      if (err instanceof ApiError && err.upgrade) {
-        toast.error(message, {
-          description: `Available on ${err.upgrade === "pro" ? "Pro" : "Plus"}.`,
-          action: { label: "See plans", onClick: () => router.push("/app/billing") },
-        });
+      if (err instanceof ApiError && err.code === "no_credit") {
+        toast.error(message, { action: { label: "Add credit", onClick: () => router.push("/app/billing") } });
       } else toast.error(message);
     },
     [router],

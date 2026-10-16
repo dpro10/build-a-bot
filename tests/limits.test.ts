@@ -1,8 +1,9 @@
 /**
  * What bounds the bill when anyone with the link can sign up: the allowance before an email is
- * confirmed, the plan's monthly searches, and the site-wide daily ceilings.
+ * confirmed, credit (lookups are paid from it at Tavily's price, and running out stops what costs
+ * money), and the site-wide daily ceilings.
  */
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 
 process.env.DATA_DIR = "memory";
@@ -14,7 +15,8 @@ const { getDb, resetDbForTests, schema } = await import("@/lib/db");
 const { createBot } = await import("@/lib/bots/create");
 const { runTurn } = await import("@/lib/agent/run");
 const { ensureConversation } = await import("@/lib/channels/outbound");
-const { recordUsage, ANONYMOUS_INCLUDED_MESSAGES } = await import("@/lib/billing/usage");
+const { checkSpend, getUsage, recordUsage, ANONYMOUS_INCLUDED_MESSAGES } = await import("@/lib/billing/usage");
+const { config } = await import("@/lib/env");
 const { underDailyCeiling } = await import("@/lib/billing/ceiling");
 import type { Bot, User } from "@/lib/db/schema";
 
@@ -79,12 +81,31 @@ describe("limits when anyone can sign up", () => {
     expect((await say(await botFor(confirmed), confirmed, "hi")).status).not.toBe("limited");
   });
 
-  it("enforces the plan's monthly web searches", async () => {
+  it("a web lookup is paid from credit at Tavily's price, and running out stops what costs money", async () => {
     const user = await person("usr_searcher", true);
     const bot = await botFor(user);
-    expect((await say(bot, user, "search the web for sourdough tips")).text).toMatch(/Here's what I found/);
-    await recordUsage(db, user.id, { searches: 50 });
-    expect((await say(bot, user, "search the web for rye bread")).text).toMatch(/all 50 web searches/);
+    await recordUsage(db, user.id, { costMicros: 999_999 }); // a millionth of a dollar left
+    config.tavily.apiKey = "tvly_test";
+    vi.stubGlobal("fetch", async () =>
+      Response.json({ answer: "Feed your starter twice a day.", results: [{ title: "Sourdough tips", url: "https://example.com/sourdough", content: "Feed it." }] }),
+    );
+    try {
+      expect((await say(bot, user, "search the web for sourdough tips")).text).toMatch(/Here's what I found/);
+      const usage = await getUsage(db, user.id);
+      expect(usage.searches).toBe(1);
+      expect(usage.costMicros).toBe(999_999 + 8_000); // the demo brain costs nothing; the lookup, $0.008
+      // Now below zero: lookups and the included brain wait for credit.
+      const spend = await checkSpend(db, user, "lookup");
+      expect(spend).toEqual({ ok: false, code: "no_credit", message: "You're out of credit. Add credit in Credit & usage to keep going." });
+      const next = await say(bot, user, "search the web for rye bread");
+      expect(next.status).toBe("limited");
+      expect(next.text).toBe(
+        "You're out of credit. Add credit in Credit & usage, or switch me to your own AI key or subscription in Settings → Brain (that's free here).",
+      );
+    } finally {
+      config.tavily.apiKey = undefined;
+      vi.unstubAllGlobals();
+    }
   });
 
   it("stops paid lookups and the included brain for everyone at today's ceiling", async () => {
@@ -98,7 +119,7 @@ describe("limits when anyone can sign up", () => {
     expect((await say(bot, user, "search the web for pretzels")).text).toMatch(/today's limit for everyone/);
     const third = await say(bot, user, "hi");
     expect(third.status).toBe("limited");
-    expect(third.text).toMatch(/reached its daily limit/);
+    expect(third.text).toMatch(/have reached today's limit/);
   });
 
   it("a ceiling of 0 is off", async () => {
