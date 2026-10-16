@@ -25,8 +25,8 @@ Open http://localhost:3000.
 | Channels (Telegram, texts, email, Slack, Discord) | Simulated: nothing really goes out | Each provider's keys (`docs/DEPLOY.md`) |
 | Sign-in emails | The magic link appears on screen | An email provider |
 | Payments | Plans switch without paying | Stripe keys |
-| Meeting transcripts | A scripted meeting plays, whatever is said | The speech server (`speech/`, run it locally with Docker) and `TRANSCRIBE_PROVIDER=nvidia`, `TRANSCRIBE_BASE_URL`, `TRANSCRIBE_API_KEY`; or a Together AI or Groq key |
-| Voice typing | It types sample sentences, whatever is said (marked *Demo*) | The same speech-to-text settings; the AI cleanup runs on `TOKEN_FACTORY_API_KEY` |
+| Meeting transcripts | A scripted meeting plays, whatever is said (only when you run it yourself: a deployed site never makes up a transcript) | The speech server (`speech/`, run it locally with Docker) and `TRANSCRIBE_PROVIDER=nvidia`, `TRANSCRIBE_BASE_URL`, `TRANSCRIBE_API_KEY`; or a Together AI or Groq key |
+| Voice typing | Real, in the desktop app: NVIDIA Parakeet hears you on your computer (it downloads once, about 0.7 GB). The website doesn't listen | Nothing for speech; the AI cleanup runs on `TOKEN_FACTORY_API_KEY` (without it, the plain cleanup) |
 | Web actions | Simulated sites | `BROWSER_USE_API_KEY` |
 
 Weather, Wikipedia and exchange rates are live when your computer can reach them; otherwise you get labeled placeholders.
@@ -95,7 +95,7 @@ Then:
 2. Press **Start taking notes**. The first time, a short consent note appears: tick it, then **Got it**.
 3. Choose **A call in another tab** (share the call's tab, with "Also share tab audio" on) or **In person, or on speaker** (the mic only). **Copy** gives you a heads-up to paste into the call's chat.
 4. Press **Start taking notes**. A small floating window opens with the bot listening: a red dot, a timer and a level meter. The tab shows live captions.
-5. In demo mode a scripted meeting about a launch plan plays as the transcript, whatever you actually say. With `TRANSCRIBE_API_KEY` set, it's your real words.
+5. Run locally in demo mode, a scripted meeting about a launch plan plays as the transcript, whatever you actually say. With `TRANSCRIBE_API_KEY` set, it's your real words. (A deployed site with no speech-to-text never plays the script: meeting notes say they're coming soon there.)
 6. After a minute, press **Stop and write notes**.
 
 **Expect:**
@@ -156,20 +156,15 @@ npm run dev
 
 Hold a key in any app and talk; what you meant is typed at your cursor, cleaned up. Saying "Hey" and your bot's name asks the bot instead.
 
-**In the browser:** open **Voice typing** in the left sidebar.
+It happens in the desktop app, like Wispr Flow; the website doesn't listen.
 
-1. Under **Try it**, hold the mic button for a few seconds (say anything; demo mode doesn't hear you yet) and let go.
-2. **Expect:** one of four sample sentences, with its ums, repeats and "no wait" taken out, typed into the box at the cursor, like "I was thinking we could move the team meeting to Friday at 3." **You said** / **It typed** shows the before and after. Hold again: the next one lands where the cursor is.
-3. Click the button once instead of holding: it keeps listening (hands-free) until you click again.
-4. Press **Try "Hey …"** (next to *Demo*): your bot is asked "Remind me to call Mom tomorrow at 5." and answers right there, with a link to its chat, where the exchange is kept.
-5. Select some text in the box and hold the mic: the demo hears "Make this friendlier." and changes the selection in place (**It changed it to** shows the result). The new text stays selected, so you can change it again.
-6. Under **Your words**, add a name it should spell your way, and what it writes instead if you've seen it get it wrong (try `Friday`, instead of `Thursday`). Add a snippet ("my booking link" → a URL) the same way. The desktop app uses the same list.
+**On the website:** open **Voice typing** in the left sidebar. It shows what it does, gets you the desktop app and pairs it, and keeps your words: under **Your words**, add a name it should spell your way, and what it writes instead if you've seen it get it wrong (try `Friday`, instead of `Thursday`). Add a snippet ("my booking link" → a URL) the same way. The desktop app uses the same list.
 
 **In the desktop app** (paired as in step 5):
 
-1. In the tray menu, choose **Set up voice typing…** and turn it on. On a Mac, allow **Accessibility** when asked (in a dev run it's listed as **Electron**), so it can hear the key in any app and paste for you.
-2. Click into any text field (Notes, Slack, a browser), then hold **Right Option** (Mac), **Ctrl + Windows** (Windows) or **Right Ctrl** (Linux) and talk.
-3. **Expect:** a small pill at the bottom of the screen with a waveform while you hold; let go and the sentence is typed where your cursor is, and your clipboard is put back as it was.
+1. In the tray menu, choose **Set up voice typing…** and turn it on. NVIDIA Parakeet downloads (about 0.7 GB, once; the settings window shows its progress). On a Mac, allow the **Microphone** and **Accessibility** when asked, so it can hear the key in any app and paste for you; run from source, macOS asks for the app you started it from (Terminal, VS Code…), and the settings window names it.
+2. Click into any text field (Notes, Slack, a browser), then hold **Right Option** (Mac), **Ctrl + Windows** (Windows) or **Right Ctrl** (Linux) and talk. Before Parakeet is ready, the pill says so ("Getting NVIDIA Parakeet: 45%…") rather than typing anything.
+3. **Expect:** a small pill at the bottom of the screen with a waveform while you hold; let go and what you said is typed where your cursor is (the pill says *private*: it was heard on your computer), and your clipboard is put back as it was.
 4. Tap the key twice for hands-free, and press **Esc** while it listens to cancel.
 5. Select some text, then hold **Shift** with your key: the pill turns pink ("Say what to change"). Let go and the selection is replaced; your app's Undo takes it back. With nothing selected, it writes what you asked for. Starting with "Hey Otto" instead sends Otto the request with what you selected ("Hey Otto, remind me about this tomorrow"); open its chat to see both.
 6. **Voice typing settings…** (tray) has the try-it box, your shortcut, the cleanup switches, your words, and **Recent**: *Fix* a dictation and it offers to learn the names it got wrong.
@@ -216,9 +211,9 @@ Without Accessibility on a Mac it still works: press **⌘ Shift Space** to star
 - In a browser, the floating window can't be placed at the bottom of the screen (browsers don't allow it). The desktop app can.
 
 **Voice typing:**
-- Real speech-to-text needs `TRANSCRIBE_API_KEY`; in demo mode it types sample sentences.
-- Tested end to end on Linux (real key presses, pasting into another app). Not yet on a Mac or Windows.
-- Later: the Fn (Globe) key on a Mac, and rewriting selected text by voice.
+- It's in the desktop app only; the website doesn't listen. NVIDIA Parakeet hears you on your computer, so no speech-to-text key is needed.
+- Tested end to end on Linux, and in CI on real Windows (the installer, Ctrl + Windows, Parakeet, pasting into another app). Not yet on a real Mac.
+- Later: the Fn (Globe) key on a Mac.
 
 **Web actions:** they need `BROWSER_USE_API_KEY`, and haven't been tried on real forms yet.
 

@@ -23,7 +23,7 @@ import type { DictionaryEntry, User } from "@/lib/db/schema";
 import { underDailyCeiling } from "@/lib/billing/ceiling";
 import { checkLimit, getUsage, recordUsage } from "@/lib/billing/usage";
 import { getPlan } from "@/lib/billing/plans";
-import { demoMode } from "@/lib/env";
+import { demoMode, demoSpeech } from "@/lib/env";
 import { rateLimit } from "@/lib/safety/ratelimit";
 import { TranscriptionError, transcribe, transcriptionSetup } from "@/lib/transcribe";
 import { demoEdit, demoHeard, demoPolish, type DemoSample } from "./demo";
@@ -109,9 +109,13 @@ export async function loadVoiceContext(db: Db, owner: Pick<User, "id" | "name">)
   };
 }
 
-/** Voice typing can run: a speech-to-text key, or demo mode. */
-export function voiceTypingAvailable(): boolean {
-  return Boolean(transcriptionSetup()) || demoMode;
+/**
+ * Recordings can be turned into text here: a speech-to-text key (or scripted speech, in tests).
+ * Without one, voice typing still works: the desktop app hears its owner on their computer (NVIDIA
+ * Parakeet) and sends only the words.
+ */
+export function speechToTextAvailable(): boolean {
+  return Boolean(transcriptionSetup()) || demoSpeech;
 }
 
 /** The AI cleanup can run (or is simulated in demo mode). */
@@ -189,7 +193,7 @@ export async function dictationUsage(db: Db, owner: Pick<User, "id" | "plan">): 
 export async function dictate(db: Db, owner: User, input: DictateInput): Promise<DictateOutcome> {
   // Heard on the owner's computer: this server only cleans it up, so it needs no speech-to-text.
   const onDevice = input.heard !== undefined;
-  if (!onDevice && !voiceTypingAvailable()) return { ok: false, status: 503, code: "unavailable", error: "Voice typing is coming soon." };
+  if (!onDevice && !speechToTextAvailable()) return { ok: false, status: 503, code: "unavailable", error: "This server doesn't turn recordings into text: the desktop app hears you on your computer." };
   if (input.durationMs < 1 || input.durationMs > MAX_DICTATION_MS) return { ok: false, status: 422, code: "too_long", error: "A dictation can be up to 10 minutes." };
   if ((input.audio?.byteLength ?? 0) > MAX_DICTATION_BYTES) return { ok: false, status: 413, code: "too_large", error: "That recording is too large." };
   if ((input.heard?.length ?? 0) > MAX_HEARD_CHARS) return { ok: false, status: 413, code: "too_large", error: "That dictation is too long." };

@@ -115,7 +115,8 @@ async function fakeServer() {
           owner: { name: "Dana", plan: "free" },
           bots: [{ id: "bot_1", name: "Otto", avatar: "otto", color: "mint", paused: false, meetingsOn: false }],
           meetings: { available: false, minutesLeft: 0, chunkMs: 60000 },
-          voice: { available: true, polish: false, edit: false, simulated: false, local: true, usage: { words: 0, limit: 8000 } },
+          // Like build-a-bot.site: no speech-to-text of its own, so only Parakeet on the computer hears.
+          voice: { available: false, polish: false, edit: false, simulated: false, local: true, usage: { words: 0, limit: 8000 } },
           appUrl: `http://127.0.0.1:${srv.address().port}`,
           demo: false,
         });

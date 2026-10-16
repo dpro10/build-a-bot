@@ -20,7 +20,7 @@ const bodySchema = z.object({
  * this one request and never stored.
  */
 export async function POST(req: Request) {
-  const a = await voiceAuth(req, { write: true });
+  const a = await voiceAuth(req, { write: true, appOnly: true });
   if (!a.ok) return a.res;
   const parsed = await parseJson(req, bodySchema);
   if (!parsed.ok) return parsed.res;

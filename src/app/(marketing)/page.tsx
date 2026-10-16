@@ -49,7 +49,7 @@ const FAQ: { q: string; text: string }[] = [
     q: "What is voice typing?",
     text: desktopApp
       ? "Hold a key in any app and talk. What you meant is typed where your cursor is: no ums, the right punctuation, your corrections kept, and the names your bot knows spelled right. Start with “Hey” and your bot's name to ask it instead. The desktop app hears you on your own computer, with NVIDIA's Parakeet speech model, so in English and 24 European languages your voice never leaves it; we keep a word count, never your words. Free includes 8,000 words a month, and Plus and Pro have no monthly limit."
-      : "Hold a key in any app and talk. What you meant is typed where your cursor is: no ums, the right punctuation, your corrections kept, and the names your bot knows spelled right. It comes with the desktop app (coming soon); you can try it in your browser today. Your voice is turned into text and thrown away; we keep a word count, never your words. Free includes 8,000 words a month, and Plus and Pro have no monthly limit.",
+      : "Hold a key in any app and talk. What you meant is typed where your cursor is: no ums, the right punctuation, your corrections kept, and the names your bot knows spelled right. It comes with the desktop app, which is coming soon. The app hears you on your own computer, with NVIDIA's Parakeet speech model, so your voice never leaves it; we keep a word count, never your words. Free includes 8,000 words a month, and Plus and Pro have no monthly limit.",
   },
   {
     q: "What if it makes a mistake?",

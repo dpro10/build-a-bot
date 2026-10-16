@@ -8,6 +8,8 @@ import { and, eq } from "drizzle-orm";
 
 process.env.DATA_DIR = "memory";
 process.env.DEMO_MODE = "1";
+// The scripted meeting (tests only: without it, no speech-to-text means no transcript at all).
+process.env.DEMO_SPEECH = "1";
 delete process.env.DATABASE_URL;
 delete process.env.TOKEN_FACTORY_API_KEY;
 delete process.env.TRANSCRIBE_API_KEY;

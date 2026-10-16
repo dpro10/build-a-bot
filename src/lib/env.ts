@@ -19,6 +19,15 @@ export const isProduction = process.env.NODE_ENV === "production";
 
 export const demoMode = v("DEMO_MODE") === "1" || v("DEMO_MODE") === "true" || (!isProduction && v("DEMO_MODE") !== "0");
 
+/**
+ * Scripted speech, in demo mode: with no speech-to-text, a recording "hears" sample lines (voice
+ * typing) or a sample meeting (meeting notes). On by default only outside production (running it
+ * yourself, tests); a production build needs DEMO_SPEECH=1, which only tests set. A site people
+ * use never makes up speech, which would put words in their mouths: without speech-to-text,
+ * recordings aren't turned into text there, and the app says so.
+ */
+export const demoSpeech = demoMode && (v("DEMO_SPEECH") === "1" || v("DEMO_SPEECH") === "true" || (!isProduction && v("DEMO_SPEECH") !== "0"));
+
 export function appUrl(): string {
   const explicit = v("APP_URL");
   if (explicit) return explicit.replace(/\/$/, "");
