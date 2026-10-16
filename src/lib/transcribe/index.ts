@@ -1,11 +1,16 @@
 /**
- * Speech-to-text for meeting notes.
+ * Speech-to-text for meeting notes and voice typing.
  *
  * One interface over any OpenAI-compatible `POST /audio/transcriptions` endpoint
- * (multipart: file + model, `verbose_json` for timestamps). TRANSCRIBE_PROVIDER picks
- * the base URL and model; TRANSCRIBE_BASE_URL / TRANSCRIBE_MODEL override them.
- * Without a key, demo mode returns a scripted meeting so every flow can be clicked through.
+ * (multipart: file + model, `verbose_json` for timestamps). TRANSCRIBE_PROVIDER picks the base
+ * URL and model; TRANSCRIBE_BASE_URL / TRANSCRIBE_MODEL override them.
  *
+ * The recommended setup runs NVIDIA's open models: our own speech server (speech/: NVIDIA Parakeet
+ * and Nemotron on a Nebius Serverless AI endpoint) first, and NVIDIA Parakeet on Together AI as the
+ * backup. A language the main provider can't hear goes straight to the backup; on Together that's
+ * Whisper for the languages Parakeet doesn't speak.
+ *
+ * Without a key, demo mode returns a scripted meeting so every flow can be clicked through.
  * Audio is transcribed in memory and never stored.
  */
 import { config, demoMode } from "@/lib/env";
@@ -22,6 +27,10 @@ export type Transcription = {
   simulated: boolean;
   /** How long the audio really was, as the provider measured it (verbose_json `duration`). */
   audioMs?: number;
+  /** The prompt (names and earlier sentences) was sent: the model takes hints. */
+  prompted: boolean;
+  /** What this transcription cost, in millionths of a dollar. */
+  costMicros: number;
 };
 
 export type TranscribeInput = {
@@ -29,29 +38,68 @@ export type TranscribeInput = {
   mime: string;
   /** Length of this chunk, used when the provider returns no timestamps. */
   durationMs: number;
-  /** The last few sentences before this chunk: helps the model keep names and spelling consistent. */
+  /** The last few sentences before this chunk, or names to spell right: for models that take hints. */
   prompt?: string;
+  /** ISO 639-1 ("en", "ja"), or unset to detect it. */
   language?: string;
   /** For the demo script. */
   track: "mic" | "system";
   chunk: number;
 };
 
-type Preset = { baseUrl: string; model: string; label: string };
+/** NVIDIA Parakeet TDT 0.6B v3: English and 24 European languages. */
+export const PARAKEET_LANGUAGES: ReadonlySet<string> = new Set([
+  "bg", "cs", "da", "de", "el", "en", "es", "et", "fi", "fr", "hr", "hu", "it",
+  "lt", "lv", "mt", "nl", "pl", "pt", "ro", "ru", "sk", "sl", "sv", "uk",
+]);
+
+/** Our speech server (speech/) adds NVIDIA Nemotron 3.5 ASR for these. */
+export const NEMOTRON_LANGUAGES: ReadonlySet<string> = new Set(["ar", "hi", "ja", "ko", "nb", "no", "tr", "vi", "zh"]);
+
+type Preset = {
+  baseUrl: string;
+  model: string;
+  label: (model: string) => string;
+  /** US dollars per hour of audio, and the shortest a request is billed as. */
+  costPerHour: number;
+  minSeconds?: number;
+  /** The languages the default model hears; unset = Whisper's (nearly all). */
+  languages?: ReadonlySet<string>;
+  /** The model for languages outside `languages` (Together: Whisper, where Parakeet can't go). */
+  wideModel?: string;
+};
+
+const isWhisper = (model: string) => /whisper|gpt-4o.*transcribe/i.test(model);
 
 /**
  * Providers with an OpenAI-shaped endpoint that returns segment timestamps (verbose_json) for webm/ogg.
- * Nebius Token Factory has no speech-to-text model (docs/research/meetings-2026-10-14.md §4.1).
+ * Nebius Token Factory has no speech-to-text model; our own server on Nebius AI Cloud does that.
  */
 export const TRANSCRIBE_PRESETS: Record<string, Preset> = {
+  // Our speech server (speech/README.md): set TRANSCRIBE_BASE_URL to its URL + /v1. It runs on a
+  // fixed-price machine; the cost here is that machine's price spread over the audio it can hear.
+  nvidia: {
+    baseUrl: "",
+    model: "parakeet-tdt-0.6b-v3",
+    label: () => "NVIDIA Parakeet and Nemotron on our speech server (Nebius)",
+    costPerHour: 0.05,
+    languages: new Set([...PARAKEET_LANGUAGES, ...NEMOTRON_LANGUAGES]),
+  },
   // ~$0.04 per audio hour, billed at least 10 s per request; the free tier is 7,200 audio-seconds an hour.
-  groq: { baseUrl: "https://api.groq.com/openai/v1", model: "whisper-large-v3-turbo", label: "Whisper large-v3 turbo on Groq" },
-  // ~$0.09 per audio hour; also offers nvidia/parakeet-tdt-0.6b-v3 and speaker separation (diarize).
-  together: { baseUrl: "https://api.together.ai/v1", model: "openai/whisper-large-v3", label: "Whisper large-v3 on Together AI" },
+  groq: { baseUrl: "https://api.groq.com/openai/v1", model: "whisper-large-v3-turbo", label: (m) => `${m} on Groq`, costPerHour: 0.04, minSeconds: 10 },
+  // NVIDIA Parakeet at $0.0015 a minute (~$0.09 an hour); Whisper large-v3 for the languages Parakeet doesn't speak.
+  together: {
+    baseUrl: "https://api.together.ai/v1",
+    model: "nvidia/parakeet-tdt-0.6b-v3",
+    label: (m) => (/parakeet/i.test(m) ? "NVIDIA Parakeet on Together AI" : `${m} on Together AI`),
+    costPerHour: 0.09,
+    languages: PARAKEET_LANGUAGES,
+    wideModel: "openai/whisper-large-v3",
+  },
   // whisper-1 returns timestamps; the gpt-4o transcribe models return plain text (handled below).
-  openai: { baseUrl: "https://api.openai.com/v1", model: "whisper-1", label: "Whisper on OpenAI" },
+  openai: { baseUrl: "https://api.openai.com/v1", model: "whisper-1", label: (m) => `${m} on OpenAI`, costPerHour: 0.36 },
   // Any OpenAI-compatible server: speaches/faster-whisper, whisper.cpp's server, LocalAI…
-  custom: { baseUrl: "", model: "whisper-1", label: "Your speech-to-text server" },
+  custom: { baseUrl: "", model: "whisper-1", label: () => "Your speech-to-text server", costPerHour: 0 },
 };
 
 const DEFAULT_PROVIDER = "groq";
@@ -64,7 +112,20 @@ function resolveSetup(t: { provider?: string; apiKey?: string; baseUrl?: string;
   const preset = TRANSCRIBE_PRESETS[provider];
   const baseUrl = (t.baseUrl ?? preset.baseUrl).replace(/\/$/, "");
   if (!baseUrl) return null;
-  return { provider, baseUrl, model: t.model ?? preset.model, label: preset.label, apiKey: t.apiKey };
+  const model = t.model ?? preset.model;
+  return { provider, baseUrl, model, label: preset.label(model), apiKey: t.apiKey };
+}
+
+/**
+ * The model this setup uses for a language, or null when it can't hear that language. A model
+ * someone set themselves (TRANSCRIBE_MODEL) is trusted with every language, except on our own server.
+ */
+function modelFor(setup: Setup, language: string | undefined): string | null {
+  const preset = TRANSCRIBE_PRESETS[setup.provider];
+  const lang = language?.toLowerCase();
+  if (!lang || !preset.languages || preset.languages.has(lang)) return setup.model;
+  if (setup.model !== preset.model) return setup.provider === "nvidia" ? null : setup.model;
+  return preset.wideModel ?? null;
 }
 
 export function transcriptionSetup(): Omit<Setup, "apiKey"> | null {
@@ -92,6 +153,8 @@ export class TranscriptionError extends Error {
   constructor(
     message: string,
     readonly retryable: boolean,
+    /** "unsupported_language": this provider can't hear the language (another one might). */
+    readonly code?: string,
   ) {
     super(message);
   }
@@ -136,33 +199,46 @@ export function cleanSegments(raw: VerboseSegment[], durationMs: number): Transc
   return out;
 }
 
+const UNSUPPORTED = (language?: string) => new TranscriptionError(`Speech-to-text can't hear ${language ? `this language (${language})` : "this language"} yet.`, false, "unsupported_language");
+
 export async function transcribe(input: TranscribeInput): Promise<Transcription> {
   const primary = resolveSetup(config.transcribe);
   if (!primary) {
     if (!demoMode) throw new TranscriptionError("Meeting notes are coming soon.", false);
-    return { segments: demoTranscription(input.track, input.chunk, input.durationMs), provider: "demo", model: "demo", simulated: true };
+    return { segments: demoTranscription(input.track, input.chunk, input.durationMs), provider: "demo", model: "demo", simulated: true, prompted: false, costMicros: 0 };
+  }
+  const fallback = resolveSetup(config.transcribe.fallback);
+  const primaryModel = modelFor(primary, input.language);
+  if (!primaryModel) {
+    // The main provider doesn't hear this language: straight to the backup, if it does.
+    const backupModel = fallback ? modelFor(fallback, input.language) : null;
+    if (!fallback || !backupModel) throw UNSUPPORTED(input.language);
+    return transcribeWith(fallback, backupModel, input);
   }
   try {
-    return await transcribeWith(primary, input);
+    return await transcribeWith(primary, primaryModel, input);
   } catch (err) {
-    const fallback = resolveSetup(config.transcribe.fallback);
-    if (fallback && err instanceof TranscriptionError && err.retryable) return transcribeWith(fallback, input);
+    const backupModel = fallback ? modelFor(fallback, input.language) : null;
+    const tryBackup = err instanceof TranscriptionError && (err.retryable || err.code === "unsupported_language");
+    if (fallback && backupModel && tryBackup) return transcribeWith(fallback, backupModel, input);
     throw err;
   }
 }
 
-async function transcribeWith(setup: Setup, input: TranscribeInput): Promise<Transcription> {
+async function transcribeWith(setup: Setup, model: string, input: TranscribeInput): Promise<Transcription> {
   const ext = audioExtension(input.mime);
   if (!ext) throw new TranscriptionError(`Unsupported audio format: ${input.mime}`, false);
+  // NVIDIA's models don't take hints; our server would read a prompt as one phrase to boost.
+  const prompted = Boolean(input.prompt) && isWhisper(model);
 
   const send = async (format: "verbose_json" | "json") => {
     const form = new FormData();
+    form.append("model", model);
     form.append("file", new Blob([input.audio], { type: input.mime.split(";")[0] }), `chunk.${ext}`);
-    form.append("model", setup.model);
     form.append("response_format", format);
     if (format === "verbose_json") form.append("timestamp_granularities[]", "segment");
     if (input.language) form.append("language", input.language);
-    if (input.prompt) form.append("prompt", input.prompt.slice(-600));
+    if (prompted) form.append("prompt", input.prompt!.slice(-600));
     form.append("temperature", "0");
     try {
       return await fetchWithTimeout(`${setup.baseUrl}/audio/transcriptions`, {
@@ -186,6 +262,7 @@ async function transcribeWith(setup: Setup, input: TranscribeInput): Promise<Tra
   }
   if (!res.ok) {
     const body = await res.text().catch(() => "");
+    if (res.status === 422 && /unsupported_language/.test(body)) throw UNSUPPORTED(input.language);
     throw new TranscriptionError(`Speech-to-text failed (${res.status}): ${body.slice(0, 200)}`, res.status === 429 || res.status >= 500);
   }
   const data = (await res.json().catch(() => ({}))) as { text?: string; segments?: VerboseSegment[]; duration?: number };
@@ -193,5 +270,8 @@ async function transcribeWith(setup: Setup, input: TranscribeInput): Promise<Tra
     ? cleanSegments(data.segments, input.durationMs)
     : cleanSegments([{ start: 0, end: input.durationMs / 1000, text: data.text ?? "" }], input.durationMs);
   const audioMs = typeof data.duration === "number" && Number.isFinite(data.duration) && data.duration > 0 ? Math.round(data.duration * 1000) : undefined;
-  return { segments, provider: setup.provider, model: setup.model, simulated: false, ...(audioMs ? { audioMs } : {}) };
+  const preset = TRANSCRIBE_PRESETS[setup.provider];
+  const billedSeconds = Math.max(preset.minSeconds ?? 0, (audioMs ?? input.durationMs) / 1000);
+  const costMicros = Math.round(billedSeconds * (preset.costPerHour / 3600) * 1_000_000);
+  return { segments, provider: setup.provider, model, simulated: false, prompted, costMicros, ...(audioMs ? { audioMs } : {}) };
 }

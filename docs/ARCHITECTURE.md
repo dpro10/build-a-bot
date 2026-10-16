@@ -170,8 +170,8 @@ desktop app (Electron, desktop/)            browser (Meetings tab)
             │  mic track = the owner, system/tab track = everyone else
             ▼  ~20-second standalone audio chunks (6 s in demo mode)
 POST /api/bots/[botId]/meetings/[id]/audio  →  speech-to-text (any OpenAI-compatible
-            │                                  /audio/transcriptions endpoint; Groq by default,
-            │                                  Together AI as fallback) → transcript lines
+            │                                  /audio/transcriptions endpoint; NVIDIA's models on
+            │                                  our speech server, Together AI as backup) → lines
             ▼                                  audio is never stored
 POST …/finish  →  the bot writes notes  →  web chat + the owner's best channel
 ```
@@ -196,7 +196,8 @@ desktop app (desktop/src/main/voice)          browser (/app/voice, TryVoice)
             ▼
 POST /api/voice/dictate  (raw audio body; device token or session)
    1. limits: words a month per plan, 3,000 dictations a day, 60 a minute, the site's daily ceiling
-   2. speech-to-text (Groq whisper-large-v3-turbo), prompted with the owner's words and bots' names
+   2. speech-to-text (NVIDIA Parakeet on our speech server; Whisper providers get the owner's
+      words and bots' names as a prompt)
    3. guards: too little speech → nothing; silence turned into "Thank you." or the prompt echoed → nothing
    4. "Hey Otto, …" → { kind: "command" } → the caller asks POST /api/voice/ask (SSE, runTurn)
    5. plain cleanup (always): fillers, stutters, "new line", "scratch that"
@@ -209,8 +210,9 @@ audio is never stored; the server keeps a word count, never the words
 ```
 
 - **Files:** `src/lib/dictation/text.ts` (pure text rules: tidy, snippets, commands, the guards, the checks on the AI's answer), `polish.ts` (the prompt, its examples and where it runs), `index.ts` (the pipeline, limits, the owner's vocabulary), `dictionary.ts` (add/edit/delete), `demo.ts` (sample dictations for demo mode). Routes under `src/app/api/voice/`.
-- **The AI cleanup** runs on Groq (`openai/gpt-oss-120b`, low reasoning) with the speech-to-text key, so the words go to one provider; else on the included model; or not at all (`DICTATION_POLISH`). It has a few seconds: when it's slow, fails or its answer fails the checks, the plain cleanup is typed instead, so a dictation never waits long or comes back wrong.
+- **The AI cleanup** runs on the included model on Token Factory; on Groq (`openai/gpt-oss-120b`, low reasoning) when speech-to-text runs on Groq, so the words go to one provider; or not at all (`DICTATION_POLISH`). It has a few seconds: when it's slow, fails or its answer fails the checks, the plain cleanup is typed instead, so a dictation never waits long or comes back wrong.
 - **The dictionary** (`dictionary` table: `kind` word | snippet, `text`, `heard` = what speech-to-text writes instead or the phrase that types a snippet, `source` manual | correction). Words are fed to speech-to-text as a hint and fixed afterwards; names the owner's bots remember (`memories`) are used too, without being copied. Snippets are swapped for markers before the AI cleanup so it can't rewrite them.
+- **Speech-to-text** (`src/lib/transcribe`, `speech/`): one client for any OpenAI-compatible `/audio/transcriptions`. The recommended main provider is our own speech server, `speech/`: NVIDIA Parakeet TDT 0.6B v3 (English and 24 European languages) and NVIDIA Nemotron 3.5 ASR (Japanese, Chinese, Korean, Hindi, Arabic, Vietnamese, Turkish, Norwegian) on NVIDIA NeMo-Speech.cpp, behind a small Node server that checks a key, turns any recording into 16 kHz WAV (plus a second of silence, so the last word isn't cut), picks the model by language and answers in OpenAI's shape. It runs as a Nebius Serverless AI endpoint. The backup (`TRANSCRIBE_FALLBACK_*`) is NVIDIA Parakeet on Together AI, with Whisper there for languages neither NVIDIA model hears; a language the main provider can't hear goes straight to the backup. NVIDIA's models take no prompt, so the owner's words reach them afterwards: a name that sounds like one of theirs sends the text through the AI cleanup, which knows them, and the dictionary's spellings apply last.
 - **Editing by voice** (`src/lib/dictation/edit.ts`, `POST /api/voice/edit`): Shift with the shortcut makes the recording an instruction. The desktop app copies the selection (a marker on the clipboard, then copy, then the clipboard put back; never in a terminal), dictates the instruction with the AI cleanup and commands off, and sends both. One model call, no tools: the selection is wrapped in tags as text to work on, after worked examples that include a selection giving orders; the reply must be `<replace>` (typed over the selection) or `<answer>` (shown in the pill), and a chat-style preamble, our own tags or a reply far longer than the job is refused. "Make this shorter" with nothing selected is refused before any model call. Typed words count like dictation; the selection is never stored.
 - **"Hey {bot}"** goes into the bot's web conversation like a typed message (`meta.via = "voice"`), with a directive to answer briefly, so it runs through `runTurn`, the policy engine and approvals like everything else, and shows up in the chat later.
   - **With a selection** (Shift held), the selected text goes along (`meta.selection`, shown in the chat bubble). The model reads it wrapped as `<untrusted_content>` (`src/lib/agent/selection.ts`, for included brains and the Bridge alike), and the run is tainted while it's in that conversation's history, so the injection guard asks before a send to anyone new, even under Full faith.

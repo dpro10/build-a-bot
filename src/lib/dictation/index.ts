@@ -4,8 +4,10 @@
  *
  * One dictation, in order:
  *  1. Plan limits (words a month) and the site's daily ceiling.
- *  2. Speech-to-text, steered toward the owner's words (their dictionary, their bots' names, the
- *     names their bots remember).
+ *  2. Speech-to-text (NVIDIA Parakeet by default). Models that take hints (Whisper) are steered
+ *     toward the owner's words (their dictionary, their bots' names, the names their bots
+ *     remember); with NVIDIA's, a word that sounds like one of theirs sends the text through the AI
+ *     cleanup, which knows them.
  *  3. "Hey Otto, …" at the start is a request for the bot: it goes back as a command (the caller
  *     runs it with /api/voice/ask), and isn't typed.
  *  4. Otherwise the cleanup: the plain one (tidyTranscript), then the AI one (polish.ts) when it's
@@ -176,9 +178,6 @@ export async function dictationUsage(db: Db, owner: Pick<User, "id" | "plan">): 
   return usageOf(owner, (await getUsage(db, owner.id)).dictationWords);
 }
 
-/** Speech-to-text costs about $0.04 an audio hour, billed at least 10 seconds a request. */
-const sttCostMicros = (ms: number) => Math.max(10, ms / 1000) * (0.04 / 3600) * 1_000_000;
-
 export async function dictate(db: Db, owner: User, input: DictateInput): Promise<DictateOutcome> {
   if (!voiceTypingAvailable()) return { ok: false, status: 503, code: "unavailable", error: "Voice typing is coming soon." };
   if (input.durationMs < 1 || input.durationMs > MAX_DICTATION_MS) return { ok: false, status: 422, code: "too_long", error: "A dictation can be up to 10 minutes." };
@@ -205,22 +204,24 @@ export async function dictate(db: Db, owner: User, input: DictateInput): Promise
   // 2. Speech-to-text.
   const t0 = Date.now();
   let heard = "";
+  let costMicros = 0;
   if (simulated) {
     heard = demoHeard(input.demoSample, input.audio.byteLength, ctx.bots[0]?.name ?? null);
   } else {
     try {
       const result = await transcribe({ audio: input.audio, mime: input.mime, durationMs: input.durationMs, prompt, language: input.language, track: "mic", chunk: 0 });
+      costMicros = result.costMicros;
       heard = result.segments.map((s) => s.text).join(" ").replace(/\s+/g, " ").trim();
-      if (isPromptEcho(heard, prompt)) heard = "";
+      if (result.prompted && isPromptEcho(heard, prompt)) heard = "";
       // Whisper "hears" "Thank you." in a cough; a short real "Thanks!" has more speech than this.
       if (input.speechMs !== undefined && input.speechMs < 500 && isPhantom(heard)) heard = "";
     } catch (err) {
       if (err instanceof TranscriptionError && err.retryable) return { ok: false, status: 503, code: "busy", error: "Speech-to-text is busy. Try again in a moment." };
+      if (err instanceof TranscriptionError && err.code === "unsupported_language") return { ok: false, status: 422, code: "language", error: "Voice typing can't hear that language yet. Pick another one in settings, or “Detect it”." };
       return { ok: false, status: 422, code: "unreadable", error: "I couldn't make out that recording." };
     }
   }
   const stt = Date.now() - t0;
-  let costMicros = simulated ? 0 : sttCostMicros(input.durationMs);
 
   const done = async (result: DictateResult, words: number, polishMs: number): Promise<DictateOutcome> => {
     if (words || costMicros) await recordUsage(db, owner.id, { dictationWords: words, costMicros });
