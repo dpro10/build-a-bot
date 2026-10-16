@@ -56,13 +56,24 @@ export function say(text: string): string {
   return `<Say voice="${escapeXml(config.twilio.voice)}">${escapeXml(text)}</Say>`;
 }
 
-export function gather(channelId: string, prompt?: string, attempt = 0): string {
-  const action = `${appUrl()}/api/webhooks/twilio/voice/turn?c=${encodeURIComponent(channelId)}&a=${attempt}`;
-  return `<Gather input="speech" action="${escapeXml(action)}" method="POST" speechTimeout="auto" speechModel="phone_call" enhanced="true" language="en-US" actionOnEmptyResult="true">${prompt ? say(prompt) : ""}</Gather>`;
+/**
+ * Who's on a call handled by Twilio's own speech (the simpler line): the owner, or anyone else.
+ * It rides in the URLs Twilio calls back, which Twilio signs, so it can't be changed by a caller.
+ */
+export type LineTier = "owner" | "contact";
+
+export function tierParam(url: URL): LineTier {
+  return url.searchParams.get("t") === "contact" ? "contact" : "owner";
 }
 
-export function answerTwiml(channelId: string, result: { text?: string; approvals?: number; error?: string } | null): string {
-  if (!result || result.error || !result.text) return `${say("Sorry, I hit a snag. Try asking again?")}${gather(channelId)}`;
+export function gather(channelId: string, prompt?: string, attempt = 0, tier: LineTier = "owner"): string {
+  const action = `${appUrl()}/api/webhooks/twilio/voice/turn?c=${encodeURIComponent(channelId)}&a=${attempt}&t=${tier}`;
+  // Twilio's default speech model: the legacy "phone_call" + enhanced one costs twice as much.
+  return `<Gather input="speech" action="${escapeXml(action)}" method="POST" speechTimeout="auto" language="en-US" actionOnEmptyResult="true">${prompt ? say(prompt) : ""}</Gather>`;
+}
+
+export function answerTwiml(channelId: string, result: { text?: string; approvals?: number; error?: string } | null, tier: LineTier = "owner"): string {
+  if (!result || result.error || !result.text) return `${say("Sorry, I hit a snag. Try asking again?")}${gather(channelId, undefined, 0, tier)}`;
   const extra = result.approvals ? " I've put the details in your app for your OK." : "";
-  return `${gather(channelId, `${speakable(result.text)}${extra}`)}${say("Talk soon!")}<Hangup/>`;
+  return `${gather(channelId, `${speakable(result.text)}${extra}`, 0, tier)}${say("Talk soon!")}<Hangup/>`;
 }

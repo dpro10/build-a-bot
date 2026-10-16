@@ -1,0 +1,67 @@
+#cloud-config
+# The voice server's VM: Container-Optimized OS running two containers on one Docker network.
+#   voice   the voice server (image and settings come from the VM's metadata at every start)
+#   caddy   HTTPS in front of it, with a free Let's Encrypt certificate for the VM's hostname
+# voice/deploy/gce.sh creates the VM with this file and updates the metadata on each deploy.
+
+write_files:
+  - path: /etc/systemd/system/voice-net.service
+    permissions: "0644"
+    owner: root
+    content: |
+      [Unit]
+      Description=Docker network for the voice server
+      Requires=docker.service
+      After=docker.service
+      [Service]
+      Type=oneshot
+      RemainAfterExit=true
+      ExecStart=/bin/sh -c '/usr/bin/docker network inspect voice >/dev/null 2>&1 || /usr/bin/docker network create voice'
+
+  - path: /etc/systemd/system/voice.service
+    permissions: "0644"
+    owner: root
+    content: |
+      [Unit]
+      Description=Build-a-bot voice server
+      Requires=voice-net.service
+      After=voice-net.service network-online.target
+      Wants=network-online.target
+      [Service]
+      Environment="HOME=/home/voice"
+      ExecStartPre=/bin/mkdir -p /home/voice /var/lib/voice
+      ExecStartPre=/bin/sh -c 'curl -sf -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/voice-env > /var/lib/voice/env && chmod 600 /var/lib/voice/env'
+      ExecStartPre=/bin/sh -c 'curl -sf -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/voice-image > /var/lib/voice/image'
+      ExecStartPre=/bin/sh -c '/usr/bin/docker-credential-gcr configure-docker --registries "$(cut -d/ -f1 /var/lib/voice/image)"'
+      ExecStartPre=/bin/sh -c '/usr/bin/docker pull "$(cat /var/lib/voice/image)"'
+      ExecStartPre=-/usr/bin/docker rm -f voice
+      ExecStart=/bin/sh -c 'exec /usr/bin/docker run --rm --name voice --network voice --env-file /var/lib/voice/env "$(cat /var/lib/voice/image)"'
+      ExecStop=/usr/bin/docker stop -t 20 voice
+      Restart=always
+      RestartSec=5
+      TimeoutStartSec=900
+
+  - path: /etc/systemd/system/caddy.service
+    permissions: "0644"
+    owner: root
+    content: |
+      [Unit]
+      Description=HTTPS for the voice server
+      Requires=voice-net.service
+      After=voice-net.service network-online.target
+      Wants=network-online.target
+      [Service]
+      ExecStartPre=/bin/mkdir -p /var/lib/caddy/data /var/lib/caddy/config
+      ExecStartPre=/bin/sh -c 'curl -sf -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/voice-host > /var/lib/caddy/host'
+      ExecStartPre=-/usr/bin/docker rm -f caddy
+      ExecStart=/bin/sh -c 'exec /usr/bin/docker run --rm --name caddy --network voice -p 80:80 -p 443:443 -v /var/lib/caddy/data:/data -v /var/lib/caddy/config:/config caddy:2.11.7 caddy reverse-proxy --from "$(cat /var/lib/caddy/host)" --to voice:8080'
+      ExecStop=/usr/bin/docker stop caddy
+      Restart=always
+      RestartSec=5
+
+# Container-Optimized OS keeps /etc/systemd in memory: cloud-init writes the units and starts them on every boot.
+runcmd:
+  - systemctl daemon-reload
+  - systemctl start voice-net.service
+  - systemctl start --no-block voice.service
+  - systemctl start --no-block caddy.service

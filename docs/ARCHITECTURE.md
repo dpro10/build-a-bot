@@ -35,6 +35,7 @@ Build-a-bot is one Next.js 16 app (App Router, TypeScript) with Postgres behind 
 | `src/lib/bridge`, `bridge/` | Subscription brains on the owner's computer (server side + the CLI) |
 | `src/lib/meetings`, `src/lib/transcribe`, `desktop/` | Meeting notes: the desktop app that notices calls and hears them on the computer, the transcript, notes |
 | `src/lib/dictation`, `src/components/voice`, `desktop/src/main/voice` | Voice typing: the dictation pipeline, the personal dictionary, the `/app/voice` page and the desktop app's hold-to-talk |
+| `src/lib/calls`, `src/components/call`, `voice/` | Calls: who's calling, the phone PIN, the call API the voice server uses, the Call button; the voice server itself (NVIDIA Parakeet and Magpie, turn-taking, Twilio Media Streams) |
 | `src/app/desktop` | Pages the desktop app shows (the buddy at the bottom of the screen) |
 | `src/lib/mcp-server` | The bot's tools as an MCP server |
 | `src/lib/scheduler` | Reminders and routines (time zones, next-run math, the tick) |
@@ -46,7 +47,7 @@ Build-a-bot is one Next.js 16 app (App Router, TypeScript) with Postgres behind 
 
 Postgres via Drizzle (`src/lib/db/schema.ts`). Locally and in tests it's PGlite (embedded Postgres), so `npm run dev` needs nothing installed. Migrations run on first use behind an advisory lock.
 
-Main tables: `users`, `sessions`, `bots`, `connections` (a bot's apps + per-capability permissions), `channels`, `conversations`, `messages`, `approvals`, `receipts`, `contacts`, `memories`, `notes`, `schedules`, `usage`, `credentials` (encrypted secrets), `bridge_devices`, `bridge_jobs`, `recipes`, `meetings`, `meeting_segments`, `dictionary` (voice typing's words and snippets).
+Main tables: `users`, `sessions`, `bots`, `connections` (a bot's apps + per-capability permissions), `channels`, `conversations`, `messages`, `approvals`, `receipts`, `contacts`, `memories`, `notes`, `schedules`, `usage`, `credentials` (encrypted secrets), `bridge_devices`, `bridge_jobs`, `recipes`, `meetings`, `meeting_segments`, `dictionary` (voice typing's words and snippets), `calls` (who called, the transcript, the report, what it cost).
 
 - **Receipts are append-only.** A trigger rejects updates and deletes (`drizzle/0001_safety.sql`); only account/bot deletion may remove them, inside a transaction that sets `app.allow_receipt_delete`.
 - **Row-level security is on** for every table with no policies, so the database's public API roles (e.g. Supabase's) see nothing; the app connects as the owner role.
@@ -138,7 +139,7 @@ Tools from MCP/Composio are classified by name into effects and risks (`effects.
 |---|---|
 | Web | SSE chat, approvals inline |
 | Telegram | Managed bots (one tap creates the owner's own named bot from our manager bot), or a pasted BotFather token; webhook secret header |
-| SMS & phone calls | Twilio; voice uses speech `<Gather>` turns with a short async poll so slow brains don't time out; signatures verified |
+| SMS & phone calls | Twilio; signatures verified. With the voice server (below) and `TWILIO_MEDIA_STREAMS=1`, a call is streamed to it; otherwise, or when it's down or busy, voice uses speech `<Gather>` turns with a short async poll so slow brains don't time out |
 | Email | AgentMail or Resend inbound; each bot gets its own brand-free address; Svix signatures |
 | Slack | One click: a shared app (OAuth v2). DMs are routed by workspace and Slack person to that person's own bot, and replies carry the bot's name and face. Or the bot's own app from a manifest link, where "link CODE" pairs the owner. v0 signatures |
 | Discord | HTTP interactions (`/ask`, `/link`), Ed25519 verification, deferred replies |
@@ -228,6 +229,38 @@ keeps a word count, never the words
 - **Limits:** no word limit. `usage.dictationWords` is counted when text is typed, never for commands or nothing heard. What costs money is paid from credit: a recording heard on the server, and the AI cleanup (without credit, the plain cleanup is typed). The per-owner daily cap and the site ceiling (`DICTATION_DAILY_LIMIT`) keep it from being a blank check.
 - **The desktop half:** a keyboard hook (`uiohook-napi`) hears the shortcut anywhere (a pure state machine: hold, tap, double tap for hands-free, chords left alone); the pill is a small focus-less window; the text is pasted with the clipboard (snapshot → paste → put back) and real key presses. It works out the app's kind locally and sends only that. History is encrypted on the computer. See `desktop/README.md`.
 
+## Calls
+
+Calling a bot takes three pieces: the caller (the Call button in the browser, or a phone through Twilio), the voice server (`voice/`, on its own machine; its README has the details and the numbers), and this app, which decides who's calling and does the work.
+
+```
+browser: Call button → POST /api/bots/:id/calls → { callId, token, wsUrl }
+         → WebSocket wss://voice…/call: hello { token }, then 16 kHz PCM both ways
+phone:   Twilio → POST /api/webhooks/twilio/voice → <Connect><Stream url="wss://voice…/twilio">
+         with the token as a <Parameter>; then <Redirect> to …/voice/fallback (the simpler line)
+            ▼
+voice server: Silero VAD → turn detector → NVIDIA Parakeet → the talker (Nemotron 3.5 Lightning
+  on Token Factory, streamed) → NVIDIA Magpie, streamed, stopped mid-word when the caller cuts in
+            │  each request signed: x-voice-signature: t=<unix>,v1=HMAC-SHA256(secret, "t.body")
+            ▼
+POST /api/calls/session   the token → who's calling, the greeting, the owner's context, phrases to listen for
+POST /api/calls/act       ask_bot → runTurn in the call's conversation: apps, memory, approvals, receipts
+POST /api/calls/pin       a PIN said or typed on the call (the talker never sees it)
+POST /api/calls/turn      each line of the transcript as it happens
+POST /api/calls/end       the report: how long, how fast, the talker's tokens → usage, a receipt, the chat card
+```
+
+- **The shared secret** (`VOICE_SERVER_SECRET`, 32+ characters) signs both ways: the app signs call tokens (`v1.<payload>.<HMAC>`, `src/lib/calls/tokens.ts`, mirrored in `voice/src/auth.ts`), which name the call, the bot and the kind, and for a phone call Twilio's CallSid. The browser has 2 minutes to use its token, Twilio 10. A call is claimed once (`pending → active`, within 15 minutes). The voice server signs every request to `/api/calls/*` (300 s tolerance); a bad signature is a 401.
+- **Who's calling** (`phoneSpeaker`, `greetingFor` in `src/lib/calls/index.ts`):
+  - the **owner**: on the Call button, or from their number with STIR/SHAKEN attestation A (`StirVerstat=TN-Validation-Passed-A`);
+  - **unverified**: their number without it (caller ID can be faked). `act` refuses until the phone PIN is said or typed (`src/lib/calls/pin.ts`: scrypt, 4–8 digits, no repeats or runs, 5 wrong tries lock it for 15 minutes);
+  - a **contact**: anyone else. What they say reaches the bot as a message from someone who isn't the owner, which (as on every channel) can't use the owner's apps, so the bot takes a message.
+  - The greeting says "your AI assistant" on the owner's first call only; everyone else always hears that it's an AI assistant.
+- **The call's conversation** is `call:<id>` (kind `voice`): what `ask_bot` asks runs there through `runTurn` (`meta.via = "call"`), with the same credit checks, policy engine and approvals as a chat. The talker is told what's waiting for a tap and says so; it never says something was done unless the agent's answer says so.
+- **The transcript** is appended to `calls.transcript` as the call goes (up to 400 lines). When the call ends it's posted to the bot's web chat as one message (`meta.kind = "call"`, the `ChatCall` card). Audio is never kept, here or on the voice server.
+- **Billing** (at cost): a call in the app costs the talker's tokens at its Token Factory price; the bot's own work costs what a chat turn would. A phone call adds Twilio's minutes, counted by the status callback (`/api/webhooks/twilio/voice/status`): streamed calls at `callMinuteStreamIn`/`Out` (Twilio's minute plus Media Streams, no per-use speech fees), calls on the simpler line at `callMinute`. A call needs credit to start (`checkSpend(…, "call")`).
+- **When the voice server can't take it:** the app checks `/health` (cached) before handing a phone call over, and the stream's `<Redirect>` takes over if the server drops it or is busy: `/voice/fallback` hangs up if the call already ended there, else marks it failed and carries on with `<Gather>`. The Call button says the voice line is down.
+
 ## The bot as an MCP server
 
 `/api/mcp/[botId]` serves the bot's tools over Streamable HTTP (stateless, JSON responses; legacy `initialize` and modern `server/discover` clients). Owners can mint a token in Settings and use their bot's apps from Claude Desktop, Claude Code or any MCP client, under the same rules.
@@ -269,5 +302,7 @@ Every flow in the product can be tried with zero keys when you run it yourself, 
 - **On real Postgres.** Supabase runs the server through postgres.js and a transaction pooler, which are stricter than the in-memory database the tests use. Check database changes on a real one too: a local Postgres with pgbouncer in front in `pool_mode = transaction` on port 6543, like Supabase's pooler (port 6543 also makes the client skip prepared statements).
   - `TEST_DATABASE_URL=postgres://postgres@127.0.0.1:6543/bab_test npx vitest run tests/postgres.test.ts` wipes that database and covers sign-in, rate limits, the admin numbers and the cron tick.
   - `DATABASE_URL=postgres://postgres@127.0.0.1:6543/bab_e2e ENCRYPTION_KEY=$(openssl rand -base64 32) npm run test:e2e` runs the whole e2e suite there.
+- `tests/calls.test.ts`: calls end to end through the routes: call tokens and signatures that match the voice server's, who's calling from each kind of caller ID, greetings, a whole call in the app (session, act, turn, end, the bill and the chat card), the phone PIN and its lockout, the TwiML that hands a phone call to the voice server, the fallback, and billing for streamed and simpler-line calls.
+- `cd voice && npm test`: the voice server on fakes: μ-law, resampling and text made speakable; the turn detector; the sidecar protocol; the talker's stream, prompt and tools for each kind of caller; whole calls through the session (early guesses dropped or released, barge-in with what was actually heard, fillers, slow work and its follow-up, goodbyes, the PIN said or typed, noise, nobody there); the server over real WebSockets (browser calls, a Twilio Media Streams call, bad tokens and origins, a full line). CI's real-models job builds NVIDIA's engine and runs whole calls on the real Parakeet, Magpie and Silero.
 - `cd desktop && npm test`: call detection on each OS (parsers on captured-style output), the call state machine, the controller's safety rules, the upload queue, placement, token storage, and voice typing's shortcut machine, paste and clipboard restore, app categories, history and controller, and Private speech against a stand-in runtime (download, resume, hashes, the key, idle stop, crashes, falling back), and meetings heard on the computer (timed words into lines, pieces that wait for Parakeet, dictations first, notes only once every piece is in).
 - `cd desktop && npm run test:e2e`: the real Electron app under Xvfb against a running dev server: pair, a fake call, ask, take notes, pause, stop, notes ready, stop and delete, and the mic-only path; then voice typing with real X key presses: hold, talk, the cleaned-up text pasted into another app with the clipboard put back, hands-free, Esc, and "Hey Otto". With NVIDIA's files and two spoken sentences at hand (`BAB_E2E_SPEECH_*`), `e2e/local-speech.e2e.mjs` also downloads and runs the real Parakeet on the computer and types what was said.
