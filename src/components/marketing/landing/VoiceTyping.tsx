@@ -9,7 +9,7 @@ const POINTS = [
   { icon: <Sparkles />, title: "Cleaned up", body: "No ums, the right punctuation, your corrections kept. Casual in chats, proper in email." },
   { icon: <BookA />, title: "Your words", body: "Names your bot remembers and words you add are spelled right, every time." },
   { icon: <Wand2 />, title: "Edit by voice", body: "Select text, hold Shift too, and say “make it friendlier” or “translate it to Spanish”." },
-  { icon: <ShieldCheck />, title: "Private", body: "Your voice becomes text and is thrown away. We count words, never keep them." },
+  { icon: <ShieldCheck />, title: "Private", body: "NVIDIA's Parakeet hears you on your own computer, in 25 languages, so your voice stays there. We count words, never keep them." },
 ];
 
 function Cut({ children }: { children: React.ReactNode }) {

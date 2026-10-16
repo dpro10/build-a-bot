@@ -77,6 +77,26 @@
         </ol>
       </section>
 
+      <section class="card" id="local" aria-labelledby="local-heading" hidden>
+        <h2 id="local-heading">Private speech</h2>
+        <div class="toggles">
+          <label class="toggle">
+            <span class="grow"
+              ><strong>Hear me on this computer</strong
+              ><span class="hint">NVIDIA Parakeet turns your voice into text right here, so it never leaves this computer. Only the words go on, to be cleaned up. A one-time download of about 0.7 GB.</span></span
+            >
+            <span class="switch"><input type="checkbox" id="local-on" role="switch" /><span class="track" aria-hidden="true"></span></span>
+          </label>
+        </div>
+        <p class="hint" id="local-status" role="status"></p>
+        <progress id="local-progress" max="100" value="0" aria-labelledby="local-status" hidden></progress>
+        <div class="row">
+          <button type="button" class="secondary" id="local-retry" hidden>Try again</button>
+          <button type="button" class="link" id="local-remove" hidden>Remove it from this computer</button>
+        </div>
+        <p class="hint credit">NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0), run by NVIDIA NeMo-Speech.cpp (Apache 2.0). English and 24 European languages.</p>
+      </section>
+
       <section class="card" id="try" aria-labelledby="try-heading">
         <h2 id="try-heading">Try it</h2>
         <p class="hint" id="try-hint"></p>
@@ -183,7 +203,7 @@
       </section>
 
       <footer class="privacy">
-        <p><strong>Private by design.</strong> The microphone is on only while you hold the shortcut, and the pill shows the whole time. Your voice is turned into text and thrown away; Build-a-bot keeps a word count, never your words. Your history stays on this computer, encrypted.</p>
+        <p><strong>Private by design.</strong> The microphone is on only while you hold the shortcut, and the pill shows the whole time. <span id="privacy-voice">Your voice is turned into text and thrown away;</span> Build-a-bot keeps a word count, never your words. Your history stays on this computer, encrypted.</p>
         <p><button type="button" class="link" id="open-voice-page">Voice typing in Build-a-bot</button></p>
       </footer>
     </main>

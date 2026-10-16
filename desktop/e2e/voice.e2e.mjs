@@ -120,7 +120,8 @@ test("hold a key, talk, let go: it's typed in the app you're in", { timeout: 300
   app = await electron.launch({
     executablePath: ELECTRON,
     args: ["--no-sandbox", "--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream", `--use-file-for-fake-audio-capture=${toneWav(path.join(userData, "voice.wav"))}`, APP_DIR],
-    env: { ...process.env, BAB_USER_DATA: userData, BAB_SERVER: SERVER, BAB_TEST: "1", BAB_ALLOW_PLAINTEXT_TOKEN: "1", BAB_VOICE_ENABLE: "1", BAB_VOICE_DEMO_FILE: demoFile },
+    // The demo server's sample lines, not NVIDIA Parakeet on this computer (e2e/local-speech.e2e.mjs tests that).
+    env: { ...process.env, BAB_USER_DATA: userData, BAB_SERVER: SERVER, BAB_TEST: "1", BAB_ALLOW_PLAINTEXT_TOKEN: "1", BAB_VOICE_ENABLE: "1", BAB_VOICE_DEMO_FILE: demoFile, BAB_PRIVATE_SPEECH: "off" },
   });
   const logs = [];
   app.process().stdout?.on("data", (d) => logs.push(String(d)));
