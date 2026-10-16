@@ -510,7 +510,7 @@ function planFromUser(text: string, tools: Set<string>, p: Persona, system: stri
   // Meetings the bot took notes in.
   if (tools.has("read_meeting") && /\b(take notes|record|transcribe)\b.*\b(call|meeting|zoom|meet|teams)\b|\bnote-?taker\b/.test(t)) {
     return {
-      text: `Happy to! Open the **Meetings** tab and press **Start** (in Chrome or Edge), or get the desktop app: it notices when a call starts and asks first. Either way I stay on your screen the whole time I listen, and I send you the notes when it ends.`,
+      text: `Happy to! Get the desktop app: it notices when a call starts and asks first. I stay at the bottom of your screen the whole time I listen, your call is turned into text on your own computer, and I send you the notes when it ends.`,
     };
   }
   if (tools.has("read_meeting")) {
@@ -688,7 +688,7 @@ function summarizeResults(results: { name: string; content: string; isError?: bo
         const itemsText = /## Action items\n([\s\S]*?)(?:\n## |$)/.exec(content)?.[1]?.trim();
         const u = userText.toLowerCase();
         if (/^No meetings yet/.test(content)) {
-          out.push("I haven't taken notes in any meetings yet. Start one from the **Meetings** tab, or with the desktop app (it offers when a call starts), and I'll have notes for you after.");
+          out.push("I haven't taken notes in any meetings yet. The desktop app offers when a call starts (or pick **Take notes now** in its menu), and I'll have notes for you after.");
         } else if (!summaryText && !itemsText) {
           out.push(/still recording/.test(content) ? `“${title}” is still going. Here's the gist so far — ask me again when it ends for the full notes.` : `I have the transcript for “${title}”, but no notes yet.`);
         } else if (/\baction items?\b|\bto-?dos?\b|\bwhat do i (?:need|have) to do\b/.test(u)) {

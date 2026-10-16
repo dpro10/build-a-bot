@@ -29,7 +29,6 @@ export function BuddySurface({ initial }: { initial: BuddyState }) {
 
   return (
     <Buddy
-      variant="screen"
       {...state}
       onAction={(a) => window.babDesktop?.act(a)}
       onInteractive={(on) => window.babDesktop?.setInteractive(on)}

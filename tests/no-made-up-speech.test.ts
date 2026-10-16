@@ -6,7 +6,8 @@
  * - A recording sent to voice typing is refused (the desktop app says why instead), and the desktop
  *   session tells the app the server doesn't hear recordings.
  * - What the computer heard itself (NVIDIA Parakeet in the desktop app) is cleaned up as usual.
- * - Meeting notes aren't offered: a recording can't be transcribed, so there's no scripted meeting.
+ * - Meeting notes come only from what the app hears on the computer: a recording can't be
+ *   transcribed here, so there's no scripted meeting.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -54,10 +55,11 @@ describe("no speech-to-text, in demo mode", () => {
     expect(await res.json()).toMatchObject({ kind: "text", text: "Test, test, test.", simulated: false });
   });
 
-  it("tells the desktop app the server doesn't hear recordings, and doesn't offer meeting notes", async () => {
+  it("tells the desktop app the server doesn't hear recordings, for voice typing or meetings", async () => {
     const body = await (await sessionRoute.GET(new Request("http://localhost/api/desktop/session", { headers: device }))).json();
     expect(body.voice).toMatchObject({ available: false, simulated: false, local: true });
-    expect(body.meetings.available).toBe(false);
+    // Meeting notes are taken from what the app hears on the computer; this server can't hear audio.
+    expect(body.meetings).toMatchObject({ available: false, local: true });
     expect(transcriptionAvailable()).toBe(false);
     await expect(transcribe({ audio: new ArrayBuffer(4000), mime: "audio/webm", durationMs: 6000, track: "mic", chunk: 0 })).rejects.toBeInstanceOf(TranscriptionError);
   });

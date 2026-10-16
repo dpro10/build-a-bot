@@ -46,7 +46,10 @@ export function trayItems(m) {
     if (m.phase === "paused") items.push({ id: "resume", label: "Resume taking notes" });
     items.push({ id: "copy-heads-up", label: "Copy a heads-up for the call" });
   } else {
-    items.push({ id: "take", label: "Take notes now", enabled: m.canTake && m.phase !== "stopping" && m.phase !== "discarding" });
+    const canTake = m.canTake && m.phase !== "stopping" && m.phase !== "discarding";
+    items.push({ id: "take", label: "Take notes now", enabled: canTake });
+    // A meeting in the room, not a call: the mic only, and its lines are labeled "Room".
+    items.push({ id: "take-room", label: "Take notes in the room", enabled: canTake });
     if (m.phase === "asking") items.push({ id: "copy-heads-up", label: "Copy a heads-up for the call" });
   }
   items.push({ type: "separator" });

@@ -6,8 +6,8 @@
  *  - Included brain (Nemotron 3.5 Lightning, $0.06/$0.24 per 1M): ~$0.0004 per turn.
  *  - Web search (Tavily): $0.008 per credit after 1,000 free/month → the real cost driver.
  *  - SMS ~$0.013/segment, voice ~$0.02–0.09/min incl. speech recognition.
- *  - Meeting notes: speech-to-text per hour of audio (docs/research/meetings-2026-10-14.md)
- *    plus one notes call (~15K tokens in for an hour-long meeting).
+ *  - Meeting notes: heard on the owner's computer (NVIDIA Parakeet in the desktop app), so no
+ *    speech-to-text cost; one notes call (~15K tokens in for an hour-long meeting).
  *  - Voice typing: speech-to-text (billed at least 10 s a request) plus one short cleanup call:
  *    about $0.0003 a dictation, so ~$0.01 for 1,000 words.
  */

@@ -1,5 +1,8 @@
 /**
- * Uploads audio chunks to the server, in order, two at a time.
+ * Sends a meeting's pieces to the server, in order, two at a time. What a piece becomes is up to
+ * `send`: the lines NVIDIA Parakeet heard in it on this computer (meeting-speech.mjs), or its audio.
+ * A piece `ready` says isn't ready yet (Parakeet is still on its way) waits on disk, unread, in
+ * its place in line; waiting doesn't count as a try.
  *
  *   200            → done (the transcript lines come back for live captions)
  *   network / 5xx / 429 / 503 "retry" → try again with backoff; the chunk waits in the
@@ -14,13 +17,14 @@
  * No Electron here: `send` is injected, so it can be tested with a fake server.
  */
 
-/** @typedef {import('./spool.mjs').ChunkItem & { attempts?: number, nextAt?: number, spooled?: boolean }} QueueItem */
+/** @typedef {import('./spool.mjs').ChunkItem & { attempts?: number, nextAt?: number, spooled?: boolean, queuedAt?: number }} QueueItem */
 /** @typedef {{ status: number, body: any }} SendResult */
 
 export class UploadQueue {
   /**
    * @param {object} o
    * @param {(item: QueueItem) => Promise<SendResult>} o.send  throws on network errors
+   * @param {(item: QueueItem) => boolean} [o.ready]  a piece is tried only when this says so; until then it waits (in the spool)
    * @param {import('./spool.mjs').Spool | null} [o.spool]
    * @param {(item: QueueItem, body: any) => void} [o.onUploaded]
    * @param {(reason: 'limit'|'not_recording'|'gone'|'unpaired'|'too_long', item: QueueItem, body: any) => void} [o.onStop]
@@ -28,11 +32,13 @@ export class UploadQueue {
    * @param {number} [o.concurrency]
    * @param {number} [o.baseDelayMs]
    * @param {number} [o.maxDelayMs]
+   * @param {number} [o.waitMs]  how often a piece that isn't ready is asked again
    * @param {() => number} [o.now]
    * @param {() => number} [o.random]
    */
   constructor(o) {
     this.send = o.send;
+    this.ready = o.ready ?? (() => true);
     this.spool = o.spool ?? null;
     this.onUploaded = o.onUploaded ?? (() => {});
     this.onStop = o.onStop ?? (() => {});
@@ -40,6 +46,7 @@ export class UploadQueue {
     this.concurrency = o.concurrency ?? 2;
     this.baseDelayMs = o.baseDelayMs ?? 1000;
     this.maxDelayMs = o.maxDelayMs ?? 30_000;
+    this.waitMs = o.waitMs ?? 2000;
     this.now = o.now ?? Date.now;
     this.random = o.random ?? Math.random;
     /** @type {QueueItem[]} */
@@ -57,7 +64,7 @@ export class UploadQueue {
   /** @param {QueueItem} item */
   push(item) {
     if (this.disposed || this.dropped.has(item.meetingId)) return;
-    this.queue.push({ attempts: 0, nextAt: 0, ...item });
+    this.queue.push({ attempts: 0, nextAt: 0, queuedAt: this.now(), ...item });
     this.pump();
   }
 
@@ -65,6 +72,17 @@ export class UploadQueue {
   size(meetingId) {
     const all = [...this.queue, ...this.inFlight];
     return meetingId ? all.filter((i) => i.meetingId === meetingId).length : all.length;
+  }
+
+  /** How long a meeting's oldest piece has been waiting (0 when none is). */
+  oldestAge(meetingId) {
+    const times = [...this.queue, ...this.inFlight].filter((i) => i.meetingId === meetingId).map((i) => i.queuedAt ?? this.now());
+    return times.length ? Math.max(0, this.now() - Math.min(...times)) : 0;
+  }
+
+  /** The meeting's pieces were thrown away (it was discarded, or the server stopped or lost it). */
+  isDropped(meetingId) {
+    return this.dropped.has(meetingId);
   }
 
   /** Throw away everything for a meeting (it was discarded, stopped by the server, or deleted). */
@@ -157,6 +175,17 @@ export class UploadQueue {
 
   /** @param {QueueItem} item */
   async attempt(item) {
+    let ready = true;
+    try {
+      ready = this.ready(item);
+    } catch (err) {
+      this.log(`upload: ready() threw ${err}`);
+    }
+    if (!ready) {
+      // Not yet (e.g. NVIDIA Parakeet is still downloading): it waits on disk and is asked again.
+      this.wait(item);
+      return;
+    }
     if (!item.bytes && item.spooled && this.spool) item.bytes = this.spool.read(item);
     if (!item.bytes) {
       this.log(`upload: ${item.track} #${item.chunk} has no audio left; skipping`);
@@ -222,17 +251,36 @@ export class UploadQueue {
     this.stats.retried++;
     const exp = Math.min(this.maxDelayMs, this.baseDelayMs * 2 ** Math.min(item.attempts - 1, 10));
     item.nextAt = this.now() + Math.round(exp * (0.75 + this.random() * 0.5));
-    if (!item.spooled && this.spool && item.bytes) {
-      try {
-        item.spooled = this.spool.write(item);
-        if (item.spooled) item.bytes = null; // wait on disk, not in memory
-      } catch (err) {
-        this.log(`upload: couldn't spool: ${err}`);
-      }
-    }
+    this.toDisk(item);
     // Retried chunks go back to the front (the server places lines by time, so order is a nicety).
     this.queue.unshift(item);
     this.pump();
+  }
+
+  /**
+   * Not ready to be sent yet: asked again in a moment. It isn't a failed try (so it doesn't use up
+   * the tries an engine gets later), and it keeps its place in line, so the pieces are heard in order.
+   * @param {QueueItem} item
+   */
+  wait(item) {
+    this.inFlight.delete(item);
+    item.nextAt = this.now() + this.waitMs;
+    this.toDisk(item);
+    const at = this.queue.findIndex((i) => (i.queuedAt ?? 0) > (item.queuedAt ?? 0));
+    if (at < 0) this.queue.push(item);
+    else this.queue.splice(at, 0, item);
+    this.pump();
+  }
+
+  /** Wait on disk, not in memory. @param {QueueItem} item */
+  toDisk(item) {
+    if (item.spooled || !this.spool || !item.bytes) return;
+    try {
+      item.spooled = this.spool.write(item);
+      if (item.spooled) item.bytes = null;
+    } catch (err) {
+      this.log(`upload: couldn't spool: ${err}`);
+    }
   }
 
   /** @param {QueueItem} item @param {'done'|'drop'} _how */

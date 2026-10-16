@@ -185,7 +185,7 @@
     else if (l.state === "absent") status.textContent = "It downloads when voice typing is on.";
     else if (l.server === false) status.textContent = "Downloaded, but this Build-a-bot server can't take text from it yet, so the servers hear you for now.";
     else if (!l.language) status.textContent = servers ? `${langName} isn't one of Parakeet's languages, so Build-a-bot's servers hear you in it. English and 24 European languages work here.` : `${langName} isn't one of Parakeet's languages, and this server doesn't turn recordings into text: pick English or one of 24 European languages.`;
-    else status.textContent = "On: your voice is turned into text on this computer and never leaves it.";
+    else status.textContent = "On: what you say, and your calls for meeting notes, are turned into text on this computer and never leave it.";
   }
 
   /** The microphone is turned off in the system's settings (Windows says "restricted" when it's off for every app). */

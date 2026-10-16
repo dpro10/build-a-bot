@@ -79,12 +79,21 @@ test("meeting notes pages", async ({ page }) => {
   });
   const { id } = await res.json();
   await page.request.post(`/api/bots/${id}/connections`, { data: { connectorId: "meetings" } });
-  const started = await page.request.post(`/api/bots/${id}/meetings`, { data: { app: "zoom" } });
+  // Taken the way the desktop app does: a paired computer sends the lines it heard.
+  const code = await (await page.request.post("/api/bridge/pairing-code")).json();
+  const paired = await (await page.request.post("/api/bridge/pair", { data: { code: code.code, name: "Dana's Mac", platform: "desktop-darwin-arm64" } })).json();
+  const app = { authorization: `Bearer ${paired.token}` };
+  const started = await page.request.post(`/api/bots/${id}/meetings`, { headers: app, data: { app: "zoom" } });
   const { meeting } = await started.json();
-  for (const [track, chunk] of [["mic", 0], ["system", 0], ["mic", 1]] as const) {
-    await page.request.post(`/api/bots/${id}/meetings/${meeting.id}/audio?track=${track}&chunk=${chunk}&startMs=${chunk * 6000}&durationMs=6000`, {
-      headers: { "content-type": "audio/webm" },
-      data: Buffer.alloc(4000),
+  const lines = [
+    "Thanks for joining. Let's go through the launch plan.",
+    "Quick update first: the beta has about two hundred people now.",
+    "Sam, can you have the new signup screens ready by Thursday?",
+  ];
+  for (const [i, [track, chunk]] of ([["mic", 0], ["system", 0], ["mic", 1]] as const).entries()) {
+    await page.request.post(`/api/bots/${id}/meetings/${meeting.id}/audio?track=${track}&chunk=${chunk}&startMs=${chunk * 20_000}&durationMs=20000`, {
+      headers: app,
+      data: { heard: [{ startMs: 1000, endMs: 5000, text: lines[i] }] },
     });
   }
   await page.request.post(`/api/bots/${id}/meetings/${meeting.id}/finish`);

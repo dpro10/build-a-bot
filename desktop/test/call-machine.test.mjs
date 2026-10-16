@@ -259,3 +259,15 @@ test("notes that are slow tuck the bot away; a late 'ready' still notifies", () 
   assert.equal(state.phase, "idle");
   assert.deepEqual(effects, ["notify_ready"]);
 });
+
+test("Take notes in the room (from the tray): the mic only, even with a call going on", () => {
+  let st = initialState();
+  ({ state: st } = reduce(st, { type: "call_start", key: "fake:zoom", app: "zoom", now: 0 }, { canAsk: false }));
+  const { state, effects } = reduce(st, { type: "take", inPerson: true, now: 1 }, {});
+  assert.equal(state.phase, "starting");
+  assert.deepEqual(state.call, { key: null, app: "other" });
+  assert.deepEqual(effects, [{ type: "start", app: "other", consentNotice: false, inPerson: true }]);
+  // "Take notes now" still uses the call it can see, and isn't in the room.
+  const now = reduce(st, { type: "take", now: 1 }, {});
+  assert.deepEqual(now.effects, [{ type: "start", app: "zoom", consentNotice: false }]);
+});

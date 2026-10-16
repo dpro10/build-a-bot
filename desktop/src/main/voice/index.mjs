@@ -167,12 +167,16 @@ export function setupVoice(o) {
   });
 
   /**
-   * Get Parakeet in the background while voice typing is on. After a failed download it tries again
-   * on its own half an hour later (or right away from Settings: `now`).
+   * Get Parakeet in the background while voice typing is on, or when meeting notes need it (`why`).
+   * After a failed download it tries again on its own half an hour later (or right away from
+   * Settings: `now`).
+   * @param {boolean} [now]
+   * @param {'voice'|'meetings'} [why]
    */
-  function maybeInstall(now = false) {
+  function maybeInstall(now = false, why = "voice") {
     const v = settings.get().voice;
-    if (localOff || !v.enabled || !account.device || v.onDevice === false || !local.supported() || local.blocked() || local.isInstalled() || local.installing) return;
+    if (why === "voice" && !v.enabled) return;
+    if (localOff || !account.device || v.onDevice === false || !local.supported() || local.blocked() || local.isInstalled() || local.installing) return;
     if (!now && localTriedAt && Date.now() - localTriedAt < 30 * 60_000) return;
     localTriedAt = Date.now();
     // Just downloaded: load it now, so the first dictation doesn't wait for it.
@@ -223,8 +227,11 @@ export function setupVoice(o) {
 
   /** Open the connection to the server, and start Parakeet, while the owner talks, so sending is quick. */
   function warmUp() {
-    if (onDevice()) local.warm();
-    else maybeInstall();
+    if (onDevice()) {
+      // A meeting's next piece waits until this dictation has been heard.
+      local.expectForeground();
+      local.warm();
+    } else maybeInstall();
     const server = account.server();
     if (!server || Date.now() - lastWarm < 20_000) return;
     lastWarm = Date.now();
@@ -354,6 +361,76 @@ export function setupVoice(o) {
   function micStatus() {
     if (platform === "linux") return "granted";
     return safely(() => systemPreferences.getMediaAccessStatus("microphone"), "unknown");
+  }
+
+  // Meeting notes ------------------------------------------------------------------
+
+  /**
+   * NVIDIA Parakeet can hear meetings on this computer: the same engine and the same Private speech
+   * setting as voice typing. A meeting's language is detected (voice typing's language doesn't apply).
+   */
+  function meetingParakeet() {
+    const v = settings.get().voice;
+    return !localOff && v.onDevice !== false && local.supported() && !local.blocked();
+  }
+
+  /** How the next piece of a meeting is heard (meeting-speech.mjs). @returns {'local'|'server'|'wait'} */
+  function meetingWay() {
+    const m = account.session?.meetings;
+    if (m?.local === true && meetingParakeet()) {
+      if (!local.isInstalled()) return "wait";
+      if (!local.crashing()) return "local";
+      // It keeps stopping on this computer: a server that hears audio takes the pieces meanwhile.
+      return m.available === true ? "server" : "wait";
+    }
+    if (m?.available === true) return "server";
+    return "wait";
+  }
+
+  /** Why meeting notes can't be taken on this computer, for the tray (null when they can). */
+  function meetingProblem() {
+    const m = account.session?.meetings;
+    if (!m || m.available === true || (m.local === true && meetingParakeet())) return null;
+    if (m.local !== true) return "Meeting notes aren't set up on this server";
+    if (local.blocked()) return "NVIDIA Parakeet can't run from this Windows account's folder";
+    if (localOff || !local.supported()) return "Meeting notes need NVIDIA Parakeet, which can't run here";
+    return "Turn on Private speech to take notes";
+  }
+
+  /** How much of Parakeet's download is here, in whole percent (0 before it has really started). */
+  function downloaded(s) {
+    return s.state === "downloading" && s.total ? Math.min(99, Math.floor((s.received / s.total) * 100)) : 0;
+  }
+
+  /**
+   * How this computer hears calls, for the pairing window (it's where the 0.7 GB download that
+   * pairing starts is explained). Null when the server says nothing about meeting notes.
+   */
+  function meetingLine() {
+    const m = account.session?.meetings;
+    if (!m) return null;
+    const problem = meetingProblem();
+    if (problem) return `${problem}.`;
+    const way = meetingWay();
+    if (way === "server") {
+      const why = local.isInstalled() && local.crashing() ? "NVIDIA Parakeet keeps stopping on this computer, so for now " : settings.get().voice.onDevice === false ? "Private speech is off, so " : "";
+      return `${why}Build-a-bot's servers turn the call's audio into text, and throw the audio away.`;
+    }
+    if (local.isInstalled()) return local.crashing() ? "NVIDIA Parakeet keeps stopping on this computer. It tries again in a few minutes." : "NVIDIA Parakeet turns calls into text on this computer: the audio never leaves it.";
+    const s = local.status();
+    if (s.state === "error") return "NVIDIA Parakeet didn't download. It tries again on its own, or from Voice typing settings.";
+    const pct = downloaded(s);
+    return `Getting NVIDIA Parakeet, which turns calls into text on this computer${pct ? `: ${pct}%` : ""}. It's about 0.7 GB, once.`;
+  }
+
+  /** While a meeting's pieces wait for Parakeet to download: words for the bot's bubble (null when it's here). */
+  function meetingWaitNote() {
+    if (meetingWay() !== "wait") return null;
+    if (local.isInstalled() && local.crashing()) return "NVIDIA Parakeet keeps stopping on this computer. I'm listening, and I'll write your notes once it runs again.";
+    const s = local.status();
+    if (s.state === "error") return "NVIDIA Parakeet didn't download. Your notes come once it's here: try again in Voice typing settings.";
+    const pct = downloaded(s);
+    return `Getting NVIDIA Parakeet${pct ? ` (${pct}%)` : ""}. I'm listening, and I'll write your notes once it's here.`;
   }
 
   /** Why voice typing can't hear right now, for the settings window (null when it can). */
@@ -543,6 +620,23 @@ export function setupVoice(o) {
     pushState,
     showSettings,
     registerIpc,
+    /** NVIDIA Parakeet for meeting notes: how each piece is heard (meeting-speech.mjs), and what to say meanwhile. */
+    meetings: {
+      way: meetingWay,
+      problem: meetingProblem,
+      waitNote: meetingWaitNote,
+      line: meetingLine,
+      /** @param {Uint8Array} wav @param {{ durationMs: number }} opts */
+      hear: (wav, opts) => local.transcribeTimed(wav, opts),
+      /** Meeting notes are possible here: make sure Parakeet is downloaded (or on its way). */
+      ensure() {
+        if (account.session?.meetings?.local === true && meetingParakeet() && !local.isInstalled()) maybeInstall(false, "meetings");
+      },
+      /** Load it ahead of a meeting's first piece. */
+      warm() {
+        if (meetingWay() === "local") local.warm();
+      },
+    },
     /** The tray's voice typing line and items. */
     trayInfo() {
       const v = settings.get().voice;

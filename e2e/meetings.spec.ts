@@ -1,19 +1,10 @@
 /**
- * Meeting notes in the browser, end to end in demo mode: turn the app on, take notes
- * with Chromium's fake microphone (one microphone in the room), watch the scripted
- * transcript arrive, stop, read the notes, tick an action item, delete the meeting.
- *
- * The browser recorder only listens while its floating window (Document
- * Picture-in-Picture) is open; headless Chromium opens it like a real one, as a new page.
+ * Meeting notes on the website, end to end in demo mode. Notes are taken in the desktop app, which
+ * hears the call on the owner's computer (NVIDIA Parakeet) and sends only the lines; here a paired
+ * computer's token stands in for the app. The website shows the meetings and their notes, can stop
+ * a recording, and can't record itself.
  */
-import { expect, test, type BrowserContext, type Page } from "@playwright/test";
-
-test.use({
-  launchOptions: {
-    ...(process.env.PW_CHROMIUM_PATH ? { executablePath: process.env.PW_CHROMIUM_PATH } : {}),
-    args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"],
-  },
-});
+import { expect, test, type Page } from "@playwright/test";
 
 async function newBot(page: Page, name: string): Promise<string> {
   const res = await page.request.post("/api/bots", {
@@ -36,48 +27,66 @@ async function newBot(page: Page, name: string): Promise<string> {
   return (await res.json()).id as string;
 }
 
-/** Consent (first time), then "In person", then Start: returns the floating window. */
-async function startInPerson(page: Page, context: BrowserContext) {
-  await page.getByRole("button", { name: "Start taking notes" }).click();
-  const consent = page.getByRole("dialog", { name: "Before I take notes on calls" });
-  if (await consent.isVisible().catch(() => false)) {
-    await expect(consent.getByRole("button", { name: "Got it" })).toBeDisabled();
-    await consent.getByRole("checkbox").check();
-    await consent.getByRole("button", { name: "Got it" }).click();
-  }
-  const sheet = page.getByRole("dialog", { name: "Take notes in this browser" });
-  await sheet.getByRole("radio", { name: /In person/ }).click();
-  await sheet.getByRole("button", { name: "Copy" }).click();
-  await expect(sheet.getByRole("button", { name: "Copied" })).toBeVisible();
-  const floating = context.waitForEvent("page");
-  await sheet.getByRole("button", { name: "Start taking notes" }).click();
-  const pip = await floating;
-  await expect(page.getByRole("heading", { name: /is taking notes/ })).toBeVisible({ timeout: 20_000 });
-  return pip;
+/** Pair a "computer" the way the desktop app does; returns its device token's header. */
+async function pairComputer(page: Page): Promise<Record<string, string>> {
+  const code = await page.request.post("/api/bridge/pairing-code");
+  expect(code.ok()).toBeTruthy();
+  const paired = await page.request.post("/api/bridge/pair", { data: { code: (await code.json()).code, name: "Dana's Mac", platform: "desktop-darwin-arm64" } });
+  expect(paired.ok()).toBeTruthy();
+  return { authorization: `Bearer ${(await paired.json()).token}` };
 }
 
-test("take notes in the browser, then read, tick and delete them", async ({ page, context }) => {
-  test.setTimeout(150_000);
-  await context.grantPermissions(["microphone"]);
-  const id = await newBot(page, "Inky");
+/** What the app heard in each 20-second piece of the call ("mic" is the owner, "system" everyone else). */
+const PIECES: { track: "mic" | "system"; chunk: number; heard: { startMs: number; endMs: number; text: string }[] }[] = [
+  { track: "mic", chunk: 0, heard: [{ startMs: 400, endMs: 4200, text: "Thanks for joining, everyone. Let's go through the launch plan for the new onboarding." }] },
+  { track: "system", chunk: 0, heard: [{ startMs: 5000, endMs: 9800, text: "Quick update first: the beta has about two hundred people now." }] },
+  { track: "mic", chunk: 1, heard: [{ startMs: 1000, endMs: 6000, text: "Sam, can you have the new signup screens ready by Thursday?" }] },
+  { track: "system", chunk: 1, heard: [{ startMs: 7000, endMs: 12_000, text: "Sure. I'll send the release notes by Friday." }] },
+];
 
+test("the Meetings tab gets you the desktop app; the website itself doesn't record", async ({ page }) => {
+  const id = await newBot(page, "Inky");
   await page.goto(`/app/bots/${id}/meetings`);
   await expect(page.getByRole("heading", { name: "Meetings", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Turn on meeting notes" }).click();
-  await expect(page.getByRole("button", { name: "Start taking notes" })).toBeEnabled();
+  await expect(page.getByRole("heading", { name: /The desktop app/ })).toBeVisible();
+  await expect(page.getByText(/turns the call into text right on your computer/)).toBeVisible();
+  await expect(page.getByRole("link", { name: /Get the desktop app/ })).toHaveAttribute("href", "/app/bridge#desktop");
+  // Nothing on the page records.
+  await expect(page.getByRole("button", { name: /Start taking notes/ })).toHaveCount(0);
+  const start = await page.request.post(`/api/bots/${id}/meetings`, { data: { app: "zoom" } });
+  expect(start.status()).toBe(403);
+  expect(await start.json()).toMatchObject({ code: "app_only", error: "Meeting notes are taken in the desktop app." });
+});
 
-  const pip = await startInPerson(page, context);
-  // The floating bot is on screen the whole time it listens.
-  await expect(pip.getByText("Taking notes", { exact: true })).toBeVisible();
+test("a meeting the desktop app heard: live transcript, stopped from the website, notes, tick, search, chat, delete", async ({ page }) => {
+  test.setTimeout(120_000);
+  const id = await newBot(page, "Inky");
+  expect((await page.request.post(`/api/bots/${id}/connections`, { data: { connectorId: "meetings" } })).ok()).toBeTruthy();
+  const app = await pairComputer(page);
+  const started = await page.request.post(`/api/bots/${id}/meetings`, { headers: app, data: { app: "zoom" } });
+  expect(started.status()).toBe(201);
+  const { meeting } = await started.json();
 
-  // Demo transcription: one scripted line per 6-second piece of audio.
-  const live = page.getByLabel("Live transcript");
-  await expect(live.getByText(/Okay, thanks everyone for joining/)).toBeVisible({ timeout: 30_000 });
-  await expect(live.getByText(/Sam, can you have the new signup screens ready/)).toBeVisible({ timeout: 30_000 });
-  await expect(live.getByText("Room").first()).toBeVisible();
+  // The Meetings tab shows the app is taking notes, and opens it.
+  await page.goto(`/app/bots/${id}/meetings`);
+  await expect(page.getByText("Inky is taking notes with the desktop app")).toBeVisible();
+  await page.getByRole("link", { name: "Open", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/meetings/${meeting.id}$`));
 
+  // The lines come in as the app hears them, and show up live.
+  for (const p of PIECES) {
+    const res = await page.request.post(`/api/bots/${id}/meetings/${meeting.id}/audio?track=${p.track}&chunk=${p.chunk}&startMs=${p.chunk * 20_000}&durationMs=20000`, {
+      headers: app,
+      data: { heard: p.heard },
+    });
+    expect(res.ok()).toBeTruthy();
+  }
+  await expect(page.getByText(/the beta has about two hundred people/)).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText(/Sam, can you have the new signup screens ready/)).toBeVisible();
+
+  // Stopped from the website: the notes get written.
   await page.getByRole("button", { name: "Stop and write notes" }).first().click();
-  await expect(page).toHaveURL(/\/meetings\/mtg_/, { timeout: 60_000 });
   await expect(page.getByRole("heading", { name: "Launch plan for the new onboarding" })).toBeVisible({ timeout: 60_000 });
   await expect(page.getByText(/Went through the launch plan/)).toBeVisible();
 
@@ -104,37 +113,4 @@ test("take notes in the browser, then read, tick and delete them", async ({ page
   await page.getByRole("dialog", { name: "Delete this meeting?" }).getByRole("button", { name: "Delete meeting" }).click();
   await expect(page).toHaveURL(new RegExp(`/app/bots/${id}/meetings$`));
   await expect(page.getByText("No meetings yet")).toBeVisible();
-});
-
-test("stop and delete throws away everything from the call", async ({ page, context }) => {
-  test.setTimeout(90_000);
-  await context.grantPermissions(["microphone"]);
-  const id = await newBot(page, "Blip");
-  await page.request.post(`/api/bots/${id}/connections`, { data: { connectorId: "meetings" } });
-  await page.goto(`/app/bots/${id}/meetings`);
-
-  await startInPerson(page, context);
-  await page.getByRole("button", { name: "Stop and delete", exact: true }).click();
-  await page.getByRole("dialog", { name: "Stop and delete everything?" }).getByRole("button", { name: "Stop and delete", exact: true }).click();
-  await expect(page.getByText("Stopped and deleted. Nothing from this call was kept.")).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByRole("button", { name: "Start taking notes" })).toBeVisible();
-  const list = await (await page.request.get(`/api/bots/${id}/meetings`)).json();
-  expect(list.meetings).toEqual([]);
-});
-
-test("browsers that can't keep the bot on screen don't record", async ({ page }) => {
-  // Like Safari: no Document Picture-in-Picture.
-  await page.addInitScript(() => {
-    try {
-      delete (Window.prototype as unknown as { documentPictureInPicture?: unknown }).documentPictureInPicture;
-    } catch {
-      /* not configurable */
-    }
-    Object.defineProperty(window, "documentPictureInPicture", { value: undefined, configurable: true });
-  });
-  const id = await newBot(page, "Nimbus");
-  await page.request.post(`/api/bots/${id}/connections`, { data: { connectorId: "meetings" } });
-  await page.goto(`/app/bots/${id}/meetings`);
-  await expect(page.getByText(/Use Chrome or Edge on a computer, or the desktop app/)).toBeVisible();
-  await expect(page.getByRole("button", { name: "Start taking notes" })).toBeDisabled();
 });

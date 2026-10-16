@@ -1,6 +1,6 @@
 /**
  * Voice typing: hold a key anywhere, talk, let go, and what you meant is typed where your cursor
- * is (the desktop app pastes it). Also on the Voice typing page, in the browser.
+ * is (the desktop app pastes it).
  *
  * One dictation, in order:
  *  1. Plan limits (words a month) and the site's daily ceiling.

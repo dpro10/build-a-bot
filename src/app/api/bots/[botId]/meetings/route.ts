@@ -1,10 +1,9 @@
 import { z } from "zod";
 import { after } from "next/server";
 import { apiError, json, limitOr429, parseJson, type RouteCtx } from "@/lib/api";
-import { CHUNK_MS, listMeetings, meetingsEnabled, meetingView, startMeeting } from "@/lib/meetings";
+import { CHUNK_MS, listMeetings, meetingNotesAvailable, meetingsEnabled, meetingView, startMeeting } from "@/lib/meetings";
 import { MEETING_APP_IDS } from "@/lib/meetings/apps";
 import { meetingAuth } from "@/lib/meetings/auth";
-import { transcriptionAvailable } from "@/lib/transcribe";
 import { writeMeetingNotes } from "@/lib/meetings/notes";
 
 export const maxDuration = 300;
@@ -14,12 +13,13 @@ export async function GET(req: Request, ctx: RouteCtx<{ botId: string }>) {
   const a = await meetingAuth(req, botId);
   if (!a.ok) return a.res;
   const [rows, enabled] = await Promise.all([listMeetings(a.db, botId), meetingsEnabled(a.db, botId)]);
-  return json({ meetings: rows.map(meetingView), enabled, available: transcriptionAvailable() });
+  return json({ meetings: rows.map(meetingView), enabled, available: meetingNotesAvailable() });
 }
 
+/** Start taking notes: only the desktop app (it hears the call on the owner's computer). */
 export async function POST(req: Request, ctx: RouteCtx<{ botId: string }>) {
   const { botId } = await ctx.params;
-  const a = await meetingAuth(req, botId, { write: true });
+  const a = await meetingAuth(req, botId, { write: true, appOnly: true });
   if (!a.ok) return a.res;
   const parsed = await parseJson(
     req,
@@ -36,7 +36,7 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string }>) {
   const res = await startMeeting(a.db, {
     bot: a.bot,
     owner: a.owner,
-    source: a.device ? "desktop" : "browser",
+    source: "desktop",
     app: parsed.data.app,
     title: parsed.data.title,
     deviceId: a.device?.id ?? null,
@@ -44,7 +44,7 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string }>) {
     consentNotice: parsed.data.consentNotice,
   });
   if (!res.ok) return apiError(res.status, res.error, { code: res.code, upgrade: res.upgrade, meetingId: res.meetingId });
-  // A recording this one replaced (a closed tab, a crash) gets its notes now, not at the next rescue.
+  // A recording this one replaced (a crash, a quit) gets its notes now, not at the next rescue.
   if (res.replaced.length) {
     after(async () => {
       const { getDb } = await import("@/lib/db");

@@ -41,9 +41,7 @@ const FAQ: { q: string; text: string }[] = [
   },
   {
     q: "Can it take notes in my meetings?",
-    text: desktopApp
-      ? "Yes, when you say yes. The desktop app notices when a call starts in Zoom, Meet, Teams and others, and your bot asks before it listens. You can also start notes from your browser. While it listens, it stays on your screen with a red dot. The audio is turned into text and thrown away, and you get a summary, decisions and action items. Recording laws differ by place, so let everyone on the call know."
-      : "Yes, when you say yes. Start notes from Chrome or Edge on a computer, for a call in another tab or a meeting in the room. While it listens, it stays on your screen with a red dot. The audio is turned into text and thrown away, and you get a summary, decisions and action items. A desktop app that notices when a call starts is coming soon. Recording laws differ by place, so let everyone on the call know.",
+    text: `Yes, when you say yes, with the desktop app${desktopApp ? "" : " (coming soon)"}. It notices when a call starts in Zoom, Meet, Teams and others, and your bot asks before it listens; for a meeting in the room, start it from the app's menu. While it listens, it stays on your screen with a red dot. NVIDIA Parakeet turns the call into text on your computer, so the audio never leaves it, and you get a summary, decisions and action items. The website never listens. Recording laws differ by place, so let everyone on the call know.`,
   },
   {
     q: "What is voice typing?",

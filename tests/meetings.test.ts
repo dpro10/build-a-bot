@@ -56,9 +56,9 @@ async function makeBot(opts: { connectors?: string[]; trust?: "ask" | "full"; wh
 
 const AUDIO = new ArrayBuffer(4000);
 
-/** Plays the demo meeting: n chunks on both tracks. */
-async function record(bot: Bot, who: User, chunks = 6, source: "browser" | "desktop" = "browser", deviceId?: string): Promise<Meeting> {
-  const started = await startMeeting(db, { bot, owner: who, source, app: "zoom", deviceId });
+/** Plays the demo meeting: n chunks on both tracks, as audio (the server's own speech-to-text, scripted). */
+async function record(bot: Bot, who: User, chunks = 6): Promise<Meeting> {
+  const started = await startMeeting(db, { bot, owner: who, source: "desktop", app: "zoom" });
   if (!started.ok) throw new Error(started.error);
   for (let c = 0; c < chunks; c++) {
     for (const track of ["mic", "system"] as const) {
@@ -159,7 +159,7 @@ describe("meeting notes", () => {
 
   it("a meeting can't talk the bot into emailing a stranger, even under full faith", async () => {
     const bot = await makeBot({ connectors: ["meetings", "bot_inbox"], trust: "full" });
-    const started = await startMeeting(db, { bot, owner, source: "browser" });
+    const started = await startMeeting(db, { bot, owner, source: "desktop" });
     if (!started.ok) throw new Error(started.error);
     await db.insert(schema.meetingSegments).values({
       id: "seg_inject",
@@ -183,13 +183,14 @@ describe("meeting notes", () => {
 
   it("refuses when meeting notes are off, the bot is busy, or the plan's minutes are used up", async () => {
     const off = await makeBot({ connectors: [] });
-    const r1 = await startMeeting(db, { bot: off, owner, source: "browser" });
+    const r1 = await startMeeting(db, { bot: off, owner, source: "desktop" });
     expect(!r1.ok && r1.code).toBe("meetings_off");
 
     const bot = await makeBot();
     const a = await startMeeting(db, { bot, owner, source: "desktop", deviceId: "dev_a" });
     expect(a.ok).toBe(true);
-    const b = await startMeeting(db, { bot, owner, source: "browser" });
+    // Another computer can't start a second one for the same bot.
+    const b = await startMeeting(db, { bot, owner, source: "desktop", deviceId: "dev_b" });
     expect(!b.ok && b.code).toBe("already_recording");
     // The same recorder starting again replaces its own leftover recording.
     const c = await startMeeting(db, { bot, owner, source: "desktop", deviceId: "dev_a" });
@@ -198,7 +199,7 @@ describe("meeting notes", () => {
     const freeOwner = await newOwner("usr_free", "free");
     const freeBot = await makeBot({ who: freeOwner });
     await recordUsage(db, freeOwner.id, { meetingSeconds: 120 * 60 });
-    const r2 = await startMeeting(db, { bot: freeBot, owner: freeOwner, source: "browser" });
+    const r2 = await startMeeting(db, { bot: freeBot, owner: freeOwner, source: "desktop" });
     expect(!r2.ok && r2.status).toBe(402);
     expect(!r2.ok && r2.upgrade).toBe("plus");
   });
@@ -237,12 +238,24 @@ describe("meeting notes", () => {
     );
     expect(bad.status).toBe(415);
 
+    // What the app heard on the computer (NVIDIA Parakeet): only the lines come, no audio.
+    const heard = await audioRoute.POST(
+      new Request(`http://localhost/api?track=mic&chunk=0&startMs=0&durationMs=6000`, {
+        method: "POST",
+        headers: { ...headers, "content-type": "application/json" },
+        body: JSON.stringify({ heard: [{ startMs: 400, endMs: 2600, text: "Let's ship the beta on Friday." }] }),
+      }),
+      { params: Promise.resolve({ botId: bot.id, meetingId: meeting.id }) },
+    );
+    expect(heard.status).toBe(200);
+    expect((await heard.json()).segments).toMatchObject([{ track: "mic", speaker: "You", startMs: 400, endMs: 2600, text: "Let's ship the beta on Friday." }]);
+
     const live = await meetingRoute.GET(new Request(`http://localhost/api?since=${encodeURIComponent(new Date(Date.now() - 60_000).toISOString())}`, { headers }), {
       params: Promise.resolve({ botId: bot.id, meetingId: meeting.id }),
     });
     const body = await live.json();
     expect(body.meeting.status).toBe("recording");
-    expect(body.segments).toHaveLength(1);
+    expect(body.segments).toHaveLength(2);
 
     // Unpairing from the desktop app revokes the token for good.
     const sessionRoute = await import("@/app/api/desktop/session/route");
@@ -311,9 +324,9 @@ describe("consent, in-person meetings and retention", () => {
   it("records who said yes and whether they told the others; labels in-person lines as the room", async () => {
     const owner = owner2;
     const bot = await makeBot({ who: owner });
-    const started = await startMeeting(db, { bot, owner, source: "browser", inPerson: true, consentNotice: false });
+    const started = await startMeeting(db, { bot, owner, source: "desktop", inPerson: true, consentNotice: false });
     if (!started.ok) throw new Error(started.error);
-    expect(started.meeting.meta).toMatchObject({ inPerson: true, consent: { via: "browser", noticeCopied: false } });
+    expect(started.meeting.meta).toMatchObject({ inPerson: true, consent: { via: "desktop", noticeCopied: false } });
     await addChunk(db, { meeting: started.meeting, owner, track: "mic", chunk: 0, startMs: 0, durationMs: 6000, audio: AUDIO, mime: "audio/webm" });
     const segs = await getSegments(db, started.meeting.id);
     expect(segs[0].speaker).toBe("Room");

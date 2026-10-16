@@ -215,6 +215,8 @@ Diego decided on 2026-10-13 that bots act on the web. Built as a beta:
 
 ## Decision: the bot can take notes in meetings (Diego, 2026-10-14)
 
+*Since 2026-10-16, notes are taken only in the desktop app, heard on the computer by NVIDIA Parakeet: the web recorder described below is gone (see "meeting notes live in the desktop app too").*
+
 Diego (an idea from his mom): "One of the options for what the agent can do is kind of like Whisper, where it detects when you're in a meeting and it pops up and says, do you want to record this meeting? And then the agents will be able to transcribe it… there should be the cute little agent maybe on like the very, very bottom of the screen that's kind of there so you can see when it's being transcribed."
 
 Built (research: `docs/research/meetings-2026-10-14.md`):
@@ -246,7 +248,7 @@ Built (research: `docs/research/meetings-2026-10-14.md`):
   - That holds under federal law and in most states: the owner is on the call and taps "Take notes".
   - The caveats are in the research (§5): about 10 all-party states, California applying its rule to calls from other states, and the Otter and Granola suits arguing the vendor is a third party listening in.
   - What's built stays until Diego decides otherwise: it asks first, stays visible, the heads-up is optional, and the first-time note is shown once. He can shorten or drop that note.
-- **Web recorder choices:**
+- **Web recorder choices** (the web recorder is gone since 2026-10-16):
   - Starting takes up to three clicks: the one-time consent note, sharing the call's tab, then Start. Start opens the floating window and the mic in one click, because browsers need a click for each.
   - Recording runs only while the floating window is open; closing it stops and writes the notes.
   - Safari and phones can't open the floating window, so they're pointed to Chrome or Edge on a computer, or the desktop app.
@@ -488,7 +490,21 @@ What this settles (built by Claude, agreeing with Diego):
 - **Voice typing happens in the desktop app**, like Wispr Flow. The website doesn't listen: the in-browser try-it is gone, and `/api/voice/dictate`, `/api/voice/edit` and `/api/voice/ask` answer only a paired app's device token (the website gets "Voice typing works in the desktop app."). The Voice typing page explains it, gets you the app, pairs it, and keeps your words (the dictionary stays on the web). The landing page's link says *Get the desktop app*. This fits the pitch: your voice never leaves your computer (NVIDIA Parakeet hears it there), and the website would have needed a paid speech service, or faked it.
 - **Nothing makes up speech on a site people use.** Without a speech-to-text key, a recording isn't turned into text, even in demo mode: no sample dictations, no scripted meeting. The scripted versions stay for running it yourself and for tests (`DEMO_SPEECH`, on by default only outside production).
   - Desktop: when the server can't hear recordings and Parakeet isn't ready, nothing is recorded or sent. The pill says why ("Getting NVIDIA Parakeet: 45%. Voice typing works as soon as it's done.", "Turn on Private speech…"), and the settings window stops promising that the servers hear you meanwhile.
-  - Meeting notes on build-a-bot.site say they're coming soon until there's speech-to-text: a Together AI key (NVIDIA Parakeet, about $0.09 an hour of audio) or our speech server. Diego's call. Moving meeting notes onto Parakeet in the desktop app, like voice typing, would make them free and private too.
+  - Meeting notes on build-a-bot.site said they were coming soon until there was speech-to-text. Settled the same day: meeting notes moved into the desktop app too, heard by Parakeet on the computer (below), so they need none.
+
+## Decision: meeting notes live in the desktop app too, heard on the computer by NVIDIA Parakeet (Diego, 2026-10-16)
+
+After voice typing went app-only, Diego: "Maybe meeting notes, then, should also be something you can only have if you download the app. What do you think?" Claude agreed: it's where privacy matters most (other people's voices are in a meeting), it makes notes free to run (no speech-to-text bill), it's how Granola works (a desktop app, no bot joining the call), and it's the stronger hackathon story (Parakeet hears the meeting on the computer, Nemotron on Nebius writes the notes).
+
+What this settles (built by Claude):
+- **Notes are taken in the desktop app; the website never records.** The in-browser recorder (its floating Picture-in-Picture bot, the tab-sharing sheet) is gone. Starting a meeting and sending what was said answer only a paired app's device token (the website gets "Meeting notes are taken in the desktop app."). The Meetings tab shows the meetings and their notes, how to get and pair the app, and can still stop a recording or delete one.
+- **NVIDIA Parakeet hears each piece of the call on the computer**, with each word's time, and only the lines are sent (`POST …/audio` with `{ heard: [...] }`); the audio never leaves the computer. Each ~20-second piece of each track (your mic; the call's audio), ending at a pause in the talking when there's one near so no word is cut in two, becomes 16 kHz WAV in a hidden, sandboxed page (the browser's own decoder), Parakeet hears it (voice typing goes first: a meeting's pieces wait while a dictation is heard), and its words become transcript lines at pauses and sentence ends. Silent pieces send only their time.
+  - Measured on a 4-core server with no GPU: 37 s of speech heard in 8 s, so it keeps up with a call. End to end, with NVIDIA's real engine and real speech (`desktop/e2e/meeting-parakeet.e2e.mjs`): the first live caption 27 s after "Take notes" (one 20-second piece plus hearing it), notes ready 6 s after Stop, two pieces sent as lines, none as audio.
+- **The first call doesn't wait for the download.** Pairing with a bot whose meeting notes are on gets Parakeet right away (without voice typing). The pairing window says how far the download has got. If a call starts before it's here, the bot still listens and says so ("Getting NVIDIA Parakeet (45%). I'm listening, and I'll write your notes once it's here."), again every couple of minutes, and says when it's caught up; the pieces wait on the computer (the spool) and are heard once it's ready. The notes are written only after every piece is in (not from part of the meeting), and meanwhile the app tells the server the meeting is still being heard (`PATCH { hearing: true }`), so it isn't wrapped up as abandoned.
+- **One setting for both: Private speech.** Turned off (or where Parakeet can't run, or while its engine keeps stopping), a server with speech-to-text of its own gets the pieces' audio instead, as before; one without it can't take notes, and the app says why ("Turn on Private speech to take notes"), or the pieces wait until the engine runs again. Nothing is ever made up.
+- **In the room:** "Take notes in the room" in the app's menu takes notes from the mic only (lines labeled "Room"), which only the browser recorder could do before.
+- **What it costs us:** no speech-to-text; one notes call per meeting on the bot's brain. Plan minutes stay as they are (Free 2 hours, Plus 15, Pro 50), Diego's call to change.
+- **Not covered:** Parakeet knows English and 24 European languages; a meeting in another language isn't heard well. Speakers on the call's side aren't told apart yet (they're "Others"). A word can still be cut at a piece's edge when nobody pauses for the 7 seconds around it (rare).
 
 ## Decision: a Windows app, tested on real Windows (Diego, 2026-10-16)
 
@@ -520,8 +536,8 @@ Outside demo mode nothing is simulated. Anything without its service set up says
 
 - **Channels:** texts and calls until Twilio is set up; the email channel and the bot's own inbox until there's a brand-free mail domain (`BOT_EMAIL_DOMAIN`) with an inbound provider. The Resend key for sign-in no longer turns bot email on. The working channels are web, Telegram, Discord and Slack.
 - **Paid plans:** until Stripe is set up. Plus and Pro show "Coming soon" with a waitlist, `plan:plus` and `plan:pro` on `/admin`. At the Free bot limit, the builder says so before step 1.
-- **Desktop meeting-notes app:** until there's a signed download (`NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL`). The browser recorder takes notes meanwhile.
-- **Web actions:** until Browser Use is set up. The same goes for web search, news and meeting notes without their keys.
+- **The desktop app, and with it meeting notes and voice typing:** until there's a signed download (`NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL`). In demo mode the pages say how to run it from the repo.
+- **Web actions:** until Browser Use is set up. The same goes for web search and news without their keys.
 - **Copy and recipes:** the home page, metadata and recipes only promise what works. Recipes drop channels that aren't available, so all ten featured ones can be made.
 
 **How sign-in to apps works** (details in `docs/DEPLOY.md` §4):
@@ -631,6 +647,10 @@ A code review of the server and the desktop app. Each fix has a test that fails 
   - A stream that errors (a full disk) throws if nothing listens for its `error` event, which would crash the main process. Downloads write through a file handle instead, and a full disk says so.
   - Chromium's fake microphone reads its file from the start for each new stream, so a test can change what's "said" between dictations by rewriting the file.
   - A stale Turbopack cache (`.next/dev`) made `next dev` answer 404 for API routes that exist. Deleting `.next/dev` fixed it.
+- **Meeting notes heard on the computer** (2026-10-16):
+  - Each piece of a call is heard on its own, so a word cut at a piece's edge came out mangled, and with fixed 20-second pieces someone is usually mid-word at the cut. Pieces now end at a pause (both tracks quiet for 0.3 s) from 2.5 s before their length to 5 s after.
+  - NeMo-Speech.cpp's `verbose_json` gives each word's time (seconds, within the piece) after inverse text normalization, so the words joined are the text: lines can be cut from the words without losing "3:30" or "200".
+  - An old `next-server` left on port 3000 kept answering with the old code while the new `next dev` quietly failed to start (port in use), so a test saw the website start a meeting it should have refused. Check for a running `next-server` before starting one.
 - **The Resend key for sign-in links made bots' email look live** (2026-10-14). Any email key turned the Email channel and "Its own inbox" on, so the live site offered them and tried to send codes from `<handle>@botmail.dev`. Resend refused, and the page got a 500.
   - Bots' email now has its own flag (`live.botEmail`): `BOT_EMAIL_DOMAIN`, plus AgentMail or Resend with its webhook secret. Until then both show as Coming soon, and there's no fallback domain.
   - Outside demo mode, any channel whose service isn't set up shows as Coming soon, and recipes and saved drafts leave it out.
