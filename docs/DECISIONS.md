@@ -478,6 +478,30 @@ What this settles (built by Claude; Diego to confirm the details):
 - **Diego's side:** try it on his Mac: `cd desktop && npm install && npm start`, pair, turn on voice typing, and watch *Private speech* in Voice typing settings (the first download takes a few minutes); dictations then show *private* in the pill.
 - **Next:** meeting notes on the computer with the same engine, and streaming while the key is held.
 
+## Decision: a Windows app, tested on real Windows (Diego, 2026-10-16)
+
+"Do you think we can try and get an app going for windows too I have a windows computer as well that I will try it out on. Try and make sure everything works I don't want to run into any issues."
+
+What this settles (built by Claude; Diego to confirm the details):
+- **An installer for Windows 10 and 11 (x64):** `Build-a-bot Setup <version>.exe`, built by GitHub Actions and published on every change to main as the **Desktop app (test build)** pre-release. It isn't signed yet: the browser may call it uncommon (Keep), and Windows says "Windows protected your PC" (More info → Run anyway); on a PC with Smart App Control on, it can't run at all. It installs for the user only, needs no admin, and goes in the Start menu and the system tray. Signing it (a code-signing certificate, or Azure Trusted Signing) removes those warnings; that's a purchase, Diego's call.
+- **Updating and uninstalling:** a new build installs over the old one and keeps the pairing, settings and Parakeet. Uninstalling removes them too: settings, the voice typing history, and the 0.7 GB model. It stops Private speech's engine first if it's still running, and clears "Start at login".
+- **Tested on real Windows, on every change to the desktop app** (`.github/workflows/desktop.yml`), on GitHub's Windows computers:
+  - the unit tests;
+  - NVIDIA's real Windows engine and Parakeet, downloaded from NVIDIA's pages, hearing a sentence Windows' own voice says;
+  - the installer, installed silently, then the installed app checking itself (`BAB_SMOKE=1`);
+  - then voice typing end to end in the installed app: the real Ctrl + Windows shortcut held with `SendInput`, Parakeet on the computer, and the words pasted into another app, with the Start menu kept shut and the clipboard put back;
+  - then installed again over itself (the data stays), and uninstalled with an engine still running (it's stopped, and everything is removed).
+- **Found and fixed on the way:**
+  - A user name with letters from outside English (`C:\Users\José\…`) could break the engine's command line. It now gets paths relative to its folder; CI runs it in a folder named "José Muñoz".
+  - On GitHub's Macs (virtual machines), NVIDIA's Metal engine crashes while loading. If that ever happens on a real Mac, the app now switches to the CPU at once and stays there; so a Mac whose GPU doesn't cooperate still hears its owner on the computer.
+  - Cleaning up an engine left by a force-quit couldn't recognize it in such a folder on macOS and Linux (`ps` garbles the name); it now matches the engine's own arguments.
+  - An install for one user goes to `%LOCALAPPDATA%\Programs\build-a-bot-desktop`.
+  - An engine the app didn't get to stop (a force-quit, or an update closing the app) is now stopped when the app starts, not at the first dictation.
+  - On Windows the settings window said "Allow" for the microphone, and the button did nothing: Windows doesn't ask, it has switches in Settings. Now it says the mic is fine unless those are off, and then names them.
+  - On a Mac, run from source (`npm start`), macOS asks for the microphone and Accessibility on behalf of the terminal it was started from, not "Build-a-bot". The settings window now names that app (Terminal, iTerm, VS Code, Cursor…).
+  - Checked NVIDIA's files: the Windows engine brings its own Visual C++ runtime, and the Mac engine uses only macOS's own libraries (macOS 13.3 or later). Nothing else needs installing.
+- **Not covered by CI:** NVIDIA's Metal engine on a real Mac's GPU, Windows on ARM (the x64 app runs there under Windows' emulation, untested), and a Windows account with administrator-only apps in front (Windows doesn't let a normal app paste into those).
+
 ## Build choice (Claude; Diego to confirm): what real testers see (2026-10-14)
 
 Outside demo mode nothing is simulated. Anything without its service set up says **"Coming soon"** and can't be picked or set up:

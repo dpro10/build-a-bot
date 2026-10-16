@@ -10,7 +10,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { ApiError } from "../api.mjs";
 import { VoiceTyping } from "./controller.mjs";
-import { FrontApp } from "./front-app.mjs";
+import { FrontApp, permissionApp } from "./front-app.mjs";
 import { minutesSaved, VoiceHistory, wordsPerMinute, wordsThisWeek } from "./history.mjs";
 import { Hotkey, ToggleHotkey } from "./hotkey.mjs";
 import { checkCustom, keyName, presetsFor, resolveShortcut } from "./keys.mjs";
@@ -48,6 +48,8 @@ export function setupVoice(o) {
   const { electron, settings, account, api, log } = o;
   const { systemPreferences, clipboard, globalShortcut, shell, safeStorage } = electron;
   const platform = process.platform;
+  /** Whom macOS asks for the microphone and Accessibility (run from source: the terminal). */
+  const askedFor = permissionApp({ platform, packaged: Boolean(electron.app?.isPackaged) });
 
   const history = new VoiceHistory({ file: path.join(o.userData, "voice-history.json"), safeStorage, secure: () => o.tokens.security().secure });
   // NVIDIA Parakeet on this computer. It downloads through the app's own network stack (the
@@ -68,6 +70,9 @@ export function setupVoice(o) {
     pushState();
     o.onChange();
   });
+  // An engine the last run didn't get to stop (it was force-quit, or an update closed it) is
+  // stopped now, rather than at the first dictation.
+  if (local.supported() && !localOff) void local.reap();
   /** When it last started downloading Parakeet (a download that failed tries again on its own later). */
   let localTriedAt = 0;
   const frontApp = new FrontApp({ log });
@@ -121,7 +126,7 @@ export function setupVoice(o) {
   function onDevice() {
     const v = settings.get().voice;
     const lang = v.language || "auto";
-    return !localOff && v.onDevice !== false && local.isInstalled() && account.session?.voice?.local === true && (lang === "auto" || LOCAL_LANGUAGES.has(lang));
+    return !localOff && v.onDevice !== false && local.isInstalled() && !local.blocked() && account.session?.voice?.local === true && (lang === "auto" || LOCAL_LANGUAGES.has(lang));
   }
 
   /** On this computer first; if that fails, the recording goes to the server as before. */
@@ -133,7 +138,7 @@ export function setupVoice(o) {
    */
   function maybeInstall(now = false) {
     const v = settings.get().voice;
-    if (localOff || !v.enabled || !account.device || v.onDevice === false || !local.supported() || local.isInstalled() || local.installing) return;
+    if (localOff || !v.enabled || !account.device || v.onDevice === false || !local.supported() || local.blocked() || local.isInstalled() || local.installing) return;
     if (!now && localTriedAt && Date.now() - localTriedAt < 30 * 60_000) return;
     localTriedAt = Date.now();
     // Just downloaded: load it now, so the first dictation doesn't wait for it.
@@ -276,7 +281,7 @@ export function setupVoice(o) {
       useListener(toggle);
       mode = r.ok ? "toggle" : "off";
       problem = {
-        message: `To hold ${shortcut.label} and have it paste for you, allow Build-a-bot in Privacy & Security → Accessibility. Until then, press ${toggleLabel(platform)} to start and stop, and paste with ⌘V.`,
+        message: `To hold ${shortcut.label} and have it paste for you, allow ${askedFor} in Privacy & Security → Accessibility. Until then, press ${toggleLabel(platform)} to start and stop, and paste with ⌘V.`,
         actions: [{ id: "accessibility", label: "Open Accessibility settings" }],
       };
       watchAccessibility();
@@ -337,7 +342,7 @@ export function setupVoice(o) {
         history: v.history,
         restoreClipboard: v.restoreClipboard,
       },
-      permissions: { mic: micStatus(), accessibility: platform === "darwin" ? trusted() : null },
+      permissions: { mic: micStatus(), accessibility: platform === "darwin" ? trusted() : null, app: askedFor },
       server: sessionVoice ? { available: sessionVoice.available, polish: sessionVoice.polish, edit: sessionVoice.edit === true, simulated: sessionVoice.simulated } : null,
       /** Shift is one of the shortcut's keys (a custom one), so it can't also start editing. */
       editKey: !shortcut.slots.some((slot) => slot.some((k) => k === 42 || k === 54)),
@@ -516,6 +521,47 @@ export function setupVoice(o) {
       active?.disable();
       frontApp.dispose();
       pill.destroy();
+    },
+    /**
+     * The packaged app's self-check (BAB_SMOKE=1, run by CI right after installing it): the native
+     * keyboard hook loads and runs, the pill and the settings window load, the app in front can be
+     * asked, and whether Private speech can run on this computer. Each line is "ok…" or "FAILED: …".
+     * @returns {Promise<Record<string, string>>}
+     */
+    async smoke() {
+      /** @type {Record<string, string>} */
+      const out = {};
+      const step = async (name, fn) => {
+        try {
+          out[name] = String(await fn());
+        } catch (err) {
+          out[name] = `FAILED: ${String(/** @type {any} */ (err)?.message ?? err).slice(0, 300)}`;
+        }
+      };
+      await step("keyboard hook", async () => {
+        const h = await loadHook();
+        h.start();
+        await new Promise((r) => setTimeout(r, 300));
+        h.stop();
+        return "ok";
+      });
+      await step("pill page", async () => {
+        if (!(await pill.ensure())) throw new Error("it didn't load");
+        return "ok";
+      });
+      await step("settings window", async () => {
+        await settingsWindow.show();
+        const loaded = Boolean(settingsWindow.webContents?.getURL().startsWith("bab-app://voice"));
+        settingsWindow.close();
+        if (!loaded) throw new Error("it didn't load");
+        return "ok";
+      });
+      await step("app in front", async () => {
+        const a = await frontApp.detect(8000);
+        return a ? `ok (${a.category}${a.name ? `: ${a.name}` : ""})` : "ok (nothing in front)";
+      });
+      await step("private speech", async () => (local.supported() ? `ok (${process.platform}-${process.arch})` : `ok (not on ${process.platform}-${process.arch}: the server hears)`));
+      return out;
     },
     /** For the e2e test: a read-only look (never includes the token). */
     probe() {

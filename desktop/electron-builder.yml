@@ -1,4 +1,5 @@
-# Packaging (not run in CI here): `npm run dist` on each OS. See README › Packaging and signing.
+# Packaging: `npm run dist` on each OS; CI builds, installs and tests the Windows installer
+# (.github/workflows/desktop.yml). See README › Packaging and signing.
 appId: site.build-a-bot.desktop
 productName: Build-a-bot
 copyright: Copyright © 2026 Build-a-bot
@@ -49,6 +50,10 @@ nsis:
   oneClick: true
   perMachine: false
   allowElevation: false
+  # Uninstalling deletes what the app keeps on this computer (its settings, the voice typing
+  # history, NVIDIA Parakeet's 0.7 GB); installing a new version over it keeps all that.
+  # build/installer.nsh stops Private speech's engine first.
+  deleteAppDataOnUninstall: true
 
 linux:
   target: [AppImage, deb]

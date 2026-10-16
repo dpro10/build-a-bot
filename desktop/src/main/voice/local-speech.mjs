@@ -34,7 +34,7 @@ const RELEASE = "https://github.com/NVIDIA/NeMo-Speech.cpp/releases/download/v0.
 
 /** NeMo-Speech.cpp 0.2.0 for each platform (the hashes NVIDIA publishes with the release). */
 export const RUNTIMES = Object.freeze({
-  "darwin-arm64": { file: "nemo-speech-0.2.0-macos-aarch64-metal.tar.gz", sha256: "5cb02ba7c04f0b5585ce5cde9c830be5f0b7dfb4c83083c500109c381b4f2da9", itn: true },
+  "darwin-arm64": { file: "nemo-speech-0.2.0-macos-aarch64-metal.tar.gz", sha256: "5cb02ba7c04f0b5585ce5cde9c830be5f0b7dfb4c83083c500109c381b4f2da9", itn: true, gpu: true },
   "darwin-x64": { file: "nemo-speech-0.2.0-macos-x86_64-cpu.tar.gz", sha256: "d52c318d8197511d4f7eee02bcf05511f7e91b300555a130b562e571695a0f39", itn: true },
   "win32-x64": { file: "nemo-speech-0.2.0-windows-x86_64-cpu.zip", sha256: "82c80451086e86194aba9af19f800da77cd66d1c28d993d0efceffd6cdb49bb8", itn: false },
   "linux-x64": { file: "nemo-speech-0.2.0-linux-x86_64-cpu.tar.gz", sha256: "f396057150f1b774935c7414fd32ebc04195a795a34120d78d8c9ecefa1b7507", itn: true },
@@ -48,6 +48,8 @@ export const LOCAL_LANGUAGES = new Set([
   "bg", "cs", "da", "de", "el", "en", "es", "et", "fi", "fr", "hr", "hu", "it",
   "lt", "lv", "mt", "nl", "pl", "pt", "ro", "ru", "sk", "sl", "sv", "uk",
 ]);
+
+const FOLDER_PROBLEM = "It can't run from this Windows account's folder: its name has letters from outside English, and Windows keeps no short name for it.";
 
 /** Room the download needs besides the model itself. */
 const SPARE_BYTES = 300 * 1024 * 1024;
@@ -128,6 +130,27 @@ function run(spawnImpl, cmd, args) {
     });
     child.on("error", reject);
     child.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`${cmd} exited with ${code}: ${err.trim().slice(0, 300)}`))));
+  });
+}
+
+/** Plain ASCII, which every program can open as a path. */
+const ascii = (s) => /^[\x20-\x7e]*$/.test(s);
+
+/**
+ * Windows: a folder's short name (C:\Users\JOS~1\…), plain ASCII where its long name isn't, or
+ * null when Windows keeps none for it (short names can be turned off for a drive).
+ */
+function shortPath(spawnImpl, dir) {
+  return new Promise((resolve) => {
+    let out = "";
+    const child = spawnImpl(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-Command", "(New-Object -ComObject Scripting.FileSystemObject).GetFolder($env:BAB_SHORT_OF).ShortPath"],
+      { env: { ...process.env, BAB_SHORT_OF: dir }, stdio: ["ignore", "pipe", "ignore"], windowsHide: true },
+    );
+    child.stdout?.on("data", (d) => (out += d));
+    child.on("error", () => resolve(null));
+    child.on("close", (code) => resolve(code === 0 && out.trim() ? out.trim() : null));
   });
 }
 
@@ -218,8 +241,39 @@ export class LocalSpeech extends EventEmitter {
     this.idleTimer = null;
     this.abort = null;
     this.lastEmit = 0;
-    /** Checked for an engine an earlier run left behind. */
-    this.reaped = false;
+    /** Checking for an engine an earlier run left behind (once per run). @type {Promise<void> | null} */
+    this.reaping = null;
+    /**
+     * Where it runs the model, with a runtime that has a GPU (Metal on Apple silicon): "auto" (the
+     * GPU) until that fails on this computer, then "cpu" from then on. Read from engine.json at
+     * the first start. The other runtimes are CPU-only.
+     * @type {'auto'|'cpu'|null}
+     */
+    this.device = null;
+    /** Windows: the folder as the engine can open it (see place()); undefined until asked. @type {string | null | undefined} */
+    this.short = undefined;
+  }
+
+  /**
+   * The folder as a path NVIDIA's engine can open. Its Windows build can't open files in a folder
+   * whose name has letters from outside English (C:\Users\José\…), even given relative to it: it
+   * gets Windows' short name for the folder instead (C:\Users\JOS~1\…), plain ASCII. Null when
+   * Windows keeps no short name there: then it can't run on this computer.
+   */
+  async place() {
+    if (this.platform !== "win32" || ascii(this.dir)) return this.dir;
+    if (this.short === undefined) {
+      await fsp.mkdir(this.dir, { recursive: true });
+      const short = await shortPath(this.spawn, this.dir);
+      this.short = short && ascii(short) ? short : null;
+      this.log(`local speech: the folder's name isn't plain ASCII; ${this.short ? "using its short name" : "Windows keeps no short name for it"}`);
+    }
+    return this.short;
+  }
+
+  /** It can't run here (Windows, a folder it can't open; see place()). */
+  blocked() {
+    return this.short === null;
   }
 
   get paths() {
@@ -232,6 +286,8 @@ export class LocalSpeech extends EventEmitter {
       marker: path.join(this.dir, "installed.json"),
       /** The running engine's process id, so a run of the app that was force-quit can be cleaned up after. */
       pid: path.join(this.dir, "engine.pid"),
+      /** The GPU didn't work here: run on the CPU (kept until NVIDIA's runtime changes). */
+      device: path.join(this.dir, "engine.json"),
     };
   }
 
@@ -259,7 +315,7 @@ export class LocalSpeech extends EventEmitter {
       received += f.received;
       total += f.total;
     }
-    return { state: this.state, supported: this.supported(), received, total, error: this.error, model: LOCAL_MODEL.label, bytes: this.src.modelBytes };
+    return { state: this.state, supported: this.supported(), blocked: this.blocked(), received, total, error: this.error, model: LOCAL_MODEL.label, bytes: this.src.modelBytes };
   }
 
   /** @param {LocalState} state */
@@ -305,6 +361,7 @@ export class LocalSpeech extends EventEmitter {
   async doInstall() {
     const p = this.paths;
     this.error = null;
+    if (!(await this.place())) throw new LocalSpeechError("folder", FOLDER_PROBLEM);
     this.abort = new AbortController();
     this.files = new Map([["model", { received: 0, total: this.src.modelBytes }]]);
     this.set("downloading");
@@ -441,7 +498,11 @@ export class LocalSpeech extends EventEmitter {
     this.abort?.abort();
     await this.installing?.catch(() => {});
     await this.stop();
-    await fsp.rm(this.dir, { recursive: true, force: true });
+    // One left running by an earlier run would hold the folder open (Windows won't delete it then).
+    this.reaping = null;
+    await this.reap();
+    // Windows lets go of a stopped program's files a moment later.
+    await fsp.rm(this.dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
     this.files.clear();
     this.error = null;
     this.set(this.runtime ? "absent" : "unsupported");
@@ -463,36 +524,97 @@ export class LocalSpeech extends EventEmitter {
   }
 
   /**
-   * An engine left running by a run of the app that couldn't stop it (force-quit, crashed): stop it,
-   * so it doesn't hold the model in memory for nothing. Only if that process is still our engine
-   * (a process id can be reused by another program).
+   * An engine left running by a run of the app that couldn't stop it (force-quit, crashed, closed
+   * by an update): stop it, so it doesn't hold the model in memory for nothing. Only if that
+   * process is still our engine (a process id can be reused by another program). Checked once per
+   * run, when the app starts; a start meanwhile waits for the same check.
    */
-  async reap() {
-    if (this.reaped) return;
-    this.reaped = true;
+  reap() {
+    return (this.reaping ??= this.reapNow().catch((err) => this.log(`local speech: couldn't check for an engine left running (${err?.code ?? err})`)));
+  }
+
+  async reapNow() {
     let pid = 0;
+    let port = 0;
     try {
-      pid = Number(JSON.parse(await fsp.readFile(this.paths.pid, "utf8")).pid);
+      ({ pid, port } = JSON.parse(await fsp.readFile(this.paths.pid, "utf8")));
     } catch {
       return;
     }
     await fsp.rm(this.paths.pid, { force: true });
     if (!Number.isInteger(pid) || pid <= 1 || pid === process.pid) return;
+    // By what ps always prints the same: the program's name and its arguments, all plain ASCII
+    // (a folder named José can come out as "Jos?").
     const ours =
       this.platform === "win32"
         ? (await output(this.spawn, "tasklist", ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"])).trim().toLowerCase().startsWith(`"${this.exe}"`)
-        : (await output(this.spawn, "ps", ["-p", String(pid), "-o", "command="])).includes(this.paths.bin);
+        : ((cmd) => cmd.includes(`${this.exe} serve --asr-model ${path.relative(this.dir, this.paths.model)}`) && cmd.includes(`--port ${port} `))(
+            await output(this.spawn, "ps", ["-p", String(pid), "-o", "command="]),
+          );
     if (!ours) return;
+    const alive = () => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
     try {
       process.kill(pid);
-      this.log("local speech: stopped an engine left running by an earlier run");
     } catch {
-      /* already gone */
+      return;
+    }
+    // Gone before the new one loads the model, so the two don't share the memory for it.
+    for (let i = 0; i < 50 && alive(); i++) await sleep(100);
+    if (alive()) {
+      try {
+        process.kill(pid, "SIGKILL");
+      } catch {
+        /* gone just now */
+      }
+    }
+    this.log("local speech: stopped an engine left running by an earlier run");
+  }
+
+  /** It failed on the GPU on this computer (it crashed or hung): the CPU from now on. */
+  useCpu(why) {
+    if (this.device === "cpu") return;
+    this.device = "cpu";
+    this.log(`local speech: it didn't start on the GPU (${why}); using the CPU from now on`);
+    // Written at once (it's tiny), so it can't land in a folder that's being deleted.
+    try {
+      fs.writeFileSync(this.paths.device, JSON.stringify({ device: "cpu", runtime: this.src.runtimeSha256, why: String(why), at: new Date().toISOString() }));
+    } catch {
+      /* it tries the GPU again next time */
     }
   }
 
+  loadDevice() {
+    try {
+      const d = JSON.parse(fs.readFileSync(this.paths.device, "utf8"));
+      // A new runtime from NVIDIA gets another try on the GPU.
+      if (d.device === "cpu" && d.runtime === this.src.runtimeSha256) return "cpu";
+    } catch {
+      /* not decided yet */
+    }
+    return "auto";
+  }
+
   async start() {
+    try {
+      return await this.startOnce();
+    } catch (err) {
+      // It crashed on the GPU while loading: straight away, once more on the CPU.
+      if (err instanceof LocalSpeechError && err.code === "crashed" && this.lastDevice !== "cpu" && this.device === "cpu") return this.startOnce();
+      throw err;
+    }
+  }
+
+  async startOnce() {
     if (!this.isInstalled()) throw new LocalSpeechError("absent", "It isn't downloaded yet.");
+    const root = await this.place();
+    if (!root) throw new LocalSpeechError("folder", FOLDER_PROBLEM);
     await this.reap();
     const now = Date.now();
     this.crashes = this.crashes.filter((t) => now - t < 10 * 60_000);
@@ -500,16 +622,30 @@ export class LocalSpeech extends EventEmitter {
     const p = this.paths;
     this.port = await freePort();
     this.secret = randomBytes(24).toString("hex");
-    const args = ["serve", "--asr-model", p.model, "--host", "127.0.0.1", "--port", String(this.port), "--no-ui", "--device", "auto"];
-    if (fs.existsSync(p.itn)) args.push("--itn-model-dir", p.itn);
+    const device = this.runtime?.gpu ? (this.device ??= this.loadDevice()) : "cpu";
+    this.lastDevice = device;
+    // It runs in its own folder (as place() gives it), with paths relative to it.
+    const bin = path.join(root, path.relative(this.dir, p.bin));
+    const args = ["serve", "--asr-model", path.relative(this.dir, p.model), "--host", "127.0.0.1", "--port", String(this.port), "--no-ui", "--device", device];
+    if (fs.existsSync(p.itn)) args.push("--itn-model-dir", path.relative(this.dir, p.itn));
     const env = { ...process.env, NEMO_SPEECH_HTTP_API_KEY: this.secret };
-    if (this.platform === "win32") env.PATH = `${path.dirname(p.bin)};${env.PATH ?? ""}`;
+    if (this.platform === "win32") {
+      // Its DLLs sit next to it; and its temporary files go in its folder too, not the user's.
+      env.PATH = `${path.dirname(bin)};${env.PATH ?? ""}`;
+      await fsp.mkdir(path.join(this.dir, "tmp"), { recursive: true });
+      env.TEMP = env.TMP = path.join(root, "tmp");
+    }
     this.stopping = false;
     this.set("starting");
-    // In its own folder: what it writes, it writes there.
-    const child = this.spawn(p.bin, args, { cwd: this.dir, env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    const child = this.spawn(bin, args, { cwd: root, env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
     this.child = child;
-    if (child.pid) void fsp.writeFile(p.pid, JSON.stringify({ pid: child.pid })).catch(() => {});
+    if (child.pid) {
+      try {
+        fs.writeFileSync(p.pid, JSON.stringify({ pid: child.pid, port: this.port }));
+      } catch {
+        /* only the clean-up after a force-quit needs it */
+      }
+    }
     const lines = (d) => {
       for (const line of String(d).split("\n")) if (ENGINE_LOG.test(line.trim())) this.log(`local speech: ${line.trim().slice(0, 200)}`);
     };
@@ -519,10 +655,11 @@ export class LocalSpeech extends EventEmitter {
       if (this.child !== child) return;
       this.child = null;
       clearTimeout(this.idleTimer);
-      void fsp.rm(p.pid, { force: true }).catch(() => {});
+      fs.rmSync(p.pid, { force: true });
       if (!this.stopping) {
         this.crashes.push(Date.now());
         this.log(`local speech: stopped on its own (${why})`);
+        if (device !== "cpu" && child.pid !== undefined) this.useCpu(`it stopped: ${why}`);
       }
       this.set(this.isInstalled() ? "installed" : "absent");
     };
@@ -548,6 +685,7 @@ export class LocalSpeech extends EventEmitter {
       await sleep(250);
     }
     await this.stop();
+    if (device !== "cpu") this.useCpu("it took too long to start");
     throw new LocalSpeechError("slow", "It took too long to start.");
   }
 
