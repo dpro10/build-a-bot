@@ -139,6 +139,13 @@ describe("who's on the line", () => {
     expect(g("unverified")).toMatch(/^Hi, it's Otto, an AI assistant\. .*set a phone PIN in the Build-a-bot app\.$/);
     expect(g("unverified")).not.toMatch(/Diego/);
     expect(g("contact")).toBe("Hi, you've reached Otto, Diego's AI assistant. Diego isn't on this line, but I can take a message.");
+    // An account with no name (a bot built before signing in) is greeted without one.
+    const nameless = (speaker: "owner" | "contact", firstCall = false) => calls.greetingFor({ botName: "Otto", firstName: null, speaker, firstCall, pinAvailable: false, kind: "web" });
+    expect(nameless("owner", true)).toBe("Hi, it's Otto, your AI assistant. What can I do for you?");
+    expect(nameless("owner")).toBe("Hey, it's Otto. What can I do for you?");
+    expect(nameless("contact")).toBe("Hi, you've reached Otto, an AI assistant. The person I work for isn't on this line, but I can take a message.");
+    expect(calls.callFirstName({ name: "  Diego Prozzi " })).toBe("Diego");
+    expect(calls.callFirstName({ name: null })).toBeNull();
   });
 });
 

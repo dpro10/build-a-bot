@@ -3,9 +3,8 @@ import { appUrl, config } from "@/lib/env";
 import { loadBotAndOwner } from "@/lib/channels/inbound";
 import { gather, readTwilioForm, routeTwilio, say, twiml } from "@/lib/channels/twilio-inbound";
 import { escapeXml } from "@/lib/channels/twilio";
-import { ownerName } from "@/lib/agent/prompt";
 import { checkSpend } from "@/lib/billing/usage";
-import { phoneSpeaker, startCall, voiceServerUp } from "@/lib/calls";
+import { callFirstName, phoneSpeaker, startCall, voiceServerUp } from "@/lib/calls";
 
 /**
  * Incoming call. With the voice server up (and Twilio Media Streams allowed on the account), the
@@ -48,7 +47,7 @@ export async function POST(req: Request) {
   const tier = speaker === "owner" ? "owner" : "contact";
   const greeting =
     speaker === "owner"
-      ? `Hi ${ownerName(owner).split(" ")[0]}, it's ${bot.name}, your AI assistant. What can I do for you?`
+      ? `Hi${callFirstName(owner) ? ` ${callFirstName(owner)}` : ""}, it's ${bot.name}, your AI assistant. What can I do for you?`
       : `Hi, you've reached ${bot.name}, an AI assistant. I can take a message.`;
   return twiml(`${gather(routed.channel.id, greeting, 0, tier)}${say("I didn't hear anything. Call back anytime!")}<Hangup/>`);
 }

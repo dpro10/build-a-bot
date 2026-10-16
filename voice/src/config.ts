@@ -76,7 +76,7 @@ export function loadConfig(): VoiceConfig {
     appUrl,
     secret,
     allowedOrigins: [appOrigin, ...(env("ALLOWED_ORIGINS")?.split(",").map((o) => o.trim()).filter(Boolean) ?? [])],
-    maxCalls: Math.max(1, Number(env("MAX_CALLS") ?? 2)),
+    maxCalls: Math.max(1, Number(env("MAX_CALLS") ?? 1)),
     talker: {
       baseUrl: env("TOKEN_FACTORY_BASE_URL") ?? "https://api.tokenfactory.nebius.com/v1",
       apiKey,

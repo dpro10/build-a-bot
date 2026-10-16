@@ -739,6 +739,9 @@ A code review of the server and the desktop app. Each fix has a test that fails 
   - Twilio trial accounts block `<Stream>` (and `<Record>`, `<Dial>`…), cap TwiML at 10 hops a call and fetch it with a 5 s timeout.
   - onnxruntime-node's install script downloads extra binaries from NuGet, which the cloud sandbox blocks. The npm package already has Linux x64's, so `voice/.npmrc` skips the download.
   - Node 22 runs the voice server's TypeScript directly, so it may only use syntax that can be erased: no parameter properties, no enums.
+  - Magpie's NanoCodec, not the Magpie model, limits the speed. On 4 vCPUs: 2 threads + 2 for the codec ≈ 1.0× real time with first audio at 0.9 s; 1 + 3 streams at 1.2× but first audio takes 1.5 s; 3 + 1 drops to 0.6×. Barely real time means a stutter whenever the machine is busy, so the server measures its speed and holds each sentence until it can play through (`SpeechPace`).
+  - The tokenizer folder inside Magpie's `.nemo` is mode 0700. Unpacked as root and run as the container's own user, Magpie couldn't read it ("failed to read …/model_config.yaml"). CI's start-up check caught it; `fetch-models.sh` now keeps its own folder modes and makes everything readable.
+  - Found in a real-browser test: an owner without a name was greeted "Hi your, it's Otto" (`ownerName` falls back to "your owner"). Greetings now leave the name out when there isn't one.
 
 ## On hold: a front desk for small businesses (Diego, 2026-10-15)
 

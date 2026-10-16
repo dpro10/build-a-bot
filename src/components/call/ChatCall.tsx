@@ -5,6 +5,7 @@
 import * as React from "react";
 import { ChevronDown, Phone } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { plainText } from "@/lib/dictation/text";
 
 export type ChatCallRef = {
   kind: "web" | "phone";
@@ -40,7 +41,7 @@ export function ChatCall({ call, botName }: { call: ChatCallRef; botName: string
         <ol className="flex flex-col gap-1.5 border-t border-border px-4 py-3 text-sm" aria-label="Transcript">
           {call.turns.map((t, i) => (
             <li key={i}>
-              <span className="font-semibold">{t.role === "caller" ? "You" : botName}:</span> {t.text}
+              <span className="font-semibold">{t.role === "caller" ? "You" : botName}:</span> {t.role === "bot" ? plainText(t.text) : t.text}
               {t.interrupted ? <span className="text-muted-foreground"> (you cut in)</span> : null}
             </li>
           ))}

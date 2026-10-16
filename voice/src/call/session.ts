@@ -22,7 +22,7 @@ import { VAD_RATE, VAD_WINDOW_MS, type Vad, type VadStream } from "../vad/vad.ts
 import { concatPcm } from "../audio/pcm.ts";
 import { PhraseCache } from "./phrases.ts";
 import { pinFromSpeech } from "./pin.ts";
-import { Speaker } from "./speaker.ts";
+import { Speaker, type SpeechPace } from "./speaker.ts";
 import type { CallTransport } from "./transport.ts";
 
 export type SessionConfig = {
@@ -60,6 +60,8 @@ export type SessionDeps = {
   llm: Llm;
   app: AppApi;
   phrases: PhraseCache;
+  /** How fast speech is made here (shared by every call): sentences wait to play without gaps. */
+  pace?: SpeechPace;
   transport: CallTransport;
   info: SessionInfo;
   config?: Partial<SessionConfig>;
@@ -169,6 +171,7 @@ export class CallSession {
       voice: deps.info.bot.voice || deps.engine.info.voice || undefined,
       language: deps.info.language,
       now: this.now,
+      pace: deps.pace,
       events: {
         onTalking: () => {
           this.detector.botSpeaking = true;

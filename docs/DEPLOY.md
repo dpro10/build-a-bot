@@ -90,6 +90,8 @@ Talking with a bot by phone, or with the **Call** button in the app, goes throug
 
 **What it costs:** the default `c3-highcpu-4` VM (4 Intel Sapphire Rapids vCPUs, 8 GB) is about $0.17 an hour, $124 a month, plus about $7 a month for its disk and IP address. The Google Cloud free trial's $300 (good for 90 days from sign-up) covers about two months of it running all the time. A stopped VM costs only the $7 (below).
 
+**Is it fast enough?** On 4 vCPUs Magpie makes speech at about real time, which is just enough: the server measures its own speed at start, and the deploy log prints it (`speechRate`, also in `/health`). If it says it's under 1, sentences wait a moment before playing so they don't stutter, and answers start later; an 8-vCPU `c3-highcpu-8` (about $0.34 an hour) is about twice as fast. It takes one call at a time (`VOICE_MAX_CALLS`); a second phone call gets the simpler line, a second Call button says the line is busy.
+
 **1. Google Cloud** (5 minutes, in the console with the free-trial account):
 1. Create a project, e.g. `build-a-bot-voice`, with the free trial as its billing account. A separate project keeps the voice server apart from anything else in the account.
 2. Open Cloud Shell (the `>_` button at the top right) and make the key GitHub deploys with (put your project ID in `P`):
