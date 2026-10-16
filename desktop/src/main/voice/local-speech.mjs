@@ -241,8 +241,8 @@ export class LocalSpeech extends EventEmitter {
     this.idleTimer = null;
     this.abort = null;
     this.lastEmit = 0;
-    /** Checked for an engine an earlier run left behind. */
-    this.reaped = false;
+    /** Checking for an engine an earlier run left behind (once per run). @type {Promise<void> | null} */
+    this.reaping = null;
     /**
      * Where it runs the model, with a runtime that has a GPU (Metal on Apple silicon): "auto" (the
      * GPU) until that fails on this computer, then "cpu" from then on. Read from engine.json at
@@ -499,7 +499,7 @@ export class LocalSpeech extends EventEmitter {
     await this.installing?.catch(() => {});
     await this.stop();
     // One left running by an earlier run would hold the folder open (Windows won't delete it then).
-    this.reaped = false;
+    this.reaping = null;
     await this.reap();
     // Windows lets go of a stopped program's files a moment later.
     await fsp.rm(this.dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
@@ -524,13 +524,16 @@ export class LocalSpeech extends EventEmitter {
   }
 
   /**
-   * An engine left running by a run of the app that couldn't stop it (force-quit, crashed): stop it,
-   * so it doesn't hold the model in memory for nothing. Only if that process is still our engine
-   * (a process id can be reused by another program).
+   * An engine left running by a run of the app that couldn't stop it (force-quit, crashed, closed
+   * by an update): stop it, so it doesn't hold the model in memory for nothing. Only if that
+   * process is still our engine (a process id can be reused by another program). Checked once per
+   * run, when the app starts; a start meanwhile waits for the same check.
    */
-  async reap() {
-    if (this.reaped) return;
-    this.reaped = true;
+  reap() {
+    return (this.reaping ??= this.reapNow().catch((err) => this.log(`local speech: couldn't check for an engine left running (${err?.code ?? err})`)));
+  }
+
+  async reapNow() {
     let pid = 0;
     let port = 0;
     try {

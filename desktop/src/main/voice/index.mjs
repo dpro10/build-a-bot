@@ -10,7 +10,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { ApiError } from "../api.mjs";
 import { VoiceTyping } from "./controller.mjs";
-import { FrontApp } from "./front-app.mjs";
+import { FrontApp, permissionApp } from "./front-app.mjs";
 import { minutesSaved, VoiceHistory, wordsPerMinute, wordsThisWeek } from "./history.mjs";
 import { Hotkey, ToggleHotkey } from "./hotkey.mjs";
 import { checkCustom, keyName, presetsFor, resolveShortcut } from "./keys.mjs";
@@ -48,6 +48,8 @@ export function setupVoice(o) {
   const { electron, settings, account, api, log } = o;
   const { systemPreferences, clipboard, globalShortcut, shell, safeStorage } = electron;
   const platform = process.platform;
+  /** Whom macOS asks for the microphone and Accessibility (run from source: the terminal). */
+  const askedFor = permissionApp({ platform, packaged: Boolean(electron.app?.isPackaged) });
 
   const history = new VoiceHistory({ file: path.join(o.userData, "voice-history.json"), safeStorage, secure: () => o.tokens.security().secure });
   // NVIDIA Parakeet on this computer. It downloads through the app's own network stack (the
@@ -68,6 +70,9 @@ export function setupVoice(o) {
     pushState();
     o.onChange();
   });
+  // An engine the last run didn't get to stop (it was force-quit, or an update closed it) is
+  // stopped now, rather than at the first dictation.
+  if (local.supported() && !localOff) void local.reap();
   /** When it last started downloading Parakeet (a download that failed tries again on its own later). */
   let localTriedAt = 0;
   const frontApp = new FrontApp({ log });
@@ -276,7 +281,7 @@ export function setupVoice(o) {
       useListener(toggle);
       mode = r.ok ? "toggle" : "off";
       problem = {
-        message: `To hold ${shortcut.label} and have it paste for you, allow Build-a-bot in Privacy & Security → Accessibility. Until then, press ${toggleLabel(platform)} to start and stop, and paste with ⌘V.`,
+        message: `To hold ${shortcut.label} and have it paste for you, allow ${askedFor} in Privacy & Security → Accessibility. Until then, press ${toggleLabel(platform)} to start and stop, and paste with ⌘V.`,
         actions: [{ id: "accessibility", label: "Open Accessibility settings" }],
       };
       watchAccessibility();
@@ -337,7 +342,7 @@ export function setupVoice(o) {
         history: v.history,
         restoreClipboard: v.restoreClipboard,
       },
-      permissions: { mic: micStatus(), accessibility: platform === "darwin" ? trusted() : null },
+      permissions: { mic: micStatus(), accessibility: platform === "darwin" ? trusted() : null, app: askedFor },
       server: sessionVoice ? { available: sessionVoice.available, polish: sessionVoice.polish, edit: sessionVoice.edit === true, simulated: sessionVoice.simulated } : null,
       /** Shift is one of the shortcut's keys (a custom one), so it can't also start editing. */
       editKey: !shortcut.slots.some((slot) => slot.some((k) => k === 42 || k === 54)),

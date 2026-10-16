@@ -14,7 +14,7 @@ import { KEY, checkCustom, defaultShortcut, inShortcut, presetsFor, resolveShort
 import { hotkeyStep, initialHotkey } from "../src/main/voice/hotkey-machine.mjs";
 import { Hotkey, ToggleHotkey } from "../src/main/voice/hotkey.mjs";
 import { Paster, snapshotClipboard } from "../src/main/voice/paste.mjs";
-import { categorize, parseActiveWindow, parseAsn, parseLsappinfo, parseWinForeground, parseXpropWindow } from "../src/main/voice/front-app.mjs";
+import { categorize, parseActiveWindow, parseAsn, parseLsappinfo, parseWinForeground, parseXpropWindow, permissionApp } from "../src/main/voice/front-app.mjs";
 import { VoiceHistory, addToStats, minutesSaved, wordsPerMinute, wordsThisWeek } from "../src/main/voice/history.mjs";
 import { suggestWords } from "../src/main/voice/learn.mjs";
 import { VoiceTyping, copiedNote, plain, voiceError } from "../src/main/voice/controller.mjs";
@@ -449,6 +449,18 @@ test("apps sort into chat, email, code, terminal and docs; browser tabs by their
   assert.deepEqual(categorize({ id: "firefox", title: "general | Acme - Slack — Mozilla Firefox" }), { name: "Slack", category: "chat" });
   assert.deepEqual(categorize({ id: "com.google.chrome", title: null }), { name: "Chrome", category: "browser" });
   assert.deepEqual(categorize({ id: "com.example.unknown", name: "Unknown App" }), { name: "Unknown App", category: "other" });
+});
+
+test("macOS asks for the app that started it: Build-a-bot when installed, the terminal when run from source", () => {
+  assert.equal(permissionApp({ platform: "darwin", packaged: true, env: { __CFBundleIdentifier: "com.apple.Terminal" } }), "Build-a-bot");
+  assert.equal(permissionApp({ platform: "darwin", packaged: false, env: { __CFBundleIdentifier: "com.apple.Terminal", TERM_PROGRAM: "Apple_Terminal" } }), "Terminal");
+  assert.equal(permissionApp({ platform: "darwin", packaged: false, env: { __CFBundleIdentifier: "com.microsoft.VSCode", TERM_PROGRAM: "vscode" } }), "VS Code");
+  assert.equal(permissionApp({ platform: "darwin", packaged: false, env: { __CFBundleIdentifier: "com.todesktop.230313mzl4w4u92", TERM_PROGRAM: "vscode" } }), "Cursor");
+  assert.equal(permissionApp({ platform: "darwin", packaged: false, env: { __CFBundleIdentifier: "com.googlecode.iterm2" } }), "iTerm");
+  assert.equal(permissionApp({ platform: "darwin", packaged: false, env: { TERM_PROGRAM: "iTerm.app" } }), "iTerm");
+  assert.equal(permissionApp({ platform: "darwin", packaged: false, env: {} }), "the app you started it from");
+  // Windows and Linux don't ask per app.
+  assert.equal(permissionApp({ platform: "win32", packaged: false, env: { TERM_PROGRAM: "vscode" } }), "Build-a-bot");
 });
 
 // ---------------------------------------------------------------------------

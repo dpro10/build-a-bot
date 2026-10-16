@@ -542,6 +542,25 @@ test("an engine left running by a run of the app that was force-quit is stopped;
   assert.doesNotThrow(() => process.kill(/** @type {number} */ (other.pid), 0), "still running");
 });
 
+test("when the app starts it stops an engine left running, before any dictation; one said right away waits for that", { skip: process.platform === "win32" && "covered on Windows by scripts/check-private-speech.mjs" }, async (t) => {
+  const { local, make, logs } = await setup(t);
+  await local.install();
+  await local.transcribe(wav());
+  const orphan = local.child;
+  await until(() => fs.existsSync(local.paths.pid));
+  local.child = null;
+  const gone = new Promise((r) => orphan.once("exit", r));
+  // The app starts again: it checks at once (index.mjs), and the owner talks right away.
+  const next = make();
+  const check = next.reap();
+  assert.equal(next.reap(), check, "one check per run");
+  const heard = next.transcribe(wav());
+  await gone;
+  assert.match(await heard, /Friday/);
+  assert.equal(logs.filter((m) => /stopped an engine left running/.test(m)).length, 1);
+  assert.equal(JSON.parse(fs.readFileSync(next.paths.pid, "utf8")).pid, next.child?.pid);
+});
+
 test("warm() starts it while the owner is still talking", async (t) => {
   const { local } = await setup(t);
   local.warm();
