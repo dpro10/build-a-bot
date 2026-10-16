@@ -34,7 +34,7 @@ const heardBody = z.object({ heard: z.string().max(MAX_HEARD_CHARS) });
  * stored.
  */
 export async function POST(req: Request) {
-  const a = await voiceAuth(req, { write: true });
+  const a = await voiceAuth(req, { write: true, appOnly: true });
   if (!a.ok) return a.res;
   const q = query.safeParse(Object.fromEntries(new URL(req.url).searchParams));
   if (!q.success) return apiError(422, "Bad dictation parameters");

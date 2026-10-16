@@ -608,7 +608,7 @@ function setupVoice(opts = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bab-voice-c-"));
   const history = new VoiceHistory({ file: path.join(dir, "h.json"), safeStorage: fakeSafe, secure: () => true });
   const bots = [{ id: "bot_1", name: "Otto", color: "grape", avatar: "otto" }];
-  const account = { device: opts.unpaired ? null : { server: "https://x" }, session: { voice: { available: true, edit: opts.serverEdit ?? true } }, appUrl: () => "https://x", refresh: async () => {}, bots: () => bots };
+  const account = { device: opts.unpaired ? null : { server: "https://x" }, session: { voice: { available: opts.serverHears !== false, edit: opts.serverEdit ?? true } }, appUrl: () => "https://x", refresh: async () => {}, bots: () => bots };
   const hotkey = new EventEmitter();
   hotkey.finish = () => hotkey.emit("stop");
   hotkey.abort = () => calls.push("hotkey.abort");
@@ -626,6 +626,8 @@ function setupVoice(opts = {}) {
     history,
     canPaste: () => opts.canPaste !== false,
     ensureMic: async () => opts.micAllowed !== false,
+    localReady: () => Boolean(opts.localReady),
+    cantHear: opts.cantHear,
     open: (t, x) => opened.push([t, x]),
     platform: opts.platform ?? "darwin",
     limits: { doneMs: 30, noteMs: 30, errorMs: 30, replyMs: 60_000 },
@@ -647,6 +649,31 @@ test("hold, talk, let go: it's typed where the cursor is, in the app's style", a
   assert.equal(h.app, "Slack");
   assert.equal(env.v.settings.get().voiceStats.total, 4);
   assert.deepEqual(env.v.usage, { words: 4, limit: 8000 });
+});
+
+test("a server that doesn't hear recordings, and Parakeet not ready yet: the pill says why, and nothing is recorded, sent or typed", async () => {
+  const why = { code: "on-device", message: "Getting NVIDIA Parakeet: 45%. Voice typing works as soon as it's done.", actions: ["settings"] };
+  const env = setupVoice({ serverHears: false, cantHear: () => why });
+  env.hotkey.emit("start");
+  await flush(20);
+  assert.ok(!env.calls.some((c) => c.startsWith("mic.") || c.startsWith("api.")), env.calls.join("\n"));
+  assert.ok(env.calls.includes("hotkey.abort"));
+  const shown = env.states.at(-1);
+  assert.equal(shown.phase, "error");
+  assert.equal(shown.message, why.message);
+  assert.deepEqual(shown.actions, ["settings"]);
+  assert.deepEqual(env.pasted, []);
+
+  // Once Parakeet is ready, it hears on this computer as usual.
+  const ready = setupVoice({ serverHears: false, cantHear: () => null, localReady: true });
+  ready.hotkey.emit("start");
+  await flush();
+  ready.hotkey.emit("stop");
+  await flush(20);
+  assert.deepEqual(ready.pasted, ["Let's meet at 3."]);
+
+  // The reasons the app gives keep their own words and buttons.
+  assert.deepEqual(voiceError(why), { message: why.message, actions: ["settings"] });
 });
 
 test("an app it doesn't recognize is sent as 'other', without its name (kept only in local history)", async () => {

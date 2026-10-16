@@ -759,6 +759,25 @@ test("dictation goes through this computer's Parakeet first, and only the words 
     ["audio", "audio"],
   );
 
+  // A server that doesn't turn recordings into text: never sent there. Why it wasn't heard is
+  // thrown for the pill (not ready yet; or Parakeet failed on this one: try again).
+  calls.length = 0;
+  let why = { code: "on-device", message: "Getting NVIDIA Parakeet: 45%. Voice typing works as soon as it's done.", actions: ["settings"] };
+  const parakeetOnly = localFirst({ local, api, use: () => use, noServer: () => why });
+  use = false;
+  await assert.rejects(parakeetOnly(rec, p), (e) => e.code === "on-device" && e.message === why.message && e.actions[0] === "settings");
+  use = true;
+  fail = new LocalSpeechError("engine", "It answered 500.");
+  why = { code: "on-device", message: "NVIDIA Parakeet couldn't hear that one. Try again.", actions: ["retry"] };
+  await assert.rejects(parakeetOnly(rec, p), (e) => e.code === "on-device" && e.actions[0] === "retry");
+  assert.deepEqual(
+    calls.map((c) => c[0]),
+    ["local"],
+    "the recording never left",
+  );
+  fail = null;
+  assert.deepEqual(await parakeetOnly(rec, p), { kind: "text", text: "Hi there.", local: true });
+
   // The server's own answer (out of words, unpaired…) stands: the audio isn't sent as well.
   calls.length = 0;
   fail = null;

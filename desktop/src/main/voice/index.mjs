@@ -129,8 +129,42 @@ export function setupVoice(o) {
     return !localOff && v.onDevice !== false && local.isInstalled() && !local.blocked() && account.session?.voice?.local === true && (lang === "auto" || LOCAL_LANGUAGES.has(lang));
   }
 
-  /** On this computer first; if that fails, the recording goes to the server as before. */
-  const dictate = localFirst({ local, api, use: onDevice, log });
+  /** This server turns recordings into text (it never makes words up; without that, only Parakeet hears). */
+  const serverHears = () => account.session?.voice?.available !== false;
+
+  /**
+   * Why nothing can hear the next dictation, for the pill and settings: this server doesn't turn
+   * recordings into text, and Parakeet on this computer can't hear it (yet). Null when it can.
+   * @returns {{ code: string, message?: string, actions?: string[] } | null}
+   */
+  function cantHear() {
+    if (serverHears() || onDevice()) return null;
+    const v = settings.get().voice;
+    const lang = v.language || "auto";
+    const fix = ["settings"];
+    if (localOff || !local.supported()) return { code: "on-device", message: "Voice typing can't hear you on this computer yet: this server doesn't turn recordings into text.", actions: [] };
+    if (local.blocked()) return { code: "on-device", message: "NVIDIA Parakeet can't run from this Windows account's folder, and this server doesn't turn recordings into text.", actions: fix };
+    if (v.onDevice === false) return { code: "on-device", message: "Turn on Private speech: NVIDIA Parakeet hears you on this computer, and this server doesn't turn recordings into text.", actions: fix };
+    if (lang !== "auto" && !LOCAL_LANGUAGES.has(lang)) return { code: "on-device", message: "NVIDIA Parakeet doesn't speak the language you picked. Pick one it does, or “Detect it”, in settings.", actions: fix };
+    // A server too old to take text heard on the computer.
+    if (local.isInstalled() && account.session?.voice?.local !== true) return { code: "unavailable" };
+    const s = local.status();
+    if (s.state === "error") return { code: "on-device", message: "NVIDIA Parakeet didn't download. Try again from settings: voice typing works once it's here.", actions: fix };
+    const pct = s.state === "downloading" && s.total ? ` ${Math.min(99, Math.floor((s.received / s.total) * 100))}%` : "";
+    return { code: "on-device", message: `Getting NVIDIA Parakeet${pct ? `:${pct}` : ""}. Voice typing works as soon as it's done.`, actions: fix };
+  }
+
+  /**
+   * On this computer first. If that fails, the recording goes to the server, when the server can
+   * turn it into text; otherwise the pill says why it wasn't heard.
+   */
+  const dictate = localFirst({
+    local,
+    api,
+    use: onDevice,
+    log,
+    noServer: () => (serverHears() ? null : (cantHear() ?? { code: "on-device", message: "NVIDIA Parakeet couldn't hear that one. Try again.", actions: ["retry"] })),
+  });
 
   /**
    * Get Parakeet in the background while voice typing is on. After a failed download it tries again
@@ -155,6 +189,12 @@ export function setupVoice(o) {
     account,
     api: { ...api, dictate },
     localReady: onDevice,
+    // Pressed before Parakeet is here: say why, and make sure it's on its way.
+    cantHear: () => {
+      const why = cantHear();
+      if (why) maybeInstall();
+      return why;
+    },
     pill,
     paster,
     frontApp,
@@ -316,6 +356,13 @@ export function setupVoice(o) {
     return safely(() => systemPreferences.getMediaAccessStatus("microphone"), "unknown");
   }
 
+  /** Why voice typing can't hear right now, for the settings window (null when it can). */
+  function voiceProblem() {
+    const why = cantHear();
+    if (!why) return null;
+    return { message: why.message ?? "Voice typing isn't set up on this server yet." };
+  }
+
   function state() {
     const v = settings.get().voice;
     const s = settings.get().voiceStats;
@@ -326,7 +373,7 @@ export function setupVoice(o) {
       platform,
       enabled: Boolean(v.enabled),
       mode,
-      problem: account.device && sessionVoice && sessionVoice.available === false && !onDevice() ? { message: "Voice typing isn't set up on this server yet." } : problem,
+      problem: (account.device && voiceProblem()) || problem,
       shortcut: { id: shortcut.id, label: shortcut.label },
       presets: presetsFor(platform).map((p) => ({ id: p.id, label: p.label, hint: p.hint ?? null })),
       toggleShortcut: toggleLabel(platform),

@@ -1,8 +1,9 @@
 /**
- * Voice typing's API in demo mode (no speech-to-text key: the demo "hears" sample lines), the way
- * the desktop app and the Voice typing page use it:
+ * Voice typing's API in demo mode with scripted speech (DEMO_SPEECH: no speech-to-text key, and the
+ * demo "hears" sample lines), the way the desktop app and the Voice typing page use it:
  *
- * - The desktop app with its device token; the page with a signed-in session (same site only).
+ * - Talking, editing by voice and "Hey {bot}" answer only the desktop app (its device token); the
+ *   page, with a signed-in session (same site only), manages the dictionary.
  * - /api/voice/dictate types the demo's line cleaned up, or hands "Hey {bot}, …" back as a command.
  * - /api/voice/ask runs the request in the bot's chat and streams the reply.
  * - /api/voice/edit changes the selected text the way they said (demo: by rule), or writes it.
@@ -14,6 +15,7 @@ import { eq } from "drizzle-orm";
 
 process.env.DATA_DIR = "memory";
 process.env.DEMO_MODE = "1";
+process.env.DEMO_SPEECH = "1";
 delete process.env.DATABASE_URL;
 for (const key of ["TOKEN_FACTORY_API_KEY", "TRANSCRIBE_API_KEY", "TRANSCRIBE_FALLBACK_API_KEY", "TAVILY_API_KEY", "COMPOSIO_API_KEY"]) delete process.env[key];
 
@@ -81,9 +83,9 @@ afterAll(async () => {
 });
 
 describe("dictating", () => {
-  it("needs a paired computer or a signed-in session", async () => {
+  it("needs a paired computer", async () => {
     session.user = null;
-    expect((await dictateRoute.POST(dictateReq("durationMs=3000", {}))).status).toBe(401);
+    expect((await dictateRoute.POST(dictateReq("durationMs=3000", {}))).status).toBe(403);
     expect((await dictateRoute.POST(dictateReq("durationMs=3000", { authorization: "Bearer bab_dev_revoked" }))).status).toBe(401);
   });
 
@@ -132,12 +134,18 @@ describe("dictating", () => {
     expect((await dictateRoute.POST(jsonReq("POST", "http://localhost/api/voice/dictate?durationMs=2000", { text: "hi" }))).status).toBe(422);
   });
 
-  it("works from the Voice typing page, on the same site only", async () => {
+  it("happens in the desktop app: the website, even signed in, is told so (talking, editing, asking)", async () => {
     session.user = owner;
-    const ok = await dictateRoute.POST(dictateReq("durationMs=3000&speechMs=2500&demo=2", { origin: "http://localhost", host: "localhost" }));
-    expect((await ok.json()).text).toBe(DEMO_DICTATIONS[2].typed);
-    const cross = await dictateRoute.POST(dictateReq("durationMs=3000", { origin: "https://evil.example", host: "localhost" }));
-    expect(cross.status).toBe(403);
+    const site = { origin: "http://localhost", host: "localhost" };
+    const talk = await dictateRoute.POST(dictateReq("durationMs=3000&speechMs=2500&demo=2", site));
+    expect(talk.status).toBe(403);
+    expect(await talk.json()).toMatchObject({ code: "app_only", error: "Voice typing works in the desktop app." });
+    expect((await dictateRoute.POST(jsonReq("POST", "http://localhost/api/voice/dictate?durationMs=2000", { heard: "Hello there." }, site))).status).toBe(403);
+    expect((await editRoute.POST(jsonReq("POST", "http://localhost/api/voice/edit", { instruction: "Make this friendlier.", selection: "Send the slides." }, site))).status).toBe(403);
+    const ask = await askRoute.POST(jsonReq("POST", "http://localhost/api/voice/ask", { botId: bot.id, text: "Remind me to call Mom." }, site));
+    expect(ask.status).toBe(403);
+    // The page still keeps the owner's words.
+    expect((await dictionaryRoute.GET(new Request("http://localhost/api/voice/dictionary", { headers: site }))).status).toBe(200);
     session.user = null;
   });
 });
@@ -167,17 +175,14 @@ describe("editing by voice", () => {
 
   it("checks who's asking and what it's sent", async () => {
     session.user = null;
-    expect((await editRoute.POST(jsonReq("POST", "http://localhost/api/voice/edit", { instruction: "shorter", selection: "x" }, {}))).status).toBe(401);
+    // Only the desktop app (a revoked one is unpaired).
+    expect((await editRoute.POST(jsonReq("POST", "http://localhost/api/voice/edit", { instruction: "shorter", selection: "x" }, {}))).status).toBe(403);
+    expect((await editRoute.POST(jsonReq("POST", "http://localhost/api/voice/edit", { instruction: "shorter", selection: "x" }, { authorization: "Bearer bab_dev_revoked" }))).status).toBe(401);
     expect((await editRoute.POST(jsonReq("POST", "http://localhost/api/voice/edit", { instruction: "", selection: "x" }))).status).toBe(422);
     expect((await editRoute.POST(jsonReq("POST", "http://localhost/api/voice/edit", { instruction: "shorter", selection: "x".repeat(20_001) }))).status).toBe(422);
     expect((await editRoute.POST(jsonReq("POST", "http://localhost/api/voice/edit", { instruction: "shorter", selection: "x", category: "spaceship" }))).status).toBe(422);
-    // From the Voice typing page: the same site only.
-    session.user = owner;
-    const cross = await editRoute.POST(jsonReq("POST", "http://localhost/api/voice/edit", { instruction: "shorter", selection: "One. Two." }, { origin: "https://evil.example", host: "localhost" }));
-    expect(cross.status).toBe(403);
-    const ok = await editRoute.POST(jsonReq("POST", "http://localhost/api/voice/edit", { instruction: "make it shorter", selection: "One. Two." }, { origin: "http://localhost", host: "localhost" }));
+    const ok = await editRoute.POST(jsonReq("POST", "http://localhost/api/voice/edit", { instruction: "make it shorter", selection: "One. Two." }));
     expect(await ok.json()).toMatchObject({ kind: "replace", text: "One." });
-    session.user = null;
   });
 });
 

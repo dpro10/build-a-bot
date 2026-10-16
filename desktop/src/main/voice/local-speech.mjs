@@ -752,12 +752,19 @@ export class LocalSpeech extends EventEmitter {
 
 /**
  * Voice typing's dictate(), on this computer first: Parakeet hears the WAV and only the words go to
- * the server. If it can't (not ready, failed), the recording goes to the server as before. Errors
- * from the server itself (out of words, unpaired…) are the server's answer either way.
- * @param {{ local: { transcribe(wav: Uint8Array, o?: { durationMs?: number }): Promise<string> }, api: { dictate: Function, dictateText: Function }, use: () => boolean, log?: (m: string) => void }} o
+ * the server. If it can't (not ready, failed), the recording goes to the server, when the server
+ * turns recordings into text; `noServer` says when it doesn't, and why (that's thrown, for the
+ * pill). Errors from the server itself (out of words, unpaired…) are the server's answer either way.
+ * @param {{ local: { transcribe(wav: Uint8Array, o?: { durationMs?: number }): Promise<string> }, api: { dictate: Function, dictateText: Function }, use: () => boolean, noServer?: () => ({ code: string, message?: string, actions?: string[] } | null), log?: (m: string) => void }} o
  */
 export function localFirst(o) {
   const log = o.log ?? (() => {});
+  /** The recording would go to the server: unless `noServer` says why it can't (it makes no words up). */
+  const toServer = (audio, p) => {
+    const why = o.noServer?.();
+    if (why) throw Object.assign(new Error(why.message ?? why.code), why);
+    return o.api.dictate(audio, p);
+  };
   return async function dictate(audio, p) {
     if (audio?.wav && o.use()) {
       const t = Date.now();
@@ -771,6 +778,6 @@ export function localFirst(o) {
       }
       if (heard !== null) return { ...(await o.api.dictateText(heard, audio, p)), local: true };
     }
-    return o.api.dictate(audio, p);
+    return toServer(audio, p);
   };
 }
