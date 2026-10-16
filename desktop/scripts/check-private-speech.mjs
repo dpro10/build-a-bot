@@ -58,7 +58,7 @@ try {
       failed = true;
     }
   }
-  console.log(`[${t()}] engine device: ${local.device} ("auto" is the GPU where this build has one)`);
+  console.log(`[${t()}] engine device: ${local.lastDevice} ("auto" is the GPU, on Apple silicon; NVIDIA's other builds are CPU-only)`);
 
   // The app was force-quit and left its engine running: the next start stops it (on Windows it
   // checks the process with tasklist, on macOS with ps).

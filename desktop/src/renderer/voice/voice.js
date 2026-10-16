@@ -186,17 +186,27 @@
     else status.textContent = "On: your voice is turned into text on this computer and never leaves it.";
   }
 
+  /** The microphone is turned off in the system's settings (Windows says "restricted" when it's off for every app). */
+  const micOff = (s) => s.permissions.mic === "denied" || s.permissions.mic === "restricted";
+
   function renderSetup(s) {
-    const micOk = s.permissions.mic === "granted";
+    const off = micOff(s);
+    // Windows doesn't ask: desktop apps get the microphone unless it's turned off in Settings.
+    const micOk = s.permissions.mic === "granted" || (s.platform === "win32" && !off);
+    // Run from source on a Mac, macOS asks on behalf of the app it was started from (Terminal…).
+    const who = s.permissions.app || "Build-a-bot";
+    const fromSource = who === "Build-a-bot" ? "" : " Run from source, macOS asks on behalf of the app that started it.";
     const micStep = $("step-mic");
     micStep.className = micOk ? "done" : "todo";
     $("step-mic-text").textContent = micOk
       ? "Allowed. It's on only while you hold the shortcut."
-      : s.permissions.mic === "denied"
-        ? "Turned off for Build-a-bot. Turn it on in your system settings."
+      : off
+        ? s.platform === "win32"
+          ? "Windows has it turned off. In Settings → Privacy & security → Microphone, turn on Microphone access and Let desktop apps access your microphone."
+          : `Turned off for ${who}. Turn it on in Privacy & Security → Microphone.${fromSource}`
         : "Your computer will ask the first time.";
     $("mic-allow").hidden = micOk || s.platform === "linux";
-    $("mic-allow").textContent = s.permissions.mic === "denied" ? "Open settings" : "Allow";
+    $("mic-allow").textContent = off ? "Open settings" : "Allow";
 
     const accessStep = $("step-access");
     accessStep.hidden = s.platform !== "darwin";
@@ -205,7 +215,7 @@
       accessStep.className = ok ? "done" : "todo";
       $("step-access-text").textContent = ok
         ? "Allowed. It can hear the shortcut and paste for you."
-        : "So it can hear the shortcut in any app and paste for you. Turn on Build-a-bot in Privacy & Security → Accessibility.";
+        : `So it can hear the shortcut in any app and paste for you. Turn on ${who} in Privacy & Security → Accessibility.${fromSource}`;
       $("access-allow").hidden = ok;
     }
     $("step-try").className = s.stats.total > 0 ? "done" : "todo";
@@ -470,7 +480,7 @@
     render(await api.local("remove"));
   });
   $("mic").addEventListener("change", async (e) => render(await api.set({ micId: e.target.value })));
-  $("mic-allow").addEventListener("click", () => act(state?.permissions.mic === "denied" ? "mic-settings" : "mic"));
+  $("mic-allow").addEventListener("click", () => act(state && micOff(state) ? "mic-settings" : "mic"));
   $("access-allow").addEventListener("click", () => act("accessibility"));
   $("pair").addEventListener("click", () => api.open("pair"));
   $("open-voice-page").addEventListener("click", () => api.open("voice-page"));

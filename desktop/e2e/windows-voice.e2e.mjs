@@ -18,13 +18,15 @@ import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";
+import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const APP_DIR = fileURLToPath(new URL("../", import.meta.url));
 const FIXTURES = fileURLToPath(new URL("./fixtures/", import.meta.url));
-const ELECTRON = path.join(APP_DIR, "node_modules", "electron", "dist", "electron.exe");
+/** Electron from source, for the other app (and this one without BAB_E2E_APP): it downloads on first use. */
+const electronBin = () => createRequire(path.join(APP_DIR, "package.json"))("electron");
 const APP = process.env.BAB_E2E_APP || null;
 const WAV = process.env.BAB_E2E_SPEECH_WAV;
 const EXPECT = (process.env.BAB_E2E_SPEECH_EXPECT ?? "team meeting,tuesday").split(",").map((w) => w.trim().toLowerCase());
@@ -162,7 +164,7 @@ test("Windows: hold Ctrl + Windows, talk, let go: NVIDIA Parakeet hears it on th
 
   // ---- the app (as installed, or from source), paired with the stand-in server
   app = await electron.launch({
-    executablePath: APP ?? ELECTRON,
+    executablePath: APP ?? electronBin(),
     args: [...(APP ? [] : [APP_DIR]), "--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream", `--use-file-for-fake-audio-capture=${mic}`],
     env: { ...process.env, BAB_USER_DATA: userData, BAB_SERVER: server.origin, BAB_TEST: "1", BAB_VOICE_ENABLE: "1", BAB_LOG: "1" },
     timeout: 60_000,
@@ -203,8 +205,13 @@ test("Windows: hold Ctrl + Windows, talk, let go: NVIDIA Parakeet hears it on th
   // ---- another app in front, with "ORIGINAL CLIPBOARD" on the clipboard
   const outFile = path.join(userData, "target.txt");
   const clipFile = path.join(userData, "clip.txt");
-  target = spawn(ELECTRON, [path.join(FIXTURES, "target-app.cjs")], { env: { ...process.env, TARGET_OUT: outFile, TARGET_CLIP: clipFile }, stdio: ["ignore", "pipe", "pipe"] });
-  await until("the target app", () => fs.existsSync(clipFile) && fs.readFileSync(clipFile, "utf8") === "ORIGINAL CLIPBOARD", 30_000);
+  target = spawn(electronBin(), [path.join(FIXTURES, "target-app.cjs")], { env: { ...process.env, TARGET_OUT: outFile, TARGET_CLIP: clipFile }, stdio: ["ignore", "pipe", "pipe"] });
+  let targetFailed = null;
+  target.on("error", (err) => (targetFailed = err));
+  await until("the target app", () => {
+    if (targetFailed) throw targetFailed;
+    return fs.existsSync(clipFile) && fs.readFileSync(clipFile, "utf8") === "ORIGINAL CLIPBOARD";
+  }, 60_000);
   const typed = () => fs.readFileSync(outFile, "utf8");
   await step("focus", () => winkey("focus", "Target app"));
 
