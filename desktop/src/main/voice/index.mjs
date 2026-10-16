@@ -121,7 +121,7 @@ export function setupVoice(o) {
   function onDevice() {
     const v = settings.get().voice;
     const lang = v.language || "auto";
-    return !localOff && v.onDevice !== false && local.isInstalled() && account.session?.voice?.local === true && (lang === "auto" || LOCAL_LANGUAGES.has(lang));
+    return !localOff && v.onDevice !== false && local.isInstalled() && !local.blocked() && account.session?.voice?.local === true && (lang === "auto" || LOCAL_LANGUAGES.has(lang));
   }
 
   /** On this computer first; if that fails, the recording goes to the server as before. */
@@ -133,7 +133,7 @@ export function setupVoice(o) {
    */
   function maybeInstall(now = false) {
     const v = settings.get().voice;
-    if (localOff || !v.enabled || !account.device || v.onDevice === false || !local.supported() || local.isInstalled() || local.installing) return;
+    if (localOff || !v.enabled || !account.device || v.onDevice === false || !local.supported() || local.blocked() || local.isInstalled() || local.installing) return;
     if (!now && localTriedAt && Date.now() - localTriedAt < 30 * 60_000) return;
     localTriedAt = Date.now();
     // Just downloaded: load it now, so the first dictation doesn't wait for it.

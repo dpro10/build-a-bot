@@ -77,10 +77,13 @@ jobs:
           afconvert -f WAVE -d LEI16@16000 -c 1 "$RUNNER_TEMP/said.aiff" "$RUNNER_TEMP/said.wav"
           ls -l "$RUNNER_TEMP/said.wav"
       # Downloads NVIDIA's files the way the app does (about 0.7 GB), checks them, runs the engine.
-      # In a folder named like a user's (C:\Users\José\…): letters from outside English included.
+      # In the user's own folder, as the app keeps it, under a name like a user's (C:\Users\José\…).
+      - name: Short names on this drive (Windows)
+        if: runner.os == 'Windows'
+        run: fsutil 8dot3name query C:
       - name: Hear it on this computer
         working-directory: desktop
-        run: node scripts/check-private-speech.mjs "${{ runner.temp }}/José Muñoz/private-speech" "${{ runner.temp }}/said.wav" "team meeting, tuesday"
+        run: node scripts/check-private-speech.mjs "$HOME/José Muñoz/private-speech" "${{ runner.temp }}/said.wav" "team meeting, tuesday"
 
   windows-installer:
     name: Windows installer
