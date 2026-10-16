@@ -1,0 +1,13 @@
+{
+  "name": "build-a-bot-speech",
+  "private": true,
+  "description": "NVIDIA Parakeet and Nemotron speech recognition behind an OpenAI-compatible API, for Build-a-bot",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test \"test/*.test.mjs\""
+  }
+}

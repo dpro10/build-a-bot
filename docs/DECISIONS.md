@@ -439,6 +439,31 @@ Diego asked to keep building toward beating Wispr Flow ("maximum effort and exem
 - **Found on the way (voice typing):** answers to "Hey Otto" were stored as if the bot had reached out on its own ("Otto reached out" in the chat), because any run with a platform note was marked proactive. Now only runs with no message to answer are.
 - **Found on the way:** the try-it mic button could miss the release when something above it disappeared as it started (the button moved out from under the pointer, so the recording never stopped). It now captures the pointer.
 
+## Decision: speech-to-text on NVIDIA's models, on Nebius (Diego, 2026-10-15)
+
+Diego asked why voice typing needs Groq, and whether a better open model exists. Told that NVIDIA's (Parakeet, Nemotron) beat the Whisper model Groq runs: "lets use nvidias actually". Then: "im in the nvidia x nebius hackathon and the more we create build-a-bot, the more i see how well it could fit there."
+
+What this settles (built by Claude; Diego to confirm the details):
+- **Our own speech server** (`speech/`): NVIDIA Parakeet TDT 0.6B v3 and NVIDIA Nemotron 3.5 ASR on NVIDIA NeMo-Speech.cpp (NVIDIA's native runtime, Apache 2.0), behind a small Node server with an OpenAI-compatible `/v1/audio/transcriptions`. It's a container for a **Nebius Serverless AI endpoint**, so speech runs on Nebius next to the brains on Token Factory, and audio never goes to a third-party API.
+  - **Parakeet** hears "detect it" and 25 languages (English and 24 European). **Nemotron** hears Japanese, Chinese, Korean, Hindi, Arabic, Vietnamese, Turkish and Norwegian. Any other language goes to the backup.
+  - Any recording (webm, ogg, mp4, wav…) becomes 16 kHz WAV with a second of silence after it, the key is checked, uploads are limited, a burst gets "busy" (so the app uses the backup), and the log never has what was said.
+  - Images `ghcr.io/dpro10/build-a-bot-speech:cpu` and `:cuda`, built by GitHub Actions. Deploy steps and costs: `speech/README.md`.
+- **Backup:** NVIDIA Parakeet on Together AI ($0.0015 per audio minute), with Whisper there only for languages Parakeet doesn't speak. Groq stays possible but is no longer the default.
+- **Why these models** (tested here on the same clips, 2026-10-15): Parakeet was the most accurate (word-perfect on LibriSpeech samples where Nemotron wrote "slashy" for "slushy"; right punctuation; "$142", "October 30th", "10 a.m."; Spanish and German correct) and the fastest on a CPU (a 4-second clip in 0.7 s on 4 cores, about 5× real time). Nemotron was right for Hindi. Neither invents words in silence or noise, which Whisper does. On NVIDIA's own FLEURS numbers, English word errors are 4.85% for Parakeet v3 against 7.9% for Nemotron 3.5.
+- **The owner's words:** NVIDIA's models take no prompt (Parakeet ignores word boosting, and the published Nemotron 3.5 GGUF has no tokenizer for it). So a name that sounds like one of theirs sends the dictation through the AI cleanup, which knows their words, and the dictionary's spellings apply last. Whisper providers still get the prompt.
+- **Cost:** a CPU endpoint (`cpu-d3`, 8 vCPUs, 32 GiB) is about $0.26 an hour, ~$190 a month, whatever the volume; stopped, it costs nothing. An NVIDIA L40S GPU endpoint is about $1.55 an hour.
+- **The AI cleanup** now defaults to the included model on Token Factory (it used Groq only because speech-to-text ran there). With speech on Nebius AI Cloud, a dictation stays on Nebius end to end.
+- **Diego's side:**
+  - Create the endpoint in the Nebius console from the image, with a key (`speech/README.md`, about 10 minutes).
+  - In Vercel, set `TRANSCRIBE_PROVIDER=nvidia`, `TRANSCRIBE_BASE_URL` and `TRANSCRIBE_API_KEY`; optionally a Together AI key as `TRANSCRIBE_FALLBACK_*`.
+  - While the repository is private, its image is too: give Nebius a GitHub token that can read packages, or make the package public.
+- **Found on the way:**
+  - NeMo-Speech.cpp only reads WAV.
+  - Without trailing silence, the streaming Nemotron model drops the last word ("ten A" for "ten AM").
+  - Its number rules write "three thirty" as "03:30", and Parakeet sometimes writes "at 3.30" British-style; the server makes both "3:30" (not "at 2.25 percent" or "version 3.30").
+  - Docker Hub rate-limits anonymous pulls from shared machines; GitHub's runners build the image.
+- **Next:** stream the audio while the key is held (the server already has NVIDIA's realtime WebSocket), and an on-device mode with the same runtime in the desktop app.
+
 ## Build choice (Claude; Diego to confirm): what real testers see (2026-10-14)
 
 Outside demo mode nothing is simulated. Anything without its service set up says **"Coming soon"** and can't be picked or set up:
@@ -577,7 +602,7 @@ Diego: "I really like that front desk for businesses idea. Lets hold on to it." 
 5. Trademark clearance before brand spend (unchanged).
 6. Meeting notes before launch:
    - a lawyer's review of the consent flow and retention (California § 632, and the Granola complaint's theory);
-   - Groq's paid tier (the free tier allows 7,200 audio-seconds an hour per organization);
+   - the speech server on Nebius (`speech/README.md`) and a Together AI key for its backup;
    - sign and notarize the Mac app. Diego already has an Apple Developer account (2026-10-14); what's needed is a Developer ID Application certificate and notarization credentials in CI secrets, and a Mac or macOS runner to build;
    - whether to merge the desktop app with the Bridge into one "Build-a-bot app".
 7. Meeting notes, next: transcription on the owner's own key or on-device (sherpa-onnx with Parakeet), and calendar-based meeting titles.
@@ -589,4 +614,5 @@ Diego: "I really like that front desk for businesses idea. Lets hold on to it." 
    - **Remote MCP servers from the official MCP Registry**, curated, since quality varies. Owners can already paste any MCP server's URL.
    - **The long tail through Zapier's MCP server**, where the owner connects their own Zapier account, or a second sign-in provider for apps Composio lacks.
    - Count clicks on "Coming soon" apps to see what testers want first.
-9. Voice typing before launch: Diego tests it on his Mac; the Groq key (`TRANSCRIBE_API_KEY`) turns it on for real; the signed Mac and Windows apps ship it to everyone.
+9. Voice typing before launch: Diego tests it on his Mac; the speech server on Nebius (`TRANSCRIBE_PROVIDER=nvidia`) turns it on for real; the signed Mac and Windows apps ship it to everyone.
+10. The Nebius × NVIDIA hackathon (due 2026-10-30, 10am PT): enter Build-a-bot as a second entry? It qualifies except for one requirement: the repository must be public with an open-source license. Diego decides that, the track (Personal AI suggested), what judges can use, and the video. Draft write-up, video script, checklist and feedback: `docs/HACKATHON.md`.
