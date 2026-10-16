@@ -445,3 +445,90 @@ function DeleteAccount({ botCount, creditLeft }: { botCount: number; creditLeft:
     </Dialog>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Phone PIN
+
+/** The PIN that proves it's you when you call your bot from a phone it can't vouch for. */
+export function PhonePinForm({ initialSet, locked }: { initialSet: boolean; locked: boolean }) {
+  const [set, setSet] = React.useState(initialSet);
+  const [editing, setEditing] = React.useState(!initialSet);
+  const [pin, setPin] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
+  const [saving, setSaving] = React.useState(false);
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await api("/api/account/phone-pin", { method: "PUT", body: { pin } });
+      setSet(true);
+      setEditing(false);
+      setPin("");
+      toast.success("Phone PIN saved.");
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const remove = async () => {
+    setSaving(true);
+    try {
+      await api("/api/account/phone-pin", { method: "DELETE" });
+      setSet(false);
+      setEditing(true);
+      toast.success("Phone PIN removed.");
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (set && !editing) {
+    return (
+      <div className="flex flex-wrap items-center gap-3">
+        <Badge tone={locked ? "warning" : "success"}>{locked ? "Locked for a few minutes (too many wrong tries)" : "PIN set"}</Badge>
+        <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+          Change
+        </Button>
+        <Button variant="ghost" size="sm" onClick={remove} loading={saving}>
+          Remove
+        </Button>
+      </div>
+    );
+  }
+  return (
+    <form onSubmit={save} className="flex flex-col gap-2">
+      <Label htmlFor="phone-pin">{set ? "New PIN" : "PIN"}</Label>
+      <div className="flex flex-wrap gap-2">
+        <Input
+          id="phone-pin"
+          type="password"
+          inputMode="numeric"
+          autoComplete="new-password"
+          pattern="\d{4,8}"
+          maxLength={8}
+          value={pin}
+          onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
+          className="w-40 tracking-[0.3em]"
+          aria-describedby="phone-pin-hint"
+        />
+        <Button type="submit" loading={saving} disabled={pin.length < 4}>
+          Save PIN
+        </Button>
+        {set ? (
+          <Button type="button" variant="ghost" onClick={() => setEditing(false)}>
+            Cancel
+          </Button>
+        ) : null}
+      </div>
+      <FieldHint id="phone-pin-hint" className={cn(error && "text-danger")}>
+        {error ?? "4 to 8 digits. You say it or type it when your bot can't confirm the call is from you."}
+      </FieldHint>
+    </form>
+  );
+}

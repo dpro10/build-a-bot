@@ -1,17 +1,18 @@
 # Build-a-bot
 
-Anyone makes their own AI agent in about a minute: pick a face, give it a name, choose a brain (or connect the AI subscription they already pay for), give it their apps, decide how much it can do on its own, and talk to it anywhere — calls, texts, email, Telegram, Discord, Slack. It can also sit in on their calls and take the notes, and type for them by voice in any app.
+Anyone makes their own AI agent in about a minute: pick a face, give it a name, choose a brain (or connect the AI subscription they already pay for), give it their apps, decide how much it can do on its own, and talk to it anywhere — calls, texts, email, Telegram, Discord, Slack. Call it, from the app or a phone, and it answers in its own voice and gets things done while you talk. It can also sit in on their calls and take the notes, and type for them by voice in any app.
 
 - **Site:** [build-a-bot.site](https://build-a-bot.site), live on Vercel + Supabase since 2026-10-14, still in demo mode until the last keys are in (`docs/DECISIONS.md` → *Live*).
-- **Status (2026-10-16):** the whole product is built (the website, the dashboard, and a desktop app for meeting notes and voice typing) and runs locally in demo mode with zero keys. Meeting notes and voice typing are only in the desktop app, which hears them on the user's own computer. `docs/DEPLOY.md` lists what each integration needs.
+- **Status (2026-10-16):** the whole product is built (the website, the dashboard, and a desktop app for meeting notes and voice typing) and runs locally in demo mode with zero keys. Meeting notes and voice typing are only in the desktop app, which hears them on the user's own computer. Calls with a bot run on our voice server (`voice/`), tested on NVIDIA's real models and live once it's deployed (`docs/DEPLOY.md` §8). `docs/DEPLOY.md` lists what each integration needs.
 - **Reviewing it?** Start with [`docs/TRY-IT.md`](docs/TRY-IT.md): how to run both apps, what to click, and what's simulated.
 
 ## Built on NVIDIA and Nebius
 
 - **The brains:** NVIDIA Nemotron on **Nebius Token Factory**. Nemotron 3.5 Lightning is every new bot's default: fast, and cheap (about $0.0004 for a typical message, at Token Factory's price). Nemotron 3 Super and Nemotron 3 Ultra take the harder jobs. Token Factory also runs the other included open models, and the AI cleanup for voice typing.
 - **The ears:** NVIDIA **Parakeet TDT 0.6B v3** turns speech into text on the user's own computer, for voice typing and meeting notes. The desktop app runs it on NVIDIA's NeMo-Speech.cpp, so the audio never leaves the computer. Our own speech server (`speech/`: Parakeet and **Nemotron 3.5 ASR** on NeMo-Speech.cpp, built to deploy as a **Nebius Serverless AI** endpoint) is optional, for computers where Parakeet can't run.
+- **The voice:** on calls, NVIDIA **Magpie TTS Multilingual** speaks and Parakeet hears, on NeMo-Speech.cpp on our own server (`voice/`), while Nemotron 3.5 Lightning holds the conversation and hands the work to the bot. No speech API hears anyone.
 - **Web search:** Tavily.
-- A possible entry in the Nebius × NVIDIA Global AI Hackathon (due October 30): [`docs/HACKATHON.md`](docs/HACKATHON.md).
+- Our entry in the Nebius × NVIDIA Global AI Hackathon (due October 30): [`docs/HACKATHON.md`](docs/HACKATHON.md).
 
 ## Try it
 
@@ -77,6 +78,13 @@ Recipes prefill it (`/build?recipe=inbox-zero`, or any shared `/r/[slug]`). The 
 
 Web chat, phone calls and texts (Twilio), email (its own brand-free address), Telegram (a one-tap managed bot), Discord (`/ask`) and Slack (one click, or the bot's own app). WhatsApp and iMessage are on a waitlist.
 
+### Calls
+
+- **Call your bot:** the **Call** button in its header, or its phone number. It answers in its own voice in about a second, and you talk like you would to a person: cut in whenever you like and it stops mid-word.
+- **It does the work while you talk:** "what's on my calendar tomorrow?", "move the three o'clock to Friday and tell Sam". The bot's own agent does it, with your apps, its memory and the same approvals as the chat: anything risky waits for your tap in the app, and the bot says so. Slow jobs keep going after the bot says "one sec", and it tells you when they're done.
+- **It knows who's calling:** you on the app, or on your own phone when your carrier vouches for the number. Otherwise it asks for your phone PIN (Account → Phone PIN), which the AI never sees. Anyone else can leave a message, and the bot does nothing for them.
+- **Heard and spoken by NVIDIA's open models on our own server:** Parakeet hears, Magpie speaks, Nemotron 3.5 Lightning talks (`voice/`). The audio isn't kept; the transcript lands in the chat. Calls cost what they cost us: the talker's tokens, plus Twilio's minute on a phone.
+
 ### Meeting notes (beta)
 
 - **In the desktop app** (`desktop/`), like Granola: no bot joins the call. It notices when a call starts in Zoom, Meet, Teams, Webex, Slack, Discord and more. The bot peeks up from the very bottom of the screen: "Want me to take notes?" For a meeting in the room, *Take notes in the room* is in the app's menu.
@@ -138,6 +146,9 @@ npm test               # detection on each OS, the call state machine, the safet
 npm run test:e2e       # the real Electron app against the dev server (Linux, under xvfb)
 cd ../speech
 npm test               # the speech server: auth, audio formats, language routing, limits, the log
+cd ../voice
+npm test               # the voice server: turn-taking, barge-in, fillers, the PIN, Twilio and the
+                       # browser end to end on fakes (CI also runs whole calls on NVIDIA's real models)
 ```
 
 axe finds no serious WCAG 2.2 AA problems on the main public and dashboard pages, in light or dark mode.
@@ -156,10 +167,12 @@ axe finds no serious WCAG 2.2 AA problems on the main public and dashboard pages
   - `policy`: trust.
   - `tools`, `connectors`, `channels`, `bridge`, `billing`, `scheduler`, `db`.
   - `meetings` and `transcribe`: meeting notes and speech-to-text.
+  - `calls`: calls with a bot: who's calling, the phone PIN, call tokens, what the voice server asks the app.
   - `web-actions`: the cloud browser.
-- `src/components`: the UI, including `avatar` (the five characters) and `meetings` (the meetings, their notes, and the bot the desktop app shows at the bottom of the screen).
+- `src/components`: the UI, including `avatar` (the five characters), `meetings` (the meetings, their notes, and the bot the desktop app shows at the bottom of the screen) and `call` (the Call button and the call itself).
 - `desktop/`: the desktop app for meeting notes and voice typing (Electron), with NVIDIA Parakeet on the computer. Its README covers permissions, building and signing.
 - `speech/`: our optional speech-to-text server: NVIDIA Parakeet and Nemotron on NVIDIA NeMo-Speech.cpp, for a Nebius Serverless AI endpoint. Its README covers deploying it and what it costs.
+- `voice/`: the voice server for calls: NVIDIA Parakeet and Magpie on NeMo-Speech.cpp, Silero VAD, turn-taking, Twilio Media Streams and the browser. Its README covers how it works and how fast it is; `docs/DEPLOY.md` §8 covers deploying it.
 - `bridge/`: the Bridge, which runs a subscription brain on the owner's computer.
 - `tests/` and `e2e/`: unit and end-to-end tests.
 - `docs/`:
@@ -215,6 +228,7 @@ The current list is in `docs/DECISIONS.md`.
    - signed downloads, since both are only in the app: signing and notarizing the Mac app (a Developer ID certificate and notarization credentials in CI secrets, built on a Mac or a macOS runner), and signing the Windows installer;
    - whether the desktop app and the Bridge become one app.
 7. **Meeting notes, next:** meeting titles from the calendar, telling the call's speakers apart, and languages beyond Parakeet's 25.
+8. **Calls:** deploying the voice server and upgrading Twilio for streaming (`docs/DEPLOY.md` §8). Next: the bot calling you back when a job is done, a call starting your other agents (desk tasks through the Bridge, research, the cloud browser), and calls heard on your own computer.
 
 ## Ground rules
 
@@ -238,6 +252,7 @@ These hold whatever gets built next.
 **Costs:**
 - **Model:** Nemotron 3.5 Lightning on Token Factory cost $0.06 per million input tokens and $0.24 per million output (checked for the hackathon). That's about $4 to $5 a month per active bot.
 - **Search:** Tavily includes 1,000 free credits a month, then $0.008 per credit; it's free for students.
+- **Calls:** the voice server's VM is about $124 a month (on Google Cloud's free trial credit for now), whatever the volume. A phone call adds Twilio's $0.0129 a minute (with the audio stream).
 - **Speech-to-text:** nothing: the desktop app hears voice typing and meetings on the user's computer (NVIDIA Parakeet). The optional speech server (`speech/`), a Nebius Serverless AI endpoint, would be about $190 a month for an 8-vCPU machine, whatever the volume. Its backup: NVIDIA Parakeet on Together AI, $0.0015 per audio minute.
 - **Reachability:** Token Factory, Tavily and the cloud-browser hosts all work on Diego's network. Kimi, DeepSeek and Together AI (the speech-to-text backup) are blocked there; the app calls Together from its server, so only local testing is affected.
 
