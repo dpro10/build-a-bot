@@ -35,7 +35,7 @@ const SUBPROCESSORS: { name: string; purpose: string; data: string }[] = [
   { name: "Nebius Token Factory", purpose: "The included open models", data: "Messages and context, when your bot uses an included model (and dictated text, when voice typing's cleanup runs there)" },
   { name: "Your chosen AI provider", purpose: "Your own API key, if you add one", data: "Messages and context, sent to that provider only" },
   { name: "Tavily", purpose: "Web search", data: "Search queries" },
-  { name: "Groq, with Together AI as a backup", purpose: "Turning meeting audio and voice typing into text, and cleaning up what you dictate", data: "Audio, only while it's turned into text; dictated text, only while it's cleaned up" },
+  { name: "Nebius AI Cloud (our speech server, running NVIDIA's open speech models), with Together AI as a backup", purpose: "Turning meeting audio and voice typing into text", data: "Audio, only while it's turned into text" },
   { name: "Composio", purpose: "Sign-in and actions for many apps", data: "App tokens and the actions your bot takes in those apps" },
   { name: "Twilio", purpose: "Phone calls and texts", data: "Phone numbers, texts, call speech and transcripts" },
   { name: "AgentMail and Resend", purpose: "Your bot's email address and sign-in emails", data: "Email addresses and email content" },

@@ -6,6 +6,13 @@ Anyone makes their own AI agent in about a minute: pick a face, give it a name, 
 - **Status (2026-10-15):** the whole product is built (the website, the dashboard, and a desktop app for meeting notes and voice typing) and runs locally in demo mode with zero keys. `docs/DEPLOY.md` lists what each integration needs.
 - **Reviewing it?** Start with [`docs/TRY-IT.md`](docs/TRY-IT.md): how to run both apps, what to click, and what's simulated.
 
+## Built on NVIDIA and Nebius
+
+- **The brains:** NVIDIA Nemotron on **Nebius Token Factory**. Nemotron 3.5 Lightning is every new bot's default: fast, and cheap enough (about $4–5 a month per active bot) to include on the free plan. Nemotron 3 Super and Nemotron 3 Ultra take the harder jobs on Plus and Pro. Token Factory also runs the other included open models, and the AI cleanup for voice typing.
+- **The ears:** NVIDIA **Parakeet TDT 0.6B v3** and **Nemotron 3.5 ASR** turn speech into text for voice typing and meeting notes. They run on NVIDIA's NeMo-Speech.cpp in our own server (`speech/`), built to deploy as a **Nebius Serverless AI** endpoint.
+- **Web search:** Tavily.
+- A possible entry in the Nebius × NVIDIA Global AI Hackathon (due October 30): [`docs/HACKATHON.md`](docs/HACKATHON.md).
+
 ## Try it
 
 ```bash
@@ -127,6 +134,8 @@ npm run test:e2e       # Playwright on a phone and a desktop: builder → chat �
 cd desktop
 npm test               # detection on each OS, the call state machine, the safety rules, uploads
 npm run test:e2e       # the real Electron app against the dev server (Linux, under xvfb)
+cd ../speech
+npm test               # the speech server: auth, audio formats, language routing, limits, the log
 ```
 
 axe finds no serious WCAG 2.2 AA problems on the main public and dashboard pages, in light or dark mode.
@@ -148,6 +157,7 @@ axe finds no serious WCAG 2.2 AA problems on the main public and dashboard pages
   - `web-actions`: the cloud browser.
 - `src/components`: the UI, including `avatar` (the five characters) and `meetings` (the recorder and the bot at the bottom of the screen).
 - `desktop/`: the desktop app for meeting notes (Electron). Its README covers permissions, building and signing.
+- `speech/`: our speech-to-text server: NVIDIA Parakeet and Nemotron on NVIDIA NeMo-Speech.cpp, for a Nebius Serverless AI endpoint. Its README covers deploying it and what it costs.
 - `bridge/`: the Bridge, which runs a subscription brain on the owner's computer.
 - `tests/` and `e2e/`: unit and end-to-end tests.
 - `docs/`:
@@ -200,7 +210,7 @@ The current list is in `docs/DECISIONS.md`.
 5. **Trademark clearance** before spending on the brand.
 6. **Meeting notes before launch:**
    - a lawyer's look at the consent flow and retention;
-   - Groq's paid tier;
+   - the speech server on Nebius (`speech/README.md`) and a Together AI key for its backup;
    - signing and notarizing the Mac app (a Developer ID certificate and notarization credentials in CI secrets, built on a Mac or a macOS runner);
    - whether the desktop app and the Bridge become one app.
 7. **Meeting notes, next:** transcription on the owner's own key or on the device, and meeting titles from the calendar.
@@ -227,8 +237,8 @@ These hold whatever gets built next.
 **Costs:**
 - **Model:** Nemotron 3.5 Lightning on Token Factory cost $0.06 per million input tokens and $0.24 per million output (checked for the hackathon). That's about $4 to $5 a month per active bot.
 - **Search:** Tavily includes 1,000 free credits a month, then $0.008 per credit; it's free for students.
-- **Speech-to-text:** Groq's Whisper large-v3 turbo, about $0.04 per audio hour.
-- **Reachability:** Token Factory, Tavily and the cloud-browser hosts all work on Diego's network. Kimi, DeepSeek and Together AI (the speech-to-text fallback) are blocked there.
+- **Speech-to-text:** NVIDIA Parakeet and Nemotron on our own speech server (`speech/`), a Nebius Serverless AI endpoint: about $190 a month for an 8-vCPU machine, whatever the volume. Backup: NVIDIA Parakeet on Together AI, $0.0015 per audio minute.
+- **Reachability:** Token Factory, Tavily and the cloud-browser hosts all work on Diego's network. Kimi, DeepSeek and Together AI (the speech-to-text backup) are blocked there; the app calls Together from its server, so only local testing is affected.
 
 **Name:**
 - Build-A-Bear defeated a BUILD A BOT trademark application in 2004 (for toys).

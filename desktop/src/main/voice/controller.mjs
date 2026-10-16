@@ -52,6 +52,7 @@ export function voiceError(err) {
   if (e.code === "mic-missing") return { message: "I can't find a microphone.", actions: ["settings"] };
   if (e.code === "mic-busy") return { message: "Another app is using the microphone.", actions: [] };
   if (e.code === "edit-failed") return { message: e.message || "I couldn't do that one. Try saying it another way.", actions: ["retry"] };
+  if (e.code === "language") return { message: e.message || "Voice typing can't hear that language yet.", actions: ["settings"] };
   if (e.code === "unreadable" || e.status === 422 || e.status === 413) return { message: e.message || "I couldn't make out that recording.", actions: [] };
   return { message: "Something went wrong. Try again in a moment.", actions: ["retry"] };
 }

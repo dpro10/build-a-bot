@@ -37,9 +37,16 @@ const HOW = [
   { icon: <MessageCircle />, title: "Or ask your bot", body: "Start with “Hey” and your bot's name: “Hey Otto, remind me to call Mom at 5.” With text selected and Shift held, it gets that too: “Hey Otto, add this to my calendar.”" },
 ];
 
-const PRIVATE = [
+/** What stays private. Who hears the audio is named when it's NVIDIA's models on our own server. */
+const privatePoints = () => [
   { icon: <AudioLines />, text: "The mic is on only while you hold the key, and the pill on your screen shows it the whole time." },
-  { icon: <Trash2 />, text: "Your voice is turned into text and thrown away. We keep a word count, never your words." },
+  {
+    icon: <Trash2 />,
+    text:
+      transcriptionSetup()?.provider === "nvidia"
+        ? "Your voice is turned into text on our own server, by NVIDIA's open speech models, and thrown away. We keep a word count, never your words."
+        : "Your voice is turned into text and thrown away. We keep a word count, never your words.",
+  },
   { icon: <Laptop />, text: "Your history stays on your computer, encrypted, and you can turn it off." },
   { icon: <ShieldCheck />, text: "So the words fit, only the kind of app you're in (“chat”, “email”) and a well-known app's name are sent. Never what's on your screen." },
   { icon: <Wand2 />, text: "When you edit by voice, the text you selected is sent once to change it, and never kept." },
@@ -183,7 +190,7 @@ export default async function VoicePage() {
           Private by design
         </h2>
         <ul className="mt-4 grid gap-3 sm:grid-cols-2">
-          {PRIVATE.map((p) => (
+          {privatePoints().map((p) => (
             <li key={p.text} className="flex gap-3 text-sm">
               <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-card text-primary [&_svg]:size-4" aria-hidden="true">
                 {p.icon}
