@@ -30,8 +30,9 @@ async function until(fn, ms = 5000) {
 
 /**
  * A stand-in for `nemo-speech serve`: the same flags, routes, key check and chatter as NVIDIA's.
- * FAKE_NEMO: "crash" exits at once, "never-ready" never gets ready, "slow" takes 1.5 s to get
- * ready, "broken" answers 500. No require or import, so it runs the same as CommonJS or as a module.
+ * FAKE_NEMO: "crash" exits at once, "gpu-crash" exits at once unless it's told to use the CPU,
+ * "never-ready" never gets ready, "slow" takes 1.5 s to get ready, "broken" answers 500. No require
+ * or import, so it runs the same as CommonJS or as a module.
  */
 const FAKE_RUNTIME = `#!/usr/bin/env node
 const http = process.getBuiltinModule("node:http");
@@ -41,7 +42,7 @@ const flag = (n) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : u
 const mode = process.env.FAKE_NEMO || "";
 if (process.env.FAKE_NEMO_LOG) fs.appendFileSync(process.env.FAKE_NEMO_LOG, JSON.stringify({ args, cwd: process.cwd(), keyed: Boolean(process.env.NEMO_SPEECH_HTTP_API_KEY) }) + "\\n");
 if (args[0] !== "serve" || !fs.existsSync(flag("--asr-model"))) process.exit(2);
-if (mode === "crash") process.exit(3);
+if (mode === "crash" || (mode === "gpu-crash" && flag("--device") !== "cpu")) process.exit(3);
 const key = process.env.NEMO_SPEECH_HTTP_API_KEY;
 const born = Date.now();
 console.log("[nemo-speech] serve session started");
@@ -437,10 +438,11 @@ test("runs it on 127.0.0.1 behind a key of its own, and tidies what it heard", a
   assert.equal(fs.realpathSync.native(run.cwd).toLowerCase(), fs.realpathSync.native(dir).toLowerCase(), "it runs in its own folder");
   const args = run.args;
   assert.equal(args[0], "serve");
-  assert.equal(args[args.indexOf("--asr-model") + 1], local.paths.model);
+  assert.equal(path.resolve(run.cwd, args[args.indexOf("--asr-model") + 1]), path.resolve(run.cwd, path.relative(dir, local.paths.model)));
+  assert.equal(path.isAbsolute(args[args.indexOf("--asr-model") + 1]), false, "relative to its folder, so no user name in it");
   assert.equal(args[args.indexOf("--host") + 1], "127.0.0.1");
   assert.equal(args[args.indexOf("--port") + 1], String(local.port));
-  assert.equal(args[args.indexOf("--itn-model-dir") + 1], local.paths.itn);
+  assert.equal(args[args.indexOf("--itn-model-dir") + 1], path.relative(dir, local.paths.itn));
   assert.equal(args[args.indexOf("--device") + 1], "auto");
   assert.ok(args.includes("--no-ui"));
   assert.equal(args.join(" ").includes(local.secret), false);
@@ -535,14 +537,37 @@ test("stops after a while unused, so the model isn't in memory all day", async (
   assert.equal(await local.transcribe(wav()), "Let's meet at 3:30 on Friday, or 3:45.");
 });
 
-test("a runtime that keeps crashing is given up on (the server hears the owner instead)", async (t) => {
+test("a runtime that keeps crashing (on the GPU, then on the CPU) is given up on: the server hears the owner instead", async (t) => {
   const { local, spawned } = await setup(t, { mode: "crash" });
   await local.install();
-  for (let i = 0; i < 3; i++) await assert.rejects(local.ensureRunning(), (e) => e instanceof LocalSpeechError && e.code === "crashed");
+  // The GPU, then at once the CPU; then the CPU again.
+  for (let i = 0; i < 2; i++) await assert.rejects(local.ensureRunning(), (e) => e instanceof LocalSpeechError && e.code === "crashed");
+  assert.deepEqual(
+    spawned.map((a) => a[a.indexOf("--device") + 1]),
+    ["auto", "cpu", "cpu"],
+  );
   assert.equal(local.state, "installed");
   await assert.rejects(local.ensureRunning(), (e) => e instanceof LocalSpeechError && e.code === "crashing");
   await assert.rejects(local.transcribe(wav()), (e) => e instanceof LocalSpeechError && e.code === "crashing");
   assert.equal(spawned.length, 3, "it wasn't started a fourth time");
+});
+
+test("the GPU failing on this computer moves it to the CPU, at once and from then on", async (t) => {
+  const { local, make, engineRuns, logs } = await setup(t, { mode: "gpu-crash" });
+  await local.install();
+  assert.equal(await local.transcribe(wav()), "Let's meet at 3:30 on Friday, or 3:45.", "this dictation is still heard here");
+  const devices = () => engineRuns().map((r) => r.args[r.args.indexOf("--device") + 1]);
+  assert.deepEqual(devices(), ["auto", "cpu"]);
+  assert.ok(logs.some((m) => /the GPU didn't work here \(it stopped: 3\); using the CPU from now on/.test(m)), logs.join("\n"));
+  assert.equal(JSON.parse(fs.readFileSync(local.paths.device, "utf8")).device, "cpu");
+  await local.stop();
+  // The next run of the app goes straight to the CPU…
+  const next = make();
+  t.after(() => next.stop());
+  await next.transcribe(wav());
+  assert.deepEqual(devices(), ["auto", "cpu", "cpu"]);
+  // …until NVIDIA's runtime changes: a new one gets another try on the GPU.
+  assert.equal(make({ sources: { ...local.src, runtimeSha256: "0".repeat(64) } }).loadDevice(), "auto");
 });
 
 test("a runtime that can't run at all fails at once instead of hanging the dictation", async (t) => {
