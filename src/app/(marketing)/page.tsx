@@ -15,7 +15,10 @@ import { PricingTeaser } from "@/components/marketing/landing/PricingTeaser";
 import { FinalCta } from "@/components/marketing/landing/FinalCta";
 import { Faq, faqJsonLd, type FaqItem } from "@/components/marketing/Faq";
 import { Container, Section, SectionHeader } from "@/components/marketing/ui";
-import { available, paidPlansOpen } from "@/lib/env";
+import { available } from "@/lib/env";
+import { starterCreditMicros } from "@/lib/billing/credit";
+import { UNIT_PRICES, formatMicros, perMessageMicros } from "@/lib/billing/prices";
+import { INCLUDED_MODELS } from "@/lib/models/catalog";
 import { SITE } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -25,6 +28,8 @@ export const metadata: Metadata = {
 
 /** The desktop app can be had (signed downloads, or the repo in demo mode); otherwise it's coming soon. */
 const desktopApp = available("desktopApp");
+const DEFAULT_MODEL = INCLUDED_MODELS.find((m) => m.default) ?? INCLUDED_MODELS[0];
+const STARTER = starterCreditMicros();
 
 const FAQ: { q: string; text: string }[] = [
   {
@@ -33,11 +38,15 @@ const FAQ: { q: string; text: string }[] = [
   },
   {
     q: "Can I use my ChatGPT or Claude plan?",
-    text: "Yes. Install the Bridge on your computer and your bot runs on your own Claude Code (Claude Pro or Max) or Codex (ChatGPT Plus or Pro), signed in by you. Your login never leaves your machine, and we never see it. It works while your computer is awake; when it sleeps, your bot waits, or uses the free brain if you opt in. Gemini works with an API key.",
+    text: "Yes. Install the Bridge on your computer and your bot runs on your own Claude Code (Claude Pro or Max) or Codex (ChatGPT Plus or Pro), signed in by you. Your login never leaves your machine, and we never see it. It works while your computer is awake; when it sleeps, your bot waits, or uses an open model we run (from your credit) if you opt in. Gemini works with an API key.",
+  },
+  {
+    q: "What does it cost?",
+    text: `There are no plans and no subscription: you pay for what your bots use, at cost, from credit you add. A message on ${DEFAULT_MODEL.label} is about ${formatMicros(perMessageMicros(DEFAULT_MODEL))} and a web lookup ${formatMicros(UNIT_PRICES.lookup)}, exactly what the services charge us.${STARTER > 0 ? ` Every account starts with ${formatMicros(STARTER)} of credit, no card needed.` : ""} A bot on your own API key or your Claude or ChatGPT subscription is free here.`,
   },
   {
     q: "What does Full faith mean?",
-    text: `Full faith lets your bot act on its own across the apps you connect: sending, posting, updating and deleting for you, with a receipt for every action. A few hard limits still apply. It asks before sending your data to someone new right after reading outside content, before deleting more than 10 things at once, and before spending past your cap. It never shares passwords or keys and never pretends to be human. Full faith comes with Plus and Pro${paidPlansOpen ? "" : ", which are coming soon"}.`,
+    text: `Full faith lets your bot act on its own across the apps you connect: sending, posting, updating and deleting for you, with a receipt for every action. A few hard limits still apply. It asks before sending your data to someone new right after reading outside content, before deleting more than 10 things at once, and before spending past your cap. It never shares passwords or keys and never pretends to be human.`,
   },
   {
     q: "Can it take notes in my meetings?",
@@ -46,8 +55,8 @@ const FAQ: { q: string; text: string }[] = [
   {
     q: "What is voice typing?",
     text: desktopApp
-      ? "Hold a key in any app and talk. What you meant is typed where your cursor is: no ums, the right punctuation, your corrections kept, and the names your bot knows spelled right. Start with “Hey” and your bot's name to ask it instead. The desktop app hears you on your own computer, with NVIDIA's Parakeet speech model, so in English and 24 European languages your voice never leaves it; we keep a word count, never your words. Free includes 8,000 words a month, and Plus and Pro have no monthly limit."
-      : "Hold a key in any app and talk. What you meant is typed where your cursor is: no ums, the right punctuation, your corrections kept, and the names your bot knows spelled right. It comes with the desktop app, which is coming soon. The app hears you on your own computer, with NVIDIA's Parakeet speech model, so your voice never leaves it; we keep a word count, never your words. Free includes 8,000 words a month, and Plus and Pro have no monthly limit.",
+      ? "Hold a key in any app and talk. What you meant is typed where your cursor is: no ums, the right punctuation, your corrections kept, and the names your bot knows spelled right. Start with “Hey” and your bot's name to ask it instead. The desktop app hears you on your own computer, with NVIDIA's Parakeet speech model, so in English and 24 European languages your voice never leaves it; we keep a word count, never your words. There's no word limit: hearing you is free, and the AI cleanup costs a fraction of a cent."
+      : "Hold a key in any app and talk. What you meant is typed where your cursor is: no ums, the right punctuation, your corrections kept, and the names your bot knows spelled right. It comes with the desktop app, which is coming soon. The app hears you on your own computer, with NVIDIA's Parakeet speech model, so your voice never leaves it; we keep a word count, never your words. There's no word limit: hearing you is free, and the AI cleanup costs a fraction of a cent.",
   },
   {
     q: "What if it makes a mistake?",
@@ -84,6 +93,12 @@ const LINKS: Record<string, React.ReactNode> = {
     <>
       {" "}
       <Link href="/safety#hard-limits">See every hard limit</Link>.
+    </>
+  ),
+  "What does it cost?": (
+    <>
+      {" "}
+      <Link href="/pricing">See every price</Link>.
     </>
   ),
 };

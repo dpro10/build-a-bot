@@ -86,8 +86,8 @@ export default function PrivacyPage() {
         <DocSection id="collect" title={title("collect")}>
           <h3>Your account</h3>
           <p>
-            Your email address (once you add one), your name if you give it, your time zone, your plan and billing status, and the date you
-            confirmed you&apos;re 18 or older.
+            Your email address (once you add one), your name if you give it, your time zone, the credit you&apos;ve added (the amounts and dates;
+            Stripe keeps the card), and the date you confirmed you&apos;re 18 or older.
           </p>
           <h3>Your bots</h3>
           <p>
@@ -134,7 +134,7 @@ export default function PrivacyPage() {
           <h3>Technical details</h3>
           <p>
             Your browser&apos;s user agent for each signed-in session, the computers you pair with the Bridge, and monthly usage counts (messages,
-            searches, minutes, texts, words typed by voice) for your plan.
+            searches, minutes, texts, words typed by voice) with what they cost, for your credit.
           </p>
         </DocSection>
 
@@ -166,7 +166,7 @@ export default function PrivacyPage() {
           <ul>
             <li>run your bots: send your messages to the brain you chose, use the apps you connected, and deliver replies on your channels;</li>
             <li>keep you and others safe: enforce your trust settings and our hard limits, keep receipts, and follow our crisis protocol;</li>
-            <li>run your plan: count usage against your limits and handle billing;</li>
+            <li>run your credit: count what you use, charge it at cost, and handle payments;</li>
             <li>help you when you ask, and fix problems.</li>
           </ul>
           <p>
@@ -247,7 +247,8 @@ export default function PrivacyPage() {
               Secrets aren&apos;t included, since we never show them again.
             </li>
             <li>
-              <strong>Delete:</strong> delete your account and all of its data from the same page. Paid plans are canceled when you do.
+              <strong>Delete:</strong> delete your account and all of its data from the same page. There&apos;s no subscription to cancel; ask us
+              first if you&apos;d like unused credit you added refunded.
             </li>
             <li>
               <strong>Disconnect:</strong> remove an app or turn off a channel at any time; your bot loses access right away.

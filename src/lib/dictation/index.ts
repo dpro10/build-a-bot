@@ -3,7 +3,8 @@
  * is (the desktop app pastes it).
  *
  * One dictation, in order:
- *  1. Plan limits (words a month) and the site's daily ceiling.
+ *  1. Credit (speech-to-text here and the AI cleanup are paid from it, at cost; out of credit, what
+ *     the computer heard still gets the plain cleanup), and the daily caps.
  *  2. Speech-to-text (NVIDIA Parakeet by default). Models that take hints (Whisper) are steered
  *     toward the owner's words (their dictionary, their bots' names, the names their bots
  *     remember); with NVIDIA's, a word that sounds like one of theirs sends the text through the AI
@@ -12,18 +13,18 @@
  *     runs it with /api/voice/ask), and isn't typed.
  *  4. Otherwise the cleanup: the plain one (tidyTranscript), then the AI one (polish.ts) when it's
  *     on and checks out, then the owner's spellings and snippets.
- *  5. The words typed count toward the plan.
+ *  5. The words typed are counted, and what it cost is paid from credit.
  *
  * The audio is transcribed in memory and thrown away; what was said is never stored or logged.
- * Only the number of words is kept (the plan's meter).
+ * Only the number of words is kept (Credit & usage shows it).
  */
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { schema, type Db } from "@/lib/db";
 import type { DictionaryEntry, User } from "@/lib/db/schema";
 import { underDailyCeiling } from "@/lib/billing/ceiling";
-import { checkLimit, getUsage, recordUsage } from "@/lib/billing/usage";
-import { getPlan } from "@/lib/billing/plans";
-import { demoMode, demoSpeech } from "@/lib/env";
+import { getUsage, recordUsage } from "@/lib/billing/usage";
+import { hasCredit, outOfCreditMessage } from "@/lib/billing/credit";
+import { creditOpen, demoMode, demoSpeech } from "@/lib/env";
 import { rateLimit } from "@/lib/safety/ratelimit";
 import { TranscriptionError, transcribe, transcriptionSetup } from "@/lib/transcribe";
 import { demoEdit, demoHeard, demoPolish, type DemoSample } from "./demo";
@@ -174,20 +175,20 @@ export type DictateResult =
       heard: string;
     };
 
+/** Words typed this month. There's no monthly limit (people pay for what they use); `limit` stays for older apps. */
 export type DictateUsage = { words: number; limit: number | null };
 
 export type DictateOutcome =
   | { ok: true; result: DictateResult; usage: DictateUsage; simulated: boolean; ms: { stt: number; polish: number } }
-  | { ok: false; status: number; code: string; error: string; upgrade?: "plus" | "pro" };
+  | { ok: false; status: number; code: string; error: string };
 
-function usageOf(owner: Pick<User, "plan">, used: number): DictateUsage {
-  const limit = getPlan(owner.plan).limits.dictationWords;
-  return { words: used, limit: Number.isFinite(limit) ? limit : null };
+function usageOf(used: number): DictateUsage {
+  return { words: used, limit: null };
 }
 
-/** The plan's words this month: used and limit (null = unlimited). */
-export async function dictationUsage(db: Db, owner: Pick<User, "id" | "plan">): Promise<DictateUsage> {
-  return usageOf(owner, (await getUsage(db, owner.id)).dictationWords);
+/** Words typed by voice this month. */
+export async function dictationUsage(db: Db, owner: Pick<User, "id">): Promise<DictateUsage> {
+  return usageOf((await getUsage(db, owner.id)).dictationWords);
 }
 
 export async function dictate(db: Db, owner: User, input: DictateInput): Promise<DictateOutcome> {
@@ -199,16 +200,19 @@ export async function dictate(db: Db, owner: User, input: DictateInput): Promise
   if ((input.heard?.length ?? 0) > MAX_HEARD_CHARS) return { ok: false, status: 413, code: "too_large", error: "That dictation is too long." };
   if (!onDevice && !input.audio) return { ok: false, status: 422, code: "unreadable", error: "I couldn't make out that recording." };
 
-  const limit = await checkLimit(db, owner, "dictationWords");
-  if (!limit.ok) return { ok: false, status: 402, code: "limit", error: limit.message, upgrade: limit.plan.id === "free" ? "plus" : "pro" };
   const before = (await getUsage(db, owner.id)).dictationWords;
 
   // A tap, or a recording with no speech in it: nothing to send (and nothing to pay for).
   if ((input.speechMs !== undefined && input.speechMs < MIN_SPEECH_MS) || (!onDevice && (input.audio?.byteLength ?? 0) < 400)) {
-    return { ok: true, result: { kind: "empty" }, usage: usageOf(owner, before), simulated: !onDevice && !transcriptionSetup(), ms: { stt: 0, polish: 0 } };
+    return { ok: true, result: { kind: "empty" }, usage: usageOf(before), simulated: !onDevice && !transcriptionSetup(), ms: { stt: 0, polish: 0 } };
   }
+  // What it costs: hearing it here (speech-to-text) and the AI cleanup are paid from credit; heard
+  // on the computer it's free. Out of credit, a recording can't be heard here, and what was heard on
+  // the computer gets the plain cleanup (still free) instead of the AI's.
+  const credit = await hasCredit(db, owner.id);
+  if (!onDevice && transcriptionSetup() && !credit) return { ok: false, status: 402, code: "no_credit", error: outOfCreditMessage({ canAdd: creditOpen }) };
 
-  // "Unlimited" plans are for people, not scripts; and the whole site has a daily ceiling.
+  // Voice typing is for people, not scripts: a daily cap per account, and one for the whole site.
   const today = await rateLimit(db, `dictate-day:${owner.id}`, DAILY_DICTATIONS, 86_400);
   if (!today.ok) return { ok: false, status: 429, code: "daily", error: "That's a lot of voice typing for one day. It resets tomorrow." };
   if (!(await underDailyCeiling(db, "dictation"))) return { ok: false, status: 503, code: "busy", error: "Voice typing is very busy today. Try again in a little while." };
@@ -244,7 +248,7 @@ export async function dictate(db: Db, owner: User, input: DictateInput): Promise
 
   const done = async (result: DictateResult, words: number, polishMs: number): Promise<DictateOutcome> => {
     if (words || costMicros) await recordUsage(db, owner.id, { dictationWords: words, costMicros });
-    return { ok: true, result, usage: usageOf(owner, before + words), simulated, ms: { stt, polish: polishMs } };
+    return { ok: true, result, usage: usageOf(before + words), simulated, ms: { stt, polish: polishMs } };
   };
 
   if (!heard) return done({ kind: "empty" }, 0, 0);
@@ -264,7 +268,7 @@ export async function dictate(db: Db, owner: User, input: DictateInput): Promise
   // Short, clean and nothing to fix: the plain cleanup is what they meant, with no wait for a model.
   // (A snippet gets the AI's touch, for the punctuation around it.)
   const worthIt = guarded.slots.length > 0 || needsPolish(tidy, { category: input.category, vocabulary: ctx.vocabulary, language: input.language });
-  if (input.polish && countWords(tidy) >= 3 && worthIt) {
+  if (input.polish && credit && countWords(tidy) >= 3 && worthIt) {
     if (simulated) {
       text = guarded.slots.length ? null : demoPolish(heard);
     } else {
@@ -325,7 +329,7 @@ export type EditByVoiceInput = {
 
 export type EditOutcome =
   | { ok: true; kind: "replace" | "answer"; text: string; words: number; usage: DictateUsage; simulated: boolean; ms: number }
-  | { ok: false; status: number; code: string; error: string; upgrade?: "plus" | "pro" };
+  | { ok: false; status: number; code: string; error: string };
 
 /** Editing by voice can run: a model for it, or demo mode. */
 export function voiceEditAvailable(): boolean {
@@ -333,8 +337,8 @@ export function voiceEditAvailable(): boolean {
 }
 
 /**
- * Change the selection the way they said, or write what they asked for (edit.ts). Same limits as a
- * dictation; the words it types count toward the plan's words. Nothing is stored.
+ * Change the selection the way they said, or write what they asked for (edit.ts). Same checks as a
+ * dictation (credit for the model, the daily limits); the words it types count as voice typing. Nothing is stored.
  */
 export async function editByVoice(db: Db, owner: User, input: EditByVoiceInput): Promise<EditOutcome> {
   const instruction = input.instruction.trim();
@@ -344,8 +348,8 @@ export async function editByVoice(db: Db, owner: User, input: EditByVoiceInput):
   const setup = polishSetup();
   if (!setup && !demoMode) return { ok: false, status: 503, code: "unavailable", error: "Editing by voice isn't set up on this server yet." };
 
-  const limit = await checkLimit(db, owner, "dictationWords");
-  if (!limit.ok) return { ok: false, status: 402, code: "limit", error: limit.message, upgrade: limit.plan.id === "free" ? "plus" : "pro" };
+  // The model that does it is paid from credit (demo mode's rules are free).
+  if (setup && !(await hasCredit(db, owner.id))) return { ok: false, status: 402, code: "no_credit", error: outOfCreditMessage({ canAdd: creditOpen }) };
   const today = await rateLimit(db, `dictate-day:${owner.id}`, DAILY_DICTATIONS, 86_400);
   if (!today.ok) return { ok: false, status: 429, code: "daily", error: "That's a lot of voice typing for one day. It resets tomorrow." };
   if (!(await underDailyCeiling(db, "dictation"))) return { ok: false, status: 503, code: "busy", error: "Voice typing is very busy today. Try again in a little while." };
@@ -368,5 +372,5 @@ export async function editByVoice(db: Db, owner: User, input: EditByVoiceInput):
   }
   const words = result.kind === "replace" ? countWords(result.text) : 0;
   if (words || costMicros) await recordUsage(db, owner.id, { dictationWords: words, costMicros });
-  return { ok: true, ...result, words, usage: usageOf(owner, (await getUsage(db, owner.id)).dictationWords), simulated: !setup, ms: Date.now() - t0 };
+  return { ok: true, ...result, words, usage: usageOf((await getUsage(db, owner.id)).dictationWords), simulated: !setup, ms: Date.now() - t0 };
 }

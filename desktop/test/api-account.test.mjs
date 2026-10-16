@@ -88,6 +88,23 @@ test("account: notes are offered when this computer can hear the call, or the se
   assert.equal(account.whyNot(), null, "an older server that hears audio itself");
 });
 
+test("account: out of credit, notes wait only for a bot whose notes cost it (its owner's own AI is free)", () => {
+  const settings = { get: () => ({ server: "http://s", botId: "bot_1" }), update: () => {} };
+  const account = new Account({ api: createApi({ fetch: async () => ({}), server: () => "http://s", token: () => null }), tokens: {}, settings });
+  account.device = { server: "http://s" };
+  const included = [{ id: "bot_1", name: "Inky", avatar: "otto", color: "grape", paused: false, meetingsOn: true, notesNeedCredit: true }];
+  account.session = { bots: included, meetings: { available: false, local: true, credit: false, minutesLeft: 0, chunkMs: 20000 } };
+  assert.equal(account.whyNot(), "Out of credit: add some to take notes");
+  account.session = { bots: included, meetings: { available: false, local: true, credit: true, minutesLeft: 600, chunkMs: 20000 } };
+  assert.equal(account.whyNot(), null);
+  const ownKey = [{ ...included[0], notesNeedCredit: false }];
+  account.session = { bots: ownKey, meetings: { available: false, local: true, credit: false, minutesLeft: 600, chunkMs: 20000 } };
+  assert.equal(account.whyNot(), null, "its own AI writes the notes: free here");
+  // An older server says minutesLeft instead.
+  account.session = { bots: ownKey, meetings: { available: false, local: true, minutesLeft: 0, chunkMs: 20000 } };
+  assert.equal(account.whyNot(), "Out of credit: add some to take notes");
+});
+
 test("api: errors keep the server's code; network failures are status 0", async () => {
   const f = fakeFetch([{ status: 409, body: { error: "Turn on Meeting notes for Inky first.", code: "meetings_off" } }, { throw: "ECONNREFUSED" }]);
   const api = createApi({ fetch: f.fn, server: () => "http://s", token: () => "bab_dev_t" });

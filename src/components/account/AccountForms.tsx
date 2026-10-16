@@ -239,7 +239,8 @@ export function ProfileForm({
 // ---------------------------------------------------------------------------
 // Your data: export, sign out, delete
 
-export function DataActions({ anonymous, botCount, paid }: { anonymous: boolean; botCount: number; paid: boolean }) {
+/** `creditLeft`: credit they added and haven't used ("$4.37"), which deleting the account gives up. */
+export function DataActions({ anonymous, botCount, creditLeft }: { anonymous: boolean; botCount: number; creditLeft: string | null }) {
   const [exporting, setExporting] = React.useState(false);
   const [signingOut, setSigningOut] = React.useState(false);
   const signOutForm = React.useRef<HTMLFormElement>(null);
@@ -330,7 +331,7 @@ export function DataActions({ anonymous, botCount, paid }: { anonymous: boolean;
         icon={<Trash2 className="size-4" />}
         title="Delete my account"
         text="Permanently remove your account, your bots and everything they know."
-        action={<DeleteAccount botCount={botCount} paid={paid} />}
+        action={<DeleteAccount botCount={botCount} creditLeft={creditLeft} />}
       />
     </div>
   );
@@ -353,7 +354,7 @@ function Row({ icon, title, text, action, danger }: { icon: React.ReactNode; tit
   );
 }
 
-function DeleteAccount({ botCount, paid }: { botCount: number; paid: boolean }) {
+function DeleteAccount({ botCount, creditLeft }: { botCount: number; creditLeft: string | null }) {
   const [open, setOpen] = React.useState(false);
   const [confirm, setConfirm] = React.useState("");
   const [busy, setBusy] = React.useState(false);
@@ -398,7 +399,8 @@ function DeleteAccount({ botCount, paid }: { botCount: number; paid: boolean }) 
                 : `All ${botCount} of your bots, with their chats, memories, notes, meetings and routines`,
               "Every receipt and approval",
               "Your saved API keys and app connections",
-              paid ? "Paired computers and your plan (your subscription is canceled right away)" : "Paired computers (Bridge)",
+              "Paired computers (Bridge and the desktop app)",
+              ...(creditLeft ? [`The ${creditLeft} of credit you added and haven't used`] : []),
             ].map((line) => (
               <li key={line} className="flex gap-2.5">
                 <Trash2 className="mt-0.5 size-4 shrink-0 text-danger" aria-hidden />
@@ -408,7 +410,10 @@ function DeleteAccount({ botCount, paid }: { botCount: number; paid: boolean }) 
           </ul>
           <div className="mt-5 flex items-start gap-2.5 rounded-2xl bg-muted/70 p-3 text-sm text-muted-foreground">
             <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
-            <span>Want a copy first? Close this and use Download my data.</span>
+            <span>
+              Want a copy first? Close this and use Download my data.
+              {creditLeft ? " To get unused credit refunded, ask us before you delete; afterwards there's no account to refund it from." : null}
+            </span>
           </div>
           <div className="mt-5 flex flex-col gap-2">
             <Label htmlFor="confirm-delete">

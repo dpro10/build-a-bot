@@ -12,18 +12,20 @@ import { cn } from "@/lib/utils";
 import type { AvatarId, ColorwayId } from "@/lib/avatars";
 
 export type ShellBot = { id: string; name: string; avatar: AvatarId; color: ColorwayId; status: string; pending: number; subtitle: string };
+export type ShellCredit = { label: string; tone: "primary" | "warning" | "danger" };
 
 export function AppShell({
   bots,
   pendingTotal,
-  planName,
+  credit,
   demo,
   anonymous,
   children,
 }: {
   bots: ShellBot[];
   pendingTotal: number;
-  planName: string;
+  /** Credit left, for the Credit & usage badge ("$0.93"), and whether it's fine, low or out. */
+  credit: ShellCredit;
   demo: boolean;
   anonymous: boolean;
   children: React.ReactNode;
@@ -43,7 +45,7 @@ export function AppShell({
   }, []);
 
   const nav = (
-    <SidebarContent bots={bots} pendingTotal={pendingTotal} planName={planName} pathname={pathname} anonymous={anonymous} />
+    <SidebarContent bots={bots} pendingTotal={pendingTotal} credit={credit} pathname={pathname} anonymous={anonymous} />
   );
 
   return (
@@ -115,13 +117,13 @@ export function AppShell({
 function SidebarContent({
   bots,
   pendingTotal,
-  planName,
+  credit,
   pathname,
   anonymous,
 }: {
   bots: ShellBot[];
   pendingTotal: number;
-  planName: string;
+  credit: ShellCredit;
   pathname: string;
   anonymous: boolean;
 }) {
@@ -181,7 +183,18 @@ function SidebarContent({
         <NavItem href="/app/approvals" icon={<Bell className="size-[18px]" />} label="Approvals" active={pathname === "/app/approvals"} badge={pendingTotal} />
         <NavItem href="/app/voice" icon={<Mic className="size-[18px]" />} label="Voice typing" active={pathname === "/app/voice"} />
         <NavItem href="/app/bridge" icon={<Laptop className="size-[18px]" />} label="Bridge (your computer)" active={pathname === "/app/bridge"} />
-        <NavItem href="/app/billing" icon={<CreditCard className="size-[18px]" />} label="Plan & usage" active={pathname === "/app/billing"} trailing={<Badge tone="primary">{planName}</Badge>} />
+        <NavItem
+          href="/app/billing"
+          icon={<CreditCard className="size-[18px]" />}
+          label="Credit & usage"
+          active={pathname === "/app/billing"}
+          trailing={
+            <Badge tone={credit.tone} className="tabular-nums">
+              <span className="sr-only">{credit.tone === "danger" ? "Out of credit: " : "Credit left: "}</span>
+              {credit.label}
+            </Badge>
+          }
+        />
         <div className="mt-1 flex items-center justify-between">
           <NavItem href="/app/account" icon={<Settings className="size-[18px]" />} label="Account" active={pathname === "/app/account"} />
           <ThemeToggle />

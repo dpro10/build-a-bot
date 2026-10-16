@@ -1,11 +1,11 @@
 /**
- * Outside demo mode with bots' own inboxes and Twilio set up, but no paid plans on sale:
- * the Email channel sends for real from the bot's own address, a provider failure reads
- * as a plain sentence instead of a 500, and a plan lock doesn't point at a dead upgrade.
+ * Outside demo mode with bots' own inboxes and Twilio set up, and no Stripe: the Email channel
+ * sends for real from the bot's own address, a provider failure reads as a plain sentence instead
+ * of a 500, texts come with no plan, and a text without credit says so instead of going out.
  */
 import crypto from "node:crypto";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 process.env.DATA_DIR = "memory";
 process.env.DEMO_MODE = "0";
@@ -27,7 +27,9 @@ vi.mock("@/lib/auth/session", async (importOriginal) => ({
 const { getDb, resetDbForTests, schema } = await import("@/lib/db");
 const { createBot } = await import("@/lib/bots/create");
 const { routeInboundEmail } = await import("@/lib/channels/email-inbound");
-const { live } = await import("@/lib/env");
+const { appUrl, live } = await import("@/lib/env");
+const { getUsage, recordUsage } = await import("@/lib/billing/usage");
+const callStatusRoute = await import("@/app/api/webhooks/twilio/voice/status/route");
 const channelsRoute = await import("@/app/api/bots/[botId]/channels/route");
 import type { Bot } from "@/lib/db/schema";
 
@@ -42,7 +44,7 @@ const post = (body: unknown) =>
 beforeAll(async () => {
   await resetDbForTests();
   const db = await getDb();
-  const [owner] = await db.insert(schema.users).values({ id: "usr_set_up", email: "dana@example.com", emailVerifiedAt: new Date(), timezone: "UTC", plan: "free" }).returning();
+  const [owner] = await db.insert(schema.users).values({ id: "usr_set_up", email: "dana@example.com", emailVerifiedAt: new Date(), timezone: "UTC" }).returning();
   session.user = owner;
   const res = await createBot(db, owner, {
     avatar: "otto",
@@ -106,10 +108,49 @@ describe("channels with their services set up", () => {
     expect(mail).toMatchObject([{ channelKind: "email", author: "contact", meta: { from: "sam@example.com", subject: "Receipts" } }]);
   });
 
-  it("a plan lock says paid plans are coming soon while none are on sale", async () => {
-    expect(notes).toEqual(["Text messages are part of Plus. Paid plans are coming soon."]);
-    const res = await post({ kind: "sms", action: "enable" });
+  it("a finished call is charged at Twilio's price, for each minute it started", async () => {
+    const db = await getDb();
+    await db.insert(schema.channels).values({ id: "chn_voice_test", botId: bot.id, kind: "voice", status: "active", ownerAddress: "+15125550123", ownerVerifiedAt: new Date() });
+    const params: Record<string, string> = { CallSid: "CA_test", CallStatus: "completed", CallDuration: "61", Direction: "inbound", From: "+15125550123", To: "+15555550100" };
+    const url = `${appUrl()}/api/webhooks/twilio/voice/status`;
+    const signed = Object.keys(params)
+      .sort()
+      .reduce((acc, k) => acc + k + params[k], url);
+    const signature = crypto.createHmac("sha1", "twilio_test").update(signed).digest("base64");
+    const before = await getUsage(db, bot.ownerId);
+    const res = await callStatusRoute.POST(
+      new Request(url, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", "x-twilio-signature": signature }, body: new URLSearchParams(params).toString() }),
+    );
+    expect(res.status).toBe(200);
+    const after = await getUsage(db, bot.ownerId);
+    expect(after.voiceSeconds - before.voiceSeconds).toBe(61);
+    expect(after.costMicros - before.costMicros).toBe(100_000); // 2 started minutes × $0.05
+  });
+
+  it("texts need no plan: one is charged at Twilio's price, and without credit it doesn't go out", async () => {
+    expect(notes).toEqual([]);
+    const db = await getDb();
+    await db
+      .update(schema.channels)
+      .set({ status: "active", ownerAddress: "+15125550123", ownerVerifiedAt: new Date() })
+      .where(and(eq(schema.channels.botId, bot.id), eq(schema.channels.kind, "sms")));
+    const sent: string[] = [];
+    vi.stubGlobal("fetch", async (url: string | URL) => {
+      sent.push(String(url));
+      return Response.json({ sid: "SM_test_1" }, { status: 201 });
+    });
+    const before = await getUsage(db, bot.ownerId);
+    expect((await post({ kind: "sms", action: "test" })).status).toBe(200);
+    expect(sent).toEqual(["https://api.twilio.com/2010-04-01/Accounts/AC_test/Messages.json"]);
+    const after = await getUsage(db, bot.ownerId);
+    expect(after.smsSegments - before.smsSegments).toBe(1);
+    expect(after.costMicros - before.costMicros).toBe(12_500);
+
+    await recordUsage(db, bot.ownerId, { costMicros: 1_000_001 }); // the starter dollar, and then some
+    sent.length = 0;
+    const res = await post({ kind: "sms", action: "test" });
     expect(res.status).toBe(402);
-    expect(await res.json()).toEqual({ error: "Text messages are part of Plus. Paid plans are coming soon." });
+    expect(await res.json()).toEqual({ error: "Out of credit: add credit in Credit & usage to send texts and calls.", code: "no_credit" });
+    expect(sent).toEqual([]);
   });
 });

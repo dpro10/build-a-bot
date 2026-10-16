@@ -12,7 +12,6 @@ import { CHANNEL_BY_KIND, type ChannelKind } from "@/lib/channels/catalog";
 import { AVATARS, isAvatarId } from "@/lib/avatars";
 import { TRUST, isTrustLevel } from "@/lib/trust";
 import { INCLUDED_MODELS, PROVIDERS } from "@/lib/models/catalog";
-import { getPlan } from "@/lib/billing/plans";
 import { Logo } from "@/components/brand/Logo";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -94,7 +93,7 @@ export default async function AdminPage() {
         ) : null}
 
         <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Stat label="Monthly revenue (est.)" value={usd.format(m.mrr)} sub={`${fmt.format(m.paying)} paying`} />
+          <Stat label="Credit sold" value={usd.format(m.credit.soldUsd)} sub={`${usd.format(m.credit.soldThisMonthUsd)} this month · ${fmt.format(m.credit.buyers)} buyers`} />
           <Stat label="People" value={fmt.format(m.users.total)} sub={`${fmt.format(m.users.signedUp)} with email · +${fmt.format(m.users.new7)} this week`} />
           <Stat label="Bots" value={fmt.format(m.bots.total)} sub={`${fmt.format(m.bots.active7)} active this week · ${fmt.format(m.bots.paused)} paused`} />
           <Stat label="Messages" value={fmt.format(m.messages.d7)} sub={`${fmt.format(m.messages.d1)} today · ${fmt.format(m.messages.d30)} in 30 days`} />
@@ -104,12 +103,19 @@ export default async function AdminPage() {
           <Panel title="Signups, last 14 days">
             <Spark data={m.signupsByDay} />
           </Panel>
-          <Panel title="Plans">
-            <Bars data={m.plans.map((p) => ({ key: `${p.plan}${p.status !== "active" ? ` (${p.status})` : ""}`, n: p.n }))} format={(k) => k.charAt(0).toUpperCase() + k.slice(1)} />
-          </Panel>
-          <Panel title="Included-model spend this month">
+          <Panel title="Breaking even (all time)">
             <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-              <Kv k="Model cost" v={usd.format(m.usage.costUsd)} />
+              <Kv k="Credit sold" v={usd.format(m.credit.soldUsd)} />
+              <Kv k="Used, at cost" v={usd.format(m.credit.usedUsd)} />
+              <Kv k="Sold minus used" v={usd.format(m.credit.soldUsd - m.credit.usedUsd)} />
+              <Kv k="Card fees passed on" v={usd.format(Math.max(0, m.credit.paidUsd - m.credit.soldUsd))} />
+              <Kv k="Starter credit" v={`${usd.format(m.credit.starterUsd)} an account`} />
+              {m.credit.demoUsd ? <Kv k="Demo credit" v={usd.format(m.credit.demoUsd)} /> : null}
+            </dl>
+          </Panel>
+          <Panel title="Used this month, at cost">
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+              <Kv k="Cost" v={usd.format(m.usage.costUsd)} />
               <Kv k="Included messages" v={fmt.format(m.usage.includedMessages)} />
               <Kv k="Tokens in / out" v={`${fmt.format(m.usage.tokensIn)} / ${fmt.format(m.usage.tokensOut)}`} />
               <Kv k="Searches" v={fmt.format(m.usage.searches)} />
@@ -182,7 +188,7 @@ export default async function AdminPage() {
   );
 }
 
-/** Channel rows on the waitlist plus waitlist sign-ups ("channel:whatsapp", "connector:strava", "plan:plus"), under one readable label each. */
+/** Channel rows on the waitlist plus waitlist sign-ups ("channel:whatsapp", "connector:strava"), under one readable label each. */
 function mergeWaitlists(channels: Breakdown, signups: Breakdown, label: { channel: (k: string) => string; connector: (k: string) => string }): Breakdown {
   const out = new Map<string, number>();
   const add = (key: string, n: number) => out.set(key, (out.get(key) ?? 0) + n);
@@ -190,7 +196,7 @@ function mergeWaitlists(channels: Breakdown, signups: Breakdown, label: { channe
   for (const w of signups) {
     const [kind, id] = w.key.includes(":") ? w.key.split(":", 2) : ["", w.key];
     add(
-      kind === "channel" ? `${label.channel(id)} (channel)` : kind === "connector" ? `${label.connector(id)} (app)` : kind === "plan" ? `${getPlan(id).name} (plan)` : w.key,
+      kind === "channel" ? `${label.channel(id)} (channel)` : kind === "connector" ? `${label.connector(id)} (app)` : kind === "plan" ? `${id.charAt(0).toUpperCase()}${id.slice(1)} plan (from before)` : w.key,
       w.n,
     );
   }

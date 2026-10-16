@@ -195,8 +195,6 @@ export default async function RecipePage({ params }: { params: Promise<{ slug: s
                     <BrandTile icon={channelIcon(c)} size={26} className={later ? "opacity-60 grayscale" : undefined} /> {c.name}
                     {later ? (
                       <span className="rounded-full bg-muted px-1.5 py-px text-[10px] font-bold">{availability === "waitlist" ? "Waitlist" : "Coming soon"}</span>
-                    ) : c.minPlan !== "free" ? (
-                      <span className="rounded-full bg-primary-soft px-1.5 py-px text-[10px] font-bold text-primary">{c.minPlan === "plus" ? "Plus" : "Pro"}</span>
                     ) : null}
                   </li>
                 );

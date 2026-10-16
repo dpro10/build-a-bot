@@ -2,8 +2,9 @@ import { getDb } from "@/lib/db";
 import { readTwilioForm, routeTwilio } from "@/lib/channels/twilio-inbound";
 import { loadBotAndOwner } from "@/lib/channels/inbound";
 import { recordUsage } from "@/lib/billing/usage";
+import { UNIT_PRICES } from "@/lib/billing/prices";
 
-/** Call ended: meter the minutes (plans include a monthly allowance). */
+/** Call ended: count its minutes, and charge them at Twilio's price (each started minute). */
 export async function POST(req: Request) {
   const { params, valid } = await readTwilioForm(req);
   if (!valid) return new Response("bad signature", { status: 403 });
@@ -14,6 +15,7 @@ export async function POST(req: Request) {
   const routed = await routeTwilio(db, "voice", botSide ?? "", ownerSide ?? "");
   if (!routed) return new Response("ok");
   const loaded = await loadBotAndOwner(db, routed.channel.botId);
-  if (loaded) await recordUsage(db, loaded.owner.id, { voiceSeconds: Number(params.CallDuration ?? 0) });
+  const seconds = Math.max(0, Number(params.CallDuration ?? 0) || 0);
+  if (loaded) await recordUsage(db, loaded.owner.id, { voiceSeconds: seconds, costMicros: Math.ceil(seconds / 60) * UNIT_PRICES.callMinute });
   return new Response("ok");
 }

@@ -1,7 +1,7 @@
 /**
  * Meeting notes end to end on a real (in-memory) Postgres with the demo brain and the
  * demo transcript: start → audio chunks → live transcript → finish → notes → tools,
- * plus the guards (meetings off, plan limits, devices, prompt injection, the Bridge).
+ * plus the guards (meetings off, out of credit, devices, prompt injection, the Bridge).
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
@@ -24,6 +24,7 @@ const { meetingAuth } = await import("@/lib/meetings/auth");
 const { readMeeting, searchMeetings, listMeetings } = await import("@/lib/tools/builtin/meetings");
 const { cleanSegments } = await import("@/lib/transcribe");
 const { recordUsage } = await import("@/lib/billing/usage");
+const { config } = await import("@/lib/env");
 const { completeJob } = await import("@/lib/bridge/jobs");
 const { demoMeetingNotes } = await import("@/lib/llm/demo");
 const { sha256 } = await import("@/lib/crypto");
@@ -80,8 +81,8 @@ async function say(bot: Bot, text: string, who: User = owner) {
   return runTurn({ db, bot: fresh, owner: who, conversation, channelKind: "web", message: { text, author: "owner" } });
 }
 
-async function newOwner(id: string, plan: "free" | "plus" | "pro" = "pro"): Promise<User> {
-  const [u] = await db.insert(schema.users).values({ id, email: `${id}@example.com`, emailVerifiedAt: new Date(), name: "Dana", timezone: "America/Chicago", plan }).returning();
+async function newOwner(id: string): Promise<User> {
+  const [u] = await db.insert(schema.users).values({ id, email: `${id}@example.com`, emailVerifiedAt: new Date(), name: "Dana", timezone: "America/Chicago" }).returning();
   return u;
 }
 
@@ -181,7 +182,7 @@ describe("meeting notes", () => {
     expect(sent).toHaveLength(0);
   });
 
-  it("refuses when meeting notes are off, the bot is busy, or the plan's minutes are used up", async () => {
+  it("refuses when meeting notes are off, the bot is busy, or there's no credit for notes that cost it", async () => {
     const off = await makeBot({ connectors: [] });
     const r1 = await startMeeting(db, { bot: off, owner, source: "desktop" });
     expect(!r1.ok && r1.code).toBe("meetings_off");
@@ -196,12 +197,20 @@ describe("meeting notes", () => {
     const c = await startMeeting(db, { bot, owner, source: "desktop", deviceId: "dev_a" });
     expect(c.ok).toBe(true);
 
-    const freeOwner = await newOwner("usr_free", "free");
-    const freeBot = await makeBot({ who: freeOwner });
-    await recordUsage(db, freeOwner.id, { meetingSeconds: 120 * 60 });
-    const r2 = await startMeeting(db, { bot: freeBot, owner: freeOwner, source: "desktop" });
-    expect(!r2.ok && r2.status).toBe(402);
-    expect(!r2.ok && r2.upgrade).toBe("plus");
+    // Out of credit: notes written by a real included model wait for credit (the demo brain costs nothing).
+    const broke = await newOwner("usr_broke");
+    const brokeBot = await makeBot({ who: broke });
+    await recordUsage(db, broke.id, { costMicros: 1_000_001 }); // the starter dollar, and then some
+    expect((await startMeeting(db, { bot: brokeBot, owner: broke, source: "desktop" })).ok).toBe(true); // demo brain: free
+    await db.update(schema.meetings).set({ status: "ready" }).where(eq(schema.meetings.botId, brokeBot.id));
+    config.tokenFactory.apiKey = "tf_test_key";
+    try {
+      const r2 = await startMeeting(db, { bot: brokeBot, owner: broke, source: "desktop" });
+      expect(r2).toMatchObject({ ok: false, status: 402, code: "no_credit" });
+      expect(!r2.ok && r2.error).toBe("You're out of credit. Add credit in Credit & usage, or switch me to your own AI key or subscription in Settings → Brain (that's free here).");
+    } finally {
+      config.tokenFactory.apiKey = undefined;
+    }
   });
 
   it("the desktop app uses its device token, only for its owner's bots", async () => {
@@ -313,7 +322,7 @@ describe("meeting notes", () => {
 });
 
 describe("consent, in-person meetings and retention", () => {
-  // Its own owner (and device), so the first group's owner stays under the plan's bot limit.
+  // Its own owner (and device), so the first group's owner stays under the fair-use bot limit.
   let owner2: User;
   const token2 = "bab_dev_test_token_456";
   beforeAll(async () => {

@@ -15,7 +15,6 @@ const { createBot } = await import("@/lib/bots/create");
 const { runTurn } = await import("@/lib/agent/run");
 const { ensureConversation } = await import("@/lib/channels/outbound");
 const { recordUsage } = await import("@/lib/billing/usage");
-const { PLANS } = await import("@/lib/billing/plans");
 import type { AgentEvent } from "@/lib/agent/run";
 import type { Bot, User } from "@/lib/db/schema";
 
@@ -53,7 +52,7 @@ const ownKey = { kind: "byok" as const, provider: "openai", model: "gpt-6.1-sol"
 beforeAll(async () => {
   await resetDbForTests();
   db = await getDb();
-  [owner] = await db.insert(schema.users).values({ id: "usr_fails", email: "fails@example.com", emailVerifiedAt: new Date(), timezone: "UTC", plan: "pro" }).returning();
+  [owner] = await db.insert(schema.users).values({ id: "usr_fails", email: "fails@example.com", emailVerifiedAt: new Date(), timezone: "UTC" }).returning();
 });
 
 afterEach(() => {
@@ -86,26 +85,40 @@ describe("a turn that can't be answered", () => {
     expect(notices).toEqual([]);
   });
 
-  it("the plan's monthly messages are used up: one reply, no notice", async () => {
+  it("out of credit: one reply, no notice", async () => {
     const bot = await makeBot("Chatty", { kind: "included", model: "nvidia/Nemotron-3_5-Lightning" });
-    const used = PLANS.pro.limits.includedMessages;
-    await recordUsage(db, owner.id, { messages: used, includedMessages: used });
+    await recordUsage(db, owner.id, { costMicros: 1_000_001 }); // the starter dollar, and then some
     const { res, done, notices } = await say(bot);
     expect(res.status).toBe("limited");
     expect(done).toMatchObject({ status: "limited", text: res.text });
     expect(notices).toEqual([]);
   });
 
-  it("the free brain is at today's limit for everyone: one reply, no notice", async () => {
+  it("out of credit, a routine says so once a day instead of every time it runs", async () => {
+    const bot = await makeBot("Routinely", { kind: "included", model: "nvidia/Nemotron-3_5-Lightning" });
+    const conversation = await ensureConversation(db, bot.id, "web", "owner");
+    const routine = () => runTurn({ db, bot, owner, conversation, channelKind: "web", message: null, directive: "Run your scheduled routine “Brief” now.", trigger: "routine" });
+    const first = await routine();
+    expect(first).toMatchObject({ status: "limited" });
+    expect(first.text).toMatch(/^You're out of credit\. /);
+    const second = await routine();
+    expect(second).toEqual({ status: "limited", text: "", messageId: null, approvals: [] });
+    const said = await db.select().from(schema.messages).where(eq(schema.messages.conversationId, conversation.id));
+    expect(said.filter((m) => m.author === "bot" && m.text.startsWith("You're out of credit."))).toHaveLength(1);
+    // The owner writing still gets an answer every time.
+    expect((await say(bot)).res.text).toMatch(/^You're out of credit\. /);
+  });
+
+  it("the open models we run are at today's limit for everyone: one reply, no notice", async () => {
     await resetDbForTests();
     db = await getDb();
-    [owner] = await db.insert(schema.users).values({ id: "usr_fails", email: "fails@example.com", emailVerifiedAt: new Date(), timezone: "UTC", plan: "pro" }).returning();
+    [owner] = await db.insert(schema.users).values({ id: "usr_fails", email: "fails@example.com", emailVerifiedAt: new Date(), timezone: "UTC" }).returning();
     process.env.INCLUDED_DAILY_LIMIT = "1";
     const bot = await makeBot("Busy", { kind: "included", model: "nvidia/Nemotron-3_5-Lightning" });
     expect((await say(bot)).res.status).toBe("ok");
     const { res, notices } = await say(bot);
     expect(res.status).toBe("limited");
-    expect(res.text).toMatch(/reached its daily limit/);
+    expect(res.text).toMatch(/have reached today's limit/);
     expect(notices).toEqual([]);
   });
 });

@@ -1,6 +1,5 @@
 "use client";
 import * as React from "react";
-import Link from "next/link";
 import { Plus } from "lucide-react";
 import type { ChannelKind } from "@/lib/channels/catalog";
 import { BrandTile } from "@/components/brand/icons";
@@ -8,13 +7,11 @@ import { channelIcon } from "@/components/catalog/channel-icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { channelDef, minPlanLabel } from "./model";
+import { channelDef } from "./model";
 import { WAITLIST_WHY, WaitlistJoin } from "./WaitlistJoin";
 
 export function AddChannelGrid({
   kinds,
-  planGates,
-  plansOnSale,
   availability,
   joined,
   ownerEmail,
@@ -22,10 +19,6 @@ export function AddChannelGrid({
   onJoin,
 }: {
   kinds: ChannelKind[];
-  /** Plan a channel needs when the owner's plan lacks it. */
-  planGates: Partial<Record<ChannelKind, string>>;
-  /** Paid plans can be bought here; otherwise a plan gate has nowhere to send people. */
-  plansOnSale: boolean;
   availability: Partial<Record<ChannelKind, boolean>>;
   joined: Set<ChannelKind>;
   ownerEmail: string | null;
@@ -40,8 +33,6 @@ export function AddChannelGrid({
         const def = channelDef(kind);
         const soon = def.availability === "soon" || (def.availability !== "waitlist" && !availability[kind]);
         const waitlist = def.availability === "waitlist";
-        const gate = planGates[kind];
-        const badge = gate ?? (soon ? minPlanLabel(def) : null);
         return (
           <li key={kind} id={kind} className="flex scroll-mt-28 flex-col gap-3 rounded-3xl border border-border bg-card p-4 transition hover:border-foreground/15">
             <div className="flex items-start gap-3">
@@ -49,7 +40,7 @@ export function AddChannelGrid({
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="font-semibold">{def.name}</span>
-                  {badge ? <Badge tone="accent" className="px-2 py-0 text-[11px]">{badge}</Badge> : null}
+                  {soon ? <Badge className="px-2 py-0 text-[11px]">Soon</Badge> : null}
                 </div>
                 <p className="text-[13px] text-muted-foreground">{def.tagline}</p>
               </div>
@@ -61,12 +52,6 @@ export function AddChannelGrid({
                 <WaitlistJoin name={def.name} joined={joined.has(kind)} ownerEmail={ownerEmail} onJoin={(email) => onJoin(kind, email)} compact />
               ) : soon ? (
                 <span className="text-sm font-medium text-muted-foreground">Coming soon</span>
-              ) : gate && !plansOnSale ? (
-                <span className="text-sm font-medium text-muted-foreground">Part of {gate}. Paid plans are coming soon.</span>
-              ) : gate ? (
-                <Button asChild variant="outline" size="sm">
-                  <Link href="/app/billing">See {gate}</Link>
-                </Button>
               ) : (
                 <Button
                   size="sm"

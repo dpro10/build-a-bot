@@ -23,7 +23,7 @@ async function buildBot(page: Page, name: string) {
 
   // Brain: the included model is preselected
   await expect(page.getByRole("heading", { name: "Choose its brain" })).toBeVisible();
-  await expect(page.getByRole("radio", { name: /Free open models/ })).toHaveAttribute("aria-checked", "true");
+  await expect(page.getByRole("radio", { name: /Open models we run/ })).toHaveAttribute("aria-checked", "true");
   await footer(page).getByRole("button", { name: /Continue/ }).click();
 
   // Apps: pick a job, then Gmail from the catalog

@@ -254,7 +254,7 @@
 
   const LABELS = {
     retry: "Try again",
-    upgrade: "Upgrade",
+    upgrade: "Add credit",
     pair: "Pair",
     settings: "Settings",
     "mic-settings": "Allow microphone",

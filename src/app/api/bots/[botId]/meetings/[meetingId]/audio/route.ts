@@ -84,6 +84,6 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string; meetingI
     ...(heard ? { heard } : { audio: body, mime }),
     silent: q.data.silent === "1",
   });
-  if (!res.ok) return apiError(res.status, res.error, { code: res.code, upgrade: res.upgrade });
+  if (!res.ok) return apiError(res.status, res.error, { code: res.code });
   return json({ segments: res.segments.map(segmentView), duplicate: Boolean(res.duplicate), warning: res.warning ?? null });
 }

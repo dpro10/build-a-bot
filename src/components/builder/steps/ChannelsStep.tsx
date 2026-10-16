@@ -5,7 +5,7 @@ import { BrandTile } from "@/components/brand/icons";
 import { channelIcon } from "@/components/catalog/channel-icon";
 import { Badge } from "@/components/ui/badge";
 import { FieldHint, Input, Label } from "@/components/ui/input";
-import { PLANS, planAllowsChannel, type PlanId } from "@/lib/billing/plans";
+import { UNIT_PRICES, formatMicros } from "@/lib/billing/prices";
 import { CHANNELS, channelAvailability, type ChannelDef, type ChannelKind, type LiveFlags } from "@/lib/channels/catalog";
 import { cn } from "@/lib/utils";
 import { isEmailLike, isPhoneLike } from "../state";
@@ -19,7 +19,6 @@ export function ChannelsStep({
   onPhone,
   email,
   onEmail,
-  plan,
   demo,
   live,
 }: {
@@ -30,7 +29,6 @@ export function ChannelsStep({
   onPhone: (v: string) => void;
   email: string;
   onEmail: (v: string) => void;
-  plan: PlanId;
   demo: boolean;
   live: LiveFlags;
 }) {
@@ -43,7 +41,13 @@ export function ChannelsStep({
   const toggle = (kind: ChannelKind) => onChannels(channels.includes(kind) ? channels.filter((c) => c !== kind) : [...channels, kind]);
 
   const simulated = (def: ChannelDef) => demo && def.requires && !live[def.requires];
-  const planBadge = (def: ChannelDef) => (!demo && !planAllowsChannel(PLANS[plan], def.kind) && def.availability !== "soon" && def.availability !== "waitlist" ? (def.minPlan === "pro" ? "Pro" : "Plus") : null);
+  // Texts and calls cost money (Twilio); everything else here is free.
+  const priceNote = (def: ChannelDef) =>
+    def.kind === "sms"
+      ? `Texts are paid from your credit, at cost: ${formatMicros(UNIT_PRICES.textIn)} for each one you send it, ${formatMicros(UNIT_PRICES.textOut)} for each reply.`
+      : def.kind === "voice"
+        ? `Calls are paid from your credit, at cost: ${formatMicros(UNIT_PRICES.callMinute)} a minute.`
+        : null;
 
   // Outside demo mode, a channel whose service isn't set up here waits with the ones coming later.
   const availability = (def: ChannelDef) => channelAvailability(def, demo, live);
@@ -58,21 +62,18 @@ export function ChannelsStep({
         {available.map((def) => {
           const always = def.kind === "web";
           const active = always || channels.includes(def.kind);
-          const badge = planBadge(def);
-          // Part of a paid plan nobody can buy yet: shown, but not picked.
-          const locked = Boolean(badge) && !live.stripe;
+          const price = priceNote(def);
           return (
             <button
               key={def.kind}
               type="button"
               aria-pressed={active}
-              disabled={always || locked}
+              disabled={always}
               onClick={() => toggle(def.kind)}
               className={cn(
                 "relative flex items-start gap-3 rounded-3xl border bg-card p-4 text-left transition",
                 active ? "border-primary ring-2 ring-primary/20" : "border-border hover:border-foreground/25",
-                (always || locked) && "cursor-default",
-                locked && "hover:border-border",
+                always && "cursor-default",
               )}
             >
               <BrandTile icon={channelIcon(def)} size={44} />
@@ -81,13 +82,12 @@ export function ChannelsStep({
                   <span className="font-display text-[17px] font-semibold">{def.name}</span>
                   {always ? <Badge tone="success">Always on</Badge> : null}
                   {def.kind === "telegram" ? <Badge tone="primary">Free · instant</Badge> : null}
-                  {badge ? <Badge tone="accent">{badge}</Badge> : null}
                   {simulated(def) && active ? <Badge tone="warning">Simulated in demo</Badge> : null}
                 </span>
                 <span className="block text-sm font-medium text-foreground/80">{def.tagline}</span>
                 <span className="mt-0.5 block text-[13px] leading-snug text-muted-foreground">{def.description}</span>
                 {def.note && active ? <span className="mt-1 block text-xs text-muted-foreground">{def.note}</span> : null}
-                {locked ? <span className="mt-1 block text-xs text-muted-foreground">Part of {badge}. Paid plans are coming soon.</span> : null}
+                {price ? <span className="mt-1 block text-xs text-muted-foreground">{price}</span> : null}
               </span>
               <span className={cn("flex size-6 shrink-0 items-center justify-center rounded-full border-2", active ? "border-primary bg-primary text-primary-foreground" : "border-input")} aria-hidden>
                 {active ? <Check className="size-3.5" strokeWidth={3} /> : null}

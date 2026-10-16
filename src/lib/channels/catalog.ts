@@ -32,7 +32,6 @@ export type ChannelDef = {
   icon: string;
   brand?: boolean;
   color: string;
-  minPlan: "free" | "plus" | "pro";
   availability: "available" | "beta" | "waitlist" | "soon";
   /** What we need from the owner in the builder. */
   needs: "none" | "phone" | "email";
@@ -51,7 +50,6 @@ export const CHANNELS: ChannelDef[] = [
     description: "Chat in your browser or add it to your home screen.",
     icon: "MessageCircle",
     color: "#7C5CFF",
-    minPlan: "free",
     availability: "available",
     needs: "none",
     style: "rich",
@@ -64,7 +62,6 @@ export const CHANNELS: ChannelDef[] = [
     description: "Talk out loud. It can also call you with your morning brief.",
     icon: "Phone",
     color: "#19B57A",
-    minPlan: "plus",
     availability: "available",
     needs: "phone",
     requires: "twilio",
@@ -79,7 +76,6 @@ export const CHANNELS: ChannelDef[] = [
     description: "Text it like a friend. Works on any phone.",
     icon: "MessageSquareText",
     color: "#0EA5E9",
-    minPlan: "plus",
     availability: "available",
     needs: "phone",
     requires: "twilio",
@@ -93,7 +89,6 @@ export const CHANNELS: ChannelDef[] = [
     description: "Email it or forward things to it. It replies from its own address.",
     icon: "Mail",
     color: "#F59E0B",
-    minPlan: "free",
     availability: "available",
     needs: "email",
     requires: "botEmail",
@@ -107,7 +102,6 @@ export const CHANNELS: ChannelDef[] = [
     icon: "telegram",
     brand: true,
     color: "#26A5E4",
-    minPlan: "free",
     availability: "available",
     needs: "none",
     style: "rich",
@@ -120,7 +114,6 @@ export const CHANNELS: ChannelDef[] = [
     icon: "discord",
     brand: true,
     color: "#5865F2",
-    minPlan: "free",
     availability: "available",
     needs: "none",
     requires: "discord",
@@ -134,7 +127,6 @@ export const CHANNELS: ChannelDef[] = [
     icon: "slack",
     brand: true,
     color: "#4A154B",
-    minPlan: "free",
     availability: "available",
     needs: "none",
     style: "rich",
@@ -147,7 +139,6 @@ export const CHANNELS: ChannelDef[] = [
     icon: "whatsapp",
     brand: true,
     color: "#25D366",
-    minPlan: "plus",
     availability: "waitlist",
     needs: "phone",
     style: "plain",
@@ -160,7 +151,6 @@ export const CHANNELS: ChannelDef[] = [
     icon: "imessage",
     brand: true,
     color: "#34C759",
-    minPlan: "plus",
     availability: "waitlist",
     needs: "phone",
     style: "plain",
@@ -172,7 +162,6 @@ export const CHANNELS: ChannelDef[] = [
     description: "Chat with it inside Teams.",
     icon: "Users",
     color: "#6264A7",
-    minPlan: "pro",
     availability: "soon",
     needs: "none",
     style: "rich",
@@ -185,7 +174,6 @@ export const CHANNELS: ChannelDef[] = [
     icon: "googlechat",
     brand: true,
     color: "#00AC47",
-    minPlan: "pro",
     availability: "soon",
     needs: "none",
     style: "rich",
@@ -198,7 +186,6 @@ export const CHANNELS: ChannelDef[] = [
     icon: "signal",
     brand: true,
     color: "#3A76F0",
-    minPlan: "plus",
     availability: "soon",
     needs: "phone",
     style: "plain",

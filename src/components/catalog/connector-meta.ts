@@ -18,7 +18,7 @@ export function isAvailable(def: ConnectorDef, comingSoon?: ReadonlySet<string>)
   return def.status !== "soon" && !comingSoon?.has(def.id);
 }
 
-/** Third-party apps that count toward a plan's app limit. */
+/** Third-party apps that count toward a bot's fair-use app limit. */
 export function countsTowardLimit(def: ConnectorDef): boolean {
   return !isBuiltin(def) && isAvailable(def);
 }

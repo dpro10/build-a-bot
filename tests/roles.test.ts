@@ -3,7 +3,7 @@
  *
  * - A role is what the bot is: it introduces itself as "an AI tutor", works the way the role
  *   says, and its first message asks for the basics instead of offering generic ideas.
- * - Each role has a featured recipe that fits the Free plan, and a bot made from one keeps the role.
+ * - Each role has a featured recipe (within the fair-use limits), and a bot made from one keeps the role.
  * - The owner can change the role, or go back to a general assistant, in Settings.
  */
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -26,7 +26,7 @@ const { buildStablePrompt, greetingDirective } = await import("@/lib/agent/promp
 const { ROLES, ROLE_BY_ID, roleBadge } = await import("@/lib/roles");
 const { FEATURED_RECIPES, findFeatured, recipeSchema, botToRecipe } = await import("@/lib/recipes");
 const { startersFor } = await import("@/lib/jobs");
-const { PLANS } = await import("@/lib/billing/plans");
+const { FAIR_USE } = await import("@/lib/billing/prices");
 const { getConnector } = await import("@/lib/connectors");
 const { countsTowardLimit } = await import("@/components/catalog/connector-meta");
 const { remember } = await import("@/lib/tools/builtin/memory");
@@ -61,7 +61,7 @@ const json = (method: string, url: string, body: unknown) => new Request(url, { 
 beforeAll(async () => {
   await resetDbForTests();
   db = await getDb();
-  [owner] = await db.insert(schema.users).values({ id: "usr_dana", email: "dana@example.com", name: "Dana", emailVerifiedAt: new Date(), timezone: "UTC", plan: "pro" }).returning();
+  [owner] = await db.insert(schema.users).values({ id: "usr_dana", email: "dana@example.com", name: "Dana", emailVerifiedAt: new Date(), timezone: "UTC" }).returning();
   session.user = owner;
 });
 
@@ -113,18 +113,17 @@ describe("what a role changes in the prompt", () => {
 });
 
 describe("ready-made recipes", () => {
-  it("every role has a featured recipe that fits the Free plan", () => {
-    const free = PLANS.free.limits;
+  it("every role has a featured recipe, within the fair-use limits", () => {
     for (const role of ROLES) {
       const recipe = findFeatured(role.recipe);
       expect(recipe?.role, role.id).toBe(role.id);
       expect(recipeSchema.safeParse(recipe).success, role.id).toBe(true);
-      expect(recipe!.routines?.length ?? 0, role.id).toBeLessThanOrEqual(free.routines);
+      expect(recipe!.routines?.length ?? 0, role.id).toBeLessThanOrEqual(FAIR_USE.routines);
       const thirdParty = recipe!.connectors.filter((id) => {
         const def = getConnector(id);
         return def && countsTowardLimit(def);
       });
-      expect(thirdParty.length, role.id).toBeLessThanOrEqual(free.connectors);
+      expect(thirdParty.length, role.id).toBeLessThanOrEqual(FAIR_USE.appsPerBot);
       expect(recipe!.connectors.every((id) => getConnector(id)), role.id).toBe(true);
     }
     // The landing page shows the first six: the tutor and the job applier lead.

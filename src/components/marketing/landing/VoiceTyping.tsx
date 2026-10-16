@@ -100,7 +100,7 @@ export function VoiceTyping({ desktopApp }: { desktopApp: boolean }) {
           <Link href="/app/voice" className="inline-flex items-center gap-1.5 font-semibold text-primary hover:underline">
             {desktopApp ? "Get the desktop app" : "See how it works"} <ArrowRight className="size-4" aria-hidden="true" />
           </Link>
-          <p className="text-sm text-muted-foreground">8,000 words a month free. Unlimited on Plus and Pro.</p>
+          <p className="text-sm text-muted-foreground">No word limits. Hearing you is free on your computer; the AI cleanup costs a fraction of a cent.</p>
         </div>
       </Container>
     </Section>

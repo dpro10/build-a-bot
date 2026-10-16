@@ -10,9 +10,9 @@ export class ApiError extends Error {
   ) {
     super(message);
   }
-  /** Plan upgrade the server suggested, if any ("plus" | "pro"). */
-  get upgrade(): string | undefined {
-    return typeof this.data.upgrade === "string" ? this.data.upgrade : undefined;
+  /** Why, when the server says ("no_credit": out of credit; "fair_use": over a fair-use limit). */
+  get code(): string | undefined {
+    return typeof this.data.code === "string" ? this.data.code : undefined;
   }
 }
 

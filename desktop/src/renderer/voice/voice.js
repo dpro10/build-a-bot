@@ -130,22 +130,20 @@
       heard.replaceChildren(document.createTextNode("It heard: "), Object.assign(document.createElement("strong"), { textContent: `“${s.last.heard}”` }));
     } else heard.hidden = true;
 
-    // Stats and plan.
+    // Stats, and this month's words (no limit: people pay for what they use, and hearing is free here).
     $("stat-week").textContent = n(s.stats.week);
     $("stat-saved").textContent = s.stats.saved >= 60 ? `${(s.stats.saved / 60).toFixed(1)} h` : `${s.stats.saved} min`;
     $("stat-wpm").textContent = s.stats.wpm ? String(s.stats.wpm) : "–";
-    const plan = $("plan");
-    plan.replaceChildren();
+    const usageLine = $("plan");
+    usageLine.replaceChildren();
     if (s.usage) {
-      if (s.usage.limit) {
-        plan.append(document.createTextNode(`${n(s.usage.words)} of ${n(s.usage.limit)} words this month on the Free plan. `));
-        const up = document.createElement("button");
-        up.type = "button";
-        up.className = "link";
-        up.textContent = "Unlimited with Plus";
-        up.addEventListener("click", () => api.open("upgrade"));
-        plan.append(up);
-      } else plan.textContent = `${n(s.usage.words)} words this month. Unlimited on your plan.`;
+      usageLine.append(document.createTextNode(`${n(s.usage.words)} words this month, with no limit. `));
+      const credit = document.createElement("button");
+      credit.type = "button";
+      credit.className = "link";
+      credit.textContent = "Credit & usage";
+      credit.addEventListener("click", () => api.open("upgrade"));
+      usageLine.append(credit);
     }
 
     renderShortcuts(s);

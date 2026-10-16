@@ -7,8 +7,7 @@ import { getOwnedBot, listSchedules } from "@/lib/data";
 import { ownerChannels } from "@/lib/channels/outbound";
 import { CHANNEL_BY_KIND, channelUsable, type ChannelKind } from "@/lib/channels/catalog";
 import { appKinds } from "@/lib/connectors";
-import { getPlan } from "@/lib/billing/plans";
-import { demoMode, live, paidPlansOpen } from "@/lib/env";
+import { demoMode, live } from "@/lib/env";
 import { joinList } from "@/lib/utils";
 import { RoutinesView } from "@/components/bot/routines/RoutinesView";
 import type { ScheduleView } from "@/components/bot/routines/schedule";
@@ -45,7 +44,6 @@ export default async function RoutinesPage({ params }: { params: Promise<{ botId
       .from(schema.connections)
       .where(and(eq(schema.connections.botId, botId), ne(schema.connections.status, "disabled"))),
   ]);
-  const plan = getPlan(user.plan);
   const timezone = safeTimeZone(user.timezone);
 
   // Same pick the scheduler makes for "auto" (src/lib/channels/outbound.ts → messageOwner).
@@ -97,8 +95,6 @@ export default async function RoutinesPage({ params }: { params: Promise<{ botId
           tzName={timeZoneLongName(timezone)}
           serverNow={new Date().toISOString()}
           initial={schedules}
-          plan={{ id: plan.id, name: plan.name, limit: plan.limits.routines }}
-          paidPlans={paidPlansOpen}
           deliverOptions={deliverOptions}
           autoHint={autoHint}
           apps={[...appKinds(connections.map((c) => c.connectorId))]}

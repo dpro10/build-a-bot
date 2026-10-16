@@ -182,7 +182,7 @@ export async function writeMeetingNotes(db: Db, meetingId: string): Promise<void
 
   let brain = await resolveBrain(db, bot);
   if (brain.kind === "bridge" && bot.brain.whenOffline === "included") {
-    // The owner opted in to the free brain while their computer is asleep.
+    // The owner opted in to an included model (paid from credit) while their computer is asleep.
     const { onlineDevice } = await import("@/lib/bridge/jobs");
     if (!(await onlineDevice(db, owner.id))) {
       brain = await resolveBrain(db, { ...bot, brain: { kind: "included", provider: "nebius", model: "nvidia/Nemotron-3_5-Lightning", effort: "low" } });
