@@ -455,6 +455,35 @@ test("a dictation doesn't wait long for an engine that's still loading; the next
   assert.equal(engineRuns().length, 1, "the same engine");
 });
 
+test("an engine left running by a run of the app that was force-quit is stopped; anything else with that id isn't", async (t) => {
+  const { local, make, logs } = await setup(t);
+  await local.install();
+  await local.transcribe(wav());
+  const orphan = local.child;
+  assert.ok(orphan?.pid);
+  await until(() => fs.existsSync(local.paths.pid));
+  // The app dies without stopping it.
+  local.child = null;
+  const gone = new Promise((r) => orphan.once("exit", r));
+  const next = make();
+  t.after(() => next.stop());
+  await next.transcribe(wav());
+  await gone;
+  assert.ok(logs.some((m) => /stopped an engine left running/.test(m)));
+  assert.equal(JSON.parse(fs.readFileSync(next.paths.pid, "utf8")).pid, next.child?.pid, "the new one is recorded");
+
+  // A process id that now belongs to another program is left alone.
+  const other = spawn(process.execPath, ["-e", "setTimeout(() => {}, 30000)"]);
+  t.after(() => other.kill());
+  await next.stop();
+  fs.writeFileSync(next.paths.pid, JSON.stringify({ pid: other.pid }));
+  const third = make();
+  t.after(() => third.stop());
+  await third.transcribe(wav());
+  assert.equal(other.exitCode, null);
+  assert.doesNotThrow(() => process.kill(/** @type {number} */ (other.pid), 0), "still running");
+});
+
 test("warm() starts it while the owner is still talking", async (t) => {
   const { local } = await setup(t);
   local.warm();

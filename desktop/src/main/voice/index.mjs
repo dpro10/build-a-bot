@@ -136,7 +136,13 @@ export function setupVoice(o) {
     if (localOff || !v.enabled || !account.device || v.onDevice === false || !local.supported() || local.isInstalled() || local.installing) return;
     if (!now && localTriedAt && Date.now() - localTriedAt < 30 * 60_000) return;
     localTriedAt = Date.now();
-    void local.install().catch(() => {});
+    // Just downloaded: load it now, so the first dictation doesn't wait for it.
+    void local
+      .install()
+      .then(() => {
+        if (onDevice()) local.warm();
+      })
+      .catch(() => {});
   }
 
   const voice = new VoiceTyping({
