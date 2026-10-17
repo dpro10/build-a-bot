@@ -97,6 +97,12 @@ export const config = {
      * can't stream, so it's off until TWILIO_MEDIA_STREAMS=1 (after upgrading the account).
      */
     mediaStreams: v("TWILIO_MEDIA_STREAMS") === "1" || v("TWILIO_MEDIA_STREAMS") === "true",
+    /**
+     * The number may text US phones: it's registered (A2P 10DLC for a local number, toll-free
+     * verification for a toll-free one). Until then carriers drop its texts, so texting stays off
+     * and phone codes come by call.
+     */
+    texting: v("TWILIO_TEXTING") === "1" || v("TWILIO_TEXTING") === "true",
   },
   email: {
     agentmailKey: v("AGENTMAIL_API_KEY"),
@@ -157,6 +163,8 @@ export const live = {
   composio: Boolean(config.composio.apiKey),
   telegramManaged: Boolean(config.telegram.managerToken && config.telegram.managerUsername && config.telegram.managerWebhookSecret),
   twilio: Boolean(config.twilio.accountSid && config.twilio.authToken && config.twilio.phoneNumber),
+  /** Texts: Twilio, and a number registered to text US phones (TWILIO_TEXTING). */
+  twilioTexting: Boolean(config.twilio.accountSid && config.twilio.authToken && config.twilio.phoneNumber && config.twilio.texting),
   /** Sign-in links by email (Resend). */
   email: Boolean(config.email.resendKey),
   /** Bots' own inboxes: the Email channel and the "Its own inbox" built-in. */
