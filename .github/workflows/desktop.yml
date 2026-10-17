@@ -140,6 +140,11 @@ jobs:
           $keys = @($env:AZURE_TENANT_ID, $env:AZURE_CLIENT_ID, $env:AZURE_CLIENT_SECRET, $env:AZURE_SIGNING_ENDPOINT, $env:AZURE_SIGNING_ACCOUNT, $env:AZURE_SIGNING_PROFILE, $env:AZURE_SIGNING_PUBLISHER)
           # (Counted: PowerShell would read a list of one empty value as "nothing missing".)
           $signed = @($keys | Where-Object { [string]::IsNullOrWhiteSpace($_) }).Count -eq 0
+          if ($signed -and $env:GITHUB_EVENT_NAME -eq "pull_request") {
+            # Signing only matters for what main publishes.
+            $signed = $false
+            "::notice::Pull requests build the Windows installer unsigned, for testing; main signs it."
+          }
           if ($signed) {
             $builderArgs += @(
               "-c.win.azureSignOptions.endpoint=$env:AZURE_SIGNING_ENDPOINT",
@@ -281,7 +286,11 @@ jobs:
       - name: Signing keys?
         id: keys
         run: |
-          if [ -n "$CSC_LINK" ] && [ -n "$CSC_KEY_PASSWORD" ] && [ -n "$APPLE_API_KEY_P8" ] && [ -n "$APPLE_API_KEY_ID" ] && [ -n "$APPLE_API_ISSUER" ]; then
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            # Signing and notarizing take minutes and only matter for what main publishes.
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Pull requests build the Mac app signed ad hoc, for testing; main signs it with the Developer ID."
+          elif [ -n "$CSC_LINK" ] && [ -n "$CSC_KEY_PASSWORD" ] && [ -n "$APPLE_API_KEY_P8" ] && [ -n "$APPLE_API_KEY_ID" ] && [ -n "$APPLE_API_ISSUER" ]; then
             echo "signed=true" >> "$GITHUB_OUTPUT"
           else
             echo "signed=false" >> "$GITHUB_OUTPUT"
@@ -301,6 +310,9 @@ jobs:
           else
             unset CSC_LINK CSC_KEY_PASSWORD
             export CSC_IDENTITY_AUTO_DISCOVERY=false
+            # electron-builder signs nothing in a pull request unless told to; an ad hoc signature
+            # uses no keys, so it's safe there.
+            export CSC_FOR_PULL_REQUEST=true
             # Ad hoc: Apple silicon runs nothing unsigned. Without a real identity there's no
             # hardened runtime (it would refuse Electron's libraries) and nothing to notarize.
             args+=("-c.mac.identity=-" "-c.mac.hardenedRuntime=false" "-c.mac.notarize=false")
