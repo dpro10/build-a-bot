@@ -39,9 +39,9 @@ function PhoneVerify({
   const [demoCode, setDemoCode] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState<"sms" | "call" | null>(null);
   const phoneId = React.useId();
-  // Calls first for the calls channel. Either works for both: a call also reaches numbers a new
-  // bot number can't text yet.
-  const order: ("sms" | "call")[] = kind === "voice" ? ["call", "sms"] : ["sms", "call"];
+  // Calls first for the calls channel. Either works for both, and only a call where the number
+  // can't text yet.
+  const order: ("sms" | "call")[] = !ctx.texting ? ["call"] : kind === "voice" ? ["call", "sms"] : ["sms", "call"];
 
   const sendCode = async (via: "sms" | "call", e?: React.FormEvent) => {
     e?.preventDefault();
@@ -110,7 +110,13 @@ function PhoneVerify({
             demoNote={sentVia === "call" ? "Demo mode: no call was made." : "Demo mode: no text was sent."}
             onVerify={verify}
             onResend={() => void sendCode(sentVia)}
-            other={sentVia === "sms" ? { label: "No text? Call me with it", onClick: () => void sendCode("call") } : { label: "Text it to me instead", onClick: () => void sendCode("sms") }}
+            other={
+              sentVia === "sms"
+                ? { label: "No text? Call me with it", onClick: () => void sendCode("call") }
+                : ctx.texting
+                  ? { label: "Text it to me instead", onClick: () => void sendCode("sms") }
+                  : undefined
+            }
             onChangeTarget={() => {
               setSentTo(null);
               setDemoCode(null);
