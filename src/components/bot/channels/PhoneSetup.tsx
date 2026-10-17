@@ -35,23 +35,28 @@ function PhoneVerify({
 }) {
   const [phone, setPhone] = React.useState(formatPhone(channel.pendingOwnerAddress ?? (onCancel ? channel.ownerAddress : null)) || "");
   const [sentTo, setSentTo] = React.useState<string | null>(null);
+  const [sentVia, setSentVia] = React.useState<"sms" | "call">("sms");
   const [demoCode, setDemoCode] = React.useState<string | null>(null);
-  const [busy, setBusy] = React.useState(false);
+  const [busy, setBusy] = React.useState<"sms" | "call" | null>(null);
   const phoneId = React.useId();
+  // Calls first for the calls channel. Either works for both: a call also reaches numbers a new
+  // bot number can't text yet.
+  const order: ("sms" | "call")[] = kind === "voice" ? ["call", "sms"] : ["sms", "call"];
 
-  const sendCode = async (e?: React.FormEvent) => {
+  const sendCode = async (via: "sms" | "call", e?: React.FormEvent) => {
     e?.preventDefault();
     if (phone.replace(/\D/g, "").length < 10) {
       toast.error("Enter your full mobile number, with area code.");
       return;
     }
-    setBusy(true);
-    const data = await ctx.run(kind, "send_code", { phone });
-    setBusy(false);
+    setBusy(via);
+    const data = await ctx.run(kind, "send_code", { phone, via });
+    setBusy(null);
     if (!data) return;
     setSentTo(phone);
+    setSentVia(via);
     setDemoCode(str(data.demoCode));
-    if (data.sent) toast.success("Code sent. It can take a few seconds to arrive.");
+    if (data.sent) toast.success(via === "call" ? "Calling you now. Pick up to hear your code." : "Code sent. It can take a few seconds to arrive.");
   };
 
   const verify = async (code: string) => {
@@ -69,10 +74,10 @@ function PhoneVerify({
         <Step
           n={1}
           state={sentTo ? "done" : "current"}
-          title={sentTo ? `Code sent to ${formatPhone(sentTo) || sentTo}` : "Verify your mobile number"}
+          title={sentTo ? (sentVia === "call" ? `Calling ${formatPhone(sentTo) || sentTo} with your code` : `Code sent to ${formatPhone(sentTo) || sentTo}`) : "Verify your mobile number"}
           hint={sentTo ? undefined : `Only this number can give ${ctx.botName} commands. US and Canada numbers to start.`}
         >
-          <form onSubmit={sendCode} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <form onSubmit={(e) => void sendCode(order[0], e)} className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor={phoneId} className="text-[13px] text-muted-foreground">
                 Your mobile number
@@ -88,9 +93,19 @@ function PhoneVerify({
                 className="h-11 sm:w-60"
               />
             </div>
-            <Button type="submit" loading={busy} className="h-11 shrink-0">
-              <MessageSquareText /> Text me a code
-            </Button>
+            {order.map((via, i) => (
+              <Button
+                key={via}
+                type={i === 0 ? "submit" : "button"}
+                variant={i === 0 ? undefined : "outline"}
+                loading={busy === via}
+                disabled={busy !== null && busy !== via}
+                onClick={i === 0 ? undefined : () => void sendCode(via)}
+                className="h-11 shrink-0"
+              >
+                {via === "call" ? <Phone /> : <MessageSquareText />} {via === "call" ? "Call me with a code" : "Text me a code"}
+              </Button>
+            ))}
             {onCancel ? (
               <Button type="button" variant="ghost" className="h-11" onClick={onCancel}>
                 Keep my number
@@ -101,9 +116,10 @@ function PhoneVerify({
         <Step n={2} state={sentTo ? "current" : "upcoming"} title="Enter the 6-digit code" last>
           <VerifyCodeForm
             demoCode={demoCode}
-            demoNote="Demo mode: no text was sent."
+            demoNote={sentVia === "call" ? "Demo mode: no call was made." : "Demo mode: no text was sent."}
             onVerify={verify}
-            onResend={() => void sendCode()}
+            onResend={() => void sendCode(sentVia)}
+            other={sentVia === "sms" ? { label: "No text? Call me with it", onClick: () => void sendCode("call") } : { label: "Text it to me instead", onClick: () => void sendCode("sms") }}
             onChangeTarget={() => {
               setSentTo(null);
               setDemoCode(null);

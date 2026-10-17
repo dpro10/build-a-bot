@@ -1,0 +1,50 @@
+# A real call on the live site (scripts/live-call.mjs): a browser presses a new bot's Call button
+# and asks a question out loud; on the voice server NVIDIA Parakeet hears it, Nemotron answers and
+# Magpie speaks. Runs after each voice deploy (voice.yml), and by hand: Actions → Live call → Run
+# workflow. The run's summary has what was said and how long the answer took; the screenshots and
+# every call event are in its artifact.
+name: Live call
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_url:
+        description: The site to call through (default the APP_URL variable, else https://build-a-bot.site)
+        type: string
+        required: false
+        default: ""
+  workflow_call:
+    inputs:
+      app_url:
+        type: string
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  call:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Call
+        env:
+          APP_URL: ${{ inputs.app_url || vars.APP_URL || 'https://build-a-bot.site' }}
+        run: node scripts/live-call.mjs "$APP_URL" live-call
+      - name: Screenshots and events
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-call
+          path: live-call/
+          if-no-files-found: ignore
