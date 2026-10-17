@@ -2,7 +2,7 @@
 import { eq, sql } from "drizzle-orm";
 import { schema, type Db } from "@/lib/db";
 
-export async function rateLimit(db: Db, key: string, limit: number, windowSeconds: number): Promise<{ ok: boolean; remaining: number }> {
+export async function rateLimit(db: Db, key: string, limit: number, windowSeconds: number): Promise<{ ok: boolean; remaining: number; resetAt: Date }> {
   const now = new Date();
   const windowStart = new Date(Math.floor(now.getTime() / (windowSeconds * 1000)) * windowSeconds * 1000);
   const [row] = await db
@@ -17,7 +17,7 @@ export async function rateLimit(db: Db, key: string, limit: number, windowSecond
     })
     .returning({ count: schema.rateLimits.count });
   const count = row?.count ?? 1;
-  return { ok: count <= limit, remaining: Math.max(0, limit - count) };
+  return { ok: count <= limit, remaining: Math.max(0, limit - count), resetAt: new Date(windowStart.getTime() + windowSeconds * 1000) };
 }
 
 /** Takes back one use of a key, for something that didn't happen after all (a code the provider refused to send). */
