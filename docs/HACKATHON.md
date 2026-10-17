@@ -27,7 +27,7 @@ Diego (2026-10-15): "im in the nvidia x nebius hackathon and the more we create 
 ## Diego's decisions
 
 1. **Make the repository public, with a license.** It's required. Suggested: Apache 2.0, the license NVIDIA's NeMo-Speech.cpp uses (it includes a patent grant). Before going public:
-   - The full history was scanned on 2026-10-16 for keys and tokens: none. The only key-shaped strings are test placeholders like `sk-test-not-a-real-key-1234567890`.
+   - The full history was scanned for keys and tokens on 2026-10-16, and again on 2026-10-17: none. The only key-shaped strings are test placeholders like `sk-test-not-a-real-key-1234567890`.
    - Diego's email is in the commit history as the author, as with any public repository.
    - Anyone could then run their own copy. The brand and the hosted service stay his; the license covers the code.
 2. **Speech costs nothing now** (2026-10-16): the desktop app hears voice typing and meetings on the computer with NVIDIA Parakeet, so neither needs a speech server. Both are in the app only, like Wispr Flow and Granola: the website doesn't listen or record. A Together AI key or the Nebius endpoint is only a fallback now, for computers where Parakeet can't run.
