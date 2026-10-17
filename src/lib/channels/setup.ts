@@ -18,7 +18,7 @@ import { startSlackInstall } from "./slack-app";
 import { codeCallTwiml, placeCall, sendSms } from "./twilio";
 import { sendEmailRaw } from "./email";
 import { connectTelegramToken, startManagedTelegram } from "./telegram-setup";
-import { rateLimit } from "@/lib/safety/ratelimit";
+import { rateLimit, refundRateLimit } from "@/lib/safety/ratelimit";
 
 export type SetupResult = { ok: true; data?: Record<string, unknown> } | { ok: false; error: string; status?: number; code?: string };
 
@@ -109,6 +109,12 @@ async function codeLimit(db: Db, owner: User, destination: string, reallySent: b
   if (!(await rateLimit(db, `code:owner:${owner.id}`, reallySent ? 5 : 20, 3600)).ok) return tooMany();
   if (reallySent && !(await rateLimit(db, `code:dest:${destination}`, 3, 3600)).ok) return tooMany("Too many codes to that address. Try again in a bit.");
   return null;
+}
+
+/** A code that never went out (the provider refused it) doesn't count against anyone's limits. */
+async function refundCodeLimit(db: Db, owner: User, destination: string, ip: string | undefined): Promise<void> {
+  const keys = [`code:owner:${owner.id}`, `code:dest:${destination}`, ...(ip ? [`code:ip:${ip}`] : [])];
+  await Promise.all(keys.map((key) => refundRateLimit(db, key)));
 }
 
 export async function channelAction(
@@ -233,8 +239,13 @@ export async function channelAction(
         if (live.twilio) {
           // A new number can't text US phones until it's registered (A2P 10DLC, or toll-free
           // verification), which takes days; a call reading the code works from the start.
-          if (via === "call") await placeCall(config.twilio.phoneNumber!, phone, codeCallTwiml(bot.name, code));
-          else await sendSms(config.twilio.phoneNumber!, phone, `Your ${bot.name} verification code is ${code}. Reply STOP to opt out.`);
+          try {
+            if (via === "call") await placeCall(config.twilio.phoneNumber!, phone, codeCallTwiml(bot.name, code));
+            else await sendSms(config.twilio.phoneNumber!, phone, `Your ${bot.name} verification code is ${code}. Reply STOP to opt out.`);
+          } catch (err) {
+            await refundCodeLimit(db, owner, phone, meta.ip);
+            throw err;
+          }
           return { ok: true, data: { sent: true, via } };
         }
         if (demoMode) return { ok: true, data: { sent: false, demoCode: code, via } };
@@ -274,13 +285,18 @@ export async function channelAction(
         if (limited) return limited;
         const code = await saveCode(db, owner, bot, channel, "email", "em", { email });
         if (live.botEmail) {
-          await sendEmailRaw({
-            from: botAddress,
-            fromName: `${bot.name} (AI assistant)`,
-            to: email,
-            subject: `Your ${bot.name} code: ${code}`,
-            text: `Hi! Enter ${code} in the app to let ${bot.name} email you and read what you forward.\n\nIf you didn't ask for this, ignore it.`,
-          });
+          try {
+            await sendEmailRaw({
+              from: botAddress,
+              fromName: `${bot.name} (AI assistant)`,
+              to: email,
+              subject: `Your ${bot.name} code: ${code}`,
+              text: `Hi! Enter ${code} in the app to let ${bot.name} email you and read what you forward.\n\nIf you didn't ask for this, ignore it.`,
+            });
+          } catch (err) {
+            await refundCodeLimit(db, owner, email, meta.ip);
+            throw err;
+          }
           return { ok: true, data: { sent: true, botAddress } };
         }
         if (demoMode) return { ok: true, data: { sent: false, demoCode: code, botAddress } };
