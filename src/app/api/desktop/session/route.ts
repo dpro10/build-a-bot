@@ -3,7 +3,7 @@ import { schema } from "@/lib/db";
 import { apiError, json } from "@/lib/api";
 import { authDevice } from "@/lib/bridge/auth";
 import { getCredit } from "@/lib/billing/credit";
-import { appUrl, config, demoMode, demoSpeech } from "@/lib/env";
+import { appUrl, available, config, demoMode, demoSpeech } from "@/lib/env";
 import { CHUNK_MS, MEETINGS_CONNECTOR, meetingNotesAvailable } from "@/lib/meetings";
 import { dictationUsage, speechToTextAvailable, voiceEditAvailable, voicePolishAvailable } from "@/lib/dictation";
 import { transcriptionAvailable, transcriptionSetup } from "@/lib/transcribe";
@@ -78,6 +78,8 @@ export async function GET(req: Request) {
       local: true,
       usage: await dictationUsage(db, owner),
     },
+    /** "Give my bot a folder": this server keeps files (its Library is set up). */
+    library: { available: available("library") },
     appUrl: appUrl(),
     demo: demoMode,
   });

@@ -96,6 +96,34 @@
         ? `On. ${v.hint}, and your words are typed where your cursor is.`
         : "Hold a key in any app and talk. Your words are typed where your cursor is, cleaned up, spelled your way.";
     $("voice-open").textContent = v && v.enabled ? "Voice typing settings" : "Set up voice typing";
+    // "Give my bot a folder".
+    const lib = s.library;
+    $("library-card").hidden = !(lib && lib.available && s.bots.length);
+    if (lib && lib.available && s.bots.length) {
+      const choose = $("library-choose");
+      const select = $("library-bot");
+      if (lib.folder) {
+        $("library-line").textContent = lib.status;
+        $("library-hint").textContent = `${lib.note ? `${lib.note}. ` : ""}New and changed files go to ${lib.botName ?? "your bot"}'s Library by themselves. Nothing else on this computer is read.`;
+        choose.textContent = "Choose another folder";
+        $("library-stop").hidden = false;
+        select.hidden = true;
+      } else {
+        const first = s.bots.find((b) => b.id === lib.botId) ?? s.bots[0];
+        $("library-line").textContent = `Give ${s.bots.length > 1 ? "a bot" : first.name} a folder, like your class files. Its PDFs, Word files, slides, text and photos go to the bot's Library and stay in step.`;
+        $("library-hint").textContent = "Only that folder is read. Nothing else on this computer.";
+        choose.textContent = "Choose a folder";
+        $("library-stop").hidden = true;
+        select.hidden = s.bots.length < 2;
+        if (s.bots.length > 1 && !select.dataset.filled) {
+          select.replaceChildren(...s.bots.map((b) => Object.assign(document.createElement("option"), { value: b.id, textContent: b.name })));
+          select.value = first.id;
+          select.dataset.filled = "1";
+        }
+      }
+      choose.onclick = async () => render(await api.chooseFolder(lib.folder ? lib.botId : select.hidden ? s.bots[0].id : select.value));
+      $("library-stop").onclick = async () => render(await api.stopFolder());
+    }
     // The Bridge: bots on the owner's own Claude or ChatGPT plan think here.
     const b = s.bridge;
     $("bridge-card").hidden = !(b && b.show);

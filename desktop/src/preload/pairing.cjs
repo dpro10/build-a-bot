@@ -14,6 +14,9 @@ contextBridge.exposeInMainWorld(
     chooseBot: (botId) => ipcRenderer.invoke("pairing:choose-bot", String(botId ?? "")),
     refresh: () => ipcRenderer.invoke("pairing:refresh"),
     unpair: () => ipcRenderer.invoke("pairing:unpair"),
+    /** "Give my bot a folder": pick the folder (for this bot), or stop syncing it. */
+    chooseFolder: (botId) => ipcRenderer.invoke("pairing:library-choose", botId ? String(botId) : null),
+    stopFolder: () => ipcRenderer.invoke("pairing:library-stop"),
     /** "Think with my Claude or ChatGPT plan here" on or off. */
     setBridge: (on) => ipcRenderer.invoke("pairing:bridge", on === true),
     open: (what, botId) => (OPEN.has(what) ? ipcRenderer.invoke("pairing:open", { what, botId: botId ? String(botId) : null }) : Promise.resolve(false)),

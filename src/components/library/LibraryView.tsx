@@ -491,12 +491,19 @@ function EmptyLibrary({ botId, bot, canAdd, onPick }: { botId: string; bot: { na
           </li>
         ))}
       </ul>
-      <p className="flex items-center justify-center gap-1.5 text-center text-sm text-muted-foreground">
-        <Sparkles className="size-4 text-primary" aria-hidden /> You can also attach files in the{" "}
-        <Link href={`/app/bots/${botId}`} className="font-medium text-primary hover:underline">
-          chat
-        </Link>{" "}
-        or send them to {bot.name} on Telegram.
+      <p className="mx-auto flex max-w-xl items-start justify-center gap-1.5 text-center text-sm text-muted-foreground">
+        <Sparkles className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
+        <span>
+          You can also attach files in the{" "}
+          <Link href={`/app/bots/${botId}`} className="font-medium text-primary hover:underline">
+            chat
+          </Link>{" "}
+          or send them to {bot.name} on Telegram. With the{" "}
+          <Link href="/download" className="font-medium text-primary hover:underline">
+            desktop app
+          </Link>
+          , give it a whole folder that stays in step.
+        </span>
       </p>
     </div>
   );
