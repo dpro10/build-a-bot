@@ -4,12 +4,15 @@ import { handleInbound, loadBotAndOwner, seenBefore } from "@/lib/channels/inbou
 import { readTwilioForm, routeTwilio, twiml } from "@/lib/channels/twilio-inbound";
 import { recordUsage } from "@/lib/billing/usage";
 import { UNIT_PRICES } from "@/lib/billing/prices";
+import { live } from "@/lib/env";
 
 export const maxDuration = 300;
 
 export async function POST(req: Request) {
   const { params, valid } = await readTwilioForm(req);
   if (!valid) return new Response("bad signature", { status: 403 });
+  // Until the number may text US phones, a reply would be dropped by the carrier: stay silent.
+  if (!live.twilioTexting) return twiml("");
   const db = await getDb();
   if (await seenBefore(db, "twilio-sms", params.MessageSid)) return twiml("");
   const routed = await routeTwilio(db, "sms", params.To ?? "", params.From ?? "", params.Body ?? "");

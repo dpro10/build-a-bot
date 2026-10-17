@@ -12,6 +12,8 @@ export type ChannelCtx = {
   botEmail: string | null;
   /** The shared "Add to Slack" app is set up here: Slack is one click. */
   slackOneClick: boolean;
+  /** Texts work here (demo mode, or a number registered to text); otherwise phone codes come by call. */
+  texting: boolean;
   /** Runs a channel setup action; resolves null after showing the error. */
   run: (kind: ChannelKind, action: string, payload?: Record<string, unknown>) => Promise<ActionData | null>;
   refresh: () => Promise<void>;

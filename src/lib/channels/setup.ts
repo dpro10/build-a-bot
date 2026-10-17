@@ -244,6 +244,7 @@ export async function channelAction(
         // US & Canada only for now (also what keeps premium-rate texts and calls out).
         if (!isUsOrCanadaPhone(phone)) return { ok: false, error: "Texts and calls work with US and Canada numbers for now." };
         const via = payload.via === "call" ? "call" : "sms";
+        if (via === "sms" && live.twilio && !live.twilioTexting) return { ok: false, error: "Texts aren't set up here yet. Use Call me with a code." };
         const limited = await codeLimit(db, owner, phone, live.twilio, meta.ip);
         if (limited) return limited;
         const code = await saveCode(db, owner, bot, channel, "phone", "ph", { phone });
@@ -270,8 +271,9 @@ export async function channelAction(
         for (const k of ["sms", "voice"] as const) {
           const ch = k === kind ? channel : (await db.select().from(schema.channels).where(and(eq(schema.channels.botId, bot.id), eq(schema.channels.kind, k))).limit(1))[0];
           if (!ch) continue;
-          // The other one gets the verified number too, but stays off if the owner turned it off.
-          const status = k !== kind && (ch.status === "disabled" || ch.status === "waitlist") ? ch.status : "active";
+          // The other one gets the verified number too, but stays off if the owner turned it off, or
+          // if it can't work here yet (texting before the number is registered).
+          const status = k !== kind && (ch.status === "disabled" || ch.status === "waitlist" || !channelUsable(CHANNEL_BY_KIND[k], demoMode, live)) ? ch.status : "active";
           await db
             .update(schema.channels)
             .set({ ownerAddress: phone, ownerVerifiedAt: new Date(), status, address: config.twilio.phoneNumber ?? ch.address, config: { ...ch.config, simulated: !live.twilio } })

@@ -78,7 +78,7 @@ export const CHANNELS: ChannelDef[] = [
     color: "#0EA5E9",
     availability: "available",
     needs: "phone",
-    requires: "twilio",
+    requires: "twilioTexting",
     style: "plain",
     note: "US & Canada numbers to start.",
   },

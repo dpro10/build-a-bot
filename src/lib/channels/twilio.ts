@@ -62,7 +62,7 @@ export function codeCallTwiml(botName: string, code: string): string {
 
 export const smsAdapter: ChannelAdapter = {
   isLive() {
-    return live.twilio;
+    return live.twilioTexting;
   },
   async send({ channel }, msg) {
     const from = botPhoneNumber(channel);
