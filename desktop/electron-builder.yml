@@ -29,6 +29,10 @@ mac:
   # The .zip is what updates download.
   target: [dmg, zip]
   artifactName: "Build-a-bot-${version}-mac-${arch}.${ext}"
+  # Universal build: these are the same file in the Apple silicon and Intel halves (the keyboard
+  # hook ships one prebuilt file per chip and loads the right one; the helper is already built for
+  # both), so they're kept as they are instead of being merged.
+  x64ArchFiles: "{Contents/Resources/app.asar.unpacked/node_modules/uiohook-napi/prebuilds/**,Contents/Resources/bin/bab-audio-helper}"
   icon: build/icon.png
   hardenedRuntime: true
   gatekeeperAssess: false
