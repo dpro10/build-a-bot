@@ -4,6 +4,8 @@ Run your Build-a-bot on the AI subscription you already pay for — **Claude Pro
 
 Your login never leaves your machine. The Bridge drives your own, unmodified `claude` or `codex` CLI, signed in by you; Build-a-bot never sees, stores or relays your credentials.
 
+**Easiest: the desktop app.** It has the Bridge built in (no terminal, no Node.js): download it from [build-a-bot.site/download](https://build-a-bot.site/download), pair it, and bots on your plan think there. This terminal version is for Linux, servers, or if you'd rather. Both run the same code (`runner.mjs`).
+
 ## Requirements
 
 - Node.js 18.17+ (22+ recommended)
@@ -16,8 +18,8 @@ Your login never leaves your machine. The Bridge drives your own, unmodified `cl
 2. On your computer:
 
    ```bash
-   npx -y https://build-a-bot.site/downloads/build-a-bot-bridge-0.1.0.tgz pair ABCD-1234
-   npx -y https://build-a-bot.site/downloads/build-a-bot-bridge-0.1.0.tgz   # keep this running (Ctrl+C to stop)
+   npx -y https://build-a-bot.site/downloads/build-a-bot-bridge-0.2.0.tgz pair ABCD-1234
+   npx -y https://build-a-bot.site/downloads/build-a-bot-bridge-0.2.0.tgz   # keep this running (Ctrl+C to stop)
    ```
 
    The app shows these commands with the right address and version; copy them from there. The site serves its own copy of the Bridge, so nothing comes from npm. Self-hosting? Add `--server https://your-domain` to `pair`.
@@ -36,6 +38,8 @@ Other commands: `status` (am I paired and online?), `doctor` (checks your CLIs a
 4. Sends the answer back; your bot delivers it on the right channel.
 
 If the CLI reports any built-in tool or tries to run a shell command, the Bridge refuses the turn.
+
+The CLI runs as its own program, never through a shell (on Windows too: a `.exe` directly, or the program an npm `.cmd` shim points at), so every argument arrives exactly as written.
 
 ## What it never does
 

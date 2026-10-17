@@ -22,7 +22,7 @@
 
     <main id="signed-out" class="view" hidden>
       <h1>Pair this computer</h1>
-      <p>Your bot can notice when a call starts and offer to take notes. To connect this computer, open Build-a-bot, go to <strong>Bridge (your computer)</strong>, and type the code you see under Desktop app.</p>
+      <p>Your bots can think here with your own Claude or ChatGPT plan, take notes in your calls, and type what you say. To connect this computer, open Build-a-bot, go to <strong>Bridge (your computer)</strong>, and type the code you get there.</p>
       <p id="signed-out-reason" class="notice" role="status" hidden></p>
       <button type="button" class="link" id="open-pair-page">Open that page</button>
 
@@ -43,6 +43,7 @@
         <li>It asks before it takes notes, every time.</li>
         <li>It stays at the bottom of your screen the whole time it listens. Stop is one click.</li>
         <li>NVIDIA Parakeet turns the call into text on this computer: the audio never leaves it.</li>
+        <li>Your Claude or ChatGPT sign-in never leaves this computer, and your bots get none of your files.</li>
       </ul>
     </main>
 
@@ -68,6 +69,16 @@
         <h2 id="voice-heading">Voice typing</h2>
         <p id="voice-line">Hold a key in any app and talk. Your words are typed where your cursor is, cleaned up, spelled your way.</p>
         <button type="button" class="secondary" id="voice-open">Set up voice typing</button>
+      </section>
+
+      <section class="voice-card" id="bridge-card" aria-labelledby="bridge-heading" hidden>
+        <h2 id="bridge-heading">Your Claude or ChatGPT plan</h2>
+        <p id="bridge-line"></p>
+        <p id="bridge-hint" class="hint"></p>
+        <div class="row">
+          <button type="button" class="secondary" id="bridge-get" hidden></button>
+          <button type="button" class="secondary" id="bridge-toggle"></button>
+        </div>
       </section>
 
       <p id="storage" class="hint"></p>

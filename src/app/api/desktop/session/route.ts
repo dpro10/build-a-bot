@@ -42,6 +42,8 @@ export async function GET(req: Request) {
       meetingsOn: meetingsOn(b),
       /** Its notes are written by an included model, so taking them needs credit (its owner's own AI is free here). */
       notesNeedCredit: needsCredit(b),
+      /** It thinks with its owner's own plan, on their computer (the app's Bridge): with Claude Code or Codex. */
+      subscription: b.brain.kind === "subscription" ? (b.brain.provider === "codex" ? "codex" : "claude") : null,
     })),
     meetings: {
       /**

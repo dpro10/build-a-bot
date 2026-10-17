@@ -15,6 +15,9 @@ const { createBot } = await import("@/lib/bots/create");
 const { runTurn } = await import("@/lib/agent/run");
 const { computerFor } = await import("@/lib/bridge/jobs");
 const { ensureConversation } = await import("@/lib/channels/outbound");
+const { sha256 } = await import("@/lib/crypto");
+const { POST: heartbeat } = await import("@/app/api/bridge/heartbeat/route");
+const { GET: desktopSession } = await import("@/app/api/desktop/session/route");
 import type { AgentEvent } from "@/lib/agent/run";
 import type { Bot, User } from "@/lib/db/schema";
 
@@ -103,11 +106,52 @@ describe("a bot on your Claude or ChatGPT plan", () => {
     expect(res.text).toMatch(/^Pair your computer to start: open Bridge \(your computer\) at https?:\/\/\S+\/app\/bridge\.$/);
   });
 
-  it("the meeting-notes desktop app alone doesn't count as a paired computer", async () => {
+  it("the desktop app without Claude Code or Codex (or with its Bridge off) doesn't count as a paired computer", async () => {
     const owner = await person("usr_desktop_only");
     const bot = await planBot(owner);
     await device(owner, "dev_desktop", { platform: "desktop-darwin-arm64", seenAgoMs: 0 });
     expect(await computerFor(db, bot)).toBe("unpaired");
+  });
+
+  it("the desktop app that found Claude Code thinks there: online while it checks in, asleep when it's closed", async () => {
+    const owner = await person("usr_desktop_bridge");
+    const bot = await planBot(owner);
+    await device(owner, "dev_app", { platform: "desktop-darwin-arm64", seenAgoMs: 0, claude: "2.1.302 (Claude Code)" });
+    expect(await computerFor(db, bot)).toBe("online");
+    await db.update(schema.bridgeDevices).set({ lastSeenAt: new Date(Date.now() - 60 * 60 * 1000) }).where(eq(schema.bridgeDevices.id, "dev_app"));
+    expect(await computerFor(db, bot)).toBe("asleep");
+    const { notices } = await greet(bot, owner);
+    expect(notices[0].text).toMatch(/asleep/);
+  });
+
+  it("the heartbeat says how many turns are waiting, so a desktop app that isn't listening yet starts to", async () => {
+    const owner = await person("usr_heartbeat");
+    const bot = await planBot(owner);
+    const token = `bab_dev_${"h".repeat(40)}`;
+    await db.insert(schema.bridgeDevices).values({ id: "dev_hb", ownerId: owner.id, name: "Dana's PC", tokenHash: sha256(token), platform: "desktop-win32-x64", clis: {} });
+    const beat = async (clis: Record<string, string | null>) => {
+      const res = await heartbeat(new Request("http://localhost/api/bridge/heartbeat", { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ clis }) }));
+      expect(res.status).toBe(200);
+      return (await res.json()) as { queued: number };
+    };
+    expect((await beat({ claude: "2.1.302 (Claude Code)", codex: null })).queued).toBe(0);
+    expect(await computerFor(db, bot)).toBe("online");
+    await greet(bot, owner);
+    expect((await beat({ claude: "2.1.302 (Claude Code)", codex: null })).queued).toBe(1);
+    // Its Bridge turned off: it says it has none, and the bot no longer counts on it.
+    await beat({ claude: null, codex: null });
+    expect(await computerFor(db, bot)).toBe("unpaired");
+  });
+
+  it("the desktop app's session says which bots think with their owner's plan", async () => {
+    const owner = await person("usr_session");
+    const bot = await planBot(owner);
+    const token = `bab_dev_${"s".repeat(40)}`;
+    await db.insert(schema.bridgeDevices).values({ id: "dev_sess", ownerId: owner.id, name: "Dana's Mac", tokenHash: sha256(token), platform: "desktop-darwin-arm64", clis: {} });
+    const res = await desktopSession(new Request("http://localhost/api/desktop/session", { headers: { authorization: `Bearer ${token}` } }));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { bots: Array<{ id: string; subscription: string | null }> };
+    expect(body.bots.find((b) => b.id === bot.id)?.subscription).toBe("claude");
   });
 
   it("a paired computer that's off is asleep; once it checks in, it's online", async () => {

@@ -50,6 +50,11 @@ export default async function BridgePage() {
     .filter((d) => !d.revokedAt && isDesktopApp(d.platform))
     .map((d) => ({ id: d.id, name: d.name, online: Boolean(d.lastSeenAt && now - d.lastSeenAt.getTime() < DEVICE_ONLINE_MS) }));
   const desktop = desktopApp();
+  // The desktop app has the Bridge built in: once it can be had, it's the way to set this up.
+  const appFirst = desktop.status !== "soon";
+  const desktopSection = (
+    <DesktopAppSection app={desktop} devices={desktopApps} bot={star ? { id: star.id, name: star.name, avatar: star.avatar, color: star.color } : undefined} />
+  );
 
   return (
     <PageContainer>
@@ -58,13 +63,13 @@ export default async function BridgePage() {
         description="Let your bots think with the Claude or ChatGPT plan you already pay for — through your own Claude Code or Codex, on your own computer."
         actions={
           // Not promoted while it's coming soon (its section below says so).
-          desktop.status === "soon" ? undefined : (
+          appFirst ? (
             <Button asChild variant="soft" size="sm">
               <a href="#desktop">
-                Meeting notes app <ArrowDown />
+                The desktop app <ArrowDown />
               </a>
             </Button>
-          )
+          ) : undefined
         }
       />
 
@@ -86,7 +91,7 @@ export default async function BridgePage() {
               <div className="flex items-center justify-center gap-3 sm:gap-5">
                 <Node
                   label="The Bridge"
-                  sub="a small helper app"
+                  sub={appFirst ? "built into the desktop app" : "a small helper app"}
                   icon={
                     <span className="flex size-[60px] items-center justify-center rounded-[22px] bg-foreground text-background shadow-lift">
                       <Laptop className="size-7" aria-hidden />
@@ -129,13 +134,12 @@ export default async function BridgePage() {
         subscriptionBots={subscriptionBots}
         allBots={allBots}
         serverNow={now}
-        prerequisites={<Prerequisites />}
+        prerequisites={<Prerequisites terminal={!appFirst} />}
         startCommand={bridgeCli()}
+        appSetup={appFirst ? desktopSection : undefined}
       />
 
-      <div className="mt-12">
-        <DesktopAppSection app={desktop} devices={desktopApps} bot={star ? { id: star.id, name: star.name, avatar: star.avatar, color: star.color } : undefined} />
-      </div>
+      {appFirst ? null : <div className="mt-12">{desktopSection}</div>}
     </PageContainer>
   );
 }
@@ -176,21 +180,24 @@ function Assurance({ icon, title, children }: { icon: React.ReactNode; title: st
   );
 }
 
-function Prerequisites() {
+/** What thinking on your computer needs. `terminal`: the terminal Bridge (Node.js too). */
+function Prerequisites({ terminal }: { terminal: boolean }) {
   return (
     <div className="rounded-3xl border border-border bg-card p-5 shadow-soft sm:p-6">
-      <h2 className="font-display text-lg font-semibold">Before you start</h2>
+      <h2 className="font-display text-lg font-semibold">{terminal ? "Before you start" : "What your computer needs"}</h2>
       <ul className="mt-4 flex flex-col gap-5 text-sm">
-        <li className="flex gap-3">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-success-soft font-mono text-[11px] font-bold text-success">JS</span>
-          <div>
-            <div className="font-semibold">Node.js 18.17 or newer</div>
-            <p className="text-muted-foreground">
-              Check with <code className="rounded bg-muted px-1 py-0.5 font-mono text-[12px] text-foreground">node -v</code>.{" "}
-              <ExtLink href="https://nodejs.org">Get Node.js</ExtLink>
-            </p>
-          </div>
-        </li>
+        {terminal ? (
+          <li className="flex gap-3">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-success-soft font-mono text-[11px] font-bold text-success">JS</span>
+            <div>
+              <div className="font-semibold">Node.js 18.17 or newer</div>
+              <p className="text-muted-foreground">
+                Check with <code className="rounded bg-muted px-1 py-0.5 font-mono text-[12px] text-foreground">node -v</code>.{" "}
+                <ExtLink href="https://nodejs.org">Get Node.js</ExtLink>
+              </p>
+            </div>
+          </li>
+        ) : null}
         <li className="flex gap-3">
           <BrandTile icon={CLAUDE.icon} size={36} variant="soft" />
           <div>
@@ -217,7 +224,9 @@ function Prerequisites() {
           </span>
           <div>
             <div className="font-semibold">A computer that&apos;s awake</div>
-            <p className="text-muted-foreground">Your bots think there while it&apos;s on and the Bridge is running.</p>
+            <p className="text-muted-foreground">
+              Your bots think there while it&apos;s on and {terminal ? "the Bridge is running" : "the desktop app is open (it can start when you log in)"}.
+            </p>
           </div>
         </li>
       </ul>

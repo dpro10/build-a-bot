@@ -41,13 +41,25 @@ export async function onlineDevice(db: Db, ownerId: string) {
   return devices.find((d) => Boolean(d.clis?.claude || d.clis?.codex)) ?? null;
 }
 
-/** Has the owner paired the Bridge on a computer? (The desktop app pairs too, but only takes meeting notes.) */
+/**
+ * Has the owner paired a computer that thinks for their bots? The terminal Bridge always does; the
+ * desktop app does once it has found Claude Code or Codex (while its Bridge is on, it says which).
+ */
 export async function bridgePaired(db: Db, ownerId: string): Promise<boolean> {
   const devices = await db
-    .select({ platform: schema.bridgeDevices.platform })
+    .select({ platform: schema.bridgeDevices.platform, clis: schema.bridgeDevices.clis })
     .from(schema.bridgeDevices)
     .where(and(eq(schema.bridgeDevices.ownerId, ownerId), isNull(schema.bridgeDevices.revokedAt)));
-  return devices.some((d) => !d.platform?.startsWith("desktop-"));
+  return devices.some((d) => !d.platform?.startsWith("desktop-") || Boolean(d.clis?.claude || d.clis?.codex));
+}
+
+/** How many turns wait for one of the owner's computers (not expired). */
+export async function queuedTurns(db: Db, ownerId: string): Promise<number> {
+  const [row] = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(schema.bridgeJobs)
+    .where(and(eq(schema.bridgeJobs.ownerId, ownerId), eq(schema.bridgeJobs.status, "queued"), gt(schema.bridgeJobs.expiresAt, new Date())));
+  return Number(row?.n ?? 0);
 }
 
 /** Where a subscription brain's computer stands: online to think, paired but asleep, or never paired. */

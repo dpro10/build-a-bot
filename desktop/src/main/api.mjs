@@ -47,7 +47,7 @@ export function createApi(o) {
 
   /**
    * @param {string} method @param {string} route
-   * @param {{ json?: any, body?: Uint8Array, contentType?: string, auth?: boolean, server?: string, timeoutMs?: number }} [opts]
+   * @param {{ json?: any, body?: Uint8Array, contentType?: string, auth?: boolean, server?: string, timeoutMs?: number, signal?: AbortSignal }} [opts]
    */
   async function call(method, route, opts = {}) {
     const paired = o.server();
@@ -72,6 +72,7 @@ export function createApi(o) {
       body = opts.body;
     }
     let res;
+    const timeout = AbortSignal.timeout(opts.timeoutMs ?? 30_000);
     try {
       res = await o.fetch(`${server}${route}`, {
         method,
@@ -80,7 +81,7 @@ export function createApi(o) {
         redirect: "error",
         credentials: "omit",
         cache: "no-store",
-        signal: AbortSignal.timeout(opts.timeoutMs ?? 30_000),
+        signal: opts.signal ? AbortSignal.any([opts.signal, timeout]) : timeout,
       });
     } catch (err) {
       throw new ApiError(0, "Can't reach Build-a-bot", "network", { cause: String(/** @type {any} */ (err)?.message ?? err) });
@@ -295,6 +296,26 @@ export function createApi(o) {
     },
     deleteDictionaryEntry(id) {
       return json("DELETE", `/api/voice/dictionary/${encodeURIComponent(id)}`);
+    },
+
+    // The Bridge (bridge/): bots on the owner's own Claude or ChatGPT plan think here ---------
+
+    /**
+     * Which CLIs this computer has (version lines, or null): a bot can think here while one is
+     * reported. The answer says how many turns are waiting (`queued`, from newer servers).
+     * @param {{ claude: string | null, codex: string | null }} clis
+     */
+    bridgeHeartbeat(clis) {
+      return json("POST", "/api/bridge/heartbeat", { json: { clis } });
+    },
+    /** The next turn to think about (waits up to 25 s on the server), or null. */
+    async bridgeJob({ signal } = {}) {
+      const data = await json("GET", "/api/bridge/jobs?wait=25", { timeoutMs: 40_000, signal });
+      return data?.job ?? null;
+    },
+    /** @param {string} jobId @param {{ ok: boolean, text?: string, error?: string, costUsd?: number, model?: string }} result */
+    bridgeResult(jobId, result) {
+      return json("POST", `/api/bridge/jobs/${encodeURIComponent(jobId)}/result`, { json: result, timeoutMs: 30_000 });
     },
   };
 }

@@ -55,15 +55,17 @@ export function BridgeLive({
   serverNow,
   prerequisites,
   startCommand,
+  appSetup,
 }: {
   initialDevices: DeviceView[];
   subscriptionBots: SubscriptionBot[];
   allBots: PlainBot[];
   serverNow: number;
   prerequisites: React.ReactNode;
-  /** How the Bridge is started on this server (src/lib/bridge/cli.ts). */
   /** How this server tells owners to start the Bridge (src/lib/bridge/cli.ts). */
   startCommand: string;
+  /** The desktop app (download and pairing), when it can be had: then it leads, and the terminal is the other way. */
+  appSetup?: React.ReactNode;
 }) {
   const router = useRouter();
   const [devices, setDevices] = React.useState(initialDevices);
@@ -94,7 +96,7 @@ export function BridgeLive({
     setPairing(null);
     toast.success(`${fresh.name} is paired!`, {
       description: isDesktopApp(fresh.platform)
-        ? "Your bot will pop up there when a call starts, and ask before it takes notes."
+        ? "Bots on your plan think there once it finds Claude Code or Codex, and your bot asks before it takes notes in a call."
         : "Now start the Bridge on it so your bots can think there.",
     });
     router.refresh();
@@ -146,7 +148,7 @@ export function BridgeLive({
       await api(`/api/bridge/devices/${device.id}`, { method: "DELETE" });
       toast(`${device.name} is unpaired.`, {
         description: isDesktopApp(device.platform)
-          ? "The desktop app there stops taking notes right away."
+          ? "The desktop app there stops thinking for your bots and taking notes right away."
           : `On that computer, run \`${startCommand} unpair\` to remove its saved key too.`,
       });
       router.refresh();
@@ -157,101 +159,143 @@ export function BridgeLive({
   };
 
   const onlineWith = (cli: "claude" | "codex") => devices.some((d) => d.online && d.clis[cli]);
-  // The desktop app (meeting notes) pairs here too, but only the Bridge thinks for subscription bots.
-  const bridgeDevices = devices.filter((d) => !isDesktopApp(d.platform));
+  // Computers that think for subscription bots: the terminal Bridge, and the desktop app once it has found Claude Code or Codex.
+  const bridgeDevices = devices.filter((d) => !isDesktopApp(d.platform) || Boolean(d.clis.claude || d.clis.codex));
   const anyOnline = bridgeDevices.some((d) => d.online);
   const hasDevices = devices.length > 0;
 
-  const setup = (
+  const pointBot = (
+    <>
+      <p className="text-sm text-muted-foreground">
+        Open a bot&apos;s <span className="font-medium text-foreground">Settings → Brain</span> and choose{" "}
+        <span className="font-medium text-foreground">Your Claude</span> or <span className="font-medium text-foreground">Your ChatGPT</span>.
+      </p>
+      {allBots.length ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {allBots.slice(0, 6).map((b) => (
+            <Link
+              key={b.id}
+              href={`/app/bots/${b.id}/settings`}
+              className="inline-flex items-center gap-2 rounded-full border border-border bg-card py-1 pr-3 pl-1 text-sm font-medium shadow-soft transition hover:border-primary/40"
+            >
+              <Avatar avatar={b.avatar} color={b.color} size={26} animated={false} />
+              {b.name}
+              <ArrowRight className="size-3.5 text-muted-foreground" aria-hidden />
+            </Link>
+          ))}
+        </div>
+      ) : null}
+    </>
+  );
+
+  const terminalSteps = (
+    <ol className="flex flex-col gap-6">
+      <Step n={1} title="Get a pairing code" done={Boolean(justPaired)}>
+        {pairing && pairingLive ? (
+          <div className="animate-fade-up rounded-3xl border border-primary/30 bg-primary-soft/50 p-4 sm:p-5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="text-xs font-bold tracking-wide text-primary uppercase">Your pairing code</div>
+              <div
+                className={cn(
+                  "inline-flex items-center gap-1 text-xs font-semibold tabular-nums",
+                  pairing.expiresAt - now < 120_000 ? "text-warning" : "text-muted-foreground",
+                )}
+              >
+                <Timer className="size-3.5" aria-hidden /> Expires in {clock(pairing.expiresAt - now)}
+              </div>
+            </div>
+            <div className="mt-1 font-mono text-[34px] leading-tight font-bold tracking-[0.14em] sm:text-5xl">
+              <span aria-hidden>{pairing.code}</span>
+              <span className="sr-only">{pairing.code.split("").join(" ")}</span>
+            </div>
+            <p className="mt-3 mb-2 text-sm">Run this on the computer you want to pair:</p>
+            <CommandBlock command={pairing.command} />
+            <p className="mt-3 flex items-center gap-2 text-sm text-muted-foreground" role="status">
+              <LoaderCircle className="size-4 shrink-0 animate-spin text-primary" aria-hidden />
+              Waiting for your computer… this page updates by itself.
+            </p>
+          </div>
+        ) : (
+          <div className="flex flex-col items-start gap-3">
+            {pairing ? (
+              <p className="text-sm text-warning">That code expired. Codes last 15 minutes and work once.</p>
+            ) : justPaired ? (
+              <p className="inline-flex items-center gap-2 rounded-full bg-success-soft px-3 py-1 text-sm font-semibold text-success">
+                <PartyPopper className="size-4" aria-hidden /> Paired! Now start the Bridge (step 2).
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground">It works once and expires after 15 minutes, so get it when you&apos;re at your computer.</p>
+            )}
+            <Button onClick={getCode} loading={requesting} size="lg">
+              {!requesting ? pairing ? <RefreshCw /> : <KeyRound /> : null}
+              {pairing ? "Get a new code" : justPaired ? "Pair another computer" : "Get a pairing code"}
+            </Button>
+          </div>
+        )}
+      </Step>
+      <Step n={2} title="Start the Bridge" next={Boolean(justPaired)} last={Boolean(appSetup)}>
+        <CommandBlock command={startCommand} />
+        <p className="mt-2 text-sm text-muted-foreground">
+          Leave that window open. Your bots can think on this computer whenever it&apos;s running. Press Ctrl+C to stop it.
+        </p>
+      </Step>
+      {appSetup ? null : (
+        <Step n={3} title="Point a bot at your subscription" last>
+          {pointBot}
+        </Step>
+      )}
+    </ol>
+  );
+
+  const handyCommands = (
+    <details className="group mt-6 rounded-2xl border border-border bg-card">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold [&::-webkit-details-marker]:hidden">
+        Handy commands
+        <Plus className="size-4 text-muted-foreground transition group-open:rotate-45" aria-hidden />
+      </summary>
+      <div className="flex flex-col gap-3 px-4 pb-4">
+        <HandyCommand command={`${startCommand} status`} text="Is this computer paired, and which server is it talking to?" />
+        <HandyCommand command={`${startCommand} doctor`} text="Checks Node, Claude Code and Codex, with tips to fix what's missing." />
+        <HandyCommand command={`${startCommand} unpair`} text="Forgets this computer's key. Revoke it below too." />
+      </div>
+    </details>
+  );
+
+  const setup = appSetup ? (
+    <section aria-label="Set it up" className="flex flex-col gap-6">
+      {appSetup}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
+        <div className="flex min-w-0 flex-col gap-6 lg:col-span-3">
+          <div className="rounded-3xl border border-border bg-card p-5 shadow-soft sm:p-6">
+            <h2 className="font-display text-lg font-semibold">Then point a bot at your plan</h2>
+            <div className="mt-2">{pointBot}</div>
+          </div>
+          <details className="group rounded-3xl border border-border bg-card shadow-soft">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 [&::-webkit-details-marker]:hidden sm:px-6">
+              <span>
+                <span className="block font-semibold">Prefer the terminal?</span>
+                <span className="block text-sm text-muted-foreground">Run the Bridge without the app, on Linux or a server. Needs Node.js 18.17 or newer.</span>
+              </span>
+              <Plus className="size-4 shrink-0 text-muted-foreground transition group-open:rotate-45" aria-hidden />
+            </summary>
+            <div className="px-5 pb-5 sm:px-6">
+              {terminalSteps}
+              {handyCommands}
+            </div>
+          </details>
+        </div>
+        <aside className="lg:col-span-2">{prerequisites}</aside>
+      </div>
+    </section>
+  ) : (
     <section aria-labelledby="setup-title" className="grid grid-cols-1 gap-6 lg:grid-cols-5">
       <div className="lg:col-span-3">
         <h2 id="setup-title" className="font-display text-xl font-semibold">
           {returning ? "Pair another computer" : "Set it up"}
         </h2>
         <p className="mt-0.5 mb-5 text-sm text-muted-foreground">About two minutes. You&apos;ll copy two commands into your computer&apos;s terminal.</p>
-        <ol className="flex flex-col gap-6">
-          <Step n={1} title="Get a pairing code" done={Boolean(justPaired)}>
-            {pairing && pairingLive ? (
-              <div className="animate-fade-up rounded-3xl border border-primary/30 bg-primary-soft/50 p-4 sm:p-5">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="text-xs font-bold tracking-wide text-primary uppercase">Your pairing code</div>
-                  <div
-                    className={cn(
-                      "inline-flex items-center gap-1 text-xs font-semibold tabular-nums",
-                      pairing.expiresAt - now < 120_000 ? "text-warning" : "text-muted-foreground",
-                    )}
-                  >
-                    <Timer className="size-3.5" aria-hidden /> Expires in {clock(pairing.expiresAt - now)}
-                  </div>
-                </div>
-                <div className="mt-1 font-mono text-[34px] leading-tight font-bold tracking-[0.14em] sm:text-5xl">
-                  <span aria-hidden>{pairing.code}</span>
-                  <span className="sr-only">{pairing.code.split("").join(" ")}</span>
-                </div>
-                <p className="mt-3 mb-2 text-sm">Run this on the computer you want to pair:</p>
-                <CommandBlock command={pairing.command} />
-                <p className="mt-3 flex items-center gap-2 text-sm text-muted-foreground" role="status">
-                  <LoaderCircle className="size-4 shrink-0 animate-spin text-primary" aria-hidden />
-                  Waiting for your computer… this page updates by itself.
-                </p>
-              </div>
-            ) : (
-              <div className="flex flex-col items-start gap-3">
-                {pairing ? (
-                  <p className="text-sm text-warning">That code expired. Codes last 15 minutes and work once.</p>
-                ) : justPaired ? (
-                  <p className="inline-flex items-center gap-2 rounded-full bg-success-soft px-3 py-1 text-sm font-semibold text-success">
-                    <PartyPopper className="size-4" aria-hidden /> Paired! Now start the Bridge (step 2).
-                  </p>
-                ) : (
-                  <p className="text-sm text-muted-foreground">It works once and expires after 15 minutes, so get it when you&apos;re at your computer.</p>
-                )}
-                <Button onClick={getCode} loading={requesting} size="lg">
-                  {!requesting ? pairing ? <RefreshCw /> : <KeyRound /> : null}
-                  {pairing ? "Get a new code" : justPaired ? "Pair another computer" : "Get a pairing code"}
-                </Button>
-              </div>
-            )}
-          </Step>
-          <Step n={2} title="Start the Bridge" next={Boolean(justPaired)}>
-            <CommandBlock command={startCommand} />
-            <p className="mt-2 text-sm text-muted-foreground">
-              Leave that window open. Your bots can think on this computer whenever it&apos;s running. Press Ctrl+C to stop it.
-            </p>
-          </Step>
-          <Step n={3} title="Point a bot at your subscription" last>
-            <p className="text-sm text-muted-foreground">
-              Open a bot&apos;s <span className="font-medium text-foreground">Settings → Brain</span> and choose{" "}
-              <span className="font-medium text-foreground">Your Claude</span> or <span className="font-medium text-foreground">Your ChatGPT</span>.
-            </p>
-            {allBots.length ? (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {allBots.slice(0, 6).map((b) => (
-                  <Link
-                    key={b.id}
-                    href={`/app/bots/${b.id}/settings`}
-                    className="inline-flex items-center gap-2 rounded-full border border-border bg-card py-1 pr-3 pl-1 text-sm font-medium shadow-soft transition hover:border-primary/40"
-                  >
-                    <Avatar avatar={b.avatar} color={b.color} size={26} animated={false} />
-                    {b.name}
-                    <ArrowRight className="size-3.5 text-muted-foreground" aria-hidden />
-                  </Link>
-                ))}
-              </div>
-            ) : null}
-          </Step>
-        </ol>
-        <details className="group mt-6 rounded-2xl border border-border bg-card">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold [&::-webkit-details-marker]:hidden">
-            Handy commands
-            <Plus className="size-4 text-muted-foreground transition group-open:rotate-45" aria-hidden />
-          </summary>
-          <div className="flex flex-col gap-3 px-4 pb-4">
-            <HandyCommand command={`${startCommand} status`} text="Is this computer paired, and which server is it talking to?" />
-            <HandyCommand command={`${startCommand} doctor`} text="Checks Node, Claude Code and Codex, with tips to fix what's missing." />
-            <HandyCommand command={`${startCommand} unpair`} text="Forgets this computer's key. Revoke it below too." />
-          </div>
-        </details>
+        {terminalSteps}
+        {handyCommands}
       </div>
       <aside className="lg:col-span-2">{prerequisites}</aside>
     </section>
@@ -269,8 +313,8 @@ export function BridgeLive({
               ? anyOnline
                 ? "Your subscription bots think on whichever one is online."
                 : bridgeDevices.length
-                  ? "None are online right now. Start the Bridge on one to wake your bots."
-                  : "The desktop app takes meeting notes. To use your own Claude or ChatGPT, pair a computer with the Bridge too."
+                  ? "None are online right now. Open the desktop app (or start the Bridge) on one to wake your bots."
+                  : "None has Claude Code or Codex yet. Install one and sign in, and the desktop app starts thinking there."
               : "Computers you pair show up here."}
           </p>
         </div>
@@ -380,7 +424,7 @@ export function BridgeLive({
             <DialogTitle>Unpair {revoking?.name}?</DialogTitle>
             <DialogDescription>
               {revoking && isDesktopApp(revoking.platform)
-                ? "Your bots won't take meeting notes on this computer anymore. Its saved key stops working right away, so pairing again needs a new code."
+                ? "Your bots won't think, take meeting notes or type for you on this computer anymore. Its saved key stops working right away, so pairing again needs a new code."
                 : "Your bots won't think on this computer anymore. Its saved key stops working right away, so pairing again needs a new code."}
             </DialogDescription>
           </DialogHeader>
@@ -442,6 +486,7 @@ function HandyCommand({ command, text }: { command: string; text: string }) {
 }
 
 function DeviceRow({ device, now, fresh, onRevoke }: { device: DeviceView; now: number; fresh: boolean; onRevoke: () => void }) {
+  const desktop = isDesktopApp(device.platform);
   const os = device.platform?.replace(/^desktop-/, "") ?? "";
   const Icon = os.startsWith("win") || os.startsWith("linux") ? Monitor : Laptop;
   const paired = new Date(device.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -469,12 +514,15 @@ function DeviceRow({ device, now, fresh, onRevoke }: { device: DeviceView; now: 
           {`${device.platformLabel} · paired ${paired}`}
         </div>
         <div className="mt-2 flex flex-wrap gap-1.5">
-          {isDesktopApp(device.platform) ? (
+          {desktop ? (
             <span className="inline-flex items-center gap-1 rounded-full bg-primary-soft px-2.5 py-0.5 text-xs font-medium text-primary">
-              <AudioLines className="size-3" aria-hidden /> Desktop app (meeting notes)
+              <AudioLines className="size-3" aria-hidden /> Desktop app
             </span>
           ) : null}
-          {(isDesktopApp(device.platform) ? [] : (["claude", "codex"] as const)).map((cli) => {
+          {desktop && !device.clis.claude && !device.clis.codex ? (
+            <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">No Claude Code or Codex yet</span>
+          ) : null}
+          {(desktop ? (["claude", "codex"] as const).filter((cli) => device.clis[cli]) : (["claude", "codex"] as const)).map((cli) => {
             const version = cliVersion(device.clis[cli]);
             return (
               <span

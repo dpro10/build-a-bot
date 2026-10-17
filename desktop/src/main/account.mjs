@@ -8,7 +8,11 @@ import os from "node:os";
 import { ApiError } from "./api.mjs";
 import { normalizeServer } from "./store.mjs";
 
-/** @typedef {{ id: string, name: string, avatar: string, color: string, paused: boolean, meetingsOn: boolean, notesNeedCredit?: boolean }} SessionBot */
+/**
+ * `subscription`: the bot thinks with its owner's own plan, on their computer (the Bridge): with
+ * Claude Code ("claude") or Codex ("codex"). Older servers don't say.
+ * @typedef {{ id: string, name: string, avatar: string, color: string, paused: boolean, meetingsOn: boolean, notesNeedCredit?: boolean, subscription?: 'claude' | 'codex' | null }} SessionBot
+ */
 /**
  * `meetings.local`: the server takes the lines this computer heard (NVIDIA Parakeet), which is how
  * notes are taken; `meetings.available`: it also turns a piece's audio into text itself.
