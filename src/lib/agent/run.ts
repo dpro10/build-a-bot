@@ -356,7 +356,9 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
     }
     if (!calls.length) {
       // A small model sometimes says it's making flashcards or a quiz without calling the tool.
-      const nudge = nudged ? null : studyNudge(input.message?.author === "owner" ? input.message.text : null, toolset, state);
+      // Not when it's asking them something (which file? how many?): that's theirs to answer first.
+      const asking = /\?\s*(\**\s*)?$/.test(withoutAppNotes(stepText));
+      const nudge = nudged || asking ? null : studyNudge(input.message?.author === "owner" ? input.message.text : null, toolset, state);
       if (nudge) {
         nudged = true;
         transcript.push({ role: "assistant", content: stepText || "…" });
