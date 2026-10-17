@@ -228,7 +228,7 @@ CI does it (`.github/workflows/desktop.yml`, on every change to `desktop/`):
 | Mac | `MAC_CERTIFICATE_P12` (the Developer ID Application certificate with its private key, exported as .p12, base64), `MAC_CERTIFICATE_PASSWORD`, `APPLE_API_KEY_P8` (the App Store Connect API key's .p8 text), `APPLE_API_KEY_ID`, `APPLE_API_ISSUER` | |
 | Windows | `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` (an app registration with the *Artifact Signing Certificate Profile Signer* role on the certificate profile) | `AZURE_SIGNING_ENDPOINT` (the account's region endpoint, like `https://eus.codesigning.azure.net`), `AZURE_SIGNING_ACCOUNT`, `AZURE_SIGNING_PROFILE`, `AZURE_SIGNING_PUBLISHER` (the name on the certificate, exactly) |
 
-The step-by-step is in `docs/DEPLOY.md` §9. A platform whose keys are missing still builds, unsigned, and isn't published as a release.
+The step-by-step is in `docs/DEPLOY.md` §9. On a Mac that has the Developer ID certificate in its Keychain, `bash scripts/set-mac-signing-secrets.sh <issuer ID>` sets the Mac's five secrets. A platform whose keys are missing still builds, unsigned, and isn't published as a release.
 
 By hand, on each OS:
 
