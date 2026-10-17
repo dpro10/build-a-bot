@@ -572,7 +572,7 @@ Diego: "I really want this phone call with your agents to be able to work… Loo
 **What's built (Claude; details in `voice/README.md`):**
 - **The voice server** (`voice/`), one VM:
   - NVIDIA NeMo-Speech.cpp v0.2.0, built from source; a small C++ sidecar on its C API keeps both models loaded.
-  - NVIDIA Parakeet TDT 0.6B v3 hears. NVIDIA Magpie TTS (the Aria voice) speaks, streamed as it's made and stoppable mid-word. Silero VAD finds speech.
+  - NVIDIA Parakeet TDT 0.6B v3 hears. NVIDIA Magpie TTS speaks (the Sofia voice since 2026-10-17; see "Otto speaks as Sofia" below), streamed as it's made and stoppable mid-word. Silero VAD finds speech.
   - Nemotron 3.5 Lightning on Token Factory holds the conversation. Its `ask_bot` tool hands the real work to the bot's own agent (`/api/calls/act` → the same turn as a chat: apps, memory, approvals, receipts). This is the front/back split of NVIDIA's Nemotron voice agent blueprint.
   - Turn-taking: an early guess at the first pause (~0.2 s) whose answer is held until the turn ends; barge-in that stops the voice and remembers what the caller actually heard; short fillers while the bot works; slow work reported back when it's done.
 - **Measured** on 4 Sapphire Rapids vCPUs, with a scripted talker: from the caller stopping to the bot's first word, 1.3 s on the phone path and in the browser, with both directions heard word for word. The real talker adds Nemotron's first token.
@@ -590,7 +590,7 @@ Diego: "I really want this phone call with your agents to be able to work… Loo
   - The image is built for AVX-512 + AMX ("v4"): Magpie is about 40% faster than on NVIDIA's AVX2 prebuilt.
   - Container-Optimized OS, with Caddy for HTTPS on `<ip>.sslip.io`.
   - `.github/workflows/voice.yml` deploys it once Diego adds the keys (`docs/DEPLOY.md` §8). The VM's fixed cost isn't charged to anyone; whether calls should carry a share of it is Diego's call.
-- **Magpie as Q8_0:** requantized from NVIDIA's F16 GGUF (`voice/scripts/magpie-q8.py`; NVIDIA benchmarks Q8_0), byte-identical every build. Classifier-free guidance is off: it halves the work, and the voice stays clear on a phone line.
+- **Magpie as Q8_0:** requantized from NVIDIA's F16 GGUF (`voice/scripts/magpie-q8.py`; NVIDIA benchmarks Q8_0), byte-identical every build. Classifier-free guidance was off at first, to halve the work; it's on since 2026-10-17, since it costs almost nothing here and without it Magpie reads slower (see "Otto speaks as Sofia" below).
 
 **Next:**
 - Calls from the bot: owner only, "AI assistant" the first time, saying who's calling (TCPA).
@@ -602,11 +602,31 @@ Diego: "I really want this phone call with your agents to be able to work… Loo
 
 - **The voice server is up** at `https://34-71-25-115.sslip.io`: a `c3-highcpu-4` VM in `us-central1-a` (project `build-a-bot-voice`), the AVX-512 + AMX image, making speech at 0.97× real time. Diego set up Google Cloud and the GitHub secrets; the workflow did the rest (run 38990343806).
 - **Vercel settings:** the Vercel connector can't create production environment variables (403, "additional permissions"), so Diego pastes them; Claude redeploys through the connector, which works.
-- **A real call after every deploy** (`.github/workflows/live-call.yml`, `scripts/live-call.mjs`). A browser on GitHub's runners makes a bot on the live site, presses Call, waits for the greeting, then asks "Hi Otto. What can you help me with?" out loud (a clip in Magpie's John voice that Parakeet hears word for word). It passes on the question heard, a spoken answer and the call's record, reports the timings in the run's summary, then deletes the bot. It runs on GitHub because this sandbox's proxy doesn't carry WebSockets. Against a local copy (real Parakeet and Magpie, a stand-in talker going through `ask_bot`), the answer started 2.2 s after the question ended.
+- **A real call after every deploy** (`.github/workflows/live-call.yml`, `scripts/live-call.mjs`). A browser on GitHub's runners makes a bot on the live site, presses Call, waits for the greeting, then asks "Hi Otto. What can you help me with?" out loud (a clip in Magpie's Aria voice, which the old model file called John, that Parakeet hears word for word). It passes on the question heard, a spoken answer and the call's record, reports the timings in the run's summary, then deletes the bot. It runs on GitHub because this sandbox's proxy doesn't carry WebSockets. Against a local copy (real Parakeet and Magpie, a stand-in talker going through `ask_bot`), the answer started 2.2 s after the question ended.
 - **Twilio's free trial (as of 2026) can't run the phone line.** Its texts must use Twilio's templates, so the bot can't send its own phone code. Outgoing calls must use Twilio's templates too. Only verified numbers can call in, `<Stream>` is blocked, TwiML must come back within 5 seconds, and the trial ends after 30 days. Claude's recommendation: upgrade right away ($20 starting balance, about $1.15 a month for a number). That also puts phone calls on the voice server. **Diego to decide.**
 - **Twilio set up** (Diego, 2026-10-17): an upgraded account and a local number, (781) 702-1844 (Diego: "you sure i get local and not toll free?"; local because toll-free numbers pay for incoming calls, about $0.022 a minute against $0.0085, and the app's call prices are set for local). Claude pointed its three webhooks at the app through Twilio's API. The account started with outgoing calls to US/Canada numbers off (Voice geo permissions), so the first phone codes failed ("Account not authorized to call"). Claude turned on ordinary US/Canada numbers only; premium and toll-fraud ranges stay off. **A code the provider refuses no longer counts against the code limits**: Diego's three refused tries had used up his number's three codes an hour.
 - **Texting stays off until the number is registered** (Claude, 2026-10-17, after Diego asked "if i click 'text me a code' it wont work?"). Texts from an unregistered number are accepted by Twilio and then dropped by carriers, so the app said "Code sent" for codes that never came, and they used up tries. Now `TWILIO_TEXTING=1` (set once A2P 10DLC is approved) switches texting on. Until then Text messages is coming soon, the phone card offers only "Call me with a code", the server refuses text codes without counting them, the calls channel's number doesn't switch texting on, and incoming texts get no reply (and don't run the bot).
 - **Phone codes by call** (Claude): a new number can't text US phones until it's registered (A2P 10DLC needs a paid account; toll-free numbers need toll-free verification; either takes days). So owners can have the code read out in a call instead: it's said three times, a digit at a time, and the call says it's an AI. **Codes go only to US and Canada numbers:** the Caribbean countries that share +1, and 900 numbers, are refused, which keeps toll fraud out.
+
+## Decision: Otto speaks as Sofia, with classifier-free guidance on (Diego, 2026-10-17)
+
+After his first phone call with Otto, Diego: "it felt good... The one thing I dont like if i am being honest is the voice. I feel like the voice also reads slowly, this doesnt mean the answer is generated slowly, I think its just the voice reading the answer slowly. look into this, dont build anything." After listening to samples of each voice: "turn on guidance yeah, i liked the leo voice you sent me but it sounded like a female voice so i have a feeling you mixed them up, not sure though."
+
+- **He was right: the voices were mislabeled.**
+  - The Magpie GGUF that NeMo-Speech.cpp v0.2.0 pins (revision `19806879`) lists its voices as John, Sofia, Aria, Jason, Leo. In fact they're Aria, Jason, John, Leo and Sofia, in that order (the checkpoint's own `speakers.json`).
+  - NVIDIA fixed the names in revision `446bff55` (2026-10-15). The weights are byte for byte the same.
+  - So the "Aria" Otto used was really John (the public LibriVox voice, a man, about 118 Hz). The "Leo" Diego liked is Sofia (about 208 Hz).
+  - `fetch-models.sh` now takes Magpie's GGUF from the fixed revision. Asking it for Sofia gives exactly the audio "Leo" gave before, sample for sample.
+- **Why it sounded slow** (measured on 4 vCPUs, 12 sentences per voice, with fixed seeds):
+  - **Guidance off made Magpie drawl.** The old voice read at 147 words a minute with guidance off and 183 with it on. It costs almost nothing here: 1.03× real time against 1.04×, because the codec, not Magpie, sets the speed. An answer is even 16% less work with it on, since the same words take less audio. So the first launch's "it halves the work" was wrong at the 2 + 2 thread split.
+  - **The voice:** Sofia with guidance on reads at 196 words a minute (the others 182–214) and says every word clearly through a phone line (Parakeet heard all of them).
+  - **Dead air between sentences.** The server makes speech at 0.94× real time, so each sentence waits about 0.85 s for its first audio, plus a short buffer. Diego's live call had 1.45 s and 0.72 s of silence inside one answer. Only a faster machine (8 vCPUs or a GPU) removes it. Speaking the rest of an answer as one piece would cut about 0.7 s per extra sentence (not built).
+  - **Not the cause:**
+    - the phone line: the same seed gives exactly the same length at 8 and 22 kHz;
+    - the talker: the whole answer arrived within 0.12 s;
+    - temperature: 0.3 is slower than the default 0.6;
+    - smaller audio chunks: first audio comes 0.13 s sooner, but the machine drops below real time.
+- **Now:** `VOICE` defaults to Sofia and guidance is on (`TTS_CFG=0` turns it off). CI's calls on the real models use the same settings.
 
 ## Build choice (Claude; Diego to confirm): what real testers see (2026-10-14)
 
@@ -740,7 +760,7 @@ A code review of the server and the desktop app. Each fix has a test that fails 
   - Bots' email now has its own flag (`live.botEmail`): `BOT_EMAIL_DOMAIN`, plus AgentMail or Resend with its webhook secret. Until then both show as Coming soon, and there's no fallback domain.
   - Outside demo mode, any channel whose service isn't set up shows as Coming soon, and recipes and saved drafts leave it out.
 - **Calls and the voice server** (2026-10-16):
-  - NeMo-Speech.cpp's prebuilt Linux binaries are AVX2 only. On them, Magpie F16 ran at 0.53× real time on 4 vCPUs, too slow for a call. Built from source for AVX-512 + AMX, with Magpie as Q8_0 and classifier-free guidance off (on by default, it doubles the work), it's 0.93×, with first audio in about 0.8 s.
+  - NeMo-Speech.cpp's prebuilt Linux binaries are AVX2 only. On them, Magpie F16 ran at 0.53× real time on 4 vCPUs, too slow for a call. Built from source for AVX-512 + AMX, with Magpie as Q8_0 and classifier-free guidance off (on by default, it doubles the work), it's 0.93×, with first audio in about 0.8 s. (Later, 2026-10-17: with the 2 + 2 thread split below, guidance costs almost nothing, and it's on.)
   - NVIDIA's HTTP server sends Magpie's audio only once a whole sentence is made. The sidecar uses the C API's streaming callback instead, which can also stop mid-word.
   - Magpie's tokenizer files are inside the 1.5 GB `.nemo` tar. NVIDIA's `pull` fetches only the bytes before and after the weights; `voice/scripts/fetch-models.sh` does the same with two range requests and a sparse file. The tar holds two copies of some files, and the later one wins.
   - A v4 (AVX-512 + AMX) build may not run on the machine building it, so the Dockerfile runs NVIDIA's binary only for v3 builds, and the models are fetched without it.
