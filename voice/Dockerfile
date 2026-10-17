@@ -13,7 +13,8 @@
 #
 # Everything downloaded is pinned: NeMo-Speech.cpp at v0.2.0's commit (and its submodules at the
 # commits that tag pins), and every model by revision and SHA-256 (scripts/fetch-models.sh: Magpie,
-# its codec and tokenizer are the files and hashes of NVIDIA's own `nemo-speech pull magpie`).
+# its codec and tokenizer are the files of NVIDIA's own `nemo-speech pull magpie`, with Magpie's
+# GGUF from NVIDIA's later revision, which names its voices right).
 
 ARG NODE_IMAGE=node:22-bookworm-slim
 ARG BUILD_IMAGE=node:22-bookworm

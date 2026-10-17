@@ -10,8 +10,12 @@
 #                                                      NVIDIA Magpie TTS: the bot's voice
 #
 # Magpie's files are the ones `nemo-speech pull magpie` gets (NeMo-Speech.cpp v0.2.0's
-# models/index.json): the same revisions and hashes, fetched without running NVIDIA's binary, so a
-# build for one CPU can run anywhere. Needs curl, tar, sha256sum and python3 (with venv).
+# models/index.json), fetched without running NVIDIA's binary, so a build for one CPU can run
+# anywhere. One exception: Magpie's GGUF is NVIDIA's next revision (2026-10-15). Its weights are
+# byte for byte the same, but the one v0.2.0 pins names its voices in the wrong order (John, Sofia,
+# Aria, Jason, Leo for what are Aria, Jason, John, Leo and Sofia, as the checkpoint's own
+# speakers.json says), so asking for one voice got another. Needs curl, tar, sha256sum and python3
+# (with venv).
 set -euo pipefail
 
 DEST="${1:?usage: fetch-models.sh DEST}"
@@ -23,10 +27,11 @@ PARAKEET_SHA256=e3880d0aaaaf2c308ea2c35016b2b895c423eb3fda924c1b463d1c19b7f4d32e
 SILERO_WHEEL=https://files.pythonhosted.org/packages/9e/76/12cbd574562511a8914731436b6c584112186bb6bf149e9f952af4940146/silero_vad-6.2.0-py3-none-any.whl
 SILERO_WHEEL_SHA256=8a31f1e58e73cdc20820d842f757e678e0ae1b0ee1cb7b8aa50f20f8fd7f7638
 SILERO_ONNX_SHA256=1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3
-MAGPIE_REVISION=19806879b16d3f2ccf28fb112b1bcd16a3c7923e
-MAGPIE_F16_SHA256=30d27551fc4a050e8095139f0185796024493373e83d49443c8ddba33c514e68
+# The .nemo (where the tokenizer comes from) is the same file in this revision as in v0.2.0's.
+MAGPIE_REVISION=446bff55e1fe3d3aa29c771574e7d2b0fa322990
+MAGPIE_F16_SHA256=fb8e9297138dcc7b5fc51332f361e3cddfd433d4e0bc1d87e16e6aed21f618fc
 # What magpie-q8.py makes of it (the conversion is exact, so the result is always this file).
-MAGPIE_Q8_SHA256=deaa30ca6d10f3f86d3fd961f347c0b3630f0e4edfc543bf385fab35b46ce7f4
+MAGPIE_Q8_SHA256=5dcf54ce2f078322b0d3e9d1a97f9ddbf666fe1a655ce73f1e75daa70135b8f7
 CODEC_REVISION=fc00890b604aa2de298d2641ffc6c5f6caf8c4d7
 CODEC_SHA256=cc86d36d821a27cdc1d4ef600a3e2b0dabe76e88fcc2a8652d9543134c07ef2d
 # The tokenizer is inside the 1.5 GB .nemo (a tar): its first 20.6 MB and its last 10.5 MB, around
