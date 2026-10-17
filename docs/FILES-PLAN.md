@@ -104,6 +104,6 @@ In local demo mode, files go to disk under `DATA_DIR`.
 - `src/lib/library/`: storage (`storage.ts`), reading (`read/`: sniffing, PDF with scanned pages through the vision model, Word, PowerPoint, text and HTML, a small PNG encoder for scans), passages and search (`index.ts`, `search.ts`), study sets with spaced repetition (`study.ts`), attachments and chat-app files (`attachments.ts`, `inbound.ts`).
 - Tools (`src/lib/tools/builtin/library.ts`): `list_files`, `search_files`, `read_file`, `make_flashcards`, `make_quiz`, `study_progress`. Reading taints the turn; making study sets is owner-only. Bots on the owner's plan get them through the Bridge too, and cards made there show with the answer.
 - The web app: the paperclip, drag-and-drop and pasting in the chat, file chips, study cards that open a focused study window (flip cards, Again / Got it; quizzes scored with explanations and "Go over them with {bot}"), and the Library tab (files, study sets, cards due, CSV export).
-- Telegram (files and photos) and Discord (`/ask` with a file; the commands need registering again after deploy: `npx tsx scripts/discord-register.ts`).
+- Telegram (files and photos) and Discord (`/ask` with a file; the app re-registers its commands by itself, at most every 6 hours).
 - Deleting a bot or an account deletes its files from storage; the export lists them.
 - Tests: `tests/library.test.ts`, `tests/library-channels.test.ts`.

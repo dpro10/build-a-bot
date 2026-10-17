@@ -85,4 +85,17 @@ describe("a turn where the model narrates instead of acting", () => {
     expect(msg.parts.some((p) => p.type === "study_set")).toBe(true);
     expect(msg.text).toBe("I'll read your notes and make flashcards.\n\nHere are your flashcards on cells.");
   });
+
+  it("doesn't push when the model asks a question first (that's the owner's to answer)", async () => {
+    const res = await createBot(db, owner, {
+      avatar: "otto", color: "grape", name: "Asker", jobs: [], brain: { kind: "included", model: "nvidia/Nemotron-3_5-Lightning" },
+      connectors: [], trust: "ask", channels: [], contact: {}, ageConfirmed: true, timezone: "UTC",
+    });
+    if (!res.ok) throw new Error(res.error);
+    const bodies = stubModel(() => ({ text: "Happy to! From your syllabus or your whiteboard photo?" }));
+    const conversation = await ensureConversation(db, res.bot.id, "web", "owner");
+    const out = await runTurn({ db, bot: res.bot, owner, conversation, channelKind: "web", message: { text: "Make me a practice quiz", author: "owner" } });
+    expect(bodies).toHaveLength(1);
+    expect(out.text).toBe("Happy to! From your syllabus or your whiteboard photo?");
+  });
 });
