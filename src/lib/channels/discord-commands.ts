@@ -6,7 +6,11 @@ export const DISCORD_COMMANDS = [
     type: 1,
     integration_types: [0, 1], // server install and user install
     contexts: [0, 1, 2], // servers, bot DMs, other DMs
-    options: [{ name: "prompt", description: "What should it do?", type: 3, required: true, max_length: 2000 }],
+    options: [
+      { name: "prompt", description: "What should it do?", type: 3, required: true, max_length: 2000 },
+      // A file for its Library (a syllabus, slides, notes, a photo): type 11 is an attachment.
+      { name: "file", description: "A file for it to read (PDF, Word, slides, text or a photo)", type: 11, required: false },
+    ],
   },
   {
     name: "link",

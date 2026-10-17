@@ -8,9 +8,11 @@
  * Every query goes through server code that scopes rows by owner, and RLS is
  * enabled on every table with no public policies (see drizzle/0001_safety.sql).
  */
+import { sql } from "drizzle-orm";
 import {
   bigint,
   boolean,
+  customType,
   index,
   integer,
   jsonb,
@@ -19,6 +21,9 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
+
+/** Postgres full-text search vectors (the Library's passages). */
+const tsvector = customType<{ data: string }>({ dataType: () => "tsvector" });
 
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
 const updatedAt = () => timestamp("updated_at", { withTimezone: true }).notNull().defaultNow();
@@ -266,7 +271,12 @@ export type MessagePart =
       approvalId?: string;
     }
   | { type: "approval"; approvalId: string }
-  | { type: "notice"; tone: "info" | "warn" | "danger"; text: string };
+  | { type: "notice"; tone: "info" | "warn" | "danger"; text: string }
+  /** Flashcards or a quiz the bot made: shown as a card to study. */
+  | { type: "study_set"; set: StudySetSummary };
+
+/** What a chat card shows of a study set (the items load when it's opened). */
+export type StudySetSummary = { id: string; kind: "flashcards" | "quiz"; title: string; count: number; sources: string[] };
 
 export const messages = pgTable(
   "messages",
@@ -536,6 +546,110 @@ export const meetingSegments = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// The Library: the owner's files, read once and searchable, and study sets made from them
+// ---------------------------------------------------------------------------
+
+export const files = pgTable(
+  "files",
+  {
+    id: text("id").primaryKey(),
+    botId: text("bot_id")
+      .notNull()
+      .references(() => bots.id, { onDelete: "cascade" }),
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    /** What it turned out to be: pdf | docx | pptx | text | image */
+    kind: text("kind").notNull().default("unknown"),
+    mime: text("mime").notNull().default("application/octet-stream"),
+    size: bigint("size", { mode: "number" }).notNull().default(0),
+    /** Where the bytes are: a private Vercel Blob pathname, or a file under DATA_DIR. */
+    storageKey: text("storage_key").notNull(),
+    sha256: text("sha256"),
+    status: text("status").notNull().default("uploading"), // uploading | reading | ready | failed
+    error: text("error"),
+    /** Pages (PDF, Word sections), slides, or 1 for a photo or a text file. */
+    pages: integer("pages").notNull().default(0),
+    chars: integer("chars").notNull().default(0),
+    /** How it came in: upload | telegram | discord | desktop */
+    source: text("source").notNull().default("upload"),
+    /** The desktop app's path for a synced folder's file (so a change replaces it). */
+    sourceRef: text("source_ref"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index("files_bot_idx").on(t.botId, t.createdAt),
+    index("files_owner_idx").on(t.ownerId),
+    uniqueIndex("files_source_ref_uq").on(t.botId, t.sourceRef),
+  ],
+);
+
+/** A file's text, about a page at a time, each with where it came from (page or slide). */
+export const filePassages = pgTable(
+  "file_passages",
+  {
+    id: text("id").primaryKey(),
+    fileId: text("file_id")
+      .notNull()
+      .references(() => files.id, { onDelete: "cascade" }),
+    botId: text("bot_id")
+      .notNull()
+      .references(() => bots.id, { onDelete: "cascade" }),
+    idx: integer("idx").notNull(),
+    /** 1-based page or slide (0 when the file has none). */
+    page: integer("page").notNull().default(0),
+    /** "Page 3", "Slide 4", "Part 2". */
+    label: text("label").notNull(),
+    text: text("text").notNull(),
+    tsv: tsvector("tsv").generatedAlwaysAs(sql`to_tsvector('english', "text")`),
+  },
+  (t) => [
+    index("file_passages_file_idx").on(t.fileId, t.idx),
+    index("file_passages_bot_idx").on(t.botId),
+    index("file_passages_tsv_idx").using("gin", t.tsv),
+  ],
+);
+
+export type StudyCard = { id: string; front: string; back: string; source?: string };
+export type QuizQuestion = {
+  id: string;
+  type: "multiple_choice" | "true_false" | "short_answer";
+  question: string;
+  choices?: string[];
+  answer: string;
+  explanation?: string;
+  source?: string;
+};
+/** Per card (flashcards): its Leitner box and when it's due; per question (quizzes): the last answer. */
+export type StudyProgress = {
+  cards?: Record<string, { box: number; due: string; seen: number; missed: number }>;
+  attempts?: Array<{ at: string; score: number; total: number; missed: string[] }>;
+};
+
+export const studySets = pgTable(
+  "study_sets",
+  {
+    id: text("id").primaryKey(),
+    botId: text("bot_id")
+      .notNull()
+      .references(() => bots.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(), // flashcards | quiz
+    title: text("title").notNull(),
+    items: jsonb("items").$type<StudyCard[] | QuizQuestion[]>().notNull().default([]),
+    progress: jsonb("progress").$type<StudyProgress>().notNull().default({}),
+    /** Library files it was made from. */
+    fileIds: jsonb("file_ids").$type<string[]>().notNull().default([]),
+    /** The Bridge job that made it, so its card shows with that answer. */
+    jobId: text("job_id"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("study_sets_bot_idx").on(t.botId, t.createdAt), index("study_sets_job_idx").on(t.jobId)],
+);
+
+// ---------------------------------------------------------------------------
 // Billing & usage
 // ---------------------------------------------------------------------------
 
@@ -795,3 +909,6 @@ export type Meeting = typeof meetings.$inferSelect;
 export type MeetingSegment = typeof meetingSegments.$inferSelect;
 export type Recipe = typeof recipes.$inferSelect;
 export type Call = typeof calls.$inferSelect;
+export type LibraryFile = typeof files.$inferSelect;
+export type FilePassage = typeof filePassages.$inferSelect;
+export type StudySet = typeof studySets.$inferSelect;

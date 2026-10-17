@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { deleteLibrary } from "@/lib/library";
 import { after } from "next/server";
 import { and, eq, sql } from "drizzle-orm";
 import { schema } from "@/lib/db";
@@ -150,6 +151,8 @@ export async function DELETE(req: Request, ctx: RouteCtx<{ botId: string }>) {
   const { botId } = await ctx.params;
   const a = await authedBot(botId);
   if (!a.ok) return a.res;
+  // Its files' bytes live in storage, not the database: they go first.
+  await deleteLibrary(a.db, [botId]);
   await a.db.transaction(async (tx) => {
     await tx.execute(sql`set local app.allow_receipt_delete = 'on'`);
     await tx.delete(schema.bots).where(eq(schema.bots.id, botId));

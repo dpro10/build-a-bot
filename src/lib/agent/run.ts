@@ -11,7 +11,7 @@
  */
 import { and, desc, eq, gte, ne, sql } from "drizzle-orm";
 import { schema, type Db } from "@/lib/db";
-import type { Approval, Bot, Conversation, MessagePart, User } from "@/lib/db/schema";
+import type { Approval, Bot, Conversation, MessagePart, StudySetSummary, User } from "@/lib/db/schema";
 import { evaluate, containsSecret, type Decision } from "@/lib/policy/engine";
 import { TRUST, isTrustLevel } from "@/lib/trust";
 import { buildToolset, type Toolset } from "@/lib/tools/registry";
@@ -38,6 +38,8 @@ import { buildDynamicContext, buildStablePrompt, ownerName } from "./prompt";
 import { memoriesForTurn } from "@/lib/memory";
 import { resolveBrain } from "./brain";
 import { selectionOf, withSelection } from "./selection";
+import { LIBRARY_GUIDANCE, libraryPrompt } from "@/lib/library";
+import { withFiles } from "@/lib/library/attachments";
 
 export const MAX_STEPS = 8;
 
@@ -69,6 +71,8 @@ export type AgentEvent =
     }
   | { type: "approval"; approval: Pick<Approval, "id" | "title" | "detail" | "risk" | "reasons" | "tool" | "expiresAt" | "args"> }
   | { type: "notice"; tone: "info" | "warn" | "danger"; text: string; /** A page in the app the notice links to. */ href?: string }
+  /** Flashcards or a quiz the bot just made, to show as a card. */
+  | { type: "study_set"; set: StudySetSummary }
   | { type: "done"; messageId: string | null; text: string; status: RunStatus }
   | { type: "error"; message: string };
 
@@ -253,9 +257,13 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
     ...history.slice(-4, -1).map((m) => ({ text: m.content, weight: 0.4 })),
   ]);
 
+  const library = speakingWith === "owner" && toolset.byName.has("search_files") ? await libraryPrompt(db, bot.id) : null;
+
   const system = [
     buildStablePrompt(bot, owner, input.channelKind, botEmailAddress(bot)),
     "Messages wrapped in <system_directive> come from the Build-a-bot platform (not a person). Follow them.",
+    // Stable, so it sits with the stable part of the prompt (what's in the Library comes later).
+    toolset.byName.has("make_flashcards") ? LIBRARY_GUIDANCE : "",
     buildDynamicContext({
       bot,
       owner,
@@ -270,6 +278,7 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
       contactLabel: input.message?.contactLabel,
     }),
     toolset.byName.has("read_meeting") ? MEETINGS_GUIDANCE : "",
+    library ?? "",
     crisis ? CRISIS_GUIDANCE : "",
   ]
     .filter(Boolean)
@@ -528,6 +537,10 @@ export async function executeToolCall(
     status: output.ok ? "ok" : "error",
     summary: output.ok ? output.summary : output.error,
   });
+  if (output.ok && output.card) {
+    state.parts.push(output.card);
+    emit({ type: "study_set", set: output.card.set });
+  }
   emit({
     type: "tool",
     id: call.id,
@@ -846,7 +859,7 @@ async function loadHistory(db: Db, conversationId: string): Promise<LlmMessage[]
       const from = (m.meta as { from?: string }).from ?? "someone";
       content = `<message_from_contact from="${from.replace(/"/g, "'")}">\n${m.text}\n</message_from_contact>`;
     } else {
-      content = withSelection(content.replace(/<\/?system_directive>/g, ""), m.meta);
+      content = withFiles(withSelection(content.replace(/<\/?system_directive>/g, ""), m.meta), m.meta);
     }
     budget -= content.length;
     if (budget < 0 && out.length >= 2) break;

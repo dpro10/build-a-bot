@@ -42,6 +42,12 @@ export const config = {
     baseUrl: v("TOKEN_FACTORY_BASE_URL") ?? "https://api.tokenfactory.nebius.com/v1",
   },
   tavily: { apiKey: v("TAVILY_API_KEY") },
+  /**
+   * The Library (src/lib/library): files are kept in a private Vercel Blob store. Without it, a
+   * local run keeps them on disk under DATA_DIR (demo mode); a real server shows "Coming soon".
+   * Photos and scanned pages are read by a vision model on Token Factory (TF_MODEL_VISION).
+   */
+  library: { blobToken: v("BLOB_READ_WRITE_TOKEN"), visionModel: v("TF_MODEL_VISION") },
   /** Web actions (beta): Browser Use Cloud drives a cloud browser for reading sites and filling forms. */
   browserUse: {
     apiKey: v("BROWSER_USE_API_KEY"),
@@ -174,6 +180,8 @@ export const live = {
   stripe: Boolean(config.stripe.secretKey),
   /** Signed downloads of the desktop app are published (demo mode shows how to run it from the repo instead). */
   desktopApp: Boolean(config.desktop.downloadUrl),
+  /** The Library: a private Vercel Blob store for the owner's files. */
+  library: Boolean(config.library.blobToken),
   /** Voice calls with bots: the voice server's address and its shared secret (32+ characters). */
   voiceServer: Boolean(config.voice.serverUrl && config.voice.secret && config.voice.secret.length >= 32),
 };

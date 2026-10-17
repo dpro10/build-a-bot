@@ -7,6 +7,7 @@ import { handleInbound, loadBotAndOwner } from "@/lib/channels/inbound";
 import { decideApproval, readApprovalButtonToken, resolveShortApprovalKey } from "@/lib/agent/approvals";
 import { rateLimit } from "@/lib/safety/ratelimit";
 import { normalizeLinkCode } from "@/lib/channels/setup";
+import { fetchCapped, takeChannelFile } from "@/lib/library/inbound";
 
 export const maxDuration = 300;
 
@@ -14,7 +15,13 @@ type Interaction = {
   id: string;
   type: number;
   token: string;
-  data?: { name?: string; options?: { name: string; value: string }[]; custom_id?: string };
+  data?: {
+    name?: string;
+    options?: { name: string; value: string }[];
+    custom_id?: string;
+    /** Files attached to a command's options, by id. */
+    resolved?: { attachments?: Record<string, { id: string; filename: string; size: number; url: string; content_type?: string }> };
+  };
   user?: { id: string; username?: string };
   member?: { user: { id: string; username?: string } };
 };
@@ -79,16 +86,31 @@ export async function POST(req: Request) {
       return Response.json({ type: 4, data: { content: "You don't have a bot linked yet. In the app: your bot → Channels → Discord.", flags: EPHEMERAL } });
     }
     const prompt = i.data.options?.find((o) => o.name === "prompt")?.value ?? "";
+    const fileId = i.data.options?.find((o) => o.name === "file")?.value;
+    const attachment = fileId ? i.data.resolved?.attachments?.[fileId] : undefined;
     after(async () => {
       const loaded = await loadBotAndOwner(db, channel.botId);
       let content = "Something went wrong.";
       let components: unknown;
       if (loaded) {
+        // A file goes into the bot's Library (read first), then the question goes on with it.
+        let meta: Record<string, unknown> | undefined;
+        let note = "";
+        if (attachment) {
+          const got = await takeChannelFile(db, {
+            bot: loaded.bot,
+            owner: loaded.owner,
+            source: "discord",
+            file: { name: attachment.filename, size: attachment.size, fetch: () => fetchCapped(attachment.url) },
+          });
+          if ("error" in got) note = `${got.error}\n\n`;
+          else meta = { files: [got.attached] };
+        }
         const out = await handleInbound({
           db, bot: loaded.bot, owner: loaded.owner, channel, kind: "discord",
-          threadId: userId, replyTo: userId, text: prompt, isOwner: true, from: userId, deliverReply: false,
+          threadId: userId, replyTo: userId, text: prompt, isOwner: true, from: userId, deliverReply: false, meta,
         });
-        content = out.replyText || "Done.";
+        content = `${note}${out.replyText || "Done."}`;
         components = discordComponents(out.buttons);
       }
       await fetch(`https://discord.com/api/v10/webhooks/${config.discord.applicationId}/${i.token}/messages/@original`, {

@@ -9,7 +9,7 @@ export async function GET() {
   const bots = await a.db.select().from(schema.bots).where(eq(schema.bots.ownerId, a.user.id));
   const ids = bots.map((b) => b.id);
   const any = ids.length ? ids : ["-"];
-  const [messages, receipts, memories, notes, schedules, connections, channels, approvals, contacts, meetings, dictionary, credits, usage, calls] = await Promise.all([
+  const [messages, receipts, memories, notes, schedules, connections, channels, approvals, contacts, meetings, dictionary, credits, usage, calls, files, studySets] = await Promise.all([
     a.db.select().from(schema.messages).where(inArray(schema.messages.botId, any)),
     a.db.select().from(schema.receipts).where(inArray(schema.receipts.botId, any)),
     a.db.select().from(schema.memories).where(inArray(schema.memories.botId, any)),
@@ -24,6 +24,8 @@ export async function GET() {
     a.db.select().from(schema.credits).where(eq(schema.credits.userId, a.user.id)),
     a.db.select().from(schema.usage).where(eq(schema.usage.userId, a.user.id)),
     a.db.select().from(schema.calls).where(eq(schema.calls.ownerId, a.user.id)),
+    a.db.select().from(schema.files).where(eq(schema.files.ownerId, a.user.id)),
+    a.db.select().from(schema.studySets).where(inArray(schema.studySets.botId, any)),
   ]);
   const meetingIds = meetings.length ? meetings.map((m) => m.id) : ["-"];
   const transcripts = await a.db.select().from(schema.meetingSegments).where(inArray(schema.meetingSegments.meetingId, meetingIds));
@@ -50,6 +52,9 @@ export async function GET() {
     usage,
     /** Calls with your bots: transcripts and how they went. Call audio is never kept. */
     calls,
+    /** Your Library's files (each one downloads from its bot's Library page) and the flashcards and quizzes made from them. */
+    files: files.map(({ storageKey: _k, ...f }) => f),
+    studySets,
   };
   return new Response(JSON.stringify(data, null, 2), {
     headers: { "content-type": "application/json", "content-disposition": 'attachment; filename="build-a-bot-export.json"' },

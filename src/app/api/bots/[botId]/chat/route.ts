@@ -1,4 +1,8 @@
 import { z } from "zod";
+import { and, eq, inArray } from "drizzle-orm";
+import { schema } from "@/lib/db";
+import { MAX_ATTACHMENTS } from "@/lib/library/limits";
+import type { AttachedFile } from "@/lib/library/attachments";
 import { apiError, authedBot, limitOr429, parseJson, sameOrigin, type RouteCtx } from "@/lib/api";
 import { runTurn } from "@/lib/agent/run";
 import { ensureConversation } from "@/lib/channels/outbound";
@@ -6,7 +10,13 @@ import { sseResponse } from "@/lib/sse";
 
 export const maxDuration = 300;
 
-const bodySchema = z.object({ text: z.string().trim().min(1).max(8000) });
+const bodySchema = z
+  .object({
+    text: z.string().trim().max(8000).default(""),
+    /** Library files attached with the paperclip (already uploaded and read). */
+    fileIds: z.array(z.string().min(1).max(60)).max(MAX_ATTACHMENTS).optional(),
+  })
+  .refine((b) => b.text.length > 0 || (b.fileIds?.length ?? 0) > 0, { message: "Write a message or attach a file." });
 
 export async function POST(req: Request, ctx: RouteCtx<{ botId: string }>) {
   if (!sameOrigin(req)) return apiError(403, "Bad origin");
@@ -18,6 +28,18 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string }>) {
   // Plans meter messages; this only stops runaway scripts.
   const limited = await limitOr429(a.db, `chat:${a.user.id}`, 30, 60, "That's a lot of messages at once — give it a moment.");
   if (limited) return limited;
+  // Attached files: a light copy of each goes with the message (they're in the Library already).
+  let files: AttachedFile[] = [];
+  if (parsed.data.fileIds?.length) {
+    const rows = await a.db
+      .select()
+      .from(schema.files)
+      .where(and(eq(schema.files.botId, botId), inArray(schema.files.id, parsed.data.fileIds)));
+    files = parsed.data.fileIds
+      .map((id) => rows.find((r) => r.id === id))
+      .filter((r): r is NonNullable<typeof r> => Boolean(r))
+      .map((r) => ({ id: r.id, name: r.name, kind: r.kind, pages: r.pages, status: r.status, note: r.error }));
+  }
   const conversation = await ensureConversation(a.db, botId, "web", "owner");
   return sseResponse(async (send, signal) => {
     await runTurn({
@@ -26,7 +48,7 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string }>) {
       owner: a.user,
       conversation,
       channelKind: "web",
-      message: { text: parsed.data.text, author: "owner" },
+      message: { text: parsed.data.text, author: "owner", ...(files.length ? { meta: { files } } : {}) },
       emit: send,
       signal,
     });

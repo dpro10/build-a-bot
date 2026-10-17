@@ -11,6 +11,7 @@ import { brainLabel } from "@/lib/bots/labels";
 import type { AvatarId, ColorwayId } from "@/lib/avatars";
 import { notFound } from "next/navigation";
 import { SetupChecklist } from "@/components/app/SetupChecklist";
+import { available } from "@/lib/env";
 
 export default async function BotChatPage({ params, searchParams }: { params: Promise<{ botId: string }>; searchParams: Promise<{ ask?: string | string[] }> }) {
   const { botId } = await params;
@@ -81,6 +82,7 @@ export default async function BotChatPage({ params, searchParams }: { params: Pr
         brainLabel={brainLabel(bot.brain)}
         initialInput={typeof ask === "string" && ask.trim() ? ask.slice(0, 500) : undefined}
         viaBridge={bot.brain.kind === "subscription"}
+        canAttach={available("library")}
       />
     </div>
   );

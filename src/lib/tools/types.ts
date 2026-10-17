@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Db } from "@/lib/db";
-import type { Bot, User } from "@/lib/db/schema";
+import type { Bot, MessagePart, User } from "@/lib/db/schema";
 import type { Effect, Risk } from "@/lib/connectors/types";
 import type { Recipient } from "@/lib/policy/engine";
 import type { JsonSchema } from "@/lib/llm/types";
@@ -15,12 +15,22 @@ export type ToolContext = {
   demo: boolean;
   now: Date;
   signal?: AbortSignal;
+  /** The Bridge job this call is part of (a bot thinking on the owner's computer). */
+  jobId?: string | null;
 };
 
 export type ToolSource = { title: string; url: string };
 
 export type ToolOutput =
-  | { ok: true; content: string; summary?: string; data?: unknown; sources?: ToolSource[] }
+  | {
+      ok: true;
+      content: string;
+      summary?: string;
+      data?: unknown;
+      sources?: ToolSource[];
+      /** Something to show with the reply (flashcards or a quiz to study). */
+      card?: Extract<MessagePart, { type: "study_set" }>;
+    }
   | { ok: false; error: string };
 
 export type ToolSpec<A extends Record<string, unknown> = Record<string, unknown>> = {

@@ -9,6 +9,7 @@ import { readInbox, sendEmail } from "./inbox";
 import { messageOwnerTool } from "./owner";
 import { browserTools } from "./browser";
 import { meetingTools } from "./meetings";
+import { libraryTools } from "./library";
 
 /** Built-in connector id → its tools. */
 export const BUILTIN_TOOLS: Record<string, AnyToolSpec[]> = {
@@ -24,6 +25,7 @@ export const BUILTIN_TOOLS: Record<string, AnyToolSpec[]> = {
   bot_inbox: [readInbox, sendEmail],
   browser: browserTools,
   meetings: meetingTools,
+  library: libraryTools,
 };
 
 export { botEmailAddress } from "./inbox";
