@@ -332,6 +332,18 @@ jobs:
             args+=("-c.mac.identity=-" "-c.mac.hardenedRuntime=false" "-c.mac.notarize=false")
           fi
           npx --yes "$ELECTRON_BUILDER" "${args[@]}"
+          if [ "${{ steps.keys.outputs.signed }}" = "true" ]; then
+            # electron-builder notarizes the app; the disk image around it is signed, notarized and
+            # stapled too, so a Mac opens the download without asking Apple first.
+            id="$(security find-identity -v -p codesigning "$kc" | awk '/Developer ID Application/ { print $2; exit }')"
+            for dmg in dist/*.dmg; do
+              codesign --sign "$id" --keychain "$kc" --timestamp "$dmg"
+              result="$(xcrun notarytool submit "$dmg" --key "$APPLE_API_KEY" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER" --wait --output-format json)"
+              echo "$result"
+              echo "$result" | grep -q '"status":"Accepted"' || { echo "::error::Apple didn't notarize $dmg"; exit 1; }
+              xcrun stapler staple "$dmg"
+            done
+          fi
           rm -f "$RUNNER_TEMP/AuthKey.p8"
           [ -f "$RUNNER_TEMP/signing.keychain-db" ] && security delete-keychain "$RUNNER_TEMP/signing.keychain-db"
           ls -la dist
