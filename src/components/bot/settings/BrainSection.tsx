@@ -430,7 +430,7 @@ export function BrainSection({
         ) : (
           <div className="flex flex-col gap-5">
             <p className="text-sm text-muted-foreground">
-              Already pay for Claude or ChatGPT? {botName} can think with it through the Bridge, a small app on your computer that runs your own Claude Code or
+              Already pay for Claude or ChatGPT? {botName} can think with it on your computer: the Build-a-bot desktop app runs your own Claude Code or
               Codex. Your login never leaves your computer, and we never see it.
             </p>
             <div role="radiogroup" aria-label="Subscription" className="grid gap-2 sm:grid-cols-2">
@@ -539,7 +539,7 @@ export function BrainSection({
                 <Laptop className="size-5 shrink-0 text-warning" aria-hidden />
                 <p className="min-w-0 flex-1 text-foreground">
                   <span className="font-semibold">Your computer isn&apos;t paired yet.</span>{" "}
-                  <span className="text-muted-foreground">Until it is, {botName} can&apos;t think with your subscription.</span>
+                  <span className="text-muted-foreground">Get the desktop app and pair it. Until then, {botName} can&apos;t think with your subscription.</span>
                 </p>
                 <Button asChild size="sm" variant="secondary">
                   <Link href="/app/bridge">

@@ -4,7 +4,9 @@ A small tray / menu-bar app. When a call starts (Zoom, Google Meet, Teams, Webex
 
 It also does **voice typing**: hold a key in any app, talk, let go, and what you meant is typed where your cursor is, cleaned up (no ums, the right punctuation, your corrections kept) and with your names spelled your way. Start with "Hey" and your bot's name and it asks your bot instead. It hears you **on your computer**, with NVIDIA's Parakeet speech model, so your voice never leaves it. See [Voice typing](#voice-typing).
 
-It's the desktop half of Meeting notes (`src/lib/meetings`, `/desktop/buddy`) and Voice typing (`src/lib/dictation`, `/app/voice`) in the web app. Electron 44.7.2, plain JavaScript (ESM main process, sandboxed CommonJS preloads). One runtime dependency: `uiohook-napi`, the keyboard hook for voice typing, loaded only once you turn voice typing on.
+And it has **the Bridge** built in: bots whose brain is **Your Claude** or **Your ChatGPT** think on your computer, with your own Claude Code or Codex, signed in by you. No terminal. See [Your Claude or ChatGPT plan](#your-claude-or-chatgpt-plan-the-bridge).
+
+It's the desktop half of Meeting notes (`src/lib/meetings`, `/desktop/buddy`), Voice typing (`src/lib/dictation`, `/app/voice`) and the Bridge (`src/lib/bridge`, `/app/bridge`) in the web app. Electron 44.7.2, plain JavaScript (ESM main process, sandboxed CommonJS preloads). One runtime dependency: `uiohook-napi`, the keyboard hook for voice typing, loaded only once you turn voice typing on.
 
 ## What it does
 
@@ -15,7 +17,7 @@ It's the desktop half of Meeting notes (`src/lib/meetings`, `/desktop/buddy`) an
 5. **Stops** when you click Stop, when the call ends (the app lets go of the mic for 15 seconds), after 15 minutes of silence, at 4 hours, when your screen locks or the computer sleeps, or if the bot can't stay on screen.
 6. **Tells you when the notes are ready**, at the bottom of the screen and with a notification that opens the meeting in your browser.
 
-The tray menu has: status, Take notes now, Take notes in the room, Stop, Pause call detection for 1 hour, Show live captions, which bot takes notes, apps it won't ask in, voice typing (Set up voice typing… / its status, Paste last dictation, Voice typing settings…), Open Build-a-bot, This computer…, Start at login, Quit.
+The tray menu has: status, Take notes now, Take notes in the room, Stop, Pause call detection for 1 hour, Show live captions, which bot takes notes, apps it won't ask in, voice typing (Set up voice typing… / its status, Paste last dictation, Voice typing settings…), your Claude or ChatGPT plan (its status, *Think with my Claude plan here*, and *Get Claude Code…* when a bot needs it), Open Build-a-bot, This computer…, Start at login, Quit.
 
 ## What it never does
 
@@ -30,6 +32,8 @@ The tray menu has: status, Take notes now, Take notes in the room, Stop, Pause c
 - **Never keeps what you select.** Editing by voice sends the selected text once, to make the change you asked for; the server doesn't store it, and the local history keeps only what you said and the result.
 - **Never reads your screen.** To fit the words to the app (casual in chats, proper in email), only its kind (`chat`, `email`, `code`…) and, for apps on the built-in list, its name (`Slack`) are sent, worked out on this computer from the front app and, in a browser, the tab's title. Never the window's text, the title itself, what's around your cursor, or the name of an app that isn't on the list.
 - **No analytics.** Logs stay on this computer (`<userData>/logs/main.log`). A dictation logs one line with its kind, size and timings (`voice: text (12 words, cleaned up) in 410 + 380 ms, 4.2 s recorded`), never what was said.
+- **Never gives Claude Code or Codex your files, shell or browser.** A turn runs with every built-in tool off, in an empty folder of its own, with only your bot's tools (from Build-a-bot, where each call follows your trust level and approvals); a turn whose CLI shows any built-in tool, or runs a shell command, is refused. Your Claude or ChatGPT sign-in is never read, copied or sent, and API keys in your environment are kept from the CLI so it uses your plan.
+- **Never keeps a turn.** The bot's instructions, the conversation, the answer and the turn's short-lived tool token exist only while it runs, in that folder, which is emptied after every turn. The log says a turn ran and how long it took, never what it said.
 - **No FaceTime or phone calls** in this version: macOS doesn't let apps record FaceTime, and phone calls bring stricter consent laws (research §3.2, §5.5).
 
 ## Meetings heard on this computer
@@ -92,6 +96,15 @@ Shared with the web page (`/app/voice` → *Your words*): names and terms spelle
 ### Settings
 
 A try-it box; *Private speech* (*Hear me on this computer*, the download's progress, *Try again*, *Remove it from this computer*); the shortcut (presets, or record your own); *Clean up my words*, *Match each app's style*, *Edit by voice*, *Talk to your bot*, *Sounds*, *Put my clipboard back*; language (detect it, or one of 33) and microphone; your words and snippets; *Recent* (keep a history or not, fix, clear); and this week's words, minutes saved and words a minute. Stats are numbers only.
+
+## Your Claude or ChatGPT plan (the Bridge)
+
+`src/main/bridge/`. A bot whose brain is **Your Claude** or **Your ChatGPT** (Settings → Brain on the website) thinks on its owner's computer: Build-a-bot queues the turn, and this app runs it with the owner's own Claude Code (`claude -p`) or Codex (`codex exec`). It's the same runner as the terminal Bridge (`bridge/runner.mjs`; `runner.mjs` here is a copy, and a test keeps them identical).
+
+- **On by itself.** Once paired, the app looks for Claude Code and Codex (`program-path.mjs`: the login shell's PATH, since an app opened from the Finder gets a bare one; the registry's on Windows; and the usual install folders) and tells the server which it found, every 30 seconds. While one of the owner's bots uses their plan (or turns are waiting), it listens for turns and runs them one at a time. *Think with my Claude plan here* in the menu (or *Turn off here* in the pairing window) turns it off on this computer; the server then hears it has none, so no bot waits on it.
+- **No shell.** Each CLI runs as its own program, even on Windows: a `.exe` directly, and the program an npm or pnpm `.cmd` shim points at (Node scripts with Node, or the app's own Node when there's none). `cmd.exe` would drop the empty `--tools ""` and mangle JSON and line breaks. Windows get no console window.
+- **When something's wrong**, the bot says so in the chat, and the menu says how to fix it: *Claude Code isn't signed in: run claude in Terminal* (with one notification), *Claude Code isn't on this computer* (with *Get Claude Code…*), the plan's usage limit, or no connection. Quitting mid-turn stops the CLI and tells the bot why there's no answer.
+- **Several computers?** Whichever is online takes the next turn.
 
 ## Permissions, per OS
 
@@ -195,9 +208,15 @@ npm test             # unit tests (node --test): detectors per OS, the call stat
                      # and Private speech against a stand-in runtime: download, resume, hashes, disk space,
                      # the key, the idle stop, crashes, removing it, tidying times, falling back to the server;
                      # meetings heard here: Parakeet's timed words into lines, pieces that wait for it,
-                     # dictations first, notes only once every piece is in, the bot saying why it waits
+                     # dictations first, notes only once every piece is in, the bot saying why it waits;
+                     # the Bridge: the CLI's exact arguments, refusing built-in tools and shell commands,
+                     # sign-in and limit errors, Windows' npm shims, PATH from the login shell and the registry,
+                     # a real run against a stand-in claude (in a folder named José Muñoz), stopping mid-turn,
+                     # and the app's loop against a stand-in server (on, off, ready, quitting, unpaired)
 npm run test:e2e     # end to end under Xvfb with Playwright's Electron driver (one file at a time)
 ```
+
+`e2e/bridge.e2e.mjs` (macOS and Linux) pairs the app with a dev server in demo mode, puts a bot on Your Claude, and waits for the answer to a web chat message, thought up on this computer. The app starts with the bare PATH an app opened from the Finder gets, so it has to find Claude Code through the login shell. By default a stand-in `claude` answers; `BAB_E2E_REAL_CLAUDE=1` uses the real, signed-in Claude Code (one short turn on your plan). macOS runs it with Chromium's mock keychain.
 
 The e2e test (`e2e/meeting.e2e.mjs`) needs the web app's dev server running in demo mode at http://localhost:3000 (`BAB_E2E_SERVER` to change it; a production build there needs `DEMO_SPEECH=1` too, for the scripted meeting and sample dictations), `xvfb-run`, and Playwright (it uses the web app's `node_modules/playwright`; outside this repo, `npm i -D playwright`). It runs with Private speech off, so the server hears the pieces (its scripted meeting); each piece is checked to be a complete webm file, back to back with the last, ending at a pause near its length. It creates a demo owner and bot, turns on Meeting notes, gets a pairing code, pairs through the pairing window, fakes calls and the mic, then clicks through the bot: ask → copy the heads-up → Take notes → live captions → pause → resume → stop → notes ready (checked through the API), then *Stop and delete* (the meeting is gone from the server), *Not now*, a call that ends on its own, and a second launch where system audio is refused (mic-only, with the message). Screenshots of each phase go to `BAB_E2E_SHOTS` (default `<tmp>/bab-desktop-e2e`), plus a `sheet.png` of the bot over a fake call.
 
@@ -258,6 +277,10 @@ src/main/decoder-window.mjs  hidden, sandboxed page: a piece's webm/opus → 16 
 src/main/upload-queue.mjs    uploads with retries; spool.mjs keeps pieces on disk only while they wait or fail
 src/main/account.mjs, api.mjs, store.mjs   pairing, the server API, settings and the encrypted token
 src/main/pairing-window.mjs  the local pairing window (bab-app://pairing)
+src/main/bridge/             the Bridge: bots on the owner's Claude or ChatGPT plan think here
+  index.mjs                  when to listen, the turn loop, heartbeats, the menu's words
+  runner.mjs                 one turn with Claude Code or Codex (a copy of bridge/runner.mjs)
+  program-path.mjs           where the owner's programs are (login shell, registry, install folders)
 src/main/voice/              voice typing:
   index.mjs                  wiring: hold vs toggle, permissions, IPC for the pill and settings, tray info
   controller.mjs             one dictation: record → send → paste, "Hey {bot}" replies, errors, history

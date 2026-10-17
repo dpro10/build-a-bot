@@ -3,7 +3,7 @@
 Anyone makes their own AI agent in about a minute: pick a face, give it a name, choose a brain (or connect the AI subscription they already pay for), give it their apps, decide how much it can do on its own, and talk to it anywhere — calls, texts, email, Telegram, Discord, Slack. Call it, from the app or a phone, and it answers in its own voice and gets things done while you talk. It can also sit in on their calls and take the notes, and type for them by voice in any app.
 
 - **Site:** [build-a-bot.site](https://build-a-bot.site), live on Vercel + Supabase since 2026-10-14, still in demo mode until the last keys are in (`docs/DECISIONS.md` → *Live*).
-- **Status (2026-10-17):** the whole product is built (the website, the dashboard, and a desktop app for meeting notes and voice typing) and runs locally in demo mode with zero keys. Meeting notes and voice typing are only in the desktop app, which hears them on the user's own computer. Calls with a bot run on our voice server (`voice/`), live since 2026-10-17 with a real test call after every deploy, and phones reach bots through Twilio. The repository is public under Apache 2.0, and the desktop app downloads from build-a-bot.site/download: the Mac app signed with Developer ID and notarized, the Windows installer signed with Azure Artifact Signing (`docs/DEPLOY.md` §9). `docs/DEPLOY.md` lists what each integration needs.
+- **Status (2026-10-17):** the whole product is built (the website, the dashboard, and a desktop app for meeting notes, voice typing and the Bridge) and runs locally in demo mode with zero keys. Meeting notes and voice typing are only in the desktop app, which hears them on the user's own computer. Calls with a bot run on our voice server (`voice/`), live since 2026-10-17 with a real test call after every deploy, and phones reach bots through Twilio. The repository is public under Apache 2.0, and the desktop app downloads from build-a-bot.site/download: the Mac app signed with Developer ID and notarized, the Windows installer signed with Azure Artifact Signing (`docs/DEPLOY.md` §9). `docs/DEPLOY.md` lists what each integration needs.
 - **Reviewing it?** Start with [`docs/TRY-IT.md`](docs/TRY-IT.md): how to run both apps, what to click, and what's simulated.
 
 ## Built on NVIDIA and Nebius
@@ -53,7 +53,7 @@ Recipes prefill it (`/build?recipe=inbox-zero`, or any shared `/r/[slug]`). The 
 
 - **Included open models** on Nebius Token Factory: Nemotron 3.5 Lightning by default, plus Qwen, gpt-oss, DeepSeek, GLM, MiniMax, Kimi and Hermes, each at Token Factory's price.
 - **The owner's own key:** Anthropic, OpenAI, Gemini, OpenRouter, Groq, Mistral, xAI, DeepSeek, Together, Fireworks, Cerebras, or any OpenAI-compatible endpoint. Checked live, then encrypted.
-- **Their Claude or ChatGPT subscription, through the Bridge** (`bridge/`): a small program on their own computer that runs their own `claude -p` or `codex exec`, signed in by them, with only the bot's tools. We never see the login. While the computer sleeps the bot waits, unless the owner opts in to fall back to the included model.
+- **Their Claude or ChatGPT subscription, through the Bridge**: built into the desktop app since 2026-10-17 (or `bridge/`, the same thing for a terminal). It runs their own `claude -p` or `codex exec` on their computer, signed in by them, with only the bot's tools. We never see the login. While the computer sleeps the bot waits, unless the owner opts in to fall back to the included model.
 
 ### Apps
 
@@ -170,10 +170,10 @@ axe finds no serious WCAG 2.2 AA problems on the main public and dashboard pages
   - `calls`: calls with a bot: who's calling, the phone PIN, call tokens, what the voice server asks the app.
   - `web-actions`: the cloud browser.
 - `src/components`: the UI, including `avatar` (the five characters), `meetings` (the meetings, their notes, and the bot the desktop app shows at the bottom of the screen) and `call` (the Call button and the call itself).
-- `desktop/`: the desktop app for meeting notes and voice typing (Electron), with NVIDIA Parakeet on the computer. Its README covers permissions, building and signing.
+- `desktop/`: the desktop app for meeting notes, voice typing and the Bridge (Electron), with NVIDIA Parakeet on the computer. Its README covers permissions, building and signing.
 - `speech/`: our optional speech-to-text server: NVIDIA Parakeet and Nemotron on NVIDIA NeMo-Speech.cpp, for a Nebius Serverless AI endpoint. Its README covers deploying it and what it costs.
 - `voice/`: the voice server for calls: NVIDIA Parakeet and Magpie on NeMo-Speech.cpp, Silero VAD, turn-taking, Twilio Media Streams and the browser. Its README covers how it works and how fast it is; `docs/DEPLOY.md` §8 covers deploying it.
-- `bridge/`: the Bridge, which runs a subscription brain on the owner's computer.
+- `bridge/`: the Bridge for a terminal, which runs a subscription brain on the owner's computer (`runner.mjs` is shared with the desktop app).
 - `tests/` and `e2e/`: unit and end-to-end tests.
 - `docs/`:
   - `TRY-IT.md`: the review guide.
@@ -225,8 +225,7 @@ The current list is in `docs/DECISIONS.md`.
 5. **Trademark clearance** before spending on the brand.
 6. **Meeting notes and voice typing before launch:**
    - a lawyer's look at the consent flow and retention;
-   - signed downloads, since both are only in the app: done on 2026-10-17: the Mac app is signed and notarized, the Windows installer is signed with Azure Artifact Signing, and both download from the public repository's releases;
-   - whether the desktop app and the Bridge become one app.
+   - signed downloads, since both are only in the app: done on 2026-10-17: the Mac app is signed and notarized, the Windows installer is signed with Azure Artifact Signing, and both download from the public repository's releases.
 7. **Meeting notes, next:** meeting titles from the calendar, telling the call's speakers apart, and languages beyond Parakeet's 25.
 8. **Calls:** the voice server and Twilio are live (2026-10-17); texting waits on A2P 10DLC registration. Next: the bot calling you back when a job is done, a call starting your other agents (desk tasks through the Bridge, research, the cloud browser), and calls heard on your own computer.
 

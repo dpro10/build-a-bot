@@ -9,6 +9,9 @@
  * Voice typing (voice/): hold a shortcut anywhere and talk; what you meant is typed where your
  * cursor is. Off until the owner sets it up.
  *
+ * The Bridge (bridge/): bots whose brain is the owner's own Claude or ChatGPT plan think here, with
+ * their Claude Code or Codex. On whenever one is found, unless the owner turns it off here.
+ *
  * Dev/test switches (never needed by owners):
  *   --server=<url> or BAB_SERVER        point at a local server (e.g. http://localhost:3000)
  *   BAB_USER_DATA=<dir>                 use another settings folder
@@ -37,6 +40,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Account, deviceName } from "./account.mjs";
 import { createApi } from "./api.mjs";
+import { Bridge, GET_CLI_URL, findClis } from "./bridge/index.mjs";
 import { BuddyWindow } from "./buddy-window.mjs";
 import { CaptureWindow } from "./capture-window.mjs";
 import { Controller } from "./controller.mjs";
@@ -80,6 +84,8 @@ protocol.registerSchemesAsPrivileged([{ scheme: SCHEME, privileges: { standard: 
 /** @type {ReturnType<typeof createLogger>} */
 let log = (m) => console.log(m);
 let settings, tokens, api, account, spool, uploads, buddy, capture, decoder, controller, pairing, detector, tray, voice;
+/** @type {Bridge} */
+let bridge;
 /** @type {Updates | null} */
 let updates = null;
 /**
@@ -202,6 +208,21 @@ async function boot() {
     log,
   });
 
+  bridge = new Bridge({
+    api,
+    account,
+    settings,
+    workRoot: path.join(userData, "bridge", "work"),
+    // A CLI that's a Node script, on a Windows computer without Node: the app's own Node runs it.
+    find: () => findClis({ node: { file: process.execPath, args: [], env: { ELECTRON_RUN_AS_NODE: "1" } } }),
+    notify: ({ title, body }) => notify({ title, body }),
+    log,
+  });
+  bridge.on("change", () => {
+    tray?.update();
+    pairing.send(pairingState());
+  });
+
   const sustain = num(env.BAB_DETECT_SUSTAIN_MS, null);
   detector = new Detector({
     intervalMs: num(env.BAB_DETECT_INTERVAL_MS, 3000),
@@ -234,6 +255,7 @@ async function boot() {
     voice.pushState();
     // A bot takes notes here: get NVIDIA Parakeet now, so the first call's notes don't wait for it.
     if (account.bots().some((b) => b.meetingsOn)) voice.meetings.ensure();
+    void bridge.apply();
   });
   account.on("signed-out", (reason) => {
     // Unsent audio from the old pairing goes too (from memory as well as the spool):
@@ -242,6 +264,7 @@ async function boot() {
     spool.clear();
     // Voice typing stops, and this computer's voice history goes with the pairing.
     voice.forget();
+    bridge.forget();
     // Unpaired from the web app: say so where the owner can pair again.
     if (reason) {
       notify({ title: "Build-a-bot was unpaired", body: reason, onClick: () => void pairing.show() });
@@ -272,8 +295,7 @@ async function boot() {
     detector.stop();
     void voice.interrupt();
     voice.dispose();
-    controller
-      .shutdown()
+    Promise.all([controller.shutdown(), bridge.shutdown()])
       .catch((err) => log(`shutdown: ${err}`))
       .finally(() => {
         readyToQuit = true;
@@ -292,6 +314,7 @@ async function boot() {
   else account.once("change", () => void controller.resumeLeftovers(spool));
   detector.start();
   await voice.apply();
+  bridge.start();
   if (env.BAB_SMOKE === "1") await smoke();
 }
 
@@ -334,6 +357,9 @@ async function smoke() {
     results.updates = updatesOn({ packaged: true, platform: process.platform, flag: buildFlags().babUpdates, env: {} }) ? "on (off while checking itself)" : "off (not a signed release build)";
     results["pairing window"] = pairing.webContents?.getURL().startsWith("bab-app://pairing") ? "ok" : "FAILED: it didn't load";
     Object.assign(results, await voice.smoke());
+    // Whether this computer has Claude Code or Codex is up to its owner: reported, never a failure.
+    const found = await bridge.detect(true);
+    results.bridge = `Claude Code ${found?.clis.claude ?? "not found"} · Codex ${found?.clis.codex ?? "not found"}`;
   } catch (err) {
     results.error = `FAILED: ${/** @type {any} */ (err)?.message ?? err}`;
   }
@@ -413,8 +439,14 @@ function registerIpc() {
     if (what === "pair-page") openAppLink(`${normalizeServer(account.server() ?? settings.get().server) ?? DEFAULT_SERVER}/app/bridge#desktop`, { anyServer: true });
     else if (what === "bot-apps") openAppLink(controller.urlFor("apps", { botId: arg?.botId ?? null }));
     else if (what === "voice") void voice.showSettings("setup");
+    else if (what === "get-claude" || what === "get-codex") void shell.openExternal(GET_CLI_URL[what === "get-codex" ? "codex" : "claude"]);
     else openAppLink(controller.urlFor("app"));
     return true;
+  });
+  ipcMain.handle("pairing:bridge", (e, on) => {
+    fromPairing(e);
+    bridge.setEnabled(on === true);
+    return pairingState();
   });
   ipcMain.on("pairing:close", (e) => pairing.isSender(e) && pairing.close());
 
@@ -436,6 +468,7 @@ function pairingState() {
     trayWord: process.platform === "darwin" ? "menu bar" : "tray",
     voice: voice.trayInfo(),
     hearing: account.bots().some((b) => b.meetingsOn) ? voice.meetings.line() : null,
+    bridge: bridge.info(),
   };
 }
 
@@ -462,6 +495,7 @@ function trayModel() {
     neverApps: s.neverApps,
     voice: voice ? voice.trayInfo() : null,
     update: updates?.menu() ?? null,
+    bridge: bridge ? bridge.info() : null,
   };
 }
 
@@ -484,6 +518,11 @@ function onTrayClick(id, checked) {
   else if (id === "mac-tabs") settings.update({ macTabs: Boolean(checked) });
   else if (id === "voice-setup" || id === "voice-settings") void voice.showSettings(id === "voice-setup" ? "setup" : undefined);
   else if (id === "voice-paste-last") void voice.voice.pasteLast();
+  else if (id === "bridge-toggle") bridge.setEnabled(Boolean(checked));
+  else if (id.startsWith("bridge-get:")) {
+    const url = GET_CLI_URL[/** @type {'claude'|'codex'} */ (id.slice(11))];
+    if (url) void shell.openExternal(url);
+  }
   else if (id === "open-app") openAppLink(controller.urlFor("app"));
   else if (id === "pair" || id === "account") void pairing.show();
   else if (id === "login") setOpenAtLogin(Boolean(checked));
@@ -619,6 +658,7 @@ function exposeTestProbe() {
         spoolFiles: spool.list().length,
         tray: trayModel().status,
         voice: voice.probe(),
+        bridge: bridge.info(),
       };
     },
   };

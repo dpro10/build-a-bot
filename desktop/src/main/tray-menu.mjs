@@ -21,6 +21,8 @@ import { appShortName } from "./apps.mjs";
  * @property {string[]} neverApps
  * @property {{ enabled: boolean, mode: 'hold'|'toggle'|'off', hint: string | null, canPasteLast: boolean } | null} [voice]  voice typing
  * @property {{ version: string, canRestart: boolean } | null} [update]  a new version, downloaded and waiting
+ * @property {{ show: boolean, enabled: boolean, status: string, toggleLabel: string, getCli: { id: string, name: string } | null } | null} [bridge]
+ *   bots on the owner's own Claude or ChatGPT plan think here (bridge/)
  */
 
 /** @param {TrayModel} m */
@@ -66,6 +68,14 @@ export function trayItems(m) {
     } else {
       items.push({ id: "voice-setup", label: "Set up voice typing…" });
     }
+    items.push({ type: "separator" });
+  }
+
+  // The Bridge: bots on the owner's own Claude or ChatGPT plan think here.
+  if (m.signedIn && m.bridge?.show) {
+    items.push({ id: "bridge-status", label: m.bridge.status, enabled: false });
+    if (m.bridge.getCli) items.push({ id: `bridge-get:${m.bridge.getCli.id}`, label: `Get ${m.bridge.getCli.name}…` });
+    items.push({ id: "bridge-toggle", label: m.bridge.toggleLabel, type: "checkbox", checked: m.bridge.enabled });
     items.push({ type: "separator" });
   }
 

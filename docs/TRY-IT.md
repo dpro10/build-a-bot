@@ -193,7 +193,7 @@ Without Accessibility on a Mac it still works: press **⌘ Shift Space** to star
 - **Subscriptions (the Bridge):** it runs on a computer that has the `claude` or `codex` CLI installed and signed in.
   - Pair it from **Bridge (your computer)**.
   - On your own computer the app shows commands that run from this folder, like `node bridge/bab-bridge.mjs pair ABCD-1234 --server http://localhost:3000`, then `node bridge/bab-bridge.mjs` to start it.
-  - On a deployment it shows `npx -y https://build-a-bot.site/downloads/build-a-bot-bridge-0.1.0.tgz …`: the site serves its own copy of the Bridge, so it works without the repo or anything on npm.
+  - On a deployment it shows `npx -y https://build-a-bot.site/downloads/build-a-bot-bridge-0.2.0.tgz …`: the site serves its own copy of the Bridge, so it works without the repo or anything on npm.
 
 **Meeting notes:**
 - They're in the desktop app only; the website doesn't record. NVIDIA Parakeet hears the call on your computer, so no speech-to-text key is needed.

@@ -815,7 +815,7 @@ Diego: "I really like that front desk for businesses idea. Lets hold on to it." 
 6. Meeting notes before launch:
    - a lawyer's review of the consent flow and retention (California § 632, and the Granola complaint's theory);
    - signed downloads: done on 2026-10-17 (the Mac app signed and notarized, the Windows installer signed with Azure Artifact Signing, the repository public). (No speech server is needed since 2026-10-16: the app hears on the computer.)
-   - whether to merge the desktop app with the Bridge into one "Build-a-bot app".
+   - ~~whether to merge the desktop app with the Bridge into one "Build-a-bot app"~~: done on 2026-10-17 (see that decision).
 7. Meeting notes, next: calendar-based meeting titles and telling speakers apart. (Transcription on the computer with NVIDIA Parakeet shipped on 2026-10-16.)
 8. More apps (Diego, 2026-10-15: "lets start trying to think about how we can get more apps integrated we can just think for now no need to build something new"). Options, cheapest first:
    - **The rest of Composio's catalog.** Composio has far more toolkits with its own sign-in than the ~190 we list. A "search all apps" box could offer any of them, with a generic icon and tool list.
@@ -836,3 +836,15 @@ Diego: "the repo has to be public for the hackathon so i am fine to do that", th
 - License: Apache License 2.0 (`LICENSE`, and every package.json says so). The name, brand and hosted service aren't covered.
 - Before going public, Diego's real phone number was rewritten out of every commit (it had been in early tests and a comment; the current code uses a fictional 555 number).
 - Public also makes GitHub Actions free; private-repo minutes had run out on 2026-10-17, which stopped every build.
+
+## Decision: the Bridge lives in the desktop app (Diego, 2026-10-17)
+
+Diego: "the bridge should definetly be apart of this app", then "write up the plan for the bridge merge, and honestly go ahead and just get it done. be careful though, i need your best work." Plan and details: `docs/BRIDGE-IN-APP.md`.
+
+- One download does voice typing, meeting notes and the Bridge. Once paired, the app finds Claude Code or Codex (through the login shell's PATH, since an app opened from the Finder gets a bare one) and thinks for the owner's bots on Your Claude or Your ChatGPT. It's on unless the owner turns it off on that computer, from the menu or the pairing window.
+- The terminal Bridge stays, for Linux and servers; both run `bridge/runner.mjs` (the app keeps an identical copy, checked by a test). Its version is 0.2.0.
+- Windows runs each CLI as its own program, never through `cmd.exe`, which dropped the empty `--tools ""` and mangled JSON (a bug the terminal Bridge had on Windows).
+- The server: the desktop session says which bots think with a plan, the heartbeat answers with how many turns wait (so an app that isn't listening starts to), and a desktop app that found a CLI counts as a paired Bridge.
+- The Bridge page leads with the desktop app; the terminal commands are under "Prefer the terminal?".
+- Checked on Diego's Mac: the app, with the bare PATH of an app opened from the Finder, found his Claude Code and answered a web chat message through it (one short turn on his plan).
+- Correction to something said in the conversation: the Bridge never gives the AI the owner's files, shell or browser. It runs their plan's model with only the bot's own tools.

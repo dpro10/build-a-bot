@@ -53,6 +53,11 @@ export const DEFAULT_SETTINGS = Object.freeze({
     /** The setup window has been shown once. */
     introduced: false,
   }),
+  /**
+   * The Bridge (bridge/): bots on the owner's own Claude or ChatGPT plan think on this computer.
+   * `enabled`: null until the owner chooses (on whenever a CLI is found); false turns it off here.
+   */
+  bridge: Object.freeze({ enabled: /** @type {boolean | null} */ (null) }),
   /** Voice typing stats: numbers only (voice/history.mjs). */
   voiceStats: /** @type {import('./voice/history.mjs').VoiceStats | null} */ (null),
 });
@@ -103,6 +108,7 @@ export class Settings {
     if (!Array.isArray(this.data.pending)) this.data.pending = [];
     // Settings added in a later version get their defaults.
     this.data.voice = { ...DEFAULT_SETTINGS.voice, ...pick(saved.voice, Object.keys(DEFAULT_SETTINGS.voice)) };
+    this.data.bridge = { ...DEFAULT_SETTINGS.bridge, ...pick(saved.bridge, Object.keys(DEFAULT_SETTINGS.bridge)) };
   }
 
   get() {

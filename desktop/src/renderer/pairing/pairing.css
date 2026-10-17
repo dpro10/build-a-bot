@@ -302,6 +302,14 @@ button:disabled {
   background: var(--card);
 }
 
+.voice-card p + p {
+  margin-top: 4px;
+}
+
+.voice-card .row {
+  gap: 8px;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
