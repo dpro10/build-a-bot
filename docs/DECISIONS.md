@@ -644,6 +644,8 @@ Diego: "I want the app, on both mac and windows to be a 1 click install. can we 
 - **Where downloads come from:** each signed build is a GitHub release (`desktop-v0.1.<run>`). The download page and the apps' update checks go through build-a-bot.site, which sends them on to the files, so the files can move without a new app. The repository has to be public for anyone to download them (the hackathon needs it public anyway). **Diego to decide.**
 - **Last step:** set `NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL=https://build-a-bot.site/download` in Vercel. That turns on the desktop app, and with it meeting notes and voice typing, across the site.
 - Until signing is set up, every push to main still publishes both apps, unsigned, as the **Desktop app (test build)** pre-release, for testing.
+- **Mac: signed and notarized** (2026-10-17). Diego already had a Developer ID Application certificate and an App Store Connect team key on his Mac; he ran `desktop/scripts/set-mac-signing-secrets.sh`, which saved the five secrets in GitHub without the key passing through Claude. Two CI fixes followed: electron-builder's own temporary keychain won't unlock on the macOS 26 runners, so the workflow imports the certificate into its own keychain; and the .dmg is now signed, notarized and stapled as well as the app. First signed release: `desktop-v0.1.28`. Checked on Diego's Mac as a downloaded file: Gatekeeper accepts the disk image and the app (`source=Notarized Developer ID`, Diego Prozzi, GT5MPW83L7), both stapled, universal.
+- **Windows: in progress** (2026-10-17). Diego made an Azure account with his personal email (not his university one, so it stays his) and a card. Claude created the resource group `build-a-bot-signing` (East US) and the app registration `build-a-bot-desktop-signing`, whose tenant ID, client ID and secret went straight into GitHub's secrets. Azure refuses to create the signing account on a free-trial subscription ("not available for free, trial or sponsored subscriptions"), so **Diego to do:** Upgrade now (billing profile → Summary), then the identity validation (ID and selfie, a few business days). Then Claude creates the signing account, the certificate profile, the role assignments and the four variables.
 
 ## Build choice (Claude; Diego to confirm): what real testers see (2026-10-14)
 
@@ -803,7 +805,7 @@ Diego: "I really like that front desk for businesses idea. Lets hold on to it." 
   - Rules for talking to customers: it says it's an AI, never promises what the business didn't say, and hands off to a person on request.
   - A business price in the pricing table.
 
-## Open questions (updated 2026-10-14)
+## Open questions (updated 2026-10-17)
 
 1. First users: tinkerers or everyday iPhone users? (unchanged)
 2. Pricing: decided on 2026-10-16, pay for what you use at cost (see that decision). Still Diego's call: the starter credit ($1), refunding unused credit when someone asks, and when, if ever, to add a margin.
@@ -812,10 +814,9 @@ Diego: "I really like that front desk for businesses idea. Lets hold on to it." 
 5. Trademark clearance before brand spend (unchanged).
 6. Meeting notes before launch:
    - a lawyer's review of the consent flow and retention (California § 632, and the Granola complaint's theory);
-   - the speech server on Nebius (`speech/README.md`) and a Together AI key for its backup;
-   - sign and notarize the Mac app. Diego already has an Apple Developer account (2026-10-14); what's needed is a Developer ID Application certificate and notarization credentials in CI secrets, and a Mac or macOS runner to build;
+   - signed downloads: the Mac app is signed and notarized (2026-10-17); Windows waits on Azure (see the one-click decision); both wait on the repository going public. (No speech server is needed since 2026-10-16: the app hears on the computer.)
    - whether to merge the desktop app with the Bridge into one "Build-a-bot app".
-7. Meeting notes, next: transcription on the computer with the same NVIDIA Parakeet engine voice typing now uses (2026-10-16), and calendar-based meeting titles.
+7. Meeting notes, next: calendar-based meeting titles and telling speakers apart. (Transcription on the computer with NVIDIA Parakeet shipped on 2026-10-16.)
 8. More apps (Diego, 2026-10-15: "lets start trying to think about how we can get more apps integrated we can just think for now no need to build something new"). Options, cheapest first:
    - **The rest of Composio's catalog.** Composio has far more toolkits with its own sign-in than the ~190 we list. A "search all apps" box could offer any of them, with a generic icon and tool list.
    - **Apps that only need an API key** (many marketing, analytics and developer tools). Owners paste the key; it's stored encrypted like other keys.
@@ -824,6 +825,6 @@ Diego: "I really like that front desk for businesses idea. Lets hold on to it." 
    - **Remote MCP servers from the official MCP Registry**, curated, since quality varies. Owners can already paste any MCP server's URL.
    - **The long tail through Zapier's MCP server**, where the owner connects their own Zapier account, or a second sign-in provider for apps Composio lacks.
    - Count clicks on "Coming soon" apps to see what testers want first.
-9. Voice typing before launch: Diego tests it on his Mac; the signed Mac and Windows apps ship it to everyone. Since 2026-10-16 the desktop app hears on the computer, so it needs no speech server; only the web page (and meeting notes) need one: a Together AI key, or the speech server on Nebius.
+9. Voice typing before launch: Diego tests it on his Mac; the signed Mac and Windows apps ship it to everyone. Since 2026-10-16 the desktop app hears on the computer, so it needs no speech server (one is only a fallback for computers where Parakeet can't run).
 10. The Nebius × NVIDIA hackathon (due 2026-10-30, 10am PT): Build-a-bot is Diego's only entry (2026-10-16; Chef isn't entered). It qualifies except for one requirement: the repository must be public with an open-source license. Diego decides that, the track (Personal AI suggested), what judges can use, and the video. Draft write-up, video script, checklist and feedback: `docs/HACKATHON.md`.
-11. Calls (2026-10-16): Diego adds the Google Cloud key, the GitHub secrets, the Vercel settings and a Twilio number (`docs/DEPLOY.md` §8), then upgrades Twilio for streaming. Still his call: whether calls should carry a share of the voice server's fixed cost, and when to keep the VM running (it costs about $4 a day).
+11. Calls: live since 2026-10-17 (the voice server, Twilio upgraded with a local number). Texting waits on A2P 10DLC. Still his call: whether calls should carry a share of the voice server's fixed cost, and when to keep the VM running (it costs about $4 a day).
