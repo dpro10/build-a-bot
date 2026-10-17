@@ -1,5 +1,6 @@
 {
   "name": "build-a-bot-speech",
+  "license": "Apache-2.0",
   "private": true,
   "description": "NVIDIA Parakeet and Nemotron speech recognition behind an OpenAI-compatible API, for Build-a-bot",
   "type": "module",
