@@ -3,7 +3,7 @@
 Anyone makes their own AI agent in about a minute: pick a face, give it a name, choose a brain (or connect the AI subscription they already pay for), give it their apps, decide how much it can do on its own, and talk to it anywhere — calls, texts, email, Telegram, Discord, Slack. Call it, from the app or a phone, and it answers in its own voice and gets things done while you talk. It can also sit in on their calls and take the notes, and type for them by voice in any app.
 
 - **Site:** [build-a-bot.site](https://build-a-bot.site), live on Vercel + Supabase since 2026-10-14, still in demo mode until the last keys are in (`docs/DECISIONS.md` → *Live*).
-- **Status (2026-10-17):** the whole product is built (the website, the dashboard, and a desktop app for meeting notes and voice typing) and runs locally in demo mode with zero keys. Meeting notes and voice typing are only in the desktop app, which hears them on the user's own computer. Calls with a bot run on our voice server (`voice/`), live since 2026-10-17 with a real test call after every deploy, and phones reach bots through Twilio. The Mac app is signed with Developer ID and notarized; the Windows installer waits on Azure Artifact Signing, and public downloads wait on the repository going public (`docs/DEPLOY.md` §9). `docs/DEPLOY.md` lists what each integration needs.
+- **Status (2026-10-17):** the whole product is built (the website, the dashboard, and a desktop app for meeting notes and voice typing) and runs locally in demo mode with zero keys. Meeting notes and voice typing are only in the desktop app, which hears them on the user's own computer. Calls with a bot run on our voice server (`voice/`), live since 2026-10-17 with a real test call after every deploy, and phones reach bots through Twilio. The repository is public under Apache 2.0, and the desktop app downloads from build-a-bot.site/download: the Mac app signed with Developer ID and notarized, the Windows installer signed with Azure Artifact Signing (`docs/DEPLOY.md` §9). `docs/DEPLOY.md` lists what each integration needs.
 - **Reviewing it?** Start with [`docs/TRY-IT.md`](docs/TRY-IT.md): how to run both apps, what to click, and what's simulated.
 
 ## Built on NVIDIA and Nebius
@@ -92,7 +92,7 @@ Web chat, phone calls and texts (Twilio), email (its own brand-free address), Te
 - **Heard on your computer:** NVIDIA Parakeet turns the call into text on the computer, about 20 seconds at a time, and only the lines are sent. The audio never leaves the computer.
 - Afterwards it writes a summary, decisions and action items, sends them to you, and answers questions about past meetings ("What did we decide?").
 - The **Meetings** tab on the website has the meetings and their notes (search, action items to tick off, export), and gets you the app. The website itself never records.
-- Until signed downloads are published (`NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL`), a real server shows the desktop app as "Coming soon"; demo mode shows how to run it from this repo.
+- Without `NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL` (set on build-a-bot.site since 2026-10-17), a real server shows the desktop app as "Coming soon"; demo mode shows how to run it from this repo.
 - It never records without a yes, only listens while it's on screen, and throws each piece of audio away once it's text. Transcripts are kept 90 days by default; notes stay until deleted.
 
 ### Voice typing (beta)
@@ -225,7 +225,7 @@ The current list is in `docs/DECISIONS.md`.
 5. **Trademark clearance** before spending on the brand.
 6. **Meeting notes and voice typing before launch:**
    - a lawyer's look at the consent flow and retention;
-   - signed downloads, since both are only in the app: the Mac app is signed and notarized (2026-10-17); the Windows installer waits on Azure Artifact Signing's identity check, and both wait on the repository going public;
+   - signed downloads, since both are only in the app: done on 2026-10-17: the Mac app is signed and notarized, the Windows installer is signed with Azure Artifact Signing, and both download from the public repository's releases;
    - whether the desktop app and the Bridge become one app.
 7. **Meeting notes, next:** meeting titles from the calendar, telling the call's speakers apart, and languages beyond Parakeet's 25.
 8. **Calls:** the voice server and Twilio are live (2026-10-17); texting waits on A2P 10DLC registration. Next: the bot calling you back when a job is done, a call starting your other agents (desk tasks through the Bridge, research, the cloud browser), and calls heard on your own computer.
