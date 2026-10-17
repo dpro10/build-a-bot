@@ -117,10 +117,10 @@ Then Actions → **Voice server** → Run workflow on `main`. The first run take
 
 **3. Vercel:** set `VOICE_SERVER_URL` to that address and `VOICE_SERVER_SECRET` to the same secret, then redeploy. Each bot's header now has a **Call** button (it works on `APP_URL`'s address; the server refuses calls started from other sites).
 
-**Is it working?** After each deploy, the **Live call** workflow (`.github/workflows/live-call.yml`) makes a real call through the site: a browser makes a bot, presses **Call**, waits for the greeting and asks a question out loud. It passes when Parakeet hears the question, a spoken answer comes back and the call is recorded, then it deletes the bot. The run's summary shows what was said and how long the answer took. Run it any time from Actions → **Live call** → Run workflow. Until Vercel has the two settings, it says calls aren't set up and passes.
+**Is it working?** After each deploy of the voice server or of the site, the **Live call** workflow (`.github/workflows/live-call.yml`) makes a real call through the site: a browser makes a bot, presses **Call**, waits for the greeting and asks a question out loud. It passes when Parakeet hears the question, a spoken answer comes back and the call is recorded, then it deletes the bot. The run's summary shows what was said and how long the answer took. Run it any time from Actions → **Live call** → Run workflow. Until Vercel has the two settings, it says calls aren't set up and passes.
 
 **4. Phone calls on the voice server:**
-1. Twilio as in §5, with all three webhooks on the number.
+1. Twilio as in §5, with all three webhooks on the number. Then Voice → Settings → **Geo permissions**: turn on United States/Canada. New accounts start with outgoing calls off, and without it the bot can't call anyone, phone codes included (Twilio answers "Account not authorized to call").
 2. Upgrade the account (Twilio Console → Upgrade: a card and a $20 starting balance). Twilio's free trial (as of 2026) can't run the phone line:
    - its texts and outgoing calls must use Twilio's own templates, so the bot can't send an owner their phone code;
    - only verified numbers can call in, and callers hear a trial notice and must press a key first;
