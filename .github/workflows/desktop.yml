@@ -1,8 +1,15 @@
 # The desktop app (desktop/): its tests on Linux and Windows; Private speech with NVIDIA's real
-# runtime and Parakeet on Windows and macOS, hearing speech the system's own voice says; and the
+# runtime and Parakeet on Windows and macOS, hearing speech the system's own voice says; the
 # Windows installer: installed, checking itself, then voice typing end to end in the installed app
-# (the real Ctrl + Windows shortcut, Parakeet on the computer, the words pasted into another app).
-# On main, the installer is published as the "Desktop app (test build)" pre-release.
+# (the real Ctrl + Windows shortcut, Parakeet on the computer, the words pasted into another app);
+# and the Mac app (one app for Apple silicon and Intel), checking itself.
+#
+# Signing: with the repository's signing secrets (desktop/README.md › Packaging and signing), the
+# Windows installer is signed with Azure Artifact Signing and the Mac app with Apple's Developer ID,
+# then notarized. Without them, the builds are unsigned, for testing.
+# On main: every build becomes the "Desktop app (test build)" pre-release; signed builds are also
+# published as a release (desktop-v<version>), which build-a-bot.site/download offers and the
+# installed apps update to.
 name: Desktop app
 
 on:
@@ -22,6 +29,8 @@ concurrency:
 
 env:
   ELECTRON_BUILDER: electron-builder@26.15.3
+  # Every build has its own version, so the apps can tell a newer one.
+  APP_VERSION: 0.1.${{ github.run_number }}
 
 jobs:
   test:
@@ -100,9 +109,21 @@ jobs:
     needs: test
     runs-on: windows-latest
     timeout-minutes: 45
+    outputs:
+      signed: ${{ steps.build.outputs.signed }}
     defaults:
       run:
         working-directory: desktop
+    env:
+      # Azure Artifact Signing: an app registration allowed to sign with the certificate profile.
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+      # The signing account, from the repository's variables (not secret).
+      AZURE_SIGNING_ENDPOINT: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+      AZURE_SIGNING_ACCOUNT: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+      AZURE_SIGNING_PROFILE: ${{ vars.AZURE_SIGNING_PROFILE }}
+      AZURE_SIGNING_PUBLISHER: ${{ vars.AZURE_SIGNING_PUBLISHER }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -111,8 +132,44 @@ jobs:
           cache: npm
           cache-dependency-path: desktop/package-lock.json
       - run: npm ci
-      - name: Build it (unsigned)
-        run: npx --yes ${{ env.ELECTRON_BUILDER }} --config electron-builder.yml --win nsis --x64 --publish never
+      - name: Build it (signed once the signing settings are in)
+        id: build
+        shell: pwsh
+        run: |
+          $builderArgs = @("--config", "electron-builder.yml", "--win", "nsis", "--x64", "--publish", "never", "-c.extraMetadata.version=$env:APP_VERSION")
+          $keys = @($env:AZURE_TENANT_ID, $env:AZURE_CLIENT_ID, $env:AZURE_CLIENT_SECRET, $env:AZURE_SIGNING_ENDPOINT, $env:AZURE_SIGNING_ACCOUNT, $env:AZURE_SIGNING_PROFILE, $env:AZURE_SIGNING_PUBLISHER)
+          # (Counted: PowerShell would read a list of one empty value as "nothing missing".)
+          $signed = @($keys | Where-Object { [string]::IsNullOrWhiteSpace($_) }).Count -eq 0
+          if ($signed -and $env:GITHUB_EVENT_NAME -eq "pull_request") {
+            # Signing only matters for what main publishes.
+            $signed = $false
+            "::notice::Pull requests build the Windows installer unsigned, for testing; main signs it."
+          }
+          if ($signed) {
+            $builderArgs += @(
+              "-c.win.azureSignOptions.endpoint=$env:AZURE_SIGNING_ENDPOINT",
+              "-c.win.azureSignOptions.codeSigningAccountName=$env:AZURE_SIGNING_ACCOUNT",
+              "-c.win.azureSignOptions.certificateProfileName=$env:AZURE_SIGNING_PROFILE",
+              "-c.win.azureSignOptions.publisherName=$env:AZURE_SIGNING_PUBLISHER",
+              # Signed release builds update themselves (src/main/updates.mjs).
+              "-c.extraMetadata.babUpdates=true"
+            )
+          } else {
+            "::notice::No Windows signing settings yet: this installer is unsigned, for testing (desktop/README.md › Packaging and signing)."
+          }
+          npx --yes $env:ELECTRON_BUILDER @builderArgs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "signed=$($signed.ToString().ToLower())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Get-ChildItem dist -File | Select-Object Name, Length
+      - name: Check the signature
+        if: steps.build.outputs.signed == 'true'
+        shell: pwsh
+        run: |
+          foreach ($f in @(Get-ChildItem dist\*.exe) + @(Get-ChildItem dist\win-unpacked\*.exe)) {
+            $sig = Get-AuthenticodeSignature $f.FullName
+            "$($f.Name): $($sig.Status) ($($sig.SignerCertificate.Subject))"
+            if ($sig.Status -ne "Valid") { throw "$($f.Name) isn't signed properly." }
+          }
       # Installed the way an owner does it (for them only, no admin), silently: it goes to
       # %LOCALAPPDATA%\Programs\build-a-bot-desktop.
       - name: Install it, and let the installed app check itself
@@ -193,38 +250,169 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: build-a-bot-windows
-          path: desktop/dist/*.exe
+          # The installer, and what updates read: latest.yml and the block map (for small downloads).
+          path: |
+            desktop/dist/*.exe
+            desktop/dist/*.exe.blockmap
+            desktop/dist/latest.yml
           if-no-files-found: error
 
-  # The latest Windows installer from main, at one address: Releases → "Desktop app (test build)".
+  mac-app:
+    name: Mac app
+    needs: test
+    runs-on: macos-latest
+    timeout-minutes: 60
+    outputs:
+      signed: ${{ steps.keys.outputs.signed }}
+    defaults:
+      run:
+        working-directory: desktop
+    env:
+      # Apple's Developer ID certificate (a .p12, base64) and its password, and an App Store Connect
+      # API key (the .p8's text, its ID and the issuer ID) for notarizing.
+      CSC_LINK: ${{ secrets.MAC_CERTIFICATE_P12 }}
+      CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+      APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+      APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci
+      - name: Signing keys?
+        id: keys
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            # Signing and notarizing take minutes and only matter for what main publishes.
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Pull requests build the Mac app signed ad hoc, for testing; main signs it with the Developer ID."
+          elif [ -n "$CSC_LINK" ] && [ -n "$CSC_KEY_PASSWORD" ] && [ -n "$APPLE_API_KEY_P8" ] && [ -n "$APPLE_API_KEY_ID" ] && [ -n "$APPLE_API_ISSUER" ]; then
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No Apple signing keys yet: this Mac app is signed ad hoc, for testing (desktop/README.md › Packaging and signing)."
+          fi
+      # Universal (arm64 + x86_64); electron-builder signs it again with the app's identity.
+      - name: The call-detection helper
+        run: bash native/macos/build.sh
+      - name: Build it (signed and notarized once the keys are in)
+        run: |
+          args=(--config electron-builder.yml --mac dmg zip --universal --publish never "-c.extraMetadata.version=$APP_VERSION")
+          if [ "${{ steps.keys.outputs.signed }}" = "true" ]; then
+            printf '%s' "$APPLE_API_KEY_P8" > "$RUNNER_TEMP/AuthKey.p8"
+            export APPLE_API_KEY="$RUNNER_TEMP/AuthKey.p8"
+            # Signed release builds update themselves (src/main/updates.mjs).
+            args+=("-c.extraMetadata.babUpdates=true")
+          else
+            unset CSC_LINK CSC_KEY_PASSWORD
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+            # electron-builder signs nothing in a pull request unless told to; an ad hoc signature
+            # uses no keys, so it's safe there.
+            export CSC_FOR_PULL_REQUEST=true
+            # Ad hoc: Apple silicon runs nothing unsigned. Without a real identity there's no
+            # hardened runtime (it would refuse Electron's libraries) and nothing to notarize.
+            args+=("-c.mac.identity=-" "-c.mac.hardenedRuntime=false" "-c.mac.notarize=false")
+          fi
+          npx --yes "$ELECTRON_BUILDER" "${args[@]}"
+          rm -f "$RUNNER_TEMP/AuthKey.p8"
+          ls -la dist
+      - name: Check it
+        run: |
+          app="$(ls -d dist/mac-universal/*.app | head -1)"
+          echo "APP=$PWD/$app" >> "$GITHUB_ENV"
+          echo "app: $(lipo -archs "$app/Contents/MacOS/Build-a-bot"); helper: $(lipo -archs "$app/Contents/Resources/bin/bab-audio-helper")"
+          for arch in arm64 x86_64; do
+            lipo -archs "$app/Contents/MacOS/Build-a-bot" | grep -qw "$arch" || { echo "::error::The app isn't built for $arch"; exit 1; }
+          done
+          codesign --verify --deep --strict --verbose=2 "$app"
+          codesign -dvv "$app" 2>&1 | grep -E "^(Authority|TeamIdentifier|Signature|Runtime)" || true
+          if [ "${{ steps.keys.outputs.signed }}" = "true" ]; then
+            # What a Mac says when someone opens the download: notarized, from a known developer.
+            spctl --assess --type execute --verbose=4 "$app"
+            for dmg in dist/*.dmg; do xcrun stapler validate "$dmg"; done
+          fi
+      - name: The packaged app checks itself
+        run: |
+          export BAB_SMOKE=1 BAB_SMOKE_OUT="$RUNNER_TEMP/smoke.json" BAB_USER_DATA="$RUNNER_TEMP/bab-smoke" BAB_ALLOW_PLAINTEXT_TOKEN=1
+          set +e
+          "$APP/Contents/MacOS/Build-a-bot"
+          code=$?
+          set -e
+          cat "$BAB_SMOKE_OUT" 2>/dev/null || echo "no results"
+          if [ $code -ne 0 ] || [ ! -f "$BAB_SMOKE_OUT" ]; then
+            tail -80 "$BAB_USER_DATA/logs/main.log" 2>/dev/null || true
+            echo "::error::The packaged Mac app's self-check failed (exit code $code)."
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-a-bot-mac
+          # The disk image people download; the .zip, latest-mac.yml and block maps are what updates read.
+          path: |
+            desktop/dist/*.dmg
+            desktop/dist/*.zip
+            desktop/dist/*.blockmap
+            desktop/dist/latest-mac.yml
+          if-no-files-found: error
+
+  # On main: every build replaces the "Desktop app (test build)" pre-release; signed builds also
+  # become a release, which build-a-bot.site/download offers and the installed apps update to.
   publish:
-    name: Publish the test build
+    name: Publish
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [windows-installer, private-speech]
+    needs: [windows-installer, mac-app, private-speech]
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      WIN_SIGNED: ${{ needs.windows-installer.outputs.signed }}
+      MAC_SIGNED: ${{ needs.mac-app.outputs.signed }}
     steps:
       - uses: actions/download-artifact@v4
         with:
           name: build-a-bot-windows
-          path: dist
-      - name: Replace the pre-release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
+          path: dist/windows
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-a-bot-mac
+          path: dist/mac
+      - name: Replace the test build
         run: |
           gh release delete desktop-test --yes --cleanup-tag || true
-          cat > notes.md <<'EOF'
-          The desktop app for Windows 10 and 11, built from main by GitHub Actions after it was installed on a real Windows computer and typed a sentence there. It isn't signed yet, so:
-
-          - Your browser may say it isn't commonly downloaded. Edge: **…** next to the download → **Keep** → **Show more** → **Keep anyway**. Chrome: **Keep**.
-          - Windows says *"Windows protected your PC"*: click **More info**, then **Run anyway**.
-          - If **Smart App Control** blocks it, it can't run on that PC until it's signed.
-
-          It installs for you only (no admin needed) and starts right away; it lives in the system tray (the **^** by the clock) and in the Start menu as Build-a-bot. Pair it with a code from build-a-bot.site (**Bridge (your computer)**), then **Set up voice typing** and switch it on: NVIDIA Parakeet downloads (about 0.7 GB), then hold **Ctrl + Windows** and talk.
-
-          A newer test build installs over this one and keeps your pairing, settings and Parakeet. See desktop/README.md for everything it does.
-          EOF
-          gh release create desktop-test dist/*.exe --prerelease --target "$GITHUB_SHA" \
-            --title "Desktop app (test build, ${GITHUB_SHA::7})" --notes-file notes.md
+          {
+            echo "The desktop app, built from main by GitHub Actions after it checked itself on a real Mac and installed itself and typed a sentence on a real Windows computer."
+            echo
+            if [ "$WIN_SIGNED" = "true" ]; then
+              echo "- **Windows 10 and 11:** \`Build-a-bot-Setup-$APP_VERSION.exe\`, signed. It installs for you only (no admin needed) and starts right away."
+            else
+              echo "- **Windows 10 and 11:** \`Build-a-bot-Setup-$APP_VERSION.exe\`, not signed yet. Your browser may ask you to **Keep** it, Windows says *Windows protected your PC* (**More info** → **Run anyway**), and Smart App Control blocks it outright."
+            fi
+            if [ "$MAC_SIGNED" = "true" ]; then
+              echo "- **Mac (Apple silicon and Intel, macOS 13 or later):** \`Build-a-bot-$APP_VERSION-mac-universal.dmg\`, signed and notarized. Open it and double-click Build-a-bot: it moves itself into Applications."
+            else
+              echo "- **Mac (Apple silicon and Intel, macOS 13 or later):** \`Build-a-bot-$APP_VERSION-mac-universal.dmg\`, not signed yet, for testing: macOS won't open it until you allow it in **System Settings → Privacy & Security → Open Anyway**."
+            fi
+            echo
+            echo "Pair it with a code from build-a-bot.site (**Bridge (your computer)**), then **Set up voice typing**: NVIDIA Parakeet downloads (about 0.7 GB) and hears you on the computer. A newer test build installs over this one and keeps your pairing, settings and Parakeet. See desktop/README.md for everything it does."
+          } > notes.md
+          gh release create desktop-test dist/windows/*.exe dist/mac/*.dmg --prerelease --target "$GITHUB_SHA" \
+            --title "Desktop app (test build, $APP_VERSION)" --notes-file notes.md
+      - name: Publish the signed release
+        if: env.WIN_SIGNED == 'true' || env.MAC_SIGNED == 'true'
+        run: |
+          files=()
+          if [ "$WIN_SIGNED" = "true" ]; then files+=(dist/windows/*.exe dist/windows/*.blockmap dist/windows/latest.yml); fi
+          if [ "$MAC_SIGNED" = "true" ]; then files+=(dist/mac/*.dmg dist/mac/*.zip dist/mac/*.blockmap dist/mac/latest-mac.yml); fi
+          {
+            echo "Build-a-bot for your computer: meeting notes and voice typing, heard on the computer by NVIDIA Parakeet."
+            echo
+            echo "Get it from https://build-a-bot.site/download. Installed apps update to this version by themselves."
+          } > release.md
+          gh release create "desktop-v$APP_VERSION" "${files[@]}" --target "$GITHUB_SHA" \
+            --title "Build-a-bot desktop $APP_VERSION" --notes-file release.md

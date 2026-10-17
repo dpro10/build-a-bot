@@ -20,6 +20,7 @@ import { appShortName } from "./apps.mjs";
  * @property {string | null} botId
  * @property {string[]} neverApps
  * @property {{ enabled: boolean, mode: 'hold'|'toggle'|'off', hint: string | null, canPasteLast: boolean } | null} [voice]  voice typing
+ * @property {{ version: string, canRestart: boolean } | null} [update]  a new version, downloaded and waiting
  */
 
 /** @param {TrayModel} m */
@@ -38,6 +39,8 @@ export function trayItems(m) {
   const recording = m.phase === "listening" || m.phase === "paused" || m.phase === "starting";
   const items = [];
   items.push({ id: "status", label: m.status, enabled: false });
+  // Not while taking notes or dictating: it can wait until that's done (or until quitting).
+  if (m.update) items.push({ id: "update", label: `Restart to update to ${m.update.version}`, enabled: m.update.canRestart });
   items.push({ type: "separator" });
 
   if (recording) {

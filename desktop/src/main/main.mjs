@@ -26,6 +26,8 @@
  *   BAB_VOICE_DEMO_FILE=<path>          …re-read from this file on every dictation
  *   BAB_SMOKE=1                         check itself and quit: exit code 0 if all is well (CI, after
  *                                       installing the packaged app); results in BAB_SMOKE_OUT (JSON)
+ *   BAB_STAY_PUT=1                      a packaged Mac app doesn't move itself into Applications
+ *   BAB_UPDATES=off                     a signed build doesn't look for updates
  */
 import * as electron from "electron";
 import { Notification, app, clipboard, ipcMain, powerMonitor, protocol, safeStorage, screen, session, shell, systemPreferences } from "electron";
@@ -41,6 +43,7 @@ import { Controller } from "./controller.mjs";
 import { Decoder } from "./decoder-window.mjs";
 import { Detector } from "./detect/index.mjs";
 import { createTracker } from "./detect/tracker.mjs";
+import { moveToApplications } from "./install-location.mjs";
 import { SCHEME } from "./local-pages.mjs";
 import { createLogger } from "./log.mjs";
 import { meetingSender } from "./meeting-speech.mjs";
@@ -48,6 +51,7 @@ import { PairingWindow } from "./pairing-window.mjs";
 import { Spool } from "./spool.mjs";
 import { DEFAULT_SERVER, Settings, TokenStore, normalizeServer } from "./store.mjs";
 import { AppTray } from "./tray.mjs";
+import { Updates, updatesOn } from "./updates.mjs";
 import { UploadQueue } from "./upload-queue.mjs";
 import { setupVoice } from "./voice/index.mjs";
 
@@ -76,6 +80,8 @@ protocol.registerSchemesAsPrivileged([{ scheme: SCHEME, privileges: { standard: 
 /** @type {ReturnType<typeof createLogger>} */
 let log = (m) => console.log(m);
 let settings, tokens, api, account, spool, uploads, buddy, capture, decoder, controller, pairing, detector, tray, voice;
+/** @type {Updates | null} */
+let updates = null;
 /**
  * NVIDIA Parakeet for meeting notes, filled in once voice typing (which owns the engine) is set up:
  * how each piece is heard, and what the bot says while it's on its way.
@@ -102,6 +108,8 @@ async function boot() {
   const userData = app.getPath("userData");
   log = createLogger({ file: path.join(userData, "logs", "main.log"), echo: !app.isPackaged || env.BAB_LOG === "1" });
   log(`Build-a-bot desktop ${app.getVersion()} · Electron ${process.versions.electron} · ${process.platform}-${process.arch}`);
+  // Opened from Downloads or the disk image (macOS): it moves itself into Applications and opens again.
+  if (moveToApplications({ app, log })) return;
   if (process.platform === "darwin") app.dock?.hide();
   if (process.platform === "win32") app.setAppUserModelId("site.build-a-bot.desktop");
 
@@ -219,6 +227,7 @@ async function boot() {
   });
 
   tray = new AppTray({ model: trayModel, onClick: onTrayClick });
+  await startUpdates();
   account.on("change", () => {
     tray.update();
     pairing.send(pairingState());
@@ -286,12 +295,43 @@ async function boot() {
   if (env.BAB_SMOKE === "1") await smoke();
 }
 
+/** What CI wrote into the packaged package.json (`babUpdates` on signed release builds). */
+function buildFlags() {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(APP_ROOT, "package.json"), "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+/** A signed release build keeps itself up to date (updates.mjs). */
+async function startUpdates() {
+  const enabled = updatesOn({ packaged: app.isPackaged, platform: process.platform, flag: buildFlags().babUpdates, env });
+  if (!enabled) return;
+  try {
+    const { default: electronUpdater } = await import("electron-updater");
+    const busyPhases = new Set(["starting", "listening", "paused", "stopping", "discarding"]);
+    updates = new Updates({
+      updater: electronUpdater.autoUpdater,
+      enabled,
+      busy: () => busyPhases.has(controller.state.phase) || Boolean(voice?.voice?.isRecording?.()),
+      notify: ({ title, body }) => notify({ title, body }),
+      onChange: () => tray?.update(),
+      log,
+    });
+    updates.start();
+  } catch (err) {
+    log(`updates unavailable: ${/** @type {any} */ (err)?.message ?? err}`);
+  }
+}
+
 /** BAB_SMOKE=1: the packaged app checks itself, says how it went, and quits. */
 async function smoke() {
   /** @type {Record<string, unknown>} */
   const results = { version: app.getVersion(), platform: `${process.platform}-${process.arch}`, packaged: app.isPackaged };
   try {
     results.tray = tray ? "ok" : "FAILED: no tray icon";
+    results.updates = updatesOn({ packaged: true, platform: process.platform, flag: buildFlags().babUpdates, env: {} }) ? "on (off while checking itself)" : "off (not a signed release build)";
     results["pairing window"] = pairing.webContents?.getURL().startsWith("bab-app://pairing") ? "ok" : "FAILED: it didn't load";
     Object.assign(results, await voice.smoke());
   } catch (err) {
@@ -421,6 +461,7 @@ function trayModel() {
     botId: account.bot()?.id ?? null,
     neverApps: s.neverApps,
     voice: voice ? voice.trayInfo() : null,
+    update: updates?.menu() ?? null,
   };
 }
 
@@ -446,6 +487,7 @@ function onTrayClick(id, checked) {
   else if (id === "open-app") openAppLink(controller.urlFor("app"));
   else if (id === "pair" || id === "account") void pairing.show();
   else if (id === "login") setOpenAtLogin(Boolean(checked));
+  else if (id === "update") updates?.installNow();
   else if (id === "quit") app.quit();
   tray.update();
 }

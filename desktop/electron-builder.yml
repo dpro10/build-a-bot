@@ -1,5 +1,5 @@
-# Packaging: `npm run dist` on each OS; CI builds, installs and tests the Windows installer
-# (.github/workflows/desktop.yml). See README › Packaging and signing.
+# Packaging: CI builds, signs and publishes the Mac and Windows apps (.github/workflows/desktop.yml);
+# `npm run dist` builds one by hand on its own OS. See README › Packaging and signing.
 appId: site.build-a-bot.desktop
 productName: Build-a-bot
 copyright: Copyright © 2026 Build-a-bot
@@ -17,10 +17,22 @@ asar: true
 asarUnpack:
   - node_modules/uiohook-napi/**
 npmRebuild: false
+# Updates (signed release builds only; src/main/updates.mjs): the app asks build-a-bot.site, which
+# sends it on to the latest release's files, so where they live can change without a new app.
+publish:
+  provider: generic
+  url: https://build-a-bot.site/desktop/updates
 
 mac:
   category: public.app-category.productivity
+  # One app for Apple silicon and Intel Macs (CI builds it with --universal): nothing to choose.
+  # The .zip is what updates download.
   target: [dmg, zip]
+  artifactName: "Build-a-bot-${version}-mac-${arch}.${ext}"
+  # Universal build: these are the same file in the Apple silicon and Intel halves (the keyboard
+  # hook ships one prebuilt file per chip and loads the right one; the helper is already built for
+  # both), so they're kept as they are instead of being merged.
+  x64ArchFiles: "{Contents/Resources/app.asar.unpacked/node_modules/uiohook-napi/prebuilds/**,Contents/Resources/bin/bab-audio-helper}"
   icon: build/icon.png
   hardenedRuntime: true
   gatekeeperAssess: false
@@ -43,11 +55,13 @@ mac:
 win:
   target: [nsis]
   icon: build/icon.png
-  # Code signing: set WIN_CSC_LINK / WIN_CSC_KEY_PASSWORD (a certificate), or use
-  # azureSignOptions for Azure Trusted Signing. Unsigned builds trigger SmartScreen.
+  # Signed in CI with Azure Artifact Signing (azureSignOptions, from the repository's settings), or
+  # a certificate (WIN_CSC_LINK / WIN_CSC_KEY_PASSWORD). Unsigned builds trigger SmartScreen.
 
 nsis:
+  # One click: no questions, no admin, and it opens when it's done.
   oneClick: true
+  artifactName: "Build-a-bot-Setup-${version}.${ext}"
   perMachine: false
   allowElevation: false
   # Uninstalling deletes what the app keeps on this computer (its settings, the voice typing
