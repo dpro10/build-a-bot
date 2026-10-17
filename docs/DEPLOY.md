@@ -34,7 +34,7 @@ The app is one Next.js project plus a Postgres database. Recommended: **Vercel +
 | Web search & reader | `TAVILY_API_KEY` | 1,000 free credits/month, then $0.008/credit. Each lookup is paid from the owner's credit at $0.008 (there are no plans). |
 | Managed app sign-in | `COMPOSIO_API_KEY` | One-click sign-in for about 70 apps (Google, Microsoft, Slack, GitHub, Dropbox, HubSpot, Zoom…). Composio makes each app's auth config on first use. Apps Composio has no OAuth app of its own for (X, Spotify, Shopify, PayPal, Xero…; `src/lib/connectors/composio-auth.ts`) stay "Coming soon" until you register an app with the vendor, add it in Composio and set `COMPOSIO_AUTH_CONFIG_<TOOLKIT>`. **Turn on callback identity verification** (Composio: Settings → General → Configuration, verifier URL `{APP_URL}/api/connectors/composio/verify`): without it, someone could send a person their own sign-in link and attach that person's account to their bot. Consent screens say "Composio"; for launch, register your own Google/Microsoft apps (Google's Gmail scopes need its verification and a CASA assessment). |
 | MCP servers needing a pre-registered app | `MCP_OAUTH_CLIENTS` | JSON map of issuer/host → client id/secret, once you register Build-a-bot with that vendor. |
-| Meeting notes and voice typing | `NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL` | Both are only in the desktop app, which hears them on the user's computer with NVIDIA Parakeet: no speech-to-text is needed on the server. Until signed downloads are published (this URL), a real server shows both as "Coming soon". |
+| Meeting notes and voice typing | `NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL` | Both are only in the desktop app, which hears them on the user's computer with NVIDIA Parakeet: no speech-to-text is needed on the server. Until signed downloads are published (§9) and this is `https://build-a-bot.site/download`, a real server shows both as "Coming soon". |
 | Server speech-to-text (optional fallback) | `TRANSCRIBE_PROVIDER=nvidia`, `TRANSCRIBE_BASE_URL`, `TRANSCRIBE_API_KEY` (+ optional `TRANSCRIBE_FALLBACK_*`) | Only for computers where Parakeet can't run, or with Private speech off. NVIDIA's open speech models on our own server (`speech/`): deploy its image as a Nebius Serverless AI endpoint (steps and costs in `speech/README.md`; about $190/month for an 8-vCPU CPU machine), then point these at it. Backup: `TRANSCRIBE_FALLBACK_PROVIDER=together` with a Together AI key (NVIDIA Parakeet, $0.0015/audio minute; Whisper for the languages Parakeet doesn't speak). Groq's Whisper also works (`TRANSCRIBE_PROVIDER=groq`, paid tier). Token Factory has no speech-to-text. |
 
 Own-key (BYOK) and subscription brains need nothing from you.
@@ -80,7 +80,7 @@ A paid Checkout for an account deleted before Stripe confirmed it adds no credit
 - [ ] Meeting notes and voice typing:
   - a lawyer reviews the consent flow and transcript retention;
   - if server speech-to-text is set up as a fallback, check that provider's data-retention and training terms;
-  - sign and notarize the desktop app (Apple Developer Program for Mac, a code-signing certificate for Windows) and publish its downloads. See `desktop/README.md`. Then set `NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL` to the download page: until it's set, the site shows the desktop app, and with it meeting notes and voice typing, as "Coming soon".
+  - signed, one-click downloads of the desktop app (§9): Apple Developer Program for Mac, Azure Artifact Signing for Windows, the repository public, then `NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL=https://build-a-bot.site/download`. Until it's set, the site shows the desktop app, and with it meeting notes and voice typing, as "Coming soon".
 - [ ] Calls (§8): the voice server is up, the Call button works on `APP_URL`, and with Twilio upgraded and `TWILIO_MEDIA_STREAMS=1`, a phone call is answered by the bot's voice.
 - [ ] Smoke test: build a bot, chat, approve an action, STOP from a channel, a reminder fires, add credit with a Stripe test card, call the bot.
 
@@ -135,3 +135,32 @@ Who's who on a call: the owner on the app's Call button, or from their own numbe
 - Its log (one JSON line per event, never what anyone said): `gcloud compute ssh build-a-bot-voice --zone us-central1-a --project <P> -- sudo journalctl -u voice -u caddy -n 200`, or Logs Explorer in the console.
 - A different machine: set `VOICE_MACHINE_TYPE` and run the workflow; the VM is replaced (it keeps nothing). C3, C4 and N4 get the AVX-512 + AMX build, other types the AVX2 one. The free trial allows 8 vCPUs running at once across the account, and no GPUs.
 - A nicer address: point an A record (e.g. `voice.build-a-bot.site`) at the static IP `build-a-bot-voice-ip`, set the variable `VOICE_HOST` to it, run the workflow, and update `VOICE_SERVER_URL`.
+
+## 9. The desktop app: signed, one-click downloads
+
+Meeting notes and voice typing live in the desktop app, so the site shows them as "Coming soon" until it can be downloaded. When this section is done, **build-a-bot.site/download** offers it for Mac and Windows. Each installs in one go (the Mac app moves itself into Applications; the Windows installer asks nothing and needs no admin) and keeps itself up to date. CI builds, signs and publishes it (`desktop/README.md` › Packaging and signing); what it needs from you is two accounts that check who you are, and their keys.
+
+**1. Make the repository public**, with a license. The downloads and updates are its releases, and nobody else can download a private repository's. (The hackathon needs it public anyway; see `docs/HACKATHON.md`.)
+
+**2. Mac: the Apple Developer Program** ($99 a year).
+1. Enroll at [developer.apple.com/programs/enroll](https://developer.apple.com/programs/enroll/) as an individual, with an Apple ID that has two-factor sign-in. Approval usually takes a day or two.
+2. The certificate. On a Mac: Keychain Access → menu **Keychain Access** → **Certificate Assistant** → **Request a Certificate From a Certificate Authority…** → your email and name, **Saved to disk**. Then at [developer.apple.com/account/resources/certificates](https://developer.apple.com/account/resources/certificates/list) → **+** → **Developer ID Application** → upload that request → download the certificate and double-click it.
+3. Export it: Keychain Access → **My Certificates** → *Developer ID Application: your name (team ID)* → right-click → **Export…** → a `.p12` with a password. Then `base64 -i Certificates.p12 | pbcopy` and paste it as the secret **`MAC_CERTIFICATE_P12`**; the password is **`MAC_CERTIFICATE_PASSWORD`**.
+4. The notarization key: [appstoreconnect.apple.com](https://appstoreconnect.apple.com) → **Users and Access** → **Integrations** → **App Store Connect API** → **Team Keys** → **+**, access **Developer** → download the `.p8` (only possible once). Its text (`pbcopy < AuthKey_….p8`) is **`APPLE_API_KEY_P8`**, its Key ID **`APPLE_API_KEY_ID`**, and the Issuer ID at the top of that page **`APPLE_API_ISSUER`**.
+
+**3. Windows: Azure Artifact Signing** (formerly Trusted Signing; $9.99 a month; individuals in the US and Canada).
+1. [portal.azure.com](https://portal.azure.com) → **Create a resource** → **Artifact Signing** (or Trusted Signing) → a resource group, an account name, a region (East US), the **Basic** plan. Note the account's **URI** (like `https://eus.codesigning.azure.net/`). If Azure asks, register the `Microsoft.CodeSigning` resource provider on the subscription.
+2. On the account → **Access control (IAM)** → give yourself the **Identity Verifier** role (*Artifact Signing* or *Trusted Signing Identity Verifier*).
+3. **Identity validation** → **New** → **Public** → **Individual** → your legal name and address, then the identity check it sends you (a government ID and a selfie). It takes Microsoft a few business days.
+4. Once it says **Completed**: **Certificate profiles** → **Create** → **Public Trust** → a name → that validation.
+5. An identity for CI: **Microsoft Entra ID** → **App registrations** → **New registration** → copy its **Application (client) ID** and **Directory (tenant) ID** → **Certificates & secrets** → **New client secret** → copy the value.
+6. Back on the signing account → **Access control (IAM)** → **Add role assignment** → **Certificate Profile Signer** (*Artifact Signing* or *Trusted Signing Certificate Profile Signer*) → that app registration.
+7. Secrets: **`AZURE_TENANT_ID`**, **`AZURE_CLIENT_ID`**, **`AZURE_CLIENT_SECRET`**. Variables (the **Variables** tab, they aren't secret): **`AZURE_SIGNING_ENDPOINT`** (the account URI), **`AZURE_SIGNING_ACCOUNT`** (the account name), **`AZURE_SIGNING_PROFILE`** (the profile name), **`AZURE_SIGNING_PUBLISHER`** (your name exactly as validated: it's the name on the certificate, and installed apps check updates against it).
+
+Secrets and variables go in GitHub: the repository's **Settings → Secrets and variables → Actions**.
+
+SmartScreen can still warn on a signed app's first downloads, until it has built up a reputation. Signing removes "Unknown publisher" and Smart App Control's block.
+
+**4. Publish:** the next push to `main` that changes `desktop/`, or Actions → **Desktop app** → Run workflow, builds both apps, signs whichever has its keys, and publishes them as the release `desktop-v0.1.<run>`. The run's **Check it** (Mac: notarized Developer ID) and **Check the signature** (Windows) steps show it worked.
+
+**5. Turn it on:** in Vercel, set `NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL=https://build-a-bot.site/download` for Production and Preview, and redeploy. The site then offers the desktop app, and with it meeting notes and voice typing.

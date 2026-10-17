@@ -132,13 +132,16 @@ Electron 44's `session.setDisplayMediaRequestHandler` grants `{ video: <screen>,
 
 ## Install it
 
-- **Windows (10 and 11, x64):** the test build is a pre-release on GitHub, **Releases → Desktop app (test build)**: download `Build-a-bot.Setup.<version>.exe` and run it. It isn't signed yet, so:
-  1. Your browser may say it *isn't commonly downloaded*: in Edge, **…** next to the download → **Keep** → **Show more** → **Keep anyway**; in Chrome, **Keep**.
-  2. Windows says *"Windows protected your PC"*: click **More info**, then **Run anyway**.
-  3. If it says **Smart App Control** blocked it, there's no way past that on this PC until the app is signed (Smart App Control runs only signed apps; most PCs have it off, Windows Security › App & browser control shows which).
+From **[build-a-bot.site/download](https://build-a-bot.site/download)**, once signed builds are published (Packaging and signing, below). The page offers the visitor's own computer first.
 
-  It installs for you only, needs no admin, and starts right away; afterwards it's in the Start menu as **Build-a-bot**, and it lives in the system tray (the **^** by the clock). Pair it with a code from the web app (**Bridge (your computer)**), then **Set up voice typing…** (after pairing, or from the tray) and switch it on: NVIDIA Parakeet downloads (about 0.7 GB), and holding **Ctrl + Windows** types what you say. A new test build installs over the old one and keeps your pairing, settings and Parakeet; uninstalling (Settings › Apps) removes them too. On Windows on ARM it should run through Windows' x64 emulation (not tested). Every push to main rebuilds it, after CI has installed it on a real Windows computer and typed a sentence with it (below).
-- **macOS:** run it from the repository for now (below); a signed, notarized Mac app needs the Developer ID certificate (Packaging and signing).
+- **Mac** (macOS 13 or later, Apple silicon or Intel: one app for both): open the `.dmg` and double-click Build-a-bot. It moves itself into Applications and opens again from there (`src/main/install-location.mjs`). It's signed with a Developer ID and notarized, so macOS only asks once whether to open something downloaded.
+- **Windows** (10 and 11, x64): open `Build-a-bot-Setup-<version>.exe`. It installs for you only, in a few seconds, with no questions and no admin password, and opens. It's in the Start menu as **Build-a-bot** and lives in the system tray (the **^** by the clock). On Windows on ARM it should run through Windows' x64 emulation (not tested).
+
+Then pair it with a code from the web app (**Bridge (your computer)**), and **Set up voice typing…** (after pairing, or from the tray): NVIDIA Parakeet downloads (about 0.7 GB), and holding the shortcut types what you say.
+
+**Updates:** signed builds update themselves (`src/main/updates.mjs`). A minute after starting, and every four hours, the app asks build-a-bot.site for a newer version and downloads it in the background. It installs when the app quits, or right away from **Restart to update to …** at the top of the menu. That item is greyed out while it's taking notes or you're dictating, so it never restarts in the middle of a call. Installing over an older version keeps your pairing, settings and Parakeet; uninstalling removes them too.
+
+**Test builds:** every push to main also replaces the **Desktop app (test build)** pre-release on GitHub: both apps, signed if the signing keys are set, otherwise not. An unsigned Windows build makes the browser ask you to **Keep** it and Windows say *"Windows protected your PC"* (**More info** → **Run anyway**); Smart App Control blocks it outright. An unsigned Mac build opens only after **System Settings → Privacy & Security → Open Anyway**. Test builds don't update themselves.
 
 ## Run it
 
@@ -178,6 +181,8 @@ Running as root (CI containers) needs `--no-sandbox`: `npx electron --no-sandbox
 | `BAB_SPEECH_RUNTIME_URL`, `BAB_SPEECH_ITN_URL`, `BAB_SPEECH_MODEL_URL` | download Private speech's files from somewhere else (a test server, a mirror); they still have to match the pinned hashes |
 | `BAB_PRIVATE_SPEECH=off` | no Private speech at all: nothing downloaded, the server hears every dictation and meeting (the voice and meeting e2e tests use it, for a local demo server's sample lines and scripted meeting; a server with no speech-to-text can't hear you then, and the app says so) |
 | `BAB_SMOKE=1` | check itself and quit: the tray, the pairing window, the keyboard hook (loads, starts, stops), the pill and settings pages, which app is in front, Private speech; exit code 0 when all is well, results in `BAB_SMOKE_OUT` (JSON). CI runs it on the installed Windows app |
+| `BAB_STAY_PUT=1` | a packaged Mac app stays where it was opened instead of moving itself into Applications |
+| `BAB_UPDATES=off` | a signed build doesn't look for updates |
 
 ## Tests
 
@@ -208,7 +213,24 @@ Not tested automatically: real call detection on macOS and Windows (the parsers 
 
 ## Packaging and signing
 
-`electron-builder.yml` is ready. CI builds, installs and tests the Windows installer (above) and publishes it from main; the Mac and Linux packages are built by hand, on each OS:
+CI does it (`.github/workflows/desktop.yml`, on every change to `desktop/`):
+
+- **Windows:** the NSIS installer (one click, per user, no admin), installed on a real Windows computer and tested there (above). With the signing settings below, it's signed with **Azure Artifact Signing**, and CI checks the signature.
+- **Mac:** one universal app (arm64 + x86_64) as a `.dmg` and a `.zip` (what updates download), with the call-detection helper built universal too. With the keys below, it's signed with a **Developer ID** under the hardened runtime and **notarized**, and CI checks what a Mac will say when it's opened (`spctl`: notarized Developer ID) and the stapled ticket. Without them it's signed ad hoc, for testing. Either way the packaged app checks itself (`BAB_SMOKE=1`).
+- **Versions:** each build is `0.1.<run number>` (`-c.extraMetadata.version`), so an installed app can tell a newer one.
+- **Publishing (main only):** every build replaces the **Desktop app (test build)** pre-release. A signed build is also published as the release `desktop-v<version>`, with `latest.yml` / `latest-mac.yml` and the block maps. Signed builds alone carry `babUpdates` in their package.json, which is what switches updates on.
+- **Where downloads and updates come from:** build-a-bot.site. `/download` shows the newest signed build for each computer, `/download/mac` and `/download/windows` send people to the file, and `/desktop/updates/<file>` is the update feed (`electron-builder.yml` › `publish`). They read the repository's releases (`src/lib/desktop/releases.ts`), so **the repository has to be public** for anyone to download them, and the files can move later without a new app.
+
+**Setting up signing** (once, by the owner of the Apple and Azure accounts; the values go in the repository's Settings → Secrets and variables → Actions):
+
+| | Secrets | Variables |
+|---|---|---|
+| Mac | `MAC_CERTIFICATE_P12` (the Developer ID Application certificate with its private key, exported as .p12, base64), `MAC_CERTIFICATE_PASSWORD`, `APPLE_API_KEY_P8` (the App Store Connect API key's .p8 text), `APPLE_API_KEY_ID`, `APPLE_API_ISSUER` | |
+| Windows | `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` (an app registration with the *Artifact Signing Certificate Profile Signer* role on the certificate profile) | `AZURE_SIGNING_ENDPOINT` (the account's region endpoint, like `https://eus.codesigning.azure.net`), `AZURE_SIGNING_ACCOUNT`, `AZURE_SIGNING_PROFILE`, `AZURE_SIGNING_PUBLISHER` (the name on the certificate, exactly) |
+
+The step-by-step is in `docs/DEPLOY.md` §9. A platform whose keys are missing still builds, unsigned, and isn't published as a release.
+
+By hand, on each OS:
 
 ```sh
 bash native/macos/build.sh   # macOS only: the helper (Xcode 15.4+), copied into Resources/bin
@@ -217,9 +239,9 @@ npm run dist                 # npx electron-builder@26 --config electron-builder
 
 - **Private speech** isn't in the installer: NVIDIA's runtime and model are downloaded the first time voice typing is on, or a bot takes notes on this computer (above), so the app stays small and the model isn't redistributed. NeMo-Speech.cpp is Apache 2.0; Parakeet TDT 0.6B v3 is CC BY 4.0, credited in the settings card. NVIDIA's macOS runtime is ad-hoc signed and runs as its own process, outside the app's hardened runtime; once it matches NVIDIA's published hash, the app clears the download quarantine flag if macOS set one, so Gatekeeper doesn't stop it.
 - **Voice typing's hook** (`uiohook-napi`) ships N-API prebuilds for macOS (x64, arm64), Windows (x64, arm64) and Linux (x64, arm64), so there's nothing to compile (`npmRebuild: false`); `asarUnpack` keeps the `.node` file loadable. On macOS, Accessibility trust belongs to the signed app: a re-signed build with a new identity has to be allowed again.
-- **macOS:** a hardened-runtime, Developer ID–signed, notarized `.dmg`/`.zip` (`notarize: true`; set `APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`, and `CSC_LINK`/`CSC_KEY_PASSWORD` for the certificate; the Apple Developer Program is 99 USD a year). `LSUIElement` keeps it out of the Dock. `NSMicrophoneUsageDescription` and `NSAudioCaptureUsageDescription` must be in the **main app's** Info.plist (macOS asks on behalf of the app responsible for the process). Entitlements: `build/entitlements.mac.plist` (JIT for Electron, audio input, Apple Events). Sign the helper with the same identity (`BAB_CODESIGN_IDENTITY=… bash native/macos/build.sh`).
-- **Windows:** an NSIS per-user installer (`--win nsis --x64`). Installing over an older version keeps the app's data; uninstalling deletes it (`deleteAppDataOnUninstall`), after `build/installer.nsh` stops Private speech's engine if it's still running and clears *Start at login*. Sign it (a code-signing certificate via `WIN_CSC_LINK`/`WIN_CSC_KEY_PASSWORD`, or Azure Trusted Signing with `azureSignOptions`); unsigned builds trip SmartScreen, and Smart App Control blocks them outright. NVIDIA's `nemo-speech.exe` isn't signed either (it brings its own Visual C++ runtime, so nothing else needs installing). Notifications use the app ID `site.build-a-bot.desktop`.
-- **Linux:** AppImage and `.deb` (the `.deb` depends on `pulseaudio-utils` or `pipewire-pulse` for `pactl`).
+- **macOS:** `LSUIElement` keeps it out of the Dock. `NSMicrophoneUsageDescription` and `NSAudioCaptureUsageDescription` must be in the **main app's** Info.plist (macOS asks on behalf of the app responsible for the process). Entitlements: `build/entitlements.mac.plist` (JIT for Electron, audio input, Apple Events). electron-builder signs the helper again with the app's identity. An ad hoc build has no hardened runtime (it would refuse Electron's own libraries without a real identity).
+- **Windows:** installing over an older version keeps the app's data; uninstalling deletes it (`deleteAppDataOnUninstall`), after `build/installer.nsh` stops Private speech's engine if it's still running and clears *Start at login*. NVIDIA's `nemo-speech.exe` isn't signed (it brings its own Visual C++ runtime, so nothing else needs installing), so a PC with Smart App Control on may not let it run; then the server hears instead, where it can. Notifications use the app ID `site.build-a-bot.desktop`.
+- **Linux:** AppImage and `.deb` (the `.deb` depends on `pulseaudio-utils` or `pipewire-pulse` for `pactl`). They don't update themselves.
 - Icons: `npm run icons` renders `assets/tray/*` (template images for the macOS menu bar, colored ones for Windows/Linux), `assets/icon.png` and `build/icon.png` from the SVGs in `assets/svg` with Playwright.
 
 ## Layout
