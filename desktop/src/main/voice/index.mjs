@@ -681,6 +681,8 @@ export function setupVoice(o) {
       };
       await step("keyboard hook", async () => {
         const h = await loadHook();
+        // macOS starts the hook only once Accessibility is allowed (a fresh install hasn't been yet).
+        if (!trusted()) return "ok (loaded; starts once Accessibility is allowed)";
         h.start();
         await new Promise((r) => setTimeout(r, 300));
         h.stop();
