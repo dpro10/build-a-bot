@@ -21,7 +21,10 @@ describe("channel availability", () => {
     for (const kind of ["sms", "voice", "email"] as const) expect(channelAvailability(CHANNEL_BY_KIND[kind], false, LIVE_SITE)).toBe("soon");
     expect(channelAvailability(CHANNEL_BY_KIND.discord, false, {})).toBe("soon");
     for (const kind of ["web", "telegram", "discord", "slack"] as const) expect(channelUsable(CHANNEL_BY_KIND[kind], false, LIVE_SITE)).toBe(true);
-    expect(channelAvailability(CHANNEL_BY_KIND.sms, false, { ...LIVE_SITE, twilio: true })).toBe("available");
+    // Twilio alone gives calls; texts also need a number registered to text US phones.
+    expect(channelAvailability(CHANNEL_BY_KIND.voice, false, { ...LIVE_SITE, twilio: true })).toBe("available");
+    expect(channelAvailability(CHANNEL_BY_KIND.sms, false, { ...LIVE_SITE, twilio: true })).toBe("soon");
+    expect(channelAvailability(CHANNEL_BY_KIND.sms, false, { ...LIVE_SITE, twilio: true, twilioTexting: true })).toBe("available");
   });
 
   it("the sign-in email key doesn't turn on the Email channel; bots' own inboxes do", () => {
@@ -116,8 +119,11 @@ describe("recipes and drafts in the builder", () => {
 
   it("texts and calls come along once they're set up here (they're paid from credit, not a plan)", () => {
     expect(usableChannels(["sms", "telegram", "whatsapp"], live)).toEqual(["telegram", "whatsapp"]);
+    // Calls come with Twilio; texts once the number is registered to text.
     const withTwilio = { ...live, live: { ...LIVE_SITE, twilio: true } };
-    expect(usableChannels(["sms", "voice", "telegram", "whatsapp"], withTwilio)).toEqual(["sms", "voice", "telegram", "whatsapp"]);
+    expect(usableChannels(["sms", "voice", "telegram", "whatsapp"], withTwilio)).toEqual(["voice", "telegram", "whatsapp"]);
+    const withTexting = { ...live, live: { ...LIVE_SITE, twilio: true, twilioTexting: true } };
+    expect(usableChannels(["sms", "voice", "telegram", "whatsapp"], withTexting)).toEqual(["sms", "voice", "telegram", "whatsapp"]);
   });
 });
 

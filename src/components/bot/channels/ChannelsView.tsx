@@ -108,8 +108,8 @@ export function ChannelsView({ bot, channels: initial, demo, ownerEmail, botEmai
   }, [waiting, refresh]);
 
   const ctx: ChannelCtx = React.useMemo(
-    () => ({ botId: bot.id, botName: bot.name, demo, ownerEmail, botEmail, slackOneClick, run, refresh, expect }),
-    [bot.id, bot.name, demo, ownerEmail, botEmail, slackOneClick, run, refresh, expect],
+    () => ({ botId: bot.id, botName: bot.name, demo, ownerEmail, botEmail, slackOneClick, texting: Boolean(availability.sms), run, refresh, expect }),
+    [bot.id, bot.name, demo, ownerEmail, botEmail, slackOneClick, availability.sms, run, refresh, expect],
   );
 
   // Back from Slack (once, even when effects run twice in development).

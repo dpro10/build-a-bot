@@ -16,6 +16,7 @@ process.env.RESEND_WEBHOOK_SECRET = `whsec_${crypto.randomBytes(24).toString("ba
 process.env.TWILIO_ACCOUNT_SID = "AC_test";
 process.env.TWILIO_AUTH_TOKEN = "twilio_test";
 process.env.TWILIO_PHONE_NUMBER = "+15555550100";
+process.env.TWILIO_TEXTING = "1";
 for (const name of ["DATABASE_URL", "AGENTMAIL_API_KEY", "AGENTMAIL_WEBHOOK_SECRET", "STRIPE_SECRET_KEY"]) delete process.env[name];
 
 const session = vi.hoisted(() => ({ user: null as unknown }));
