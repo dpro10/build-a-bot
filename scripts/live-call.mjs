@@ -1,6 +1,6 @@
 // A real call on the live site, made the way a person makes one: a browser opens a new bot's page,
 // presses Call, waits for the greeting, then asks a question out loud (scripts/live-call-question.wav,
-// NVIDIA Magpie's John voice). On the voice server Parakeet hears it, Nemotron answers and Magpie
+// NVIDIA Magpie's Aria voice). On the voice server Parakeet hears it, Nemotron answers and Magpie
 // speaks. It passes when the greeting, the question, a spoken answer and the call's record all come
 // through, and reports how long the answer took. The bot is deleted afterwards.
 //

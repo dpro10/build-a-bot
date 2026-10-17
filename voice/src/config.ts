@@ -40,7 +40,7 @@ export function loadConfig(): VoiceConfig {
   if (missing.length) throw new Error(`Missing settings: ${missing.join(", ")}`);
   if (secret.length < 32) throw new Error("VOICE_SERVER_SECRET must be at least 32 characters");
 
-  const voice = env("VOICE") ?? "Aria";
+  const voice = env("VOICE") ?? "Sofia";
   const speechUrl = env("SPEECH_URL");
   const models = env("MODELS_DIR") ?? "/opt/models";
   const sidecarArgs = env("NEMO_VOICE_ARGS")?.split(/\s+/).filter(Boolean) ?? [
@@ -57,8 +57,10 @@ export function loadConfig(): VoiceConfig {
     ...(env("ITN_DIR") ? ["--itn-dir", env("ITN_DIR")!] : []),
     ...(env("TTS_THREADS") ? ["--tts-threads", env("TTS_THREADS")!] : []),
     ...(env("CODEC_THREADS") ? ["--codec-threads", env("CODEC_THREADS")!] : []),
-    // Classifier-free guidance doubles Magpie's work for a small gain: off unless asked for.
-    ...(env("TTS_CFG") === "1" ? [] : ["--no-cfg"]),
+    // Classifier-free guidance: without it Magpie reads slower, with longer pauses (one voice went
+    // from 183 to 147 words a minute). It costs almost nothing on a CPU, where the codec, not
+    // Magpie, sets the speed. TTS_CFG=0 turns it off.
+    ...(env("TTS_CFG") === "0" ? ["--no-cfg"] : []),
     ...(env("GPU") ? ["--gpu", env("GPU")!] : []),
   ];
   let extraBody: Record<string, unknown> = { reasoning_effort: "none" };

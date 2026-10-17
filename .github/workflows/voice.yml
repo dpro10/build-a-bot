@@ -85,7 +85,7 @@ jobs:
         run: |
           M=$HOME/models
           export NEMO_VOICE_BIN=$HOME/nemo-speech/bin/nemo-voice
-          export NEMO_VOICE_ARGS="--asr-model $M/parakeet-tdt-0.6b-v3.q8_0.gguf --tts-model $M/magpie/magpie_tts_multilingual_357m.v2607.q8_0.gguf --codec-model $M/magpie/nemo_nano_codec_22khz_1.89kbps_21.5fps.decoder.f16.gguf --tokenizer-dir $M/magpie/tokenizer --voice Aria --tts-threads 2 --codec-threads 2 --no-cfg"
+          export NEMO_VOICE_ARGS="--asr-model $M/parakeet-tdt-0.6b-v3.q8_0.gguf --tts-model $M/magpie/magpie_tts_multilingual_357m.v2607.q8_0.gguf --codec-model $M/magpie/nemo_nano_codec_22khz_1.89kbps_21.5fps.decoder.f16.gguf --tokenizer-dir $M/magpie/tokenizer --voice Sofia --tts-threads 2 --codec-threads 2"
           export SILERO_VAD_MODEL=$M/silero_vad.onnx
           node --test --test-timeout=900000 test/sidecar.test.ts test/turn.test.ts test/real-call.test.ts
 
