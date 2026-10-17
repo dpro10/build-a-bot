@@ -105,6 +105,13 @@ Web chat, phone calls and texts (Twilio), email (its own brand-free address), Te
 - **Private:** the mic is on only while you hold the key, with a pill on screen the whole time. NVIDIA Parakeet hears you on your own computer, so the audio never leaves it; the server gets the words to clean up and keeps a word count, not the words. History stays on your computer, encrypted.
 - **In the desktop app**, like Wispr Flow: the website doesn't listen. The **Voice typing** page (`/app/voice`) gets you the app, pairs it, and holds your words and snippets. No word limit: hearing you is free on your computer, and the AI cleanup is paid from credit (a fraction of a cent).
 
+### Your files, and studying from them
+
+- **Give your bot files:** drop them on the chat, use the paperclip or paste a screenshot, add them on the bot's **Library** tab, or send them on Telegram (or Discord's `/ask`). PDFs, Word, PowerPoint (with speaker notes), text and photos, up to 25 MB each and 500 MB in all.
+- **Read once, cited always:** each file is read into passages with their page or slide, and searched with Postgres full-text search. The bot says which file and page it used. Photos and scanned pages are read by a vision model on Nebius Token Factory, paid from credit.
+- **Flashcards and practice quizzes** that work right in the chat: flip a card, mark *Got it* or *Again* (spaced repetition brings misses back sooner); answer a quiz one question at a time, see why, get a score, and send your mistakes back to the bot to go over. CSV export for Anki and Quizlet.
+- **Private:** files live in a private store, read back only for their owner; people who message the bot can't search them; deleting a bot or the account deletes them. A file's text is outside content to the model, never instructions.
+
 ### Web actions (beta)
 
 It browses sites and fills in forms in a cloud browser (Browser Use Cloud). Before anything is sent, the owner sees every field it filled and a picture of the form, and taps to send. Payment pages, card details, passwords and logins are refused in code.
@@ -121,7 +128,7 @@ An optional morning brief (on by default), routines and reminders, on any channe
 
 ### The dashboard (`/app`)
 
-- **For each bot:** Chat with inline approvals, Meetings, Activity (receipts), Apps & trust, Channels, Routines, Memory, Settings (look, personality, brain, recipes, MCP access).
+- **For each bot:** Chat with inline approvals and file attachments, Library (files, flashcards, quizzes), Meetings, Activity (receipts), Apps & trust, Channels, Routines, Memory, Settings (look, personality, brain, recipes, MCP access).
 - **For the account:** Approvals inbox, Voice typing, Bridge (your computer, including the desktop app), Credit & usage, Account (export, delete).
 
 ### The business side
@@ -167,6 +174,7 @@ axe finds no serious WCAG 2.2 AA problems on the main public and dashboard pages
   - `policy`: trust.
   - `tools`, `connectors`, `channels`, `bridge`, `billing`, `scheduler`, `db`.
   - `meetings` and `transcribe`: meeting notes and speech-to-text.
+  - `library`: the owner's files (storage, reading, search) and study sets.
   - `calls`: calls with a bot: who's calling, the phone PIN, call tokens, what the voice server asks the app.
   - `web-actions`: the cloud browser.
 - `src/components`: the UI, including `avatar` (the five characters), `meetings` (the meetings, their notes, and the bot the desktop app shows at the bottom of the screen) and `call` (the Call button and the call itself).
