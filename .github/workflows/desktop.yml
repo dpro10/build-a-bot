@@ -390,7 +390,8 @@ jobs:
   # become a release, which build-a-bot.site/download offers and the installed apps update to.
   publish:
     name: Publish
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # A push to main, or a build started by hand on main (gh workflow run desktop.yml --ref main).
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
     needs: [windows-installer, mac-app, private-speech]
     runs-on: ubuntu-latest
     permissions:
