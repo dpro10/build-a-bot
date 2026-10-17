@@ -38,7 +38,7 @@ export function FieldHint({ className, ...props }: React.HTMLAttributes<HTMLPara
 }
 
 /**
- * What someone typed after "+1", tidied as they type: "(512) 905-9674". A 1 or +1 in front is
+ * What someone typed after "+1", tidied as they type: "(512) 555-0123". A 1 or +1 in front is
  * dropped, since the box already shows +1 (and no US or Canada area code starts with 1).
  */
 export function tidyUsPhone(value: string): string {
