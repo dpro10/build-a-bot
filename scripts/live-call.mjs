@@ -144,8 +144,9 @@ try {
     const askedEnd = at();
     const heard = await until("question heard", (e) => e.type === "transcript" && e.role === "caller" && e.t > askedAt, 20_000);
     const latency = await until("spoken answer", (e) => e.type === "latency" && e.t > askedAt, 30_000);
-    const firstAudio = audio.find((t) => t > askedEnd) ?? null;
     const done = await until("end of the answer", (e) => e.type === "state" && e.state === "listening" && e.t > latency.t, 60_000).catch(() => null);
+    // The server's timing event goes out just before the audio it times, so look once the answer has played.
+    const firstAudio = audio.find((t) => t > askedEnd) ?? null;
     await page.screenshot({ path: `${out}/2-answer.png` });
     const answer = events.filter((e) => e.type === "say" && e.t > heard.t).map((e) => e.text).join(" ");
     const tasks = events.filter((e) => e.type === "task" && e.state === "done" && e.t > heard.t);
