@@ -368,7 +368,7 @@ function studyWish(t: string): StudyWish | null {
 
 /** The file a message is about: one attached to it, one named in quotes, or the newest in the Library. */
 function fileFor(text: string, system: string): string | null {
-  const attached = /\[Attached to this message[^:]*: (.+?) \((?:\d+ (?:pages?|slides?|parts?|photos?)|Photo|Text|Document)\)/.exec(text)?.[1];
+  const attached = /\[Attached to this message[^:]*: (.+?) \((?:\d+ (?:pages?|slides?|parts?|photos?)|Photo|Text|Document|a photo[^)]*)\)/.exec(text)?.[1];
   if (attached) return attached;
   const quoted = /["“]([^"”]{2,160}\.[a-z0-9]{2,5})["”]/i.exec(text)?.[1];
   if (quoted) return quoted;

@@ -21,7 +21,11 @@ export function withFiles(text: string, meta: unknown): string {
   const files = filesOf(meta);
   if (!files.length) return text;
   const list = files
-    .map((f) => (f.status === "failed" ? `${f.name} (couldn't be read: ${f.note ?? "unknown reason"})` : `${f.name} (${pagesLabel(f.kind, f.pages)})`))
+    .map((f) =>
+      f.status === "failed"
+        ? `${f.name} (couldn't be read: ${f.note ?? "unknown reason"})`
+        : `${f.name} (${f.kind === "image" ? "a photo; its text was already read, and read_file gives it to you" : pagesLabel(f.kind, f.pages)})`,
+    )
     .join("; ");
   const ready = files.some((f) => f.status !== "failed");
   const line = `[Attached to this message${ready ? ", and now in your Library" : ""}: ${list}.${ready ? " Read them with read_file or search_files before answering about them." : ""}]`;
