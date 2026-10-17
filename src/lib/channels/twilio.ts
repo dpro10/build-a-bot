@@ -53,6 +53,13 @@ export async function placeCall(from: string, to: string, twiml: string) {
   return twilioPost("Calls.json", { From: from, To: to, Twiml: twiml });
 }
 
+/** The call that reads an owner their phone code: one digit at a time, three times. */
+export function codeCallTwiml(botName: string, code: string): string {
+  const say = (text: string) => `<Say voice="${escapeXml(config.twilio.voice)}">${escapeXml(text)}</Say>`;
+  const digits = code.split("").join(", ");
+  return `<Response><Pause length="1"/>${say(`Hi, it's ${botName}, an AI assistant. Your code is: ${digits}.`)}<Pause length="1"/>${say(`Again: ${digits}.`)}<Pause length="1"/>${say(`Once more: ${digits}. Bye!`)}</Response>`;
+}
+
 export const smsAdapter: ChannelAdapter = {
   isLive() {
     return live.twilio;

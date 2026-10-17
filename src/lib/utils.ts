@@ -85,6 +85,15 @@ export function normalizePhone(value: string): string | null {
   return null;
 }
 
+/**
+ * A US or Canada number. +1 also covers Caribbean countries, where texts and calls cost far more
+ * (and are a favorite of toll fraud), and 900 numbers, which charge the caller.
+ */
+const NOT_US_OR_CANADA = new Set(["242", "246", "264", "268", "284", "345", "441", "473", "649", "658", "664", "721", "758", "767", "784", "809", "829", "849", "868", "869", "876", "900"]);
+export function isUsOrCanadaPhone(e164: string): boolean {
+  return /^\+1[2-9]\d{2}[2-9]\d{6}$/.test(e164) && !NOT_US_OR_CANADA.has(e164.slice(2, 5));
+}
+
 export function maskPhone(e164: string): string {
   return e164.length > 4 ? `${e164.slice(0, -4).replace(/\d/g, "•")}${e164.slice(-4)}` : e164;
 }
