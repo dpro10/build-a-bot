@@ -3,7 +3,7 @@
 Anyone makes their own AI agent in about a minute: pick a face, give it a name, choose a brain (or connect the AI subscription they already pay for), give it their apps, decide how much it can do on its own, and talk to it anywhere — calls, texts, email, Telegram, Discord, Slack. Call it, from the app or a phone, and it answers in its own voice and gets things done while you talk. It can also sit in on their calls and take the notes, and type for them by voice in any app.
 
 - **Site:** [build-a-bot.site](https://build-a-bot.site), live on Vercel + Supabase since 2026-10-14, still in demo mode until the last keys are in (`docs/DECISIONS.md` → *Live*).
-- **Status (2026-10-16):** the whole product is built (the website, the dashboard, and a desktop app for meeting notes and voice typing) and runs locally in demo mode with zero keys. Meeting notes and voice typing are only in the desktop app, which hears them on the user's own computer. Calls with a bot run on our voice server (`voice/`), tested on NVIDIA's real models and live once it's deployed (`docs/DEPLOY.md` §8). `docs/DEPLOY.md` lists what each integration needs.
+- **Status (2026-10-17):** the whole product is built (the website, the dashboard, and a desktop app for meeting notes and voice typing) and runs locally in demo mode with zero keys. Meeting notes and voice typing are only in the desktop app, which hears them on the user's own computer. Calls with a bot run on our voice server (`voice/`), live since 2026-10-17 with a real test call after every deploy, and phones reach bots through Twilio. The Mac app is signed with Developer ID and notarized; the Windows installer waits on Azure Artifact Signing, and public downloads wait on the repository going public (`docs/DEPLOY.md` §9). `docs/DEPLOY.md` lists what each integration needs.
 - **Reviewing it?** Start with [`docs/TRY-IT.md`](docs/TRY-IT.md): how to run both apps, what to click, and what's simulated.
 
 ## Built on NVIDIA and Nebius
@@ -225,10 +225,10 @@ The current list is in `docs/DECISIONS.md`.
 5. **Trademark clearance** before spending on the brand.
 6. **Meeting notes and voice typing before launch:**
    - a lawyer's look at the consent flow and retention;
-   - signed downloads, since both are only in the app: signing and notarizing the Mac app (a Developer ID certificate and notarization credentials in CI secrets, built on a Mac or a macOS runner), and signing the Windows installer;
+   - signed downloads, since both are only in the app: the Mac app is signed and notarized (2026-10-17); the Windows installer waits on Azure Artifact Signing's identity check, and both wait on the repository going public;
    - whether the desktop app and the Bridge become one app.
 7. **Meeting notes, next:** meeting titles from the calendar, telling the call's speakers apart, and languages beyond Parakeet's 25.
-8. **Calls:** deploying the voice server and upgrading Twilio for streaming (`docs/DEPLOY.md` §8). Next: the bot calling you back when a job is done, a call starting your other agents (desk tasks through the Bridge, research, the cloud browser), and calls heard on your own computer.
+8. **Calls:** the voice server and Twilio are live (2026-10-17); texting waits on A2P 10DLC registration. Next: the bot calling you back when a job is done, a call starting your other agents (desk tasks through the Bridge, research, the cloud browser), and calls heard on your own computer.
 
 ## Ground rules
 

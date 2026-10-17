@@ -1,0 +1,33 @@
+# The website (src/): typecheck and unit tests on every pull request and push to main that could
+# change it. Vercel builds and deploys it; the Live call workflow checks calls after each deploy.
+name: Website
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["desktop/**", "voice/**", "speech/**", "docs/**", "**/*.md"]
+  pull_request:
+    paths-ignore: ["desktop/**", "voice/**", "speech/**", "docs/**", "**/*.md"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Typecheck and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
