@@ -82,8 +82,11 @@ struct WindowRect: Encodable { let x: Double; let y: Double; let w: Double; let 
 struct MicProcess: Encodable { let pid: Int32; let bundleId: String; let input: Bool; let output: Bool; let windows: [WindowRect] }
 struct Report: Encodable { let ok: Bool; let api: String; let inputInUse: Bool; let processes: [MicProcess]; let error: String? }
 
+/** PROC_PIDPATHINFO_MAXSIZE (4 × MAXPATHLEN): the macOS 26 SDK no longer lets Swift import that macro. */
+let procPidPathMaxSize = 4 * 1024
+
 func executablePath(_ pid: pid_t) -> String? {
-    var buffer = [CChar](repeating: 0, count: Int(PROC_PIDPATHINFO_MAXSIZE))
+    var buffer = [CChar](repeating: 0, count: procPidPathMaxSize)
     let n = proc_pidpath(pid, &buffer, UInt32(buffer.count))
     return n > 0 ? String(cString: buffer) : nil
 }
