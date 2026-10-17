@@ -31,6 +31,7 @@ const { appUrl, live } = await import("@/lib/env");
 const { getUsage, recordUsage } = await import("@/lib/billing/usage");
 const callStatusRoute = await import("@/app/api/webhooks/twilio/voice/status/route");
 const channelsRoute = await import("@/app/api/bots/[botId]/channels/route");
+const { channelAction } = await import("@/lib/channels/setup");
 import type { Bot } from "@/lib/db/schema";
 
 let bot: Bot;
@@ -196,6 +197,31 @@ describe("phone codes", () => {
     vi.stubGlobal("fetch", async () => Response.json({ sid: "CA_code_2" }, { status: 201 }));
     const res = await post({ kind: "voice", action: "send_code", payload: { phone: "+15125550177", via: "call" } });
     expect(await res.json()).toEqual({ ok: true, sent: true, via: "call" });
+  });
+
+  it("too many codes to one number says so, and how long to wait", async () => {
+    const db = await getDb();
+    const [owner] = await db.insert(schema.users).values({ id: "usr_limits", email: "lee@example.com", emailVerifiedAt: new Date(), timezone: "UTC" }).returning();
+    const made = await createBot(db, owner, {
+      avatar: "otto",
+      color: "grape",
+      name: "Pip",
+      jobs: [],
+      brain: { kind: "included", model: "nvidia/Nemotron-3_5-Lightning" },
+      connectors: [],
+      trust: "ask",
+      channels: ["voice"],
+      contact: {},
+      ageConfirmed: true,
+      timezone: "UTC",
+    });
+    if (!made.ok) throw new Error(made.error);
+    vi.stubGlobal("fetch", async () => Response.json({ sid: "CA_code_3" }, { status: 201 }));
+    const send = () => channelAction(db, owner, made.bot, "voice", "send_code", { phone: "+15125550166", via: "call" });
+    for (let i = 0; i < 3; i++) expect(await send()).toMatchObject({ ok: true });
+    const res = await send();
+    expect(res).toMatchObject({ ok: false, status: 429 });
+    expect(res.ok ? "" : res.error).toMatch(/^Too many codes to that number\. Try again in (a minute|\d+ minutes)\.$/);
   });
 
   it("codes go only to US and Canada numbers, not Caribbean or 900 numbers that share +1", async () => {

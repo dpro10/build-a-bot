@@ -104,10 +104,21 @@ async function useCode(db: Db, channel: Channel, purpose: string, prefix: string
  * (demo mode, shown on screen) only get a loose per-owner limit.
  */
 async function codeLimit(db: Db, owner: User, destination: string, reallySent: boolean, ip: string | undefined): Promise<SetupResult | null> {
-  const tooMany = (error = "Too many codes. Try again in a bit."): SetupResult => ({ ok: false, error, status: 429 });
-  if (reallySent && ip && !(await rateLimit(db, `code:ip:${ip}`, 10, 3600)).ok) return tooMany();
-  if (!(await rateLimit(db, `code:owner:${owner.id}`, reallySent ? 5 : 20, 3600)).ok) return tooMany();
-  if (reallySent && !(await rateLimit(db, `code:dest:${destination}`, 3, 3600)).ok) return tooMany("Too many codes to that address. Try again in a bit.");
+  // Says when to try again: the limits are hourly windows that reset on the hour.
+  const tooMany = (resetAt: Date, what = "Too many codes"): SetupResult => {
+    const minutes = Math.max(1, Math.ceil((resetAt.getTime() - Date.now()) / 60_000));
+    return { ok: false, error: `${what}. Try again in ${minutes === 1 ? "a minute" : `${minutes} minutes`}.`, status: 429 };
+  };
+  if (reallySent && ip) {
+    const byIp = await rateLimit(db, `code:ip:${ip}`, 10, 3600);
+    if (!byIp.ok) return tooMany(byIp.resetAt);
+  }
+  const byOwner = await rateLimit(db, `code:owner:${owner.id}`, reallySent ? 5 : 20, 3600);
+  if (!byOwner.ok) return tooMany(byOwner.resetAt);
+  if (reallySent) {
+    const byDestination = await rateLimit(db, `code:dest:${destination}`, 3, 3600);
+    if (!byDestination.ok) return tooMany(byDestination.resetAt, `Too many codes to that ${destination.startsWith("+") ? "number" : "address"}`);
+  }
   return null;
 }
 

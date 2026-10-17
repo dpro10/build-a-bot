@@ -4,7 +4,7 @@ import { Check, Lock } from "lucide-react";
 import { BrandTile } from "@/components/brand/icons";
 import { channelIcon } from "@/components/catalog/channel-icon";
 import { Badge } from "@/components/ui/badge";
-import { FieldHint, Input, Label } from "@/components/ui/input";
+import { FieldHint, Input, Label, tidyUsPhone, UsPhoneInput } from "@/components/ui/input";
 import { UNIT_PRICES, formatMicros } from "@/lib/billing/prices";
 import { CHANNELS, channelAvailability, type ChannelDef, type ChannelKind, type LiveFlags } from "@/lib/channels/catalog";
 import { cn } from "@/lib/utils";
@@ -102,19 +102,15 @@ export function ChannelsStep({
           {needsPhone ? (
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="owner-phone">Your mobile number</Label>
-              <Input
+              <UsPhoneInput
                 id="owner-phone"
-                type="tel"
-                inputMode="tel"
-                autoComplete="tel"
-                placeholder="+1 512 555 0123"
-                value={phone}
-                onChange={(e) => onPhone(e.target.value)}
+                value={tidyUsPhone(phone)}
+                onValueChange={onPhone}
                 onBlur={() => setPhoneTouched(true)}
                 aria-invalid={phoneTouched && !isPhoneLike(phone)}
               />
               <FieldHint className={cn(phoneTouched && !isPhoneLike(phone) && "text-danger")}>
-                {phoneTouched && !isPhoneLike(phone) ? "Include the area code." : `So ${name} knows it's you. We'll text a code to confirm. US & Canada to start.`}
+                {phoneTouched && !isPhoneLike(phone) ? "Your 10-digit number, area code first." : `So ${name} knows it's you. You'll get a code by call or text to confirm. US & Canada to start.`}
               </FieldHint>
             </div>
           ) : null}

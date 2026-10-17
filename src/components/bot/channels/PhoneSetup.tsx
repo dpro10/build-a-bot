@@ -3,7 +3,7 @@ import * as React from "react";
 import { BadgeCheck, MessageSquareText, Phone, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
-import { Input, Label } from "@/components/ui/input";
+import { Label, tidyUsPhone, UsPhoneInput } from "@/components/ui/input";
 import { toast } from "@/components/ui/toaster";
 import { str, type ChannelCtx } from "./context";
 import { formatPhone, type ChannelView } from "./model";
@@ -33,7 +33,7 @@ function PhoneVerify({
   onCancel?: () => void;
   onDone: () => void;
 }) {
-  const [phone, setPhone] = React.useState(formatPhone(channel.pendingOwnerAddress ?? (onCancel ? channel.ownerAddress : null)) || "");
+  const [phone, setPhone] = React.useState(tidyUsPhone(channel.pendingOwnerAddress ?? (onCancel ? channel.ownerAddress : null) ?? ""));
   const [sentTo, setSentTo] = React.useState<string | null>(null);
   const [sentVia, setSentVia] = React.useState<"sms" | "call">("sms");
   const [demoCode, setDemoCode] = React.useState<string | null>(null);
@@ -46,7 +46,7 @@ function PhoneVerify({
   const sendCode = async (via: "sms" | "call", e?: React.FormEvent) => {
     e?.preventDefault();
     if (phone.replace(/\D/g, "").length < 10) {
-      toast.error("Enter your full mobile number, with area code.");
+      toast.error("Enter your 10-digit mobile number, area code first.");
       return;
     }
     setBusy(via);
@@ -82,16 +82,7 @@ function PhoneVerify({
               <Label htmlFor={phoneId} className="text-[13px] text-muted-foreground">
                 Your mobile number
               </Label>
-              <Input
-                id={phoneId}
-                type="tel"
-                inputMode="tel"
-                autoComplete="tel"
-                placeholder="(512) 555-0123"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className="h-11 sm:w-60"
-              />
+              <UsPhoneInput id={phoneId} value={phone} onValueChange={setPhone} className="h-11 sm:w-60" />
             </div>
             {order.map((via, i) => (
               <Button
