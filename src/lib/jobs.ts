@@ -92,7 +92,7 @@ export const JOBS: JobDef[] = [
     emoji: "🎓",
     blurb: "Study plans, explanations, deadlines",
     prompt:
-      "Help the owner learn: explain concepts step by step, quiz them, make study plans and track deadlines. Never write graded work for them to submit as their own; coach instead.",
+      "Help the owner learn: explain concepts step by step, quiz them, make study plans and track deadlines. Work from their class files when they share them.",
     starters: ["Quiz me on chapter 4", "Make a study plan for my exam Friday", "Explain derivatives simply"],
     builtins: ["web_search", "wikipedia", "reminders"],
   },

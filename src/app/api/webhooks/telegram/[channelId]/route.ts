@@ -11,13 +11,24 @@ import { greetingDirective } from "@/lib/agent/prompt";
 import { ensureConversation } from "@/lib/channels/outbound";
 import { appKinds } from "@/lib/connectors";
 import { startersFor } from "@/lib/jobs";
+import { fetchCapped, takeChannelFile } from "@/lib/library/inbound";
 import type { RouteCtx } from "@/lib/api";
 
 export const maxDuration = 300;
 
 type TgUpdate = {
   update_id: number;
-  message?: { message_id: number; chat: { id: number; type: string }; from?: { id: number; first_name?: string; username?: string }; text?: string; caption?: string };
+  message?: {
+    message_id: number;
+    chat: { id: number; type: string };
+    from?: { id: number; first_name?: string; username?: string };
+    text?: string;
+    caption?: string;
+    /** A file sent as a file (PDF, Word, a photo sent uncompressed). */
+    document?: { file_id: string; file_name?: string; mime_type?: string; file_size?: number };
+    /** A photo, in several sizes (the last is the largest). */
+    photo?: { file_id: string; file_size?: number; width: number; height: number }[];
+  };
   callback_query?: { id: string; from: { id: number }; data?: string; message?: { message_id: number; chat: { id: number } } };
 };
 
@@ -62,8 +73,14 @@ export async function POST(req: Request, ctx: RouteCtx<{ channelId: string }>) {
     const msg = update.message;
     if (!msg?.from || msg.chat.type !== "private") return;
     const text = (msg.text ?? msg.caption ?? "").trim();
-    if (!text) {
-      await sendTelegram(token, String(msg.chat.id), "I can only read text for now.").catch(() => {});
+    // Telegram lets bots download files up to 20 MB.
+    const sent = msg.document
+      ? { id: msg.document.file_id, name: msg.document.file_name || "File", size: msg.document.file_size }
+      : msg.photo?.length
+        ? { id: msg.photo[msg.photo.length - 1].file_id, name: `Photo ${new Date().toISOString().slice(0, 16).replace("T", " ").replace(":", ".")}.jpg`, size: msg.photo[msg.photo.length - 1].file_size }
+        : null;
+    if (!text && !sent) {
+      await sendTelegram(token, String(msg.chat.id), "I can read text, files and photos. Stickers and voice notes are beyond me for now.").catch(() => {});
       return;
     }
     const fromId = String(msg.from.id);
@@ -104,6 +121,37 @@ export async function POST(req: Request, ctx: RouteCtx<{ channelId: string }>) {
     await telegramCall(token, "sendChatAction", { chat_id: msg.chat.id, action: "typing" }).catch(() => {});
     const typing = setInterval(() => telegramCall(token, "sendChatAction", { chat_id: msg.chat.id, action: "typing" }).catch(() => {}), 4500);
     try {
+      // A file from the owner goes into the bot's Library (read first), then the message goes on with it.
+      let meta: Record<string, unknown> = { telegramMessageId: msg.message_id };
+      if (sent) {
+        if (!isOwner) {
+          if (!text) {
+            await sendTelegram(token, String(msg.chat.id), "I only take files from the person I work for.").catch(() => {});
+            return;
+          }
+        } else if (sent.size && sent.size > 20 * 1024 * 1024) {
+          await sendTelegram(token, String(msg.chat.id), `${sent.name} is too big for Telegram to hand me (bots get files up to 20 MB). Add it on the website instead: your bot → Library.`).catch(() => {});
+          if (!text) return;
+        } else {
+          const got = await takeChannelFile(db, {
+            bot,
+            owner,
+            source: "telegram",
+            file: {
+              name: sent.name,
+              size: sent.size,
+              fetch: async () => {
+                const f = await telegramCall<{ file_path?: string }>(token, "getFile", { file_id: sent.id }).catch(() => null);
+                return f?.file_path ? fetchCapped(`https://api.telegram.org/file/bot${token}/${f.file_path}`) : null;
+              },
+            },
+          });
+          if ("error" in got) {
+            await sendTelegram(token, String(msg.chat.id), got.error).catch(() => {});
+            if (!text) return;
+          } else meta = { ...meta, files: [got.attached] };
+        }
+      }
       await handleInbound({
         db,
         bot,
@@ -116,7 +164,7 @@ export async function POST(req: Request, ctx: RouteCtx<{ channelId: string }>) {
         isOwner,
         from: fromId,
         contactLabel: msg.from.username ? `@${msg.from.username}` : msg.from.first_name,
-        meta: { telegramMessageId: msg.message_id },
+        meta,
       });
     } finally {
       clearInterval(typing);

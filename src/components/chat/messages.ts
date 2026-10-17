@@ -4,6 +4,8 @@
  * may call these.
  */
 import type { ToolView } from "./ToolChip";
+import type { StudySetSummary } from "@/lib/db/schema";
+import { filesOf, type AttachedFile } from "@/lib/library/attachments";
 
 export type ChatMessage = {
   id: string;
@@ -25,6 +27,10 @@ export type ChatMessage = {
   selection?: string;
   /** Notes from a meeting (shown with a header and a link to the meeting page). */
   meeting?: { id: string; app?: string; inPerson?: boolean; gone?: boolean };
+  /** Files the owner attached (shown as chips in their bubble). */
+  files?: AttachedFile[];
+  /** Flashcards or quizzes the bot made (shown as cards to study). */
+  studySets?: StudySetSummary[];
   /** A voice call with the bot (shown as a card with its transcript). */
   call?: { kind: "web" | "phone"; durationS: number; latencyP50Ms: number | null; turns: { role: "caller" | "bot"; text: string; interrupted?: boolean }[] };
 };
@@ -68,11 +74,14 @@ export function toChatMessage(m: {
     | { type: "tool_result"; id: string; name: string; status: ToolView["state"]; summary?: string; approvalId?: string }
     | { type: "approval"; approvalId: string }
     | { type: "notice"; tone: "info" | "warn" | "danger"; text: string }
+    | { type: "study_set"; set: StudySetSummary }
   )[];
   const tools: ToolView[] = [];
   const approvals: string[] = [];
   const notices: ChatMessage["notices"] = [];
+  const studySets: StudySetSummary[] = [];
   for (const p of parts) {
+    if (p.type === "study_set" && p.set?.id) studySets.push(p.set);
     if (p.type === "tool_call") tools.push({ id: p.id, name: p.name, title: p.title ?? p.name, summary: p.summary ?? p.title ?? p.name, state: "ok" });
     if (p.type === "tool_result") {
       const t = tools.find((x) => x.id === p.id);
@@ -96,6 +105,8 @@ export function toChatMessage(m: {
     proactive: Boolean(m.meta?.proactive) && m.role === "assistant" && m.meta?.trigger !== "greeting" && m.meta?.trigger !== "approval",
     via: typeof m.meta?.via === "string" ? (m.meta.via as string) : undefined,
     selection: m.role === "user" && typeof m.meta?.selection === "string" && m.meta.selection.trim() ? (m.meta.selection as string) : undefined,
+    ...(m.role === "user" && filesOf(m.meta).length ? { files: filesOf(m.meta) } : {}),
+    ...(studySets.length ? { studySets } : {}),
     ...(m.meta?.kind === "call" && Array.isArray(m.meta.turns)
       ? {
           call: {

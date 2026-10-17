@@ -354,6 +354,86 @@ const CANNED: [RegExp, (text: string, tools: Set<string>) => string][] = [
   ],
 ];
 
+// ---------------------------------------------------------------------------
+// The Library, in demo mode: read the file, then make flashcards or a quiz from its facts.
+
+type StudyWish = "flashcards" | "quiz" | "summary" | "question";
+
+function studyWish(t: string): StudyWish | null {
+  if (/\bflash ?cards?\b|\bstudy (set|cards)\b/.test(t)) return "flashcards";
+  if (/\bquiz\b|\bpractice (test|exam|questions)\b|\btest me\b/.test(t)) return "quiz";
+  if (/\bsummari[sz]e\b|\bsummary\b|\bmain ideas\b/.test(t)) return "summary";
+  return null;
+}
+
+/** The file a message is about: one attached to it, one named in quotes, or the newest in the Library. */
+function fileFor(text: string, system: string): string | null {
+  const attached = /\[Attached to this message[^:]*: (.+?) \((?:\d+ (?:pages?|slides?|parts?|photos?)|Photo|Text|Document|a photo[^)]*)\)/.exec(text)?.[1];
+  if (attached) return attached;
+  const quoted = /["“]([^"”]{2,160}\.[a-z0-9]{2,5})["”]/i.exec(text)?.[1];
+  if (quoted) return quoted;
+  return /Your Library \([^)]*\):\n- (.+?) \(/.exec(system)?.[1] ?? null;
+}
+
+/** Facts in a file's text: "Term: definition" lines and "X is Y." sentences. */
+function factsIn(text: string): { front: string; back: string; source: string }[] {
+  const facts: { front: string; back: string; source: string }[] = [];
+  let label = "";
+  for (const raw of text.split("\n")) {
+    const line = raw.trim().replace(/^[-*•]\s*/, "");
+    const tag = /^\[(.+?)\]$/.exec(line);
+    if (tag) {
+      label = tag[1];
+      continue;
+    }
+    if (!line || line.startsWith("#") || line.length > 240) continue;
+    const colon = /^([^:]{2,60}):\s+(.{2,200})$/.exec(line);
+    const is = /^((?:The |A |An )?[A-Z][\w -]{1,50}?) (is|are|was|were|produce|produces|make|makes|means) (.{3,180}?)\.?$/.exec(line);
+    if (colon) facts.push({ front: colon[1], back: colon[2].replace(/\.$/, ""), source: label });
+    else if (is) facts.push({ front: `${is[1].replace(/^(The|A|An) /, "")}: ${is[2]} what?`, back: `${is[1]} ${is[2]} ${is[3]}`, source: label });
+  }
+  const seen = new Set<string>();
+  return facts.filter((f) => (seen.has(f.front) ? false : (seen.add(f.front), true))).slice(0, 12);
+}
+
+function studyFollowUp(results: { name: string; content: string; isError?: boolean }[], userText: string, tools: Set<string>, made: boolean): Plan | null {
+  const wish = studyWish(userText.toLowerCase());
+  const read = results.find((r) => r.name === "read_file" && !r.isError);
+  const madeSet = results.find((r) => (r.name === "make_flashcards" || r.name === "make_quiz") && !r.isError);
+  if (madeSet) {
+    const what = /Made “(.+?)”: (.+?)\./.exec(madeSet.content);
+    return {
+      text: `Done! I made ${what ? `“${what[1]}”: ${what[2]}` : "it"} from your file. ${madeSet.name === "make_quiz" ? "Tap **Start** whenever you're ready, and I'll go over anything you miss." : "Tap **Study** to start. Cards you miss come back sooner."} (Demo brain: a real one writes much better questions.)`,
+    };
+  }
+  if (!read) return null;
+  const body = unwrapUntrusted(read.content);
+  const name = /^# (.+?) \(/.exec(body)?.[1] ?? "your file";
+  const facts = factsIn(body);
+  if (wish === "summary" || (!made && wish && !facts.length)) {
+    const lines = body.split("\n").filter((l) => l.trim() && !l.startsWith("[") && !l.startsWith("# ")).slice(0, 6);
+    return { text: `Here's what's in **${name}**:\n${lines.map((l) => `- ${l.trim()}`).join("\n")}\n\n(Demo brain: a real one summarizes properly.)` };
+  }
+  if (made || !facts.length) return null;
+  const source = (f: { source: string }) => (f.source ? `${name}, ${f.source}` : name);
+  if (wish === "flashcards" && tools.has("make_flashcards")) {
+    return { calls: [call("make_flashcards", { title: `${name.replace(/\.[a-z0-9]+$/i, "")}: flashcards`, cards: facts.map((f) => ({ front: f.front, back: f.back, source: source(f) })), files: [name] })] };
+  }
+  if (wish === "quiz" && tools.has("make_quiz")) {
+    const answers = facts.map((f) => f.back);
+    const questions = facts.slice(0, 8).map((f, i) => {
+      // A true/false needs a whole statement: "X is Y" facts, not "Term: definition" ones.
+      if (i % 3 === 2 && / (is|are|was|were|produces?|makes?|means) /.test(f.back)) return { type: "true_false", question: `True or false: ${f.back}.`, answer: "True", explanation: `It says so in ${source(f)}.`, source: source(f) };
+      if (i % 3 === 1 || answers.length < 3) return { type: "short_answer", question: f.front.endsWith("?") ? f.front : `${f.front}?`, answer: f.back, source: source(f) };
+      const others = answers.filter((a) => a !== f.back).slice(0, 3);
+      const choices = [...others.slice(0, 2), f.back].sort((a, b) => a.length - b.length);
+      return { type: "multiple_choice", question: f.front.endsWith("?") ? f.front : `${f.front}?`, choices, answer: f.back, explanation: `From ${source(f)}.`, source: source(f) };
+    });
+    return { calls: [call("make_quiz", { title: `${name.replace(/\.[a-z0-9]+$/i, "")}: practice quiz`, questions, files: [name] })] };
+  }
+  return null;
+}
+
 function planFromUser(text: string, tools: Set<string>, p: Persona, system: string): Plan {
   const t = text.toLowerCase();
   const f = FLAVOR[p.species] ?? FLAVOR.robot;
@@ -410,6 +490,26 @@ function planFromUser(text: string, tools: Set<string>, p: Persona, system: stri
       return { text: `Here's your scheduled check-in from ${p.name}: everything's on track. (Demo routine.)` };
     }
     return { text: "On it." };
+  }
+
+  // The Library: flashcards, quizzes and summaries start by reading the file; questions about an
+  // attached file search it.
+  // After a quiz: "Go over what I missed" lists each question, their answer and the right one.
+  if (/\bgo over what i missed\b/.test(t)) {
+    const missed = [...text.matchAll(/^- (.+?) \(I said "(.*?)"; the answer is "(.+?)"\)$/gm)];
+    if (missed.length) {
+      return {
+        text: `Let's go through them:\n${missed.map((m) => `- **${m[1]}** The answer is **${m[3]}**${m[2] && m[2] !== "nothing" ? ` (you said “${m[2]}”)` : ""}.`).join("\n")}\n\nWant me to make flashcards from just these, so they stick? (Demo brain: a real one explains each one properly.)`,
+      };
+    }
+  }
+  const wish = studyWish(t);
+  const file = tools.has("read_file") ? fileFor(text, system) : null;
+  if (file && wish) return { calls: [call("read_file", { file })] };
+  if (file && /\[Attached to this message/.test(text) && tools.has("search_files")) {
+    const asked = text.split("\n\n[Attached")[0].replace(/^\(Sent (?:a file|files), no message\.\)$/, "").trim();
+    if (!asked) return { text: `Got it, ${file} is in my Library now. Want flashcards, a practice quiz, or a summary?` };
+    return { calls: [call("search_files", { query: asked.slice(0, 200) })] };
   }
 
   // Memory. Questions ("what do you remember about me?") recall; statements save.
@@ -704,6 +804,19 @@ function summarizeResults(results: { name: string; content: string; isError?: bo
         }
         break;
       }
+      case "search_files": {
+        const hits = [...content.matchAll(/^### (.+?) · (.+)\n([\s\S]*?)(?=\n### |$)/gm)].slice(0, 3);
+        out.push(
+          hits.length
+            ? `Here's what your files say:\n${hits.map((h) => `- **${h[1]}**, ${h[2]}: “${h[3].trim().split("\n").slice(0, 2).join(" ").slice(0, 220)}”`).join("\n")}`
+            : "I couldn't find that in your files. Try other words, or ask me for a summary of a file.",
+        );
+        break;
+      }
+      case "list_files": {
+        out.push(/empty/i.test(content) ? "Your Library is empty. Drop files on the chat or use the paperclip, and I'll read them." : `Here's what's in your Library:\n${content}`);
+        break;
+      }
       case "search_meetings": {
         const hits = [...content.matchAll(/^- mtg_\S+ · “(.+?)” · (.+?) · \[([\d:]+)\] ([^:]+): (.+)$/gm)].slice(0, 5);
         out.push(hits.length ? `Here's what was said:\n${hits.map((h) => `- **${h[1]}** (${h[2]}, at ${h[3]}) — ${h[4]}: “${h[5]}”`).join("\n")}` : content);
@@ -959,7 +1072,13 @@ export function createDemoProvider(): LlmProvider {
         const alreadySent = req.messages.some((m) => m.role === "assistant" && m.toolCalls?.some((c) => c.name.endsWith("send_email")));
         const filledSession = results.find((r) => r.name === "web_form_fill" && !r.isError)?.content.match(/\bsession_id: (wss_[a-z0-9]+)/)?.[1];
         const submitAsked = req.messages.some((m) => m.role === "assistant" && m.toolCalls?.some((c) => c.name === "web_form_submit"));
-        if (filledSession && tools.has("web_form_submit") && !submitAsked && !/\b(don'?t|do not|without) (send|submit)|\bjust fill\b/i.test(userText)) {
+        const madeStudy = req.messages.some((m) => m.role === "assistant" && m.toolCalls?.some((c) => c.name === "make_flashcards" || c.name === "make_quiz"));
+        const study = studyFollowUp(results, userText, tools, madeStudy);
+        if (study && "calls" in study) {
+          calls = study.calls;
+        } else if (study) {
+          text = study.text;
+        } else if (filledSession && tools.has("web_form_submit") && !submitAsked && !/\b(don'?t|do not|without) (send|submit)|\bjust fill\b/i.test(userText)) {
           // Fill, then ask to send: the policy engine always holds the send for the owner's tap.
           calls = [call("web_form_submit", { session_id: filledSession })];
         } else if (/\b(do what|follow|act on)\b/i.test(userText) && injected && sendTool && !alreadySent) {

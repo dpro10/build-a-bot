@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { ArrowUp, Brain, Mic, MicOff, Sparkles, Square } from "lucide-react";
+import { ArrowUp, Brain, FileUp, Mic, MicOff, Paperclip, Sparkles, Square } from "lucide-react";
 import { Avatar } from "@/components/avatar";
 import { useBotLive } from "@/components/app/live-state";
 import { ApprovalCard, type ApprovalView } from "./ApprovalCard";
@@ -10,6 +10,10 @@ import { ToolChip, type ToolView } from "./ToolChip";
 import { mergeServerMessages, toChatMessage, type ChatMessage } from "./messages";
 import { ChatMeetingNotes } from "@/components/meetings/ChatNotes";
 import { ChatCall } from "@/components/call/ChatCall";
+import { AttachmentChips, MessageFiles, useAttachments } from "@/components/library/Attachments";
+import { StudySetCard } from "@/components/library/StudySet";
+import { ACCEPT } from "@/lib/library/limits";
+import type { StudySetSummary } from "@/lib/db/schema";
 import { cn } from "@/lib/utils";
 import type { AvatarId, ColorwayId } from "@/lib/avatars";
 import type { ComputerState } from "@/lib/bridge/jobs";
@@ -22,6 +26,7 @@ type ServerEvent =
   | ({ type: "tool" } & ToolView & { approvalId?: string })
   | { type: "approval"; approval: ApprovalView }
   | { type: "notice"; tone: "info" | "warn" | "danger"; text: string; href?: string }
+  | { type: "study_set"; set: StudySetSummary }
   | { type: "done"; messageId: string | null; text: string; status: string }
   | { type: "error"; message: string };
 
@@ -35,6 +40,11 @@ const TOOL_ACTIVITY: Record<string, string> = {
   remember: "Making a note to remember",
   send_email: "Preparing an email",
   wikipedia_lookup: "Looking it up",
+  search_files: "Searching your files",
+  read_file: "Reading your file",
+  list_files: "Looking through your Library",
+  make_flashcards: "Making flashcards",
+  make_quiz: "Writing a quiz",
 };
 
 async function* readEvents(res: Response): AsyncGenerator<ServerEvent> {
@@ -77,6 +87,7 @@ export function ChatView({
   brainLabel,
   initialInput,
   viaBridge = false,
+  canAttach = false,
 }: {
   botId: string;
   botName: string;
@@ -93,6 +104,8 @@ export function ChatView({
   initialInput?: string;
   /** Thinks with the owner's own subscription, on their computer (through the Bridge). */
   viaBridge?: boolean;
+  /** Files can be attached (the Library is set up here). */
+  canAttach?: boolean;
 }) {
   const live = useBotLive();
   const [messages, setMessages] = React.useState<ChatMessage[]>(initialMessages);
@@ -106,6 +119,9 @@ export function ChatView({
   const stickToBottom = React.useRef(true);
   const greeted = React.useRef(false);
   const inputRef = React.useRef<HTMLTextAreaElement>(null);
+  const attachments = useAttachments(botId, canAttach);
+  const [dragging, setDragging] = React.useState(false);
+  const dragDepth = React.useRef(0);
   /** Fetches what arrived outside the stream (set below); `force` runs it even mid-stream. */
   const syncRef = React.useRef<(force?: boolean) => Promise<void>>(async () => {});
 
@@ -215,6 +231,9 @@ export function ChatView({
               break;
             case "notice":
               patchLast((m) => ({ ...m, notices: [...m.notices, { tone: ev.tone, text: ev.text, href: ev.href }] }));
+              break;
+            case "study_set":
+              patchLast((m) => ({ ...m, studySets: [...(m.studySets ?? []).filter((x) => x.id !== ev.set.id), ev.set] }));
               break;
             case "done":
               finalStatus = ev.status;
@@ -329,18 +348,57 @@ export function ChatView({
     };
   }, [quickPoll]);
 
-  const send = async (text: string) => {
+  const send = async (text: string, opts: { withFiles?: boolean } = {}) => {
     const t = text.trim();
-    if (!t || streaming) return;
+    const files = opts.withFiles === false ? [] : attachments.ready.map((a) => a.file!);
+    if ((!t && !files.length) || streaming || (opts.withFiles !== false && attachments.busy)) return;
     setInput("");
+    if (opts.withFiles !== false) attachments.clear();
     stickToBottom.current = true;
     setMessages((prev) => [
       ...prev,
-      { id: `local-${Date.now()}`, key: `local-${Date.now()}`, role: "user", text: t, createdAt: new Date().toISOString(), tools: [], approvals: [], notices: [] },
+      {
+        id: `local-${Date.now()}`,
+        key: `local-${Date.now()}`,
+        role: "user",
+        text: t,
+        createdAt: new Date().toISOString(),
+        tools: [],
+        approvals: [],
+        notices: [],
+        ...(files.length ? { files: files.map((f) => ({ id: f.id, name: f.name, kind: f.kind, pages: f.pages, status: f.status, note: f.note })) } : {}),
+      },
     ]);
-    await runStream(`/api/bots/${botId}/chat`, { text: t });
+    await runStream(`/api/bots/${botId}/chat`, files.length ? { text: t, fileIds: files.map((f) => f.id) } : { text: t });
     inputRef.current?.focus();
   };
+
+  // Files dropped anywhere on the chat go to the Library and onto the message.
+  const dropProps = canAttach
+    ? {
+        onDragEnter: (e: React.DragEvent) => {
+          if (!e.dataTransfer.types.includes("Files")) return;
+          e.preventDefault();
+          dragDepth.current += 1;
+          setDragging(true);
+        },
+        onDragOver: (e: React.DragEvent) => {
+          if (e.dataTransfer.types.includes("Files")) e.preventDefault();
+        },
+        onDragLeave: () => {
+          dragDepth.current = Math.max(0, dragDepth.current - 1);
+          if (!dragDepth.current) setDragging(false);
+        },
+        onDrop: (e: React.DragEvent) => {
+          if (!e.dataTransfer.files.length) return;
+          e.preventDefault();
+          dragDepth.current = 0;
+          setDragging(false);
+          attachments.add([...e.dataTransfer.files]);
+          inputRef.current?.focus();
+        },
+      }
+    : {};
 
   const onDecided = (a: ApprovalView, followUp: string | null) => {
     setApprovals((prev) => ({ ...prev, [a.id]: a }));
@@ -357,7 +415,14 @@ export function ChatView({
   const showStarters = !streaming && messages.filter((m) => m.role === "user").length < 2 && starters.length > 0;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="relative flex min-h-0 flex-1 flex-col" {...dropProps}>
+      {dragging ? (
+        <div className="pointer-events-none absolute inset-3 z-20 flex flex-col items-center justify-center gap-2 rounded-3xl border-2 border-dashed border-primary bg-primary-soft/80 text-primary backdrop-blur-sm animate-pop">
+          <FileUp className="size-10" aria-hidden />
+          <div className="font-display text-lg font-semibold">Drop files for {botName}</div>
+          <div className="text-sm">PDFs, Word, PowerPoint, text and photos · up to 25 MB each</div>
+        </div>
+      ) : null}
       {/* Focusable so keyboard users can scroll the conversation even when it has no links. */}
       <div
         ref={listRef}
@@ -386,6 +451,7 @@ export function ChatView({
               onDecided={onDecided}
               activity={m.pending ? live.activity : null}
               botName={botName}
+              onAsk={(text) => void send(text, { withFiles: false })}
             />
           ))}
           {bridgeThinking ? (
@@ -448,6 +514,7 @@ export function ChatView({
               ))}
             </div>
           ) : null}
+          <AttachmentChips items={attachments.items} onRemove={attachments.remove} />
           <Composer
             value={input}
             onChange={setInput}
@@ -455,7 +522,10 @@ export function ChatView({
             streaming={streaming}
             onStop={() => abortRef.current?.abort()}
             inputRef={inputRef}
-            placeholder={live.paused ? `Paused — say START to wake ${botName}` : `Message ${botName}…`}
+            placeholder={live.paused ? `Paused — say START to wake ${botName}` : attachments.items.length ? `Ask ${botName} about ${attachments.items.length === 1 ? "it" : "them"}…` : `Message ${botName}…`}
+            onFiles={canAttach ? attachments.add : undefined}
+            hasFiles={attachments.ready.length > 0}
+            waiting={attachments.busy}
           />
           <p className="mt-2 text-center text-[11px] text-muted-foreground">
             {botName} is an AI and can make mistakes. Actions follow your trust settings — every one gets a receipt.
@@ -475,6 +545,7 @@ function MessageRow({
   onDecided,
   activity,
   botName,
+  onAsk,
 }: {
   botId: string;
   message: ChatMessage;
@@ -484,12 +555,14 @@ function MessageRow({
   onDecided: (a: ApprovalView, followUp: string | null) => void;
   activity: string | null;
   botName: string;
+  onAsk: (text: string) => void;
 }) {
   if (m.role === "user") {
     return (
       <div className="flex justify-end animate-fade-up">
         <div className="max-w-[85%] rounded-3xl rounded-br-lg bg-bubble-owner px-4 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap text-bubble-owner-foreground shadow-[0_6px_18px_-8px_rgb(109_77_255/0.55)]">
           {m.text}
+          {m.files?.length ? <MessageFiles botId={botId} files={m.files} /> : null}
           {m.selection ? (
             // Sent by voice with text they had selected on their screen.
             <figure className="mt-2 border-l-2 border-current/40 pl-3 text-[13px] opacity-90">
@@ -534,6 +607,9 @@ function MessageRow({
             <Markdown text={m.text} />
           </div>
         ) : null}
+        {m.studySets?.map((set) => (
+          <StudySetCard key={set.id} botId={botId} set={set} botName={botName} onAsk={onAsk} />
+        ))}
         {m.notices.map((n, i) => {
           const tone = cn(
             "self-start rounded-2xl px-3 py-2 text-sm",
@@ -569,6 +645,9 @@ function Composer({
   onStop,
   inputRef,
   placeholder,
+  onFiles,
+  hasFiles = false,
+  waiting = false,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -577,7 +656,14 @@ function Composer({
   onStop: () => void;
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   placeholder: string;
+  /** Attach files (the paperclip and pasting); absent when files can't be added here. */
+  onFiles?: (files: File[]) => void;
+  /** Read files are attached: they can be sent without words. */
+  hasFiles?: boolean;
+  /** Attached files are still uploading or being read: sending waits. */
+  waiting?: boolean;
 }) {
+  const fileRef = React.useRef<HTMLInputElement>(null);
   const [listening, setListening] = React.useState(false);
   const recRef = React.useRef<{ stop: () => void } | null>(null);
   const [canListen, setCanListen] = React.useState(false);
@@ -619,7 +705,31 @@ function Composer({
   };
 
   return (
-    <div className="flex items-end gap-2 rounded-[28px] border border-input bg-card p-1.5 pl-4 shadow-soft transition focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/15">
+    <div className={cn("flex items-end gap-2 rounded-[28px] border border-input bg-card p-1.5 shadow-soft transition focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/15", onFiles ? "pl-1.5" : "pl-4")}>
+      {onFiles ? (
+        <>
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className="inline-flex size-10 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            aria-label="Attach files"
+            title="Attach files (PDF, Word, PowerPoint, text, photos)"
+          >
+            <Paperclip className="size-5" />
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            multiple
+            accept={ACCEPT}
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files?.length) onFiles([...e.target.files]);
+              e.target.value = "";
+            }}
+          />
+        </>
+      ) : null}
       <textarea
         ref={inputRef}
         value={value}
@@ -628,6 +738,12 @@ function Composer({
           if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
             e.preventDefault();
             onSend();
+          }
+        }}
+        onPaste={(e) => {
+          if (onFiles && e.clipboardData.files.length) {
+            e.preventDefault();
+            onFiles([...e.clipboardData.files]);
           }
         }}
         rows={1}
@@ -656,7 +772,8 @@ function Composer({
         <button
           type="button"
           onClick={onSend}
-          disabled={!value.trim()}
+          disabled={(!value.trim() && !hasFiles) || waiting}
+          title={waiting ? "Waiting for your files to be read" : undefined}
           className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition hover:bg-primary-hover disabled:bg-muted disabled:text-muted-foreground"
           aria-label="Send"
         >

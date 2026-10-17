@@ -24,6 +24,9 @@ import type { RunInput, RunResult } from "@/lib/agent/run";
 import { deliver } from "@/lib/channels/outbound";
 import type { ChannelKind } from "@/lib/channels/catalog";
 import { memoriesForTurn } from "@/lib/memory";
+import { LIBRARY_GUIDANCE, libraryPrompt } from "@/lib/library";
+import { withFiles } from "@/lib/library/attachments";
+import { listStudySetsForJob, summarize } from "@/lib/library/study";
 
 export const DEVICE_ONLINE_MS = 90_000;
 const JOB_TTL_MS = 12 * 60 * 60 * 1000;
@@ -133,15 +136,19 @@ export async function runViaBridge(
       now: new Date(),
       speakingWith: input.message?.author === "contact" ? "contact" : "owner",
     }),
+    LIBRARY_GUIDANCE,
+    (await libraryPrompt(db, bot.id)) ?? "",
     "Your tools come from the 'bot' MCP server. Use only those tools; the platform enforces approvals.",
-  ].join("\n\n");
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 
   const transcript = history
     .reverse()
     .map((m) => {
       const who = m.role === "user" ? (m.author === "contact" ? "Contact" : "Owner") : "You";
       // What the owner selected on their screen goes with their message, as outside content.
-      const text = m.role === "user" && m.author !== "contact" ? withSelection(truncate(m.text, 2000), m.meta, 4000) : truncate(m.text, 2000);
+      const text = m.role === "user" && m.author !== "contact" ? withFiles(withSelection(truncate(m.text, 2000), m.meta, 4000), m.meta) : truncate(m.text, 2000);
       return `${who}: ${text}`;
     })
     .join("\n\n");
@@ -269,6 +276,8 @@ export async function completeJob(
   const text = result.ok
     ? (result.text?.trim() || "Done.")
     : `My brain on your computer hit a problem: ${truncate(result.error ?? "unknown error", 200)}`;
+  // Flashcards or a quiz made during this turn show with the answer, as they do in the cloud.
+  const made = result.ok ? await listStudySetsForJob(db, job.id) : [];
   await db.insert(schema.messages).values({
     id: sortableId("msg"),
     conversationId: conversation.id,
@@ -277,6 +286,7 @@ export async function completeJob(
     author: "bot",
     text,
     channelKind: conversation.channelKind,
+    parts: made.map((set) => ({ type: "study_set" as const, set: summarize(set) })),
     meta: { via: "bridge", model: result.model ?? (job.input as { cli?: string }).cli, costUsd: result.costUsd ?? null },
   });
   await db.insert(schema.receipts).values(usedReceipt);

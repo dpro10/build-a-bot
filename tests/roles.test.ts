@@ -74,7 +74,8 @@ describe("what a role changes in the prompt", () => {
     const tutor = buildStablePrompt({ name: "Otto", avatar: "otto", role: "tutor", jobs: ["school"], trust: "ask" } as Bot, owner, "web", null);
     expect(tutor).toContain("You are Otto, an AI tutor for Dana.");
     expect(tutor).toContain("Your role: Tutor. Dana made you for this.");
-    expect(tutor).toContain("- Coach; never write graded work");
+    expect(tutor).toContain("- When they share class materials (a syllabus, slides, notes, readings), work from them");
+    expect(tutor).not.toMatch(/graded work/);
     expect(tutor).toMatch(/first save each with the remember tool and pin: true/);
     // Memories are written about the owner by name, not "the owner".
     expect(tutor).toContain('save it with the remember tool, written about Dana by name ("Dana is vegetarian")');

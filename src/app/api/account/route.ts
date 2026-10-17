@@ -4,6 +4,7 @@ import { schema } from "@/lib/db";
 import { apiError, authed, json, parseJson, sameOrigin } from "@/lib/api";
 import { destroySession } from "@/lib/auth/session";
 import { isValidTimeZone } from "@/lib/scheduler/time";
+import { deleteLibrary } from "@/lib/library";
 
 export async function PATCH(req: Request) {
   if (!sameOrigin(req)) return apiError(403, "Bad origin");
@@ -21,6 +22,9 @@ export async function DELETE(req: Request) {
   if (!sameOrigin(req)) return apiError(403, "Bad origin");
   const a = await authed();
   if (!a.ok) return a.res;
+  // The Library's bytes live in storage, not the database: they go first.
+  const bots = await a.db.select({ id: schema.bots.id }).from(schema.bots).where(eq(schema.bots.ownerId, a.user.id));
+  await deleteLibrary(a.db, bots.map((b) => b.id));
   await a.db.transaction(async (tx) => {
     await tx.execute(sql`set local app.allow_receipt_delete = 'on'`);
     await tx.delete(schema.users).where(eq(schema.users.id, a.user.id));

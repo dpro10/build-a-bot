@@ -192,5 +192,6 @@ function toolContext(db: Db, auth: Auth): ToolContext {
     channelKind: "mcp",
     demo: demoMode,
     now: new Date(),
+    jobId: auth.job?.id ?? null,
   };
 }

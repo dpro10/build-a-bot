@@ -139,6 +139,22 @@ export const BUILTIN_CONNECTORS: ConnectorDef[] = [
     requires: "botEmail",
   },
   {
+    id: "library",
+    name: "Library",
+    category: "files",
+    description: "Reads the files you give it (syllabi, slides, notes, photos of pages) and makes flashcards and quizzes from them",
+    icon: { lucide: "LibraryBig", color: "8B5CF6" },
+    via: [{ kind: "builtin" }],
+    capabilities: [
+      { id: "read_files", label: "Read the files you give it", effect: "read", risk: "low" },
+      { id: "make_study", label: "Make flashcards and quizzes", effect: "write", risk: "low" },
+    ],
+    popular: true,
+    jobs: ["school", "research", "work"],
+    keywords: ["files", "upload", "pdf", "documents", "slides", "powerpoint", "word", "syllabus", "notes", "study", "flashcards", "quiz", "anki", "quizlet", "homework", "class"],
+    note: "Add files with the paperclip in the chat, on the bot's Library page, or by sending them on Telegram. They're private to you, and the bot says which file and page it used.",
+  },
+  {
     id: "meetings",
     name: "Meeting notes",
     category: "notes",
@@ -200,4 +216,4 @@ export const BUILTIN_CONNECTORS: ConnectorDef[] = [
 ];
 
 /** Always on for every bot, regardless of picks (cheap, safe, useful). */
-export const DEFAULT_BUILTINS = ["memory", "reminders", "weather", "currency"] as const;
+export const DEFAULT_BUILTINS = ["memory", "reminders", "weather", "currency", "library"] as const;

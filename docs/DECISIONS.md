@@ -848,3 +848,13 @@ Diego: "the bridge should definetly be apart of this app", then "write up the pl
 - The Bridge page leads with the desktop app; the terminal commands are under "Prefer the terminal?".
 - Checked on Diego's Mac: the app, with the bare PATH of an app opened from the Finder, found his Claude Code and answered a web chat message through it (one short turn on his plan).
 - Correction to something said in the conversation: the Bridge never gives the AI the owner's files, shell or browser. It runs their plan's model with only the bot's own tools.
+
+## Decision: your files for your bot, the Library (Diego, 2026-10-17)
+
+Diego: "i would be down to allow the bot get your files though, or atleast there needs to be a way for yout o upload your files to the bot. think of the tutor bot for example, it needs to acess you study materials, syllbuses, slide decks, notes, etc. In order to make a good study materials for you. it should be able to make flash cards, practice quizes, etc." Then, on the plan: "Besides that I like all of your decisons, make sure the ui ux stays clean and simple. Use as many tokens as you need to build this it needs to be subperb."
+
+- Each bot has a **Library**: files from the chat (paperclip, drop, paste), the Library tab, Telegram and Discord, stored in a private Vercel Blob store (`build-a-bot-library`), read once into cited passages, searched with Postgres full-text search. 25 MB a file, 500 MB an owner. Plan and what was built: `docs/FILES-PLAN.md`.
+- The bot makes **flashcards** (spaced repetition) and **practice quizzes** (scored, with explanations) as real objects that are studied in the chat and on the Library tab, exported as CSV.
+- **No limit on doing graded work.** Diego: "dont try and engineer some limit for this. sometimes we try to be to restrictive and end up over engineering things. at the end of the day its not our job to monitor this, it is the users choice." The tutor's "never write graded work" line and the School job's matching sentence are gone.
+- Photos and scans: a vision model on Token Factory (MiniCPM-V 4.5, then GLM-5.3-Flash; no NVIDIA vision model was listed there on 2026-10-05). Paid from credit.
+- Next (approved): the desktop app's "Give my bot a folder", then Drive/OneDrive/Dropbox import, the daily review, and dates from a syllabus.

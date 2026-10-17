@@ -69,6 +69,8 @@ export async function consumeLoginLink(db: Db, token: string): Promise<{ user: U
         await tx.update(schema.waitlist).set({ userId: existing.id }).where(eq(schema.waitlist.userId, anon.id));
         await tx.update(schema.meetings).set({ ownerId: existing.id }).where(eq(schema.meetings.ownerId, anon.id));
         await tx.update(schema.dictionary).set({ ownerId: existing.id }).where(eq(schema.dictionary.ownerId, anon.id));
+        // The Library's files go with their bots (deleting the anonymous account would take them).
+        await tx.update(schema.files).set({ ownerId: existing.id }).where(eq(schema.files.ownerId, anon.id));
         await carryCredit(tx, anon.id, existing.id);
         await tx.update(schema.users).set({ timezone: anon.timezone, ageConfirmedAt: existing.ageConfirmedAt ?? anon.ageConfirmedAt }).where(eq(schema.users.id, existing.id));
         await tx.delete(schema.users).where(eq(schema.users.id, anon.id));
