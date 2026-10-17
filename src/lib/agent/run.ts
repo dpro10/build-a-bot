@@ -301,6 +301,8 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
   let servedBy: string | undefined;
   /** The brain errored mid-turn: the reply says so, and the turn ends as "error". */
   let brainFailed = false;
+  /** Asked for flashcards or a quiz and told once to actually make it (studyNudge). */
+  let nudged = false;
 
   for (let step = 0; step < MAX_STEPS; step++) {
     if (input.signal?.aborted) break;
@@ -353,6 +355,14 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
       break;
     }
     if (!calls.length) {
+      // A small model sometimes says it's making flashcards or a quiz without calling the tool.
+      const nudge = nudged ? null : studyNudge(input.message?.author === "owner" ? input.message.text : null, toolset, state);
+      if (nudge) {
+        nudged = true;
+        transcript.push({ role: "assistant", content: stepText || "…" });
+        transcript.push({ role: "user", content: `<system_directive>\n${nudge}\n</system_directive>` });
+        continue;
+      }
       lastStepHadTools = false;
       break;
     }
@@ -833,8 +843,26 @@ async function finish(
 function withoutAppNotes(text: string): string {
   return text
     .replace(/^[ \t]*\[tools used:[^\]\n]*\][ \t]*$/gim, "")
+    // A model narrating a tool call instead of making it ("[Reading syllabus.pdf...]").
+    .replace(/^[ \t]*\[(?:reading|searching|calling|using|making|creating|opening|looking)\b[^\]\n]*\][ \t]*$/gim, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+/**
+ * The owner asked for flashcards or a quiz and the model answered without making one: what to tell
+ * it (once) so it does. A casual "quiz me" is asked in the chat, so it doesn't count.
+ */
+export function studyNudge(ownerText: string | null, toolset: Pick<Toolset, "byName">, state: Pick<RunState, "parts">): string | null {
+  if (!ownerText) return null;
+  const t = ownerText.toLowerCase();
+  const flashcards = /\bflash ?cards?\b/.test(t);
+  const quiz = /\b(practice (quiz|test|exam|questions)|(make|create|write|give|build)\b[^.?!]{0,40}\b(quiz|test))\b/.test(t);
+  if (!flashcards && !quiz) return null;
+  const tool = flashcards ? "make_flashcards" : "make_quiz";
+  if (!toolset.byName.has(tool)) return null;
+  if (state.parts.some((p) => p.type === "tool_call" && (p.name === "make_flashcards" || p.name === "make_quiz"))) return null;
+  return `The owner asked for ${flashcards ? "flashcards" : "a practice quiz"}, and you haven't made ${flashcards ? "them" : "it"} yet. Do it now: read what it's from with read_file or search_files if you haven't, then call ${tool}. Call the tools; don't describe calling them.`;
 }
 
 /** Chronological, budgeted history for this conversation, as provider-neutral messages. */
