@@ -8,14 +8,14 @@ import { schema, type Db } from "@/lib/db";
 import type { Bot, Channel, User } from "@/lib/db/schema";
 import { appUrl, config, demoMode, live } from "@/lib/env";
 import { numericCode, pairingCode } from "@/lib/crypto";
-import { isEmail, newId, normalizePhone, UnreachableError } from "@/lib/utils";
+import { isEmail, isUsOrCanadaPhone, newId, normalizePhone, UnreachableError } from "@/lib/utils";
 import { botEmailAddress } from "@/lib/tools/builtin";
 import { CHANNEL_BY_KIND, channelUsable, comingSoonNote, type ChannelKind } from "./catalog";
 import { deliver } from "./outbound";
 import { storeCredential } from "./secrets";
 import { slackCall } from "./slack";
 import { startSlackInstall } from "./slack-app";
-import { sendSms } from "./twilio";
+import { codeCallTwiml, placeCall, sendSms } from "./twilio";
 import { sendEmailRaw } from "./email";
 import { connectTelegramToken, startManagedTelegram } from "./telegram-setup";
 import { rateLimit } from "@/lib/safety/ratelimit";
@@ -224,16 +224,20 @@ export async function channelAction(
       if (action === "send_code") {
         const phone = normalizePhone(String(payload.phone ?? ""));
         if (!phone) return { ok: false, error: "Enter a valid phone number." };
-        // US & Canada only for now (also what keeps premium-rate SMS pumping out).
-        if (!/^\+1\d{10}$/.test(phone)) return { ok: false, error: "Texts and calls work with US and Canada numbers for now." };
+        // US & Canada only for now (also what keeps premium-rate texts and calls out).
+        if (!isUsOrCanadaPhone(phone)) return { ok: false, error: "Texts and calls work with US and Canada numbers for now." };
+        const via = payload.via === "call" ? "call" : "sms";
         const limited = await codeLimit(db, owner, phone, live.twilio, meta.ip);
         if (limited) return limited;
         const code = await saveCode(db, owner, bot, channel, "phone", "ph", { phone });
         if (live.twilio) {
-          await sendSms(config.twilio.phoneNumber!, phone, `Your ${bot.name} verification code is ${code}. Reply STOP to opt out.`);
-          return { ok: true, data: { sent: true } };
+          // A new number can't text US phones until it's registered (A2P 10DLC, or toll-free
+          // verification), which takes days; a call reading the code works from the start.
+          if (via === "call") await placeCall(config.twilio.phoneNumber!, phone, codeCallTwiml(bot.name, code));
+          else await sendSms(config.twilio.phoneNumber!, phone, `Your ${bot.name} verification code is ${code}. Reply STOP to opt out.`);
+          return { ok: true, data: { sent: true, via } };
         }
-        if (demoMode) return { ok: true, data: { sent: false, demoCode: code } };
+        if (demoMode) return { ok: true, data: { sent: false, demoCode: code, via } };
         return { ok: false, error: "Texts and calls are coming soon." };
       }
       if (action === "verify") {

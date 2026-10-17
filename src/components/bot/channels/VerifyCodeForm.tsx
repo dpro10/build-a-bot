@@ -11,6 +11,7 @@ export function VerifyCodeForm({
   demoNote,
   onVerify,
   onResend,
+  other,
   onChangeTarget,
   changeLabel,
 }: {
@@ -18,6 +19,8 @@ export function VerifyCodeForm({
   demoNote: string;
   onVerify: (code: string) => Promise<boolean>;
   onResend: () => void;
+  /** Another way to get the code (a call instead of a text). */
+  other?: { label: string; onClick: () => void };
   onChangeTarget: () => void;
   changeLabel: string;
 }) {
@@ -97,6 +100,11 @@ export function VerifyCodeForm({
         <button type="button" onClick={onResend} className="font-medium text-primary hover:underline">
           Send a new code
         </button>
+        {other ? (
+          <button type="button" onClick={other.onClick} className="font-medium text-primary hover:underline">
+            {other.label}
+          </button>
+        ) : null}
         <button type="button" onClick={onChangeTarget} className="font-medium text-muted-foreground hover:text-foreground hover:underline">
           {changeLabel}
         </button>

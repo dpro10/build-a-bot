@@ -598,6 +598,14 @@ Diego: "I really want this phone call with your agents to be able to work… Loo
 - Home mode: the desktop app hears and speaks the call on the owner's computer.
 - Published speed numbers ("Call-Bench"), and a GPU image.
 
+## Live: the voice server, a real call after every deploy, and Twilio's 2026 trial (2026-10-17)
+
+- **The voice server is up** at `https://34-71-25-115.sslip.io`: a `c3-highcpu-4` VM in `us-central1-a` (project `build-a-bot-voice`), the AVX-512 + AMX image, making speech at 0.97× real time. Diego set up Google Cloud and the GitHub secrets; the workflow did the rest (run 38990343806).
+- **Vercel settings:** the Vercel connector can't create production environment variables (403, "additional permissions"), so Diego pastes them; Claude redeploys through the connector, which works.
+- **A real call after every deploy** (`.github/workflows/live-call.yml`, `scripts/live-call.mjs`). A browser on GitHub's runners makes a bot on the live site, presses Call, waits for the greeting, then asks "Hi Otto. What can you help me with?" out loud (a clip in Magpie's John voice that Parakeet hears word for word). It passes on the question heard, a spoken answer and the call's record, reports the timings in the run's summary, then deletes the bot. It runs on GitHub because this sandbox's proxy doesn't carry WebSockets. Against a local copy (real Parakeet and Magpie, a stand-in talker going through `ask_bot`), the answer started 2.2 s after the question ended.
+- **Twilio's free trial (as of 2026) can't run the phone line.** Its texts must use Twilio's templates, so the bot can't send its own phone code. Outgoing calls must use Twilio's templates too. Only verified numbers can call in, `<Stream>` is blocked, TwiML must come back within 5 seconds, and the trial ends after 30 days. Claude's recommendation: upgrade right away ($20 starting balance, about $1.15 a month for a number). That also puts phone calls on the voice server. **Diego to decide.**
+- **Phone codes by call** (Claude): a new number can't text US phones until it's registered (A2P 10DLC needs a paid account; toll-free numbers need toll-free verification; either takes days). So owners can have the code read out in a call instead: it's said three times, a digit at a time, and the call says it's an AI. **Codes go only to US and Canada numbers:** the Caribbean countries that share +1, and 900 numbers, are refused, which keeps toll fraud out.
+
 ## Build choice (Claude; Diego to confirm): what real testers see (2026-10-14)
 
 Outside demo mode nothing is simulated. Anything without its service set up says **"Coming soon"** and can't be picked or set up:
