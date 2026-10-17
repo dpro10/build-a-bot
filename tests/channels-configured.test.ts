@@ -181,6 +181,23 @@ describe("phone codes", () => {
     expect(voice).toMatchObject({ status: "active", ownerAddress: "+15125550188" });
   });
 
+  it("a code Twilio refuses to send doesn't count against the limits (a new account can't call out yet)", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.stubGlobal("fetch", async () =>
+      Response.json({ code: 21215, message: "Account not authorized to call +15125550177. Perhaps you need to enable some international permissions" }, { status: 400 }),
+    );
+    // More refusals than the 3 codes an hour a number allows: each is a plain error, never "too many".
+    for (let i = 0; i < 4; i++) {
+      const res = await post({ kind: "voice", action: "send_code", payload: { phone: "+15125550177", via: "call" } });
+      expect(res.status).toBe(502);
+      expect(await res.json()).toEqual({ error: "Something went wrong with Phone calls. Try again in a moment." });
+    }
+    // Once the account can call out, the code goes out.
+    vi.stubGlobal("fetch", async () => Response.json({ sid: "CA_code_2" }, { status: 201 }));
+    const res = await post({ kind: "voice", action: "send_code", payload: { phone: "+15125550177", via: "call" } });
+    expect(await res.json()).toEqual({ ok: true, sent: true, via: "call" });
+  });
+
   it("codes go only to US and Canada numbers, not Caribbean or 900 numbers that share +1", async () => {
     vi.stubGlobal("fetch", async () => {
       throw new Error("nothing should be sent");

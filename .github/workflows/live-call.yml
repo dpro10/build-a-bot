@@ -1,8 +1,9 @@
 # A real call on the live site (scripts/live-call.mjs): a browser presses a new bot's Call button
 # and asks a question out loud; on the voice server NVIDIA Parakeet hears it, Nemotron answers and
-# Magpie speaks. Runs after each voice deploy (voice.yml), and by hand: Actions → Live call → Run
-# workflow. The run's summary has what was said and how long the answer took; the screenshots and
-# every call event are in its artifact.
+# Magpie speaks. Runs after each deploy of the voice server (voice.yml) and of the site (Vercel
+# reports its deploys to GitHub), and by hand: Actions → Live call → Run workflow. The run's summary
+# has what was said and how long the answer took; the screenshots and every call event are in its
+# artifact.
 name: Live call
 
 on:
@@ -19,14 +20,22 @@ on:
         type: string
         required: false
         default: ""
+  deployment_status:
 
 permissions:
   contents: read
 
 jobs:
   call:
+    # From Vercel, only a production deploy that finished (its environment reads "Production",
+    # or "Production – build-a-bot").
+    if: github.event_name != 'deployment_status' || (github.event.deployment_status.state == 'success' && startsWith(github.event.deployment.environment, 'Production'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # The voice server takes one call at a time: one check at a time.
+    concurrency:
+      group: live-call
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
