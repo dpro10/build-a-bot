@@ -8,7 +8,7 @@ import { isUsOrCanadaPhone, normalizePhone } from "@/lib/utils";
 
 describe("the +1 phone box", () => {
   it("tidies a number as it's typed", () => {
-    expect(["5", "512", "5129", "512905", "5129059", "5125550123"].map(tidyUsPhone)).toEqual(["5", "512", "(512) 9", "(512) 905", "(512) 905-9", "(512) 555-0123"]);
+    expect(["5", "512", "5125", "512555", "5125550", "5125550123"].map(tidyUsPhone)).toEqual(["5", "512", "(512) 5", "(512) 555", "(512) 555-0", "(512) 555-0123"]);
   });
 
   it("drops a 1 or +1 typed or pasted in front, since the box already shows +1", () => {
