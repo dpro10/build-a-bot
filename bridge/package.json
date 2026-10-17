@@ -6,5 +6,5 @@
   "bin": { "build-a-bot-bridge": "bab-bridge.mjs" },
   "files": ["bab-bridge.mjs", "README.md"],
   "engines": { "node": ">=18.17" },
-  "license": "MIT"
+  "license": "Apache-2.0"
 }

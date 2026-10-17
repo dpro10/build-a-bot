@@ -6,7 +6,7 @@
   "description": "Build-a-bot for your computer: your bot notices when a call starts, asks before it takes notes, and stays visible at the bottom of your screen the whole time it listens.",
   "main": "src/main/main.mjs",
   "type": "module",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "scripts": {
     "start": "electron .",
     "dev": "electron . --server=http://localhost:3000",

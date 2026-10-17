@@ -273,3 +273,7 @@ These live in the Cookbook (dev) workspace:
 - the "Text your agents" doc (2026-10-01);
 - Chef / cookbook-dispatch, from the hackathon;
 - the DP jr. setup notes.
+
+## License
+
+Apache License 2.0 (`LICENSE`). The name, brand and hosted service at build-a-bot.site are not covered by the license.

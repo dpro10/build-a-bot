@@ -1,6 +1,7 @@
 {
   "name": "build-a-bot",
   "version": "0.1.0",
+  "license": "Apache-2.0",
   "private": true,
   "description": "Make your own AI agent in about a minute: pick a face, name it, choose its brain, connect your apps, and talk to it anywhere.",
   "type": "module",
