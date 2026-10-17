@@ -16,7 +16,8 @@ import { normalizeServer } from "./store.mjs";
 /**
  * `meetings.local`: the server takes the lines this computer heard (NVIDIA Parakeet), which is how
  * notes are taken; `meetings.available`: it also turns a piece's audio into text itself.
- * @typedef {{ device: { id: string, name: string }, owner: { name: string | null, plan?: string }, credit?: { balanceMicros: number }, bots: SessionBot[], meetings: { available: boolean, local?: boolean, credit?: boolean, minutesLeft: number, chunkMs: number }, appUrl: string, demo: boolean }} DesktopSession
+ * `library.available`: this server keeps files ("Give my bot a folder"); older servers don't say.
+ * @typedef {{ device: { id: string, name: string }, owner: { name: string | null, plan?: string }, credit?: { balanceMicros: number }, bots: SessionBot[], meetings: { available: boolean, local?: boolean, credit?: boolean, minutesLeft: number, chunkMs: number }, library?: { available: boolean }, appUrl: string, demo: boolean }} DesktopSession
  */
 
 export function deviceName() {

@@ -298,6 +298,28 @@ export function createApi(o) {
       return json("DELETE", `/api/voice/dictionary/${encodeURIComponent(id)}`);
     },
 
+    // "Give my bot a folder" (library/): files in one folder go to a bot's Library -----------
+
+    /**
+     * A new or changed file: where its bytes go, or `unchanged` when the server has those bytes.
+     * @param {{ botId: string, path: string, size: number, sha256: string }} f
+     */
+    libraryStart(f) {
+      return json("POST", "/api/desktop/library/files", { json: f });
+    },
+    /** Running it yourself (no Blob store): the bytes go to the server. @param {string} url @param {Uint8Array} bytes */
+    libraryUploadLocal(url, bytes) {
+      return json("PUT", url, { body: bytes, contentType: "application/octet-stream", timeoutMs: 120_000 });
+    },
+    /** @param {string} botId @param {string} fileId */
+    libraryRead(botId, fileId) {
+      return json("POST", `/api/desktop/library/files/${encodeURIComponent(fileId)}/read`, { json: { botId } });
+    },
+    /** A file left the folder. @param {string} botId @param {string} path */
+    libraryDelete(botId, path) {
+      return json("DELETE", "/api/desktop/library/files", { json: { botId, path } });
+    },
+
     // The Bridge (bridge/): bots on the owner's own Claude or ChatGPT plan think here ---------
 
     /**

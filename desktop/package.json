@@ -23,6 +23,7 @@
     "node": ">=22"
   },
   "dependencies": {
+    "@vercel/blob": "2.8.0",
     "electron-updater": "6.8.10",
     "uiohook-napi": "1.5.5"
   }

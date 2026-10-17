@@ -23,6 +23,8 @@ import { appShortName } from "./apps.mjs";
  * @property {{ version: string, canRestart: boolean } | null} [update]  a new version, downloaded and waiting
  * @property {{ show: boolean, enabled: boolean, status: string, toggleLabel: string, getCli: { id: string, name: string } | null } | null} [bridge]
  *   bots on the owner's own Claude or ChatGPT plan think here (bridge/)
+ * @property {{ available: boolean, folder: string | null, folderName: string | null, status: string } | null} [library]
+ *   "Give my bot a folder" (library/)
  */
 
 /** @param {TrayModel} m */
@@ -68,6 +70,23 @@ export function trayItems(m) {
     } else {
       items.push({ id: "voice-setup", label: "Set up voice typing…" });
     }
+    items.push({ type: "separator" });
+  }
+
+  // "Give my bot a folder": one line, with what you can do with it inside.
+  if (m.signedIn && m.library?.available) {
+    if (m.library.folder) {
+      items.push({
+        id: "library",
+        label: m.library.status,
+        submenu: [
+          { id: "library-open", label: `Open “${m.library.folderName}”` },
+          { id: "library-choose", label: "Choose another folder…" },
+          { type: "separator" },
+          { id: "library-stop", label: "Stop syncing this folder" },
+        ],
+      });
+    } else items.push({ id: "library-choose", label: "Give a bot a folder…" });
     items.push({ type: "separator" });
   }
 

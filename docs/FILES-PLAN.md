@@ -1,4 +1,4 @@
-# Your files, for your bot (plan, 2026-10-17; stage 1 built the same day)
+# Your files, for your bot (plan, 2026-10-17; stage 1 and the desktop folder built the same day)
 
 Diego: "i would be down to allow the bot get your files though, or atleast there needs to be a way for yout o upload your files to the bot. think of the tutor bot for example, it needs to acess you study materials, syllbuses, slide decks, notes, etc. In order to make a good study materials for you. it should be able to make flash cards, practice quizes, etc. look into this, plan this out, dont build yet."
 
@@ -77,7 +77,7 @@ In local demo mode, files go to disk under `DATA_DIR`.
    - CSV export.
    - Files sent on Telegram and Discord.
 2. **Next:**
-   - The desktop app's folder.
+   - The desktop app's folder (built).
    - Import from Drive, OneDrive and Dropbox.
    - The daily review.
    - Slack and email attachments.
@@ -107,3 +107,10 @@ In local demo mode, files go to disk under `DATA_DIR`.
 - Telegram (files and photos) and Discord (`/ask` with a file; the app re-registers its commands by itself, at most every 6 hours).
 - Deleting a bot or an account deletes its files from storage; the export lists them.
 - Tests: `tests/library.test.ts`, `tests/library-channels.test.ts`.
+
+## What was built (the desktop folder)
+
+- The desktop app (`desktop/src/main/library/`): *Give a bot a folder…* in the menu, and a card in the pairing window (which bot, Choose a folder, Stop syncing). It watches the folder and looks again every 10 minutes; changed files (by hash) go straight to private storage and are read on the server; deleted files leave the Library. Up to 300 files of the Library's kinds, 25 MB each; hidden files, app folders, lock files and links are skipped.
+- Careful by default: a folder that suddenly looks empty removes nothing; a file that can't be read is skipped until it changes; offline, it tries again; stopping keeps the files; pairing again takes over the earlier copies instead of uploading them twice.
+- The server (`src/app/api/desktop/library/`, `src/lib/library/desktop.ts`): the device token, only the owner's own bots, paths that can't leave the folder, each file keyed by device and path. The Library page shows these files as "synced from your computer", and the empty Library points to the desktop app.
+- Tests: `desktop/test/library-sync.test.mjs`, `tests/library-desktop.test.ts`, and `desktop/e2e/library.e2e.mjs` (a real app, a real folder, a demo server).

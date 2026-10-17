@@ -6,6 +6,8 @@ It also does **voice typing**: hold a key in any app, talk, let go, and what you
 
 And it has **the Bridge** built in: bots whose brain is **Your Claude** or **Your ChatGPT** think on your computer, with your own Claude Code or Codex, signed in by you. No terminal. See [Your Claude or ChatGPT plan](#your-claude-or-chatgpt-plan-the-bridge).
 
+And you can **give a bot a folder**, like your class files: its PDFs, Word files, slides, text and photos go to the bot's Library and stay in step as you add, change and delete them. Nothing else on the computer is read. See [A folder for your bot](#a-folder-for-your-bot).
+
 It's the desktop half of Meeting notes (`src/lib/meetings`, `/desktop/buddy`), Voice typing (`src/lib/dictation`, `/app/voice`) and the Bridge (`src/lib/bridge`, `/app/bridge`) in the web app. Electron 44.7.2, plain JavaScript (ESM main process, sandboxed CommonJS preloads). One runtime dependency: `uiohook-napi`, the keyboard hook for voice typing, loaded only once you turn voice typing on.
 
 ## What it does
@@ -17,7 +19,7 @@ It's the desktop half of Meeting notes (`src/lib/meetings`, `/desktop/buddy`), V
 5. **Stops** when you click Stop, when the call ends (the app lets go of the mic for 15 seconds), after 15 minutes of silence, at 4 hours, when your screen locks or the computer sleeps, or if the bot can't stay on screen.
 6. **Tells you when the notes are ready**, at the bottom of the screen and with a notification that opens the meeting in your browser.
 
-The tray menu has: status, Take notes now, Take notes in the room, Stop, Pause call detection for 1 hour, Show live captions, which bot takes notes, apps it won't ask in, voice typing (Set up voice typing… / its status, Paste last dictation, Voice typing settings…), your Claude or ChatGPT plan (its status, *Think with my Claude plan here*, and *Get Claude Code…* when a bot needs it), Open Build-a-bot, This computer…, Start at login, Quit.
+The tray menu has: status, Take notes now, Take notes in the room, Stop, Pause call detection for 1 hour, Show live captions, which bot takes notes, apps it won't ask in, voice typing (Set up voice typing… / its status, Paste last dictation, Voice typing settings…), your Claude or ChatGPT plan (its status, *Think with my Claude plan here*, and *Get Claude Code…* when a bot needs it), *Give a bot a folder…* (or the folder's status, with Open, Choose another folder… and Stop syncing), Open Build-a-bot, This computer…, Start at login, Quit.
 
 ## What it never does
 
@@ -105,6 +107,16 @@ A try-it box; *Private speech* (*Hear me on this computer*, the download's progr
 - **No shell.** Each CLI runs as its own program, even on Windows: a `.exe` directly, and the program an npm or pnpm `.cmd` shim points at (Node scripts with Node, or the app's own Node when there's none). `cmd.exe` would drop the empty `--tools ""` and mangle JSON and line breaks. Windows get no console window.
 - **When something's wrong**, the bot says so in the chat, and the menu says how to fix it: *Claude Code isn't signed in: run claude in Terminal* (with one notification), *Claude Code isn't on this computer* (with *Get Claude Code…*), the plan's usage limit, or no connection. Quitting mid-turn stops the CLI and tells the bot why there's no answer.
 - **Several computers?** Whichever is online takes the next turn.
+
+## A folder for your bot
+
+`src/main/library/`. *Give a bot a folder…* in the menu (or **Choose a folder** in the pairing window, which asks which bot when you have several) opens the system's folder picker. The folder's files then go to that bot's Library on the website, where the bot reads them like any file it's given: it answers from them and makes flashcards and quizzes. The AI never gets the disk; it only sees what's in its Library.
+
+- **What goes:** PDFs, Word (`.docx`), PowerPoint (`.pptx`), text, Markdown, CSV, JSON, HTML and photos, up to 25 MB each and 300 files, in subfolders too. Hidden files, app folders (`node_modules`, `.git`, …), Office's `~$` lock files and links are skipped, so nothing outside the folder is opened (`scan.mjs`).
+- **Staying in step:** the app watches the folder (and looks again every 10 minutes, in case a change was missed). A file whose size or time changed is hashed; if the bytes really changed it's uploaded straight to private storage with a one-file token and read on the server, replacing its old copy. A deleted file leaves the Library. One file at a time; what it sent is remembered in `library-sync.json`.
+- **Careful by default:** a folder that suddenly looks empty (a drive that isn't connected, a cloud folder still syncing) removes nothing. A file that can't be read is skipped until it changes. No connection: it tries again in a few minutes. A full Library (500 MB) says so.
+- **Stop syncing** keeps what was already added. **Pairing again** takes over the copies it sent before (same path, same bytes) instead of uploading them twice.
+- Server side: `src/app/api/desktop/library/` (device token; only the owner's own bots; paths can't leave the folder) and `src/lib/library/desktop.ts`.
 
 ## Permissions, per OS
 
@@ -196,6 +208,7 @@ Running as root (CI containers) needs `--no-sandbox`: `npx electron --no-sandbox
 | `BAB_SMOKE=1` | check itself and quit: the tray, the pairing window, the keyboard hook (loads, starts, stops), the pill and settings pages, which app is in front, Private speech; exit code 0 when all is well, results in `BAB_SMOKE_OUT` (JSON). CI runs it on the installed Windows app |
 | `BAB_STAY_PUT=1` | a packaged Mac app stays where it was opened instead of moving itself into Applications |
 | `BAB_UPDATES=off` | a signed build doesn't look for updates |
+| `BAB_LIBRARY_FOLDER=<dir>` | after pairing, give the first bot this folder (stands in for the folder picker in tests) |
 
 ## Tests
 
@@ -212,9 +225,13 @@ npm test             # unit tests (node --test): detectors per OS, the call stat
                      # the Bridge: the CLI's exact arguments, refusing built-in tools and shell commands,
                      # sign-in and limit errors, Windows' npm shims, PATH from the login shell and the registry,
                      # a real run against a stand-in claude (in a folder named José Muñoz), stopping mid-turn,
-                     # and the app's loop against a stand-in server (on, off, ready, quitting, unpaired)
+                     # and the app's loop against a stand-in server (on, off, ready, quitting, unpaired);
+                     # a folder for your bot: what's scanned and skipped, new / touched / changed / deleted files,
+                     # remembering across restarts, the empty-folder guard, offline and refused files, the tray
 npm run test:e2e     # end to end under Xvfb with Playwright's Electron driver (one file at a time)
 ```
+
+`e2e/library.e2e.mjs` pairs the app with a dev server in demo mode and a folder of class files (`BAB_LIBRARY_FOLDER`), checks they arrive in the bot's Library, read, and the pairing window's card says so; then edits one, deletes one and adds one, checks the Library follows, asks the bot about the edited file in the web chat, and stops syncing (the files stay).
 
 `e2e/bridge.e2e.mjs` (macOS and Linux) pairs the app with a dev server in demo mode, puts a bot on Your Claude, and waits for the answer to a web chat message, thought up on this computer. The app starts with the bare PATH an app opened from the Finder gets, so it has to find Claude Code through the login shell. By default a stand-in `claude` answers; `BAB_E2E_REAL_CLAUDE=1` uses the real, signed-in Claude Code (one short turn on your plan). macOS runs it with Chromium's mock keychain.
 
@@ -281,6 +298,7 @@ src/main/bridge/             the Bridge: bots on the owner's Claude or ChatGPT p
   index.mjs                  when to listen, the turn loop, heartbeats, the menu's words
   runner.mjs                 one turn with Claude Code or Codex (a copy of bridge/runner.mjs)
   program-path.mjs           where the owner's programs are (login shell, registry, install folders)
+src/main/library/            a folder for your bot: scan.mjs (what's in it), index.mjs (keeping the Library in step)
 src/main/voice/              voice typing:
   index.mjs                  wiring: hold vs toggle, permissions, IPC for the pill and settings, tray info
   controller.mjs             one dictation: record → send → paste, "Hey {bot}" replies, errors, history

@@ -71,6 +71,18 @@
         <button type="button" class="secondary" id="voice-open">Set up voice typing</button>
       </section>
 
+      <section class="voice-card" id="library-card" aria-labelledby="library-heading" hidden>
+        <h2 id="library-heading">A folder for your bot</h2>
+        <p id="library-line"></p>
+        <p id="library-hint" class="hint"></p>
+        <div class="row">
+          <label for="library-bot" class="sr-only">Which bot</label>
+          <select id="library-bot" hidden></select>
+          <button type="button" class="secondary" id="library-choose"></button>
+          <button type="button" class="link" id="library-stop" hidden>Stop syncing</button>
+        </div>
+      </section>
+
       <section class="voice-card" id="bridge-card" aria-labelledby="bridge-heading" hidden>
         <h2 id="bridge-heading">Your Claude or ChatGPT plan</h2>
         <p id="bridge-line"></p>

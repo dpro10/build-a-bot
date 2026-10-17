@@ -12,6 +12,9 @@
  * The Bridge (bridge/): bots whose brain is the owner's own Claude or ChatGPT plan think here, with
  * their Claude Code or Codex. On whenever one is found, unless the owner turns it off here.
  *
+ * "Give my bot a folder" (library/): the files in one folder the owner picks go to a bot's
+ * Library and stay in step. Nothing else on the disk is read.
+ *
  * Dev/test switches (never needed by owners):
  *   --server=<url> or BAB_SERVER        point at a local server (e.g. http://localhost:3000)
  *   BAB_USER_DATA=<dir>                 use another settings folder
@@ -31,9 +34,10 @@
  *                                       installing the packaged app); results in BAB_SMOKE_OUT (JSON)
  *   BAB_STAY_PUT=1                      a packaged Mac app doesn't move itself into Applications
  *   BAB_UPDATES=off                     a signed build doesn't look for updates
+ *   BAB_LIBRARY_FOLDER=<path>           sync this folder to the first bot once paired (tests; no folder dialog)
  */
 import * as electron from "electron";
-import { Notification, app, clipboard, ipcMain, powerMonitor, protocol, safeStorage, screen, session, shell, systemPreferences } from "electron";
+import { Notification, app, clipboard, dialog, ipcMain, powerMonitor, protocol, safeStorage, screen, session, shell, systemPreferences } from "electron";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -41,6 +45,7 @@ import { fileURLToPath } from "node:url";
 import { Account, deviceName } from "./account.mjs";
 import { createApi } from "./api.mjs";
 import { Bridge, GET_CLI_URL, findClis } from "./bridge/index.mjs";
+import { LibrarySync } from "./library/index.mjs";
 import { BuddyWindow } from "./buddy-window.mjs";
 import { CaptureWindow } from "./capture-window.mjs";
 import { Controller } from "./controller.mjs";
@@ -86,6 +91,8 @@ let log = (m) => console.log(m);
 let settings, tokens, api, account, spool, uploads, buddy, capture, decoder, controller, pairing, detector, tray, voice;
 /** @type {Bridge} */
 let bridge;
+/** @type {LibrarySync} */
+let library;
 /** @type {Updates | null} */
 let updates = null;
 /**
@@ -222,6 +229,11 @@ async function boot() {
     tray?.update();
     pairing.send(pairingState());
   });
+  library = new LibrarySync({ api, account, settings, stateFile: path.join(userData, "library-sync.json"), log });
+  library.on("change", () => {
+    tray?.update();
+    pairing.send(pairingState());
+  });
 
   const sustain = num(env.BAB_DETECT_SUSTAIN_MS, null);
   detector = new Detector({
@@ -256,6 +268,10 @@ async function boot() {
     // A bot takes notes here: get NVIDIA Parakeet now, so the first call's notes don't wait for it.
     if (account.bots().some((b) => b.meetingsOn)) voice.meetings.ensure();
     void bridge.apply();
+    // Tests: a folder to sync, without the folder dialog.
+    if (env.BAB_LIBRARY_FOLDER && account.session && !settings.get().library.folder && account.bots()[0]) {
+      void library.choose(path.resolve(env.BAB_LIBRARY_FOLDER), account.bots()[0].id);
+    } else void library.apply();
   });
   account.on("signed-out", (reason) => {
     // Unsent audio from the old pairing goes too (from memory as well as the spool):
@@ -265,6 +281,7 @@ async function boot() {
     // Voice typing stops, and this computer's voice history goes with the pairing.
     voice.forget();
     bridge.forget();
+    library.forget();
     // Unpaired from the web app: say so where the owner can pair again.
     if (reason) {
       notify({ title: "Build-a-bot was unpaired", body: reason, onClick: () => void pairing.show() });
@@ -295,6 +312,7 @@ async function boot() {
     detector.stop();
     void voice.interrupt();
     voice.dispose();
+    library.dispose();
     Promise.all([controller.shutdown(), bridge.shutdown()])
       .catch((err) => log(`shutdown: ${err}`))
       .finally(() => {
@@ -315,6 +333,7 @@ async function boot() {
   detector.start();
   await voice.apply();
   bridge.start();
+  library.start();
   if (env.BAB_SMOKE === "1") await smoke();
 }
 
@@ -448,6 +467,16 @@ function registerIpc() {
     bridge.setEnabled(on === true);
     return pairingState();
   });
+  ipcMain.handle("pairing:library-choose", async (e, botId) => {
+    fromPairing(e);
+    await chooseLibraryFolder(typeof botId === "string" ? botId : null);
+    return pairingState();
+  });
+  ipcMain.handle("pairing:library-stop", (e) => {
+    fromPairing(e);
+    library.stop();
+    return pairingState();
+  });
   ipcMain.on("pairing:close", (e) => pairing.isSender(e) && pairing.close());
 
   voice.registerIpc(ipcMain);
@@ -469,6 +498,7 @@ function pairingState() {
     voice: voice.trayInfo(),
     hearing: account.bots().some((b) => b.meetingsOn) ? voice.meetings.line() : null,
     bridge: bridge.info(),
+    library: library.info(),
   };
 }
 
@@ -496,6 +526,7 @@ function trayModel() {
     voice: voice ? voice.trayInfo() : null,
     update: updates?.menu() ?? null,
     bridge: bridge ? bridge.info() : null,
+    library: library ? library.info() : null,
   };
 }
 
@@ -519,6 +550,12 @@ function onTrayClick(id, checked) {
   else if (id === "voice-setup" || id === "voice-settings") void voice.showSettings(id === "voice-setup" ? "setup" : undefined);
   else if (id === "voice-paste-last") void voice.voice.pasteLast();
   else if (id === "bridge-toggle") bridge.setEnabled(Boolean(checked));
+  else if (id === "library-choose") void chooseLibraryFolder(null);
+  else if (id === "library-stop") library.stop();
+  else if (id === "library-open") {
+    const folder = settings.get().library.folder;
+    if (folder) void shell.openPath(folder);
+  }
   else if (id.startsWith("bridge-get:")) {
     const url = GET_CLI_URL[/** @type {'claude'|'codex'} */ (id.slice(11))];
     if (url) void shell.openExternal(url);
@@ -529,6 +566,36 @@ function onTrayClick(id, checked) {
   else if (id === "update") updates?.installNow();
   else if (id === "quit") app.quit();
   tray.update();
+}
+
+/**
+ * "Give a bot a folder": pick the bot (the one already chosen, the only one, or in the pairing
+ * window when there are several), then the folder.
+ * @param {string | null} wanted
+ */
+async function chooseLibraryFolder(wanted) {
+  const bots = account.bots();
+  if (!bots.length) {
+    notify({ title: "Make a bot first", body: "Then give it a folder of files to read." });
+    return;
+  }
+  const botId = wanted ?? settings.get().library.botId ?? (bots.length === 1 ? bots[0].id : null);
+  const bot = bots.find((b) => b.id === botId);
+  if (!bot) {
+    // Several bots: the pairing window asks which.
+    void pairing.show();
+    return;
+  }
+  // A menu-bar app isn't in front when its menu is clicked: bring it forward so the picker is too.
+  if (process.platform === "darwin") app.focus({ steal: true });
+  const picked = await dialog.showOpenDialog({
+    title: `Give ${bot.name} a folder`,
+    message: `Its PDFs, Word files, slides, text and photos go to ${bot.name}'s Library and stay in step. Nothing else on this computer is read.`,
+    buttonLabel: `Give it to ${bot.name}`,
+    properties: ["openDirectory", "createDirectory"],
+  });
+  if (picked.canceled || !picked.filePaths[0]) return;
+  await library.choose(picked.filePaths[0], bot.id);
 }
 
 /** Open a Build-a-bot page in the browser — only the paired server's (or its public URL's) own pages. */
@@ -659,6 +726,7 @@ function exposeTestProbe() {
         tray: trayModel().status,
         voice: voice.probe(),
         bridge: bridge.info(),
+        library: library.info(),
       };
     },
   };

@@ -58,6 +58,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
    * `enabled`: null until the owner chooses (on whenever a CLI is found); false turns it off here.
    */
   bridge: Object.freeze({ enabled: /** @type {boolean | null} */ (null) }),
+  /** "Give my bot a folder" (library/): the folder whose files go to a bot's Library. */
+  library: Object.freeze({ folder: /** @type {string | null} */ (null), botId: /** @type {string | null} */ (null) }),
   /** Voice typing stats: numbers only (voice/history.mjs). */
   voiceStats: /** @type {import('./voice/history.mjs').VoiceStats | null} */ (null),
 });
@@ -109,6 +111,7 @@ export class Settings {
     // Settings added in a later version get their defaults.
     this.data.voice = { ...DEFAULT_SETTINGS.voice, ...pick(saved.voice, Object.keys(DEFAULT_SETTINGS.voice)) };
     this.data.bridge = { ...DEFAULT_SETTINGS.bridge, ...pick(saved.bridge, Object.keys(DEFAULT_SETTINGS.bridge)) };
+    this.data.library = { ...DEFAULT_SETTINGS.library, ...pick(saved.library, Object.keys(DEFAULT_SETTINGS.library)) };
   }
 
   get() {

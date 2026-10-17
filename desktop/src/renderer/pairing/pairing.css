@@ -310,6 +310,30 @@ button:disabled {
   gap: 8px;
 }
 
+#library-card .row {
+  margin-top: 10px;
+}
+
+#library-card .row > * {
+  margin-top: 0;
+}
+
+#library-card .link {
+  margin-left: 6px;
+}
+
+.voice-card select {
+  margin-top: 10px;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border, #e6e1d8);
+  border-radius: 12px;
+  background: var(--card);
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
