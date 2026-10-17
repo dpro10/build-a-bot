@@ -826,5 +826,13 @@ Diego: "I really like that front desk for businesses idea. Lets hold on to it." 
    - **The long tail through Zapier's MCP server**, where the owner connects their own Zapier account, or a second sign-in provider for apps Composio lacks.
    - Count clicks on "Coming soon" apps to see what testers want first.
 9. Voice typing before launch: Diego tests it on his Mac; the signed Mac and Windows apps ship it to everyone. Since 2026-10-16 the desktop app hears on the computer, so it needs no speech server (one is only a fallback for computers where Parakeet can't run).
-10. The Nebius × NVIDIA hackathon (due 2026-10-30, 10am PT): Build-a-bot is Diego's only entry (2026-10-16; Chef isn't entered). It qualifies except for one requirement: the repository must be public with an open-source license. Diego decides that, the track (Personal AI suggested), what judges can use, and the video. Draft write-up, video script, checklist and feedback: `docs/HACKATHON.md`.
+10. The Nebius × NVIDIA hackathon (due 2026-10-30, 10am PT): Build-a-bot is Diego's only entry (2026-10-16; Chef isn't entered). The repository must be public with an open-source license: decided on 2026-10-17 (see that decision). Diego decides the track (Personal AI suggested), what judges can use, and the video. Draft write-up, video script, checklist and feedback: `docs/HACKATHON.md`.
 11. Calls: live since 2026-10-17 (the voice server, Twilio upgraded with a local number). Texting waits on A2P 10DLC. Still his call: whether calls should carry a share of the voice server's fixed cost, and when to keep the VM running (it costs about $4 a day).
+
+## Decision: open source under Apache 2.0, history scrubbed, repository public (Diego, 2026-10-17)
+
+Diego: "the repo has to be public for the hackathon so i am fine to do that", then "Apache, scrub".
+
+- License: Apache License 2.0 (`LICENSE`, and every package.json says so). The name, brand and hosted service aren't covered.
+- Before going public, Diego's real phone number was rewritten out of every commit (it had been in early tests and a comment; the current code uses a fictional 555 number).
+- Public also makes GitHub Actions free; private-repo minutes had run out on 2026-10-17, which stopped every build.
