@@ -142,6 +142,8 @@ for i in $(seq 1 90); do
     echo "$HEALTH"
     echo "Voice server is up at https://$HOST"
     echo "In Vercel, set VOICE_SERVER_URL=https://$HOST (and VOICE_SERVER_SECRET to the same secret)."
+    # In GitHub Actions, the live call check (live-call.yml) runs next.
+    if [ -n "${GITHUB_OUTPUT:-}" ]; then echo "up=true" >> "$GITHUB_OUTPUT"; fi
     # How fast this machine makes speech (seconds of audio a second). Under 1, each sentence waits a
     # little before it plays so it doesn't stutter, and answers start later.
     RATE="$(sed -n 's/.*"speechRate":\([0-9.]*\).*/\1/p' <<<"$HEALTH")"

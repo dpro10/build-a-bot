@@ -154,3 +154,41 @@ describe("channels with their services set up", () => {
     expect(sent).toEqual([]);
   });
 });
+
+describe("phone codes", () => {
+  it("a code can come by call instead of a text (new numbers can't text until they're registered)", async () => {
+    const calls: Record<string, string>[] = [];
+    vi.stubGlobal("fetch", async (url: string | URL, init: RequestInit) => {
+      expect(String(url)).toBe("https://api.twilio.com/2010-04-01/Accounts/AC_test/Calls.json");
+      calls.push(Object.fromEntries(new URLSearchParams(String(init.body))));
+      return Response.json({ sid: "CA_code_1" }, { status: 201 });
+    });
+    const res = await post({ kind: "voice", action: "send_code", payload: { phone: "(512) 555-0188", via: "call" } });
+    expect(await res.json()).toEqual({ ok: true, sent: true, via: "call" });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ From: "+15555550100", To: "+15125550188" });
+    // Said to be an AI, and read a digit at a time, three times.
+    const twiml = calls[0].Twiml;
+    expect(twiml).toContain("Hi, it&apos;s Inkwell, an AI assistant.");
+    const digits = /Your code is: ((?:\d, ){5}\d)\./.exec(twiml)?.[1];
+    expect(digits).toBeTruthy();
+    expect(twiml.split(digits!).length - 1).toBe(3);
+
+    const verified = await post({ kind: "voice", action: "verify", payload: { code: digits!.replace(/\D/g, "") } });
+    expect(await verified.json()).toMatchObject({ ok: true, phone: "+15125550188", number: "+15555550100" });
+    const db = await getDb();
+    const [voice] = await db.select().from(schema.channels).where(and(eq(schema.channels.botId, bot.id), eq(schema.channels.kind, "voice")));
+    expect(voice).toMatchObject({ status: "active", ownerAddress: "+15125550188" });
+  });
+
+  it("codes go only to US and Canada numbers, not Caribbean or 900 numbers that share +1", async () => {
+    vi.stubGlobal("fetch", async () => {
+      throw new Error("nothing should be sent");
+    });
+    for (const phone of ["+1 876 555 0123", "+1 809 555 0123", "+1 900 555 0123", "+44 20 7946 0958"]) {
+      const res = await post({ kind: "voice", action: "send_code", payload: { phone, via: "call" } });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: "Texts and calls work with US and Canada numbers for now." });
+    }
+  });
+});

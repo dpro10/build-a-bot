@@ -132,6 +132,8 @@ jobs:
     concurrency:
       group: voice-deploy
       cancel-in-progress: false
+    outputs:
+      up: ${{ steps.deploy.outputs.up }}
     steps:
       - uses: actions/checkout@v4
       - name: Is Google Cloud set up?
@@ -177,6 +179,7 @@ jobs:
           tags: build-a-bot-voice:deploy
           cache-from: type=gha,scope=voice-${{ steps.level.outputs.level }}
       - name: Deploy
+        id: deploy
         if: steps.ready.outputs.go == 'true'
         env:
           GCP_PROJECT: ${{ vars.GCP_PROJECT }}
@@ -189,3 +192,9 @@ jobs:
           IMAGE_TAG: ${{ github.sha }}
           SOURCE_IMAGE: build-a-bot-voice:deploy
         run: voice/deploy/gce.sh
+
+  # Then a real call through the live site, to hear it all work together (live-call.yml).
+  live-call:
+    needs: deploy
+    if: needs.deploy.outputs.up == 'true'
+    uses: ./.github/workflows/live-call.yml
