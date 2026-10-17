@@ -628,6 +628,23 @@ After his first phone call with Otto, Diego: "it felt good... The one thing I do
     - smaller audio chunks: first audio comes 0.13 s sooner, but the machine drops below real time.
 - **Now:** `VOICE` defaults to Sofia and guidance is on (`TTS_CFG=0` turns it off). CI's calls on the real models use the same settings.
 
+## Decision: the desktop app installs in one click, on Mac and Windows (Diego, 2026-10-17)
+
+Diego: "I want the app, on both mac and windows to be a 1 click install. can we do that?"
+
+- **What one click means here** (built by Claude):
+  - **Windows:** the installer asks nothing, needs no admin, and opens the app when it's done (it already did).
+  - **Mac:** one app for Apple silicon and Intel. Opened from the disk image or Downloads, it moves itself into Applications and opens again from there.
+  - **Both** update themselves: a signed build checks every four hours, downloads in the background, and installs when the app quits, or from **Restart to update** in the menu. That's greyed out while it's taking notes or dictating.
+  - **build-a-bot.site/download** offers the visitor's own computer first; `/download/mac` and `/download/windows` go straight to the newest signed file.
+- **Signing is what makes it one click.** Without it, macOS won't open the app at all (only after Privacy & Security → Open Anyway), and Windows shows "Windows protected your PC". So CI signs whichever app has its keys:
+  - the Mac app with Apple's Developer ID, notarized ($99 a year);
+  - the Windows installer with Azure Artifact Signing ($9.99 a month; individuals in the US and Canada).
+  - **Diego to do:** enroll in both (each checks his ID, which takes days), then put their keys in GitHub (`docs/DEPLOY.md` §9).
+- **Where downloads come from:** each signed build is a GitHub release (`desktop-v0.1.<run>`). The download page and the apps' update checks go through build-a-bot.site, which sends them on to the files, so the files can move without a new app. The repository has to be public for anyone to download them (the hackathon needs it public anyway). **Diego to decide.**
+- **Last step:** set `NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL=https://build-a-bot.site/download` in Vercel. That turns on the desktop app, and with it meeting notes and voice typing, across the site.
+- Until signing is set up, every push to main still publishes both apps, unsigned, as the **Desktop app (test build)** pre-release, for testing.
+
 ## Build choice (Claude; Diego to confirm): what real testers see (2026-10-14)
 
 Outside demo mode nothing is simulated. Anything without its service set up says **"Coming soon"** and can't be picked or set up:
