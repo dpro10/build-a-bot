@@ -89,7 +89,7 @@ npm run typecheck
 # With the real models (as the CI's real-models job sets them up): NeMo-Speech.cpp v0.2.0 and
 # native/ built into ~/nemo-speech, and the models from scripts/fetch-models.sh ~/models
 NEMO_VOICE_BIN=~/nemo-speech/bin/nemo-voice \
-NEMO_VOICE_ARGS="--asr-model … --tts-model … --codec-model … --tokenizer-dir … --no-cfg" \
+NEMO_VOICE_ARGS="--asr-model … --tts-model … --codec-model … --tokenizer-dir … --voice Sofia" \
 SILERO_VAD_MODEL=~/models/silero_vad.onnx \
 node --test test/real-call.test.ts   # whole calls: Magpie's caller, Parakeet, Magpie's answer
 
@@ -100,8 +100,9 @@ docker run -p 8080:8080 --env-file voice.env build-a-bot-voice
 
 Settings: `APP_URL`, `VOICE_SERVER_SECRET` (shared with the app, 32+ characters),
 `TOKEN_FACTORY_API_KEY`, and optionally `TALKER_MODEL` (default `nvidia/Nemotron-3_5-Lightning`),
-`VOICE` (Aria, Sofia, John, Jason or Leo), `MAX_CALLS` (default 1: the engine speaks for one call at
-a time), `TTS_THREADS`, `CODEC_THREADS`, `TTS_CFG=1`, `SPEECH_URL` (use a stock `nemo-speech serve`
-instead of the sidecar), `ALLOWED_ORIGINS`.
+`VOICE` (default Sofia; or Aria, Jason, John or Leo), `MAX_CALLS` (default 1: the engine speaks for
+one call at a time), `TTS_THREADS`, `CODEC_THREADS`, `TTS_CFG=0` (turns classifier-free guidance
+off: Magpie then reads slower), `SPEECH_URL` (use a stock `nemo-speech serve` instead of the
+sidecar), `ALLOWED_ORIGINS`.
 
 Logs are one JSON object a line and never contain what anyone said.
