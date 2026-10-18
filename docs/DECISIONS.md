@@ -859,3 +859,10 @@ Diego: "i would be down to allow the bot get your files though, or atleast there
 - Photos and scans: a vision model on Token Factory (MiniCPM-V 4.5, then GLM-5.3-Flash; no NVIDIA vision model was listed there on 2026-10-05). Paid from credit.
 - Next (approved): the desktop app's "Give my bot a folder", then Drive/OneDrive/Dropbox import, the daily review, and dates from a syllabus.
 - **Built the same day: "Give my bot a folder"** in the desktop app (approved as stage 2). Choices made while building, for Diego to overrule: the folder is kept in step both ways (a file deleted from the folder leaves the Library), but a folder that suddenly looks empty removes nothing; **Stop syncing** and **Choose another folder** keep what was already added; up to 300 files per folder; pairing again takes over the earlier copies (same path and bytes) instead of uploading duplicates. A file deleted on the website stays deleted until it changes on the computer.
+
+## Build choice (Claude; Diego to confirm): a one-minute promo, made from the product's own pieces (2026-10-18)
+
+Diego: "make a beautiful promo video about a minute long for build a bot. Key points is owning your data, owning your intelligence and a personal assistant that gets smarter the more you use it. And zero data retention."
+
+- `video/` builds it end to end (`video/README.md`, script and claims in `video/STORYBOARD.md`): the app's own characters, logo, icons, fonts and colors on an HTML stage rendered frame by frame; the voice is Otto's, NVIDIA Magpie (Sofia), picked by NVIDIA Parakeet's transcripts; an original synthesized score (no copyrighted music, as the hackathon asks), sound effects on the on-screen moments, -14 LUFS for YouTube, and captions.
+- **Zero data retention needs one setting:** the video says the included open models keep nothing, which is only true while Zero Data Retention is switched on for our Nebius Token Factory organization (off by default; Token Factory otherwise keeps prompts and replies, in Finland, for speculative decoding). Diego to confirm it's on before the video is published; the video's footnote names it.
