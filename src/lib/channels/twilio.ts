@@ -1,11 +1,12 @@
 /**
- * Twilio: SMS and phone calls. One shared number to start (env TWILIO_PHONE_NUMBER); a bot
- * with a number of its own is routed by it. Calls use <Gather input="speech"> turns, so the whole
- * voice loop runs on ordinary serverless webhooks (no WebSocket server needed).
+ * Twilio: SMS and phone calls. One shared number to start (env TWILIO_PHONE_NUMBER), routed by the
+ * phone that calls or texts it (twilio-inbound.ts); a bot with a number of its own is routed by it.
+ * Calls use <Gather input="speech"> turns, so the whole voice loop runs on ordinary serverless
+ * webhooks (no WebSocket server needed).
  */
 import crypto from "node:crypto";
 import type { Channel } from "@/lib/db/schema";
-import { config, live } from "@/lib/env";
+import { appUrl, config, live } from "@/lib/env";
 import type { ChannelAdapter } from "./outbound";
 
 function auth() {
@@ -49,8 +50,9 @@ export function speakable(text: string): string {
     .slice(0, 1500);
 }
 
-export async function placeCall(from: string, to: string, twiml: string) {
-  return twilioPost("Calls.json", { From: from, To: to, Twiml: twiml });
+/** `statusCallback`: where Twilio reports the call when it's over (which is how it's charged). */
+export async function placeCall(from: string, to: string, twiml: string, statusCallback?: string) {
+  return twilioPost("Calls.json", { From: from, To: to, Twiml: twiml, ...(statusCallback ? { StatusCallback: statusCallback } : {}) });
 }
 
 /** The call that reads an owner their phone code: one digit at a time, three times. */
@@ -83,7 +85,8 @@ export const voiceAdapter: ChannelAdapter = {
     const twiml = `<Response><Say voice="${escapeXml(voice)}">Hi, it's ${escapeXml(bot.name)}, your AI assistant. ${escapeXml(
       speakable(msg.text),
     )}</Say><Pause length="1"/><Say voice="${escapeXml(voice)}">That's all for now. Bye!</Say></Response>`;
-    const res = await placeCall(from, msg.to, twiml);
+    // When the call is over, Twilio reports it with the bot in the URL (signed): its owner pays for it.
+    const res = await placeCall(from, msg.to, twiml, `${appUrl()}/api/webhooks/twilio/voice/status?b=${encodeURIComponent(bot.id)}`);
     return { status: "sent", providerId: res.sid };
   },
 };

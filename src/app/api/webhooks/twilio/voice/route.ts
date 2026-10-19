@@ -1,16 +1,20 @@
 import { getDb } from "@/lib/db";
 import { appUrl, config } from "@/lib/env";
 import { loadBotAndOwner } from "@/lib/channels/inbound";
-import { gather, readTwilioForm, routeTwilio, say, twiml } from "@/lib/channels/twilio-inbound";
+import { gather, readTwilioForm, routeTwilio, say, twiml, unansweredCall } from "@/lib/channels/twilio-inbound";
 import { escapeXml } from "@/lib/channels/twilio";
 import { checkSpend } from "@/lib/billing/usage";
-import { callFirstName, phoneSpeaker, startCall, voiceServerUp } from "@/lib/calls";
+import { callFirstName, lineCall, phoneSpeaker, startCall, voiceServerUp } from "@/lib/calls";
 
 /**
- * Incoming call. With the voice server up (and Twilio Media Streams allowed on the account), the
- * call streams to it: NVIDIA Parakeet hears, Nemotron talks, Magpie speaks, and the bot's agent
- * does the work. If the stream ever drops, Twilio carries on at the <Redirect> on the simpler line.
- * Otherwise the simpler line answers: Twilio's own speech recognition and voice, a turn at a time.
+ * Incoming call. On the shared number it's for the bot whose owner linked the calling phone
+ * (routeTwilio); a phone that isn't linked hears how to link it, and reaches no one's bot.
+ *
+ * With the voice server up (and Twilio Media Streams allowed on the account), the call streams to
+ * it: NVIDIA Parakeet hears, Nemotron talks, Magpie speaks, and the bot's agent does the work. If
+ * the stream ever drops, Twilio carries on at the <Redirect> on the simpler line. Otherwise the
+ * simpler line answers: Twilio's own speech recognition and voice, a turn at a time. Either way the
+ * call is kept with its bot from the start, which is how its minutes are charged to the right owner.
  *
  * Only the owner's number with the carrier's full STIR/SHAKEN attestation is greeted by name and
  * trusted; the owner's number without it can prove itself with a PIN (on the voice server).
@@ -20,10 +24,11 @@ export async function POST(req: Request) {
   if (!valid) return new Response("bad signature", { status: 403 });
   const db = await getDb();
   const routed = await routeTwilio(db, "voice", params.To ?? "", params.From ?? "");
-  if (!routed) return twiml(`${say("Sorry, this number can't take your call.")}<Hangup/>`);
+  if (!routed) return twiml(`${say(await unansweredCall(db, params.To ?? "", params.From ?? ""))}<Hangup/>`);
   const loaded = await loadBotAndOwner(db, routed.channel.botId);
   if (!loaded) return twiml("<Hangup/>");
   const { bot, owner } = loaded;
+  // A call the bot turns away (paused, or out of credit) isn't kept, so it isn't charged (about a cent).
   if (bot.status === "paused") {
     return twiml(`${say(`Hi, it's ${bot.name}. I'm paused right now. Text START to wake me up. Bye!`)}<Hangup/>`);
   }
@@ -44,6 +49,7 @@ export async function POST(req: Request) {
     }
   }
 
+  await lineCall(db, { bot, speaker, from: params.From, to: params.To, callSid: params.CallSid });
   const tier = speaker === "owner" ? "owner" : "contact";
   const greeting =
     speaker === "owner"

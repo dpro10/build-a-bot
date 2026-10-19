@@ -1,7 +1,7 @@
 /**
  * Routing and helpers for Twilio webhooks (SMS + voice).
  */
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { schema, type Db } from "@/lib/db";
 import type { Channel } from "@/lib/db/schema";
 import { appUrl, config, live } from "@/lib/env";
@@ -17,24 +17,47 @@ export async function readTwilioForm(req: Request): Promise<{ params: Record<str
   return { params, valid };
 }
 
+/** Our shared number (TWILIO_PHONE_NUMBER), however it's written. */
+export function isSharedNumber(number: string | undefined): boolean {
+  const digits = (n: string | undefined) => (n ?? "").replace(/\D/g, "");
+  return digits(number) !== "" && digits(number) === digits(config.twilio.phoneNumber);
+}
+
 /**
- * Which bot is this for? A bot's own number (To), if it has one, wins; on the shared number we
- * match the caller to the bot whose owner verified that phone. "@Name ..." picks a bot.
+ * Which bot is this for? Bots share one number, and every bot's phone channels carry it (it's the
+ * number they call and text from), so the number dialed says nothing: the phone calling or texting
+ * does. It reaches a bot whose owner linked that phone: one that isn't paused, and the one they used
+ * last if they have several ("@Name ..." picks one in a text). Only a number marked as a bot's own
+ * (`config.ownNumber`, which nothing sets until bots can get one) answers anyone, and only while
+ * exactly one bot has it: a number that was the shared one before it changed is no bot's own. Only
+ * channels that are on answer.
  */
 export async function routeTwilio(db: Db, kind: "sms" | "voice", to: string, from: string, text?: string): Promise<{ channel: Channel; text?: string } | null> {
-  const [dedicated] = await db
-    .select()
-    .from(schema.channels)
-    .where(and(eq(schema.channels.kind, kind), eq(schema.channels.address, to)))
-    .limit(1);
-  if (dedicated) return { channel: dedicated, text };
+  if (to && !isSharedNumber(to)) {
+    const own = await db
+      .select()
+      .from(schema.channels)
+      .where(
+        and(
+          eq(schema.channels.kind, kind),
+          eq(schema.channels.address, to),
+          eq(schema.channels.status, "active"),
+          sql`${schema.channels.config}->>'ownNumber' = 'true'`,
+        ),
+      )
+      .limit(2);
+    if (own.length === 1) return { channel: own[0], text };
+  }
+  if (!from) return null;
 
   const candidates = await db
-    .select({ channel: schema.channels, botName: schema.bots.name, lastActive: schema.bots.lastActiveAt })
+    .select({ channel: schema.channels, botName: schema.bots.name })
     .from(schema.channels)
     .innerJoin(schema.bots, eq(schema.bots.id, schema.channels.botId))
     .where(and(eq(schema.channels.kind, kind), eq(schema.channels.ownerAddress, from), eq(schema.channels.status, "active")))
-    .orderBy(desc(schema.bots.lastActiveAt));
+    // Paused bots last, then the one used last; one that hasn't done anything yet goes after the rest
+    // (descending, Postgres puts nulls first).
+    .orderBy(sql`${schema.bots.status} = 'paused'`, sql`${schema.bots.lastActiveAt} desc nulls last`, desc(schema.channels.ownerVerifiedAt));
   if (!candidates.length) return null;
   if (text) {
     const at = /^@(\S+)\s+([\s\S]*)$/.exec(text.trim());
@@ -44,6 +67,25 @@ export async function routeTwilio(db: Db, kind: "sms" | "voice", to: string, fro
     }
   }
   return { channel: candidates[0].channel, text };
+}
+
+/**
+ * What a caller hears when no bot answers them, before the call ends. On the shared number: their
+ * phone isn't linked to a bot (and how to link it), or it is, but calls are off. On any other
+ * number: it isn't taking calls.
+ */
+export async function unansweredCall(db: Db, to: string, from: string): Promise<string> {
+  if (!isSharedNumber(to)) return "Sorry, this number can't take your call.";
+  const [linked] = from
+    ? await db
+        .select({ id: schema.channels.id })
+        .from(schema.channels)
+        .where(and(inArray(schema.channels.kind, ["sms", "voice"]), eq(schema.channels.ownerAddress, from), isNotNull(schema.channels.ownerVerifiedAt)))
+        .limit(1)
+    : [];
+  return linked
+    ? "Calls are turned off for your bot. Turn them on in the app, then call back."
+    : "This number answers for the bots people build in the app. Link this phone in the app, then call back.";
 }
 
 export function twiml(body: string): Response {

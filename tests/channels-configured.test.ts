@@ -30,6 +30,7 @@ const { createBot } = await import("@/lib/bots/create");
 const { routeInboundEmail } = await import("@/lib/channels/email-inbound");
 const { appUrl, live } = await import("@/lib/env");
 const { getUsage, recordUsage } = await import("@/lib/billing/usage");
+const callRoute = await import("@/app/api/webhooks/twilio/voice/route");
 const callStatusRoute = await import("@/app/api/webhooks/twilio/voice/status/route");
 const channelsRoute = await import("@/app/api/bots/[botId]/channels/route");
 const { channelAction } = await import("@/lib/channels/setup");
@@ -113,16 +114,19 @@ describe("channels with their services set up", () => {
   it("a finished call is charged at Twilio's price, for each minute it started", async () => {
     const db = await getDb();
     await db.insert(schema.channels).values({ id: "chn_voice_test", botId: bot.id, kind: "voice", status: "active", ownerAddress: "+15125550123", ownerVerifiedAt: new Date() });
-    const params: Record<string, string> = { CallSid: "CA_test", CallStatus: "completed", CallDuration: "61", Direction: "inbound", From: "+15125550123", To: "+15555550100" };
-    const url = `${appUrl()}/api/webhooks/twilio/voice/status`;
-    const signed = Object.keys(params)
-      .sort()
-      .reduce((acc, k) => acc + k + params[k], url);
-    const signature = crypto.createHmac("sha1", "twilio_test").update(signed).digest("base64");
+    const fromTwilio = (path: string, params: Record<string, string>) => {
+      const url = `${appUrl()}${path}`;
+      const signed = Object.keys(params)
+        .sort()
+        .reduce((acc, k) => acc + k + params[k], url);
+      const signature = crypto.createHmac("sha1", "twilio_test").update(signed).digest("base64");
+      return new Request(url, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", "x-twilio-signature": signature }, body: new URLSearchParams(params).toString() });
+    };
+    // The call comes in (and is kept with its bot), then ends a minute and a second later.
+    const call = { CallSid: "CA_test", From: "+15125550123", To: "+15555550100" };
+    expect((await callRoute.POST(fromTwilio("/api/webhooks/twilio/voice", call))).status).toBe(200);
     const before = await getUsage(db, bot.ownerId);
-    const res = await callStatusRoute.POST(
-      new Request(url, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", "x-twilio-signature": signature }, body: new URLSearchParams(params).toString() }),
-    );
+    const res = await callStatusRoute.POST(fromTwilio("/api/webhooks/twilio/voice/status", { ...call, CallStatus: "completed", CallDuration: "61", Direction: "inbound" }));
     expect(res.status).toBe(200);
     const after = await getUsage(db, bot.ownerId);
     expect(after.voiceSeconds - before.voiceSeconds).toBe(61);

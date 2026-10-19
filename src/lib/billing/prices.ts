@@ -22,6 +22,11 @@ export const UNIT_PRICES = {
   /** Twilio (US): about $0.01 a minute on a call, plus $0.02 each time it listens for speech (about twice a minute). */
   callMinute: 50_000,
   /**
+   * A call the bot makes to read you a message (a reminder, "Call me"): Twilio's $0.014 a minute to
+   * call out, plus about $0.006 for reading the message aloud ($0.0032 per 100 characters, neural voice).
+   */
+  callMinuteOut: 20_000,
+  /**
    * A call answered by our voice server (NVIDIA speech on our own machine, so no per-use speech fees):
    * Twilio's $0.0085 a minute for an incoming call to a local number, plus $0.0044 for the audio stream.
    */
