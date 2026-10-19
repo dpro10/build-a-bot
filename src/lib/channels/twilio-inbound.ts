@@ -25,17 +25,26 @@ export function isSharedNumber(number: string | undefined): boolean {
 
 /**
  * Which bot is this for? Bots share one number, and every bot's phone channels carry it (it's the
- * number they call and text from), so on the shared number the number dialed says nothing: the
- * phone calling or texting does. It reaches a bot whose owner linked that phone: the one they used
- * last, if they have several ("@Name ..." picks one in a text). Any other number is a bot's own
- * when exactly one bot has it. Only channels that are on answer.
+ * number they call and text from), so the number dialed says nothing: the phone calling or texting
+ * does. It reaches a bot whose owner linked that phone: one that isn't paused, and the one they used
+ * last if they have several ("@Name ..." picks one in a text). Only a number marked as a bot's own
+ * (`config.ownNumber`, which nothing sets until bots can get one) answers anyone, and only while
+ * exactly one bot has it: a number that was the shared one before it changed is no bot's own. Only
+ * channels that are on answer.
  */
 export async function routeTwilio(db: Db, kind: "sms" | "voice", to: string, from: string, text?: string): Promise<{ channel: Channel; text?: string } | null> {
   if (to && !isSharedNumber(to)) {
     const own = await db
       .select()
       .from(schema.channels)
-      .where(and(eq(schema.channels.kind, kind), eq(schema.channels.address, to), eq(schema.channels.status, "active")))
+      .where(
+        and(
+          eq(schema.channels.kind, kind),
+          eq(schema.channels.address, to),
+          eq(schema.channels.status, "active"),
+          sql`${schema.channels.config}->>'ownNumber' = 'true'`,
+        ),
+      )
       .limit(2);
     if (own.length === 1) return { channel: own[0], text };
   }
@@ -46,8 +55,9 @@ export async function routeTwilio(db: Db, kind: "sms" | "voice", to: string, fro
     .from(schema.channels)
     .innerJoin(schema.bots, eq(schema.bots.id, schema.channels.botId))
     .where(and(eq(schema.channels.kind, kind), eq(schema.channels.ownerAddress, from), eq(schema.channels.status, "active")))
-    // A bot that hasn't done anything yet goes last (descending, Postgres puts nulls first).
-    .orderBy(sql`${schema.bots.lastActiveAt} desc nulls last`, desc(schema.channels.ownerVerifiedAt));
+    // Paused bots last, then the one used last; one that hasn't done anything yet goes after the rest
+    // (descending, Postgres puts nulls first).
+    .orderBy(sql`${schema.bots.status} = 'paused'`, sql`${schema.bots.lastActiveAt} desc nulls last`, desc(schema.channels.ownerVerifiedAt));
   if (!candidates.length) return null;
   if (text) {
     const at = /^@(\S+)\s+([\s\S]*)$/.exec(text.trim());

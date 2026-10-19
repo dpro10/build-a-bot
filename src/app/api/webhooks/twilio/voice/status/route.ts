@@ -20,8 +20,8 @@ function minutePrice(call: Call): number {
  * it was answered (by its CallSid), and a call a bot placed asked Twilio to report here with the bot
  * in the URL, which Twilio signs. A call the voice server answered pays Twilio's minute plus the
  * media stream, and no per-use speech fees (NVIDIA's models run on our server); one on the simpler
- * line pays for Twilio's speech too. A call that reached no bot, or read out a phone code, isn't
- * charged to anyone.
+ * line pays for Twilio's speech too. A call no bot took (the phone isn't linked, the bot is paused or
+ * out of credit) and one that read out a phone code aren't charged to anyone.
  */
 export async function POST(req: Request) {
   const { params, valid } = await readTwilioForm(req);

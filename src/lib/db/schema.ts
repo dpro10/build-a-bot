@@ -220,7 +220,11 @@ export const channels = pgTable(
       .references(() => bots.id, { onDelete: "cascade" }),
     kind: text("kind").notNull(),
     status: text("status").notNull().default("needs_setup"), // active | pending | needs_setup | disabled | error | waitlist
-    /** The bot's address on this channel (its phone number, email address, @handle). */
+    /**
+     * The bot's address on this channel (its email address, @handle). For texts and calls it's the
+     * number the bot sends from, usually the shared one: a number of the bot's own is marked
+     * `config.ownNumber` (see routeTwilio).
+     */
     address: text("address"),
     /** The owner's verified identity on this channel. Only this identity can give commands. */
     ownerAddress: text("owner_address"),

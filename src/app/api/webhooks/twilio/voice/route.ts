@@ -28,6 +28,7 @@ export async function POST(req: Request) {
   const loaded = await loadBotAndOwner(db, routed.channel.botId);
   if (!loaded) return twiml("<Hangup/>");
   const { bot, owner } = loaded;
+  // A call the bot turns away (paused, or out of credit) isn't kept, so it isn't charged (about a cent).
   if (bot.status === "paused") {
     return twiml(`${say(`Hi, it's ${bot.name}. I'm paused right now. Text START to wake me up. Bye!`)}<Hangup/>`);
   }

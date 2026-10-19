@@ -92,7 +92,10 @@ beforeAll(async () => {
   });
   if (!res.ok) throw new Error(res.error);
   bot = res.bot;
-  await db.insert(schema.channels).values({ id: "chn_call_voice", botId: bot.id, kind: "voice", status: "active", address: BOT_NUMBER, ownerAddress: OWNER_PHONE, ownerVerifiedAt: new Date() });
+  // A number of the bot's own, so anyone calling it reaches Otto.
+  await db
+    .insert(schema.channels)
+    .values({ id: "chn_call_voice", botId: bot.id, kind: "voice", status: "active", address: BOT_NUMBER, ownerAddress: OWNER_PHONE, ownerVerifiedAt: new Date(), config: { ownNumber: true } });
   // The voice server answers its health check.
   vi.stubGlobal("fetch", async (url: string | URL) => (String(url) === "https://voice.example/health" ? Response.json({ ok: true }) : new Response("no", { status: 404 })));
 });

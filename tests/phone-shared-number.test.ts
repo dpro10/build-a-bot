@@ -5,12 +5,13 @@
  *
  * - each owner reaches their own bot, whoever linked first; a phone that isn't linked hears how to
  *   link it, and one whose bot has calls off hears that, instead of reaching someone else's bot;
- * - someone with several bots reaches the one they used last;
- * - a bot's own number (one no other bot uses) still answers anyone;
+ * - someone with several bots reaches the one they used last that isn't paused;
+ * - a number marked as a bot's own (one no other bot has) still answers anyone, and no other number
+ *   does, like one that used to be the shared number;
  * - texts follow the same rules;
  * - a call is charged once, to the owner of the bot it reached (an incoming call, through the call
- *   itself; a call the bot places, through a link Twilio signs), and a call that reached no bot
- *   isn't charged to anyone.
+ *   itself; a call the bot places, through a link Twilio signs), and a call no bot took isn't
+ *   charged to anyone.
  *
  * Twilio's requests are signed the way Twilio signs them.
  */
@@ -61,6 +62,8 @@ const SAM = "+15125550188";
 const STRANGER = "+14155550100";
 /** A number of one bot's own. */
 const OWN_NUMBER = "+15555550177";
+/** A number that used to be the shared one, still saved on a bot that hasn't linked its phone since. */
+const OLD_SHARED = "+15555550111";
 
 let dana: User;
 let sam: User;
@@ -217,28 +220,44 @@ describe("calls to the shared number", () => {
     expect(await call(DANA, "CA_dana_2")).toContain("it&apos;s Otto");
     await lastActive(pip, new Date());
     expect(await call(DANA, "CA_dana_3")).toContain("it&apos;s Pip");
+    // A paused bot can't take the call: the other one does.
+    await db.update(schema.bots).set({ status: "paused" }).where(eq(schema.bots.id, pip.id));
+    expect(await call(DANA, "CA_dana_4")).toContain("it&apos;s Otto");
+    await db.update(schema.bots).set({ status: "active" }).where(eq(schema.bots.id, pip.id));
   });
 
-  it("a bot's own number, one no other bot uses, answers anyone", async () => {
+  it("a number marked as a bot's own, one no other bot has, answers anyone; no other number does", async () => {
     const db = await getDb();
     const [lee] = await db.insert(schema.users).values({ id: "usr_lee", email: "lee@example.com", name: "Lee", emailVerifiedAt: new Date(), timezone: "UTC" }).returning();
     const wren = await makeBot(lee, "Wren");
     await db
       .update(schema.channels)
-      .set({ status: "active", address: OWN_NUMBER, ownerAddress: "+15125550166", ownerVerifiedAt: new Date() })
+      .set({ status: "active", address: OWN_NUMBER, ownerAddress: "+15125550166", ownerVerifiedAt: new Date(), config: { ownNumber: true } })
       .where(and(eq(schema.channels.botId, wren.id), eq(schema.channels.kind, "voice")));
     expect(await call(STRANGER, "CA_own_1", OWN_NUMBER)).toContain("you&apos;ve reached Wren, an AI assistant");
 
     // Another bot taking calls on the same number: it's no longer one bot's own, so no one answers.
     const moss = await makeBot(lee, "Moss");
     const mossCalls = and(eq(schema.channels.botId, moss.id), eq(schema.channels.kind, "voice"));
-    await db.update(schema.channels).set({ status: "active", address: OWN_NUMBER }).where(mossCalls);
+    await db.update(schema.channels).set({ status: "active", address: OWN_NUMBER, config: { ownNumber: true } }).where(mossCalls);
     const heardByStranger = await call(STRANGER, "CA_own_2", OWN_NUMBER);
     expect(heardByStranger).toContain("Sorry, this number can&apos;t take your call.");
     expect(heardByStranger).not.toMatch(/Wren|Moss/);
     // Only bots taking calls count.
     await db.update(schema.channels).set({ status: "disabled" }).where(mossCalls);
     expect(await call(STRANGER, "CA_own_3", OWN_NUMBER)).toContain("you&apos;ve reached Wren");
+
+    // The number a bot sends from isn't its own unless it's marked: a number that used to be the
+    // shared one, still saved on one bot, answers only the phone linked to that bot.
+    const fern = await makeBot(lee, "Fern");
+    await db
+      .update(schema.channels)
+      .set({ status: "active", address: OLD_SHARED, ownerAddress: "+15125550155", ownerVerifiedAt: new Date() })
+      .where(and(eq(schema.channels.botId, fern.id), eq(schema.channels.kind, "voice")));
+    const heardOnOldNumber = await call(STRANGER, "CA_old_1", OLD_SHARED);
+    expect(heardOnOldNumber).toContain("Sorry, this number can&apos;t take your call.");
+    expect(heardOnOldNumber).not.toContain("Fern");
+    expect(await call("+15125550155", "CA_old_2", OLD_SHARED)).toContain("it&apos;s Fern");
   });
 });
 
@@ -272,11 +291,14 @@ describe("texts to the shared number", () => {
 
 describe("what calls cost, and who pays", () => {
   it("a call is charged to the owner of the bot it reached, at Twilio's price for each minute it started", async () => {
+    const db = await getDb();
+    // Twilio asking about the same call again doesn't keep it twice.
+    await call(SAM, "CA_sam_1");
+    expect(await db.select().from(schema.calls).where(eq(schema.calls.callSid, "CA_sam_1"))).toHaveLength(1);
     const before = { sam: await spent(sam), dana: await spent(dana) };
     expect((await callEnded("CA_sam_1", SAM, 61)).status).toBe(200);
     expect(await spent(sam)).toEqual({ costMicros: before.sam.costMicros + 2 * UNIT_PRICES.callMinute, voiceSeconds: before.sam.voiceSeconds + 61 });
     expect(await spent(dana)).toEqual(before.dana);
-    const db = await getDb();
     const [row] = await db.select().from(schema.calls).where(eq(schema.calls.callSid, "CA_sam_1"));
     expect(row).toMatchObject({
       botId: juniper.id,
@@ -297,10 +319,15 @@ describe("what calls cost, and who pays", () => {
     expect({ sam: await spent(sam), dana: await spent(dana) }).toEqual(before);
   });
 
-  it("a call that reached no bot isn't charged to anyone", async () => {
+  it("a call no bot took isn't charged to anyone: a phone that isn't linked, calls off, a paused bot", async () => {
+    const db = await getDb();
+    await db.update(schema.bots).set({ status: "paused" }).where(eq(schema.bots.id, juniper.id));
+    expect(await call(SAM, "CA_sam_paused")).toContain("I&apos;m paused right now.");
+    await db.update(schema.bots).set({ status: "active" }).where(eq(schema.bots.id, juniper.id));
     const before = { sam: await spent(sam), dana: await spent(dana) };
     expect((await callEnded("CA_stranger_1", STRANGER, 30)).status).toBe(200);
     expect((await callEnded("CA_sam_off", SAM, 15)).status).toBe(200);
+    expect((await callEnded("CA_sam_paused", SAM, 9)).status).toBe(200);
     expect({ sam: await spent(sam), dana: await spent(dana) }).toEqual(before);
   });
 
