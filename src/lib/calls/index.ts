@@ -3,7 +3,7 @@
  * conversation's timing; the app decides everything that's the bot's business:
  *
  *   start   a call row and a short-lived token for it (the browser's Call button, or the Twilio
- *           webhook when a phone call comes in)
+ *           webhook when a phone call comes in); a call the simpler line answers gets a row too
  *   session who's on the line and what they may do, the bot's persona, the first words
  *   act     a request from the call, run through the bot's own agent (apps, memory, approvals,
  *           receipts: the same safeguards as a chat)
@@ -117,6 +117,29 @@ export async function startCall(
     exp: Math.floor(Date.now() / 1000) + CALL_TOKEN_TTL_S[input.kind],
   });
   return { call, token, wsUrl: `${server.wsUrl}/${input.kind === "phone" ? "twilio" : "call"}` };
+}
+
+/**
+ * A phone call the simpler line answers (Twilio's own speech, no voice server), kept with its bot
+ * from the start: when Twilio reports how long it was, its minutes are charged to that bot's owner.
+ */
+export async function lineCall(db: Db, input: { bot: Pick<Bot, "id" | "ownerId">; speaker: Speaker; from?: string; to?: string; callSid?: string }): Promise<void> {
+  if (!input.callSid) return;
+  await db
+    .insert(schema.calls)
+    .values({
+      id: newId("call"),
+      botId: input.bot.id,
+      ownerId: input.bot.ownerId,
+      kind: "phone",
+      status: "line",
+      speaker: input.speaker,
+      fromAddress: input.from ?? null,
+      toAddress: input.to ?? null,
+      callSid: input.callSid,
+    })
+    // Twilio asked twice: it's kept already.
+    .onConflictDoNothing();
 }
 
 /** The voice server takes the call: once only, and only while it's fresh. */

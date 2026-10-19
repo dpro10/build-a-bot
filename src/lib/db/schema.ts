@@ -840,7 +840,10 @@ export const calls = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     kind: text("kind").notNull(), // web | phone
     direction: text("direction").notNull().default("inbound"), // inbound | outbound
-    /** pending (token issued) → active (the voice server took it) → ended | failed */
+    /**
+     * pending (token issued) → active (the voice server took it) → ended | failed (the stream dropped
+     * and the simpler line carried on). line: the simpler line answered it (no voice server).
+     */
     status: text("status").notNull().default("pending"),
     /** Who's on the line: owner | unverified (the owner's number, not yet proven) | contact */
     speaker: text("speaker").notNull().default("owner"),
