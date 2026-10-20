@@ -1,6 +1,6 @@
 "use client";
 /**
- * Pairing for the desktop app: the same one-time code as the Bridge, typed into the
+ * Pairing for the desktop app: a one-time code, typed into the
  * app's "Pair this computer" window. Watches for the new computer and says so.
  */
 import * as React from "react";

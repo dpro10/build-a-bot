@@ -48,8 +48,6 @@ export function BotHeader({
     activeTab.current?.scrollIntoView({ inline: "center", block: "nearest", behavior: "auto" });
   }, [pathname]);
   const trust = TRUST[isTrustLevel(bot.trust) ? bot.trust : "ask"];
-  // A bot on your Claude or ChatGPT plan can't think until your computer is paired and awake.
-  const computer = live.paused || live.activity ? null : live.computer;
 
   const togglePause = async () => {
     const pause = !live.paused;
@@ -91,24 +89,9 @@ export function BotHeader({
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
             <span className="inline-flex items-center gap-1.5">
               <span
-                className={cn(
-                  "size-2 rounded-full",
-                  live.paused || computer === "asleep" ? "bg-muted-foreground" : computer === "unpaired" ? "bg-warning" : "bg-success shadow-[0_0_0_3px] shadow-success/20",
-                )}
+                className={cn("size-2 rounded-full", live.paused ? "bg-muted-foreground" : "bg-success shadow-[0_0_0_3px] shadow-success/20")}
               />
-              {live.paused ? (
-                "Paused"
-              ) : live.activity ? (
-                `${live.activity}…`
-              ) : computer === "unpaired" ? (
-                <Link href="/app/bridge" className="font-semibold text-primary hover:underline">
-                  Pair your computer
-                </Link>
-              ) : computer === "asleep" ? (
-                "Waiting for your computer"
-              ) : (
-                "Online"
-              )}
+              {live.paused ? "Paused" : live.activity ? `${live.activity}…` : "Online"}
             </span>
             <span aria-hidden className="hidden sm:inline">·</span>
             <span className="w-full truncate sm:w-auto">{brain}</span>

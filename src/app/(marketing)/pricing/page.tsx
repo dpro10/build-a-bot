@@ -16,7 +16,7 @@ const starter = starterCreditMicros();
 
 export const metadata = pageMetadata({
   title: "Pricing",
-  description: `No plans: pay for what your bot uses, at cost. About ${formatMicros(perMessageMicros(model))} a message on ${model.label} and ${formatMicros(UNIT_PRICES.lookup)} a web lookup, and free on your own AI key or Claude or ChatGPT subscription.${starter > 0 ? ` Every account starts with ${formatMicros(starter)} of credit.` : ""}`,
+  description: `No plans: pay for what your bot uses, at cost. About ${formatMicros(perMessageMicros(model))} a message on ${model.label} and ${formatMicros(UNIT_PRICES.lookup)} a web lookup, and free on your own AI key.${starter > 0 ? ` Every account starts with ${formatMicros(starter)} of credit.` : ""}`,
   path: "/pricing",
 });
 

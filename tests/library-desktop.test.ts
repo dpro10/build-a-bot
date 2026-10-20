@@ -92,9 +92,9 @@ beforeAll(async () => {
   [owner] = await db.insert(schema.users).values({ id: "usr_dana", email: "dana@example.com", name: "Dana", emailVerifiedAt: new Date(), timezone: "UTC", plan: "free" }).returning();
   const [stranger] = await db.insert(schema.users).values({ id: "usr_eve", email: "eve@example.com", name: "Eve", emailVerifiedAt: new Date(), timezone: "UTC", plan: "free" }).returning();
   await db.insert(schema.bridgeDevices).values([
-    { id: "dev_mac", ownerId: owner.id, name: "Dana's Mac", tokenHash: tokenHash(MAC.authorization.slice(7)), platform: "desktop-darwin-arm64", clis: {} },
-    { id: "dev_mac2", ownerId: owner.id, name: "Dana's Mac", tokenHash: tokenHash(MAC_AGAIN.authorization.slice(7)), platform: "desktop-darwin-arm64", clis: {} },
-    { id: "dev_pc", ownerId: owner.id, name: "Dana's PC", tokenHash: tokenHash(PC.authorization.slice(7)), platform: "desktop-win32-x64", clis: {} },
+    { id: "dev_mac", ownerId: owner.id, name: "Dana's Mac", tokenHash: tokenHash(MAC.authorization.slice(7)), platform: "desktop-darwin-arm64" },
+    { id: "dev_mac2", ownerId: owner.id, name: "Dana's Mac", tokenHash: tokenHash(MAC_AGAIN.authorization.slice(7)), platform: "desktop-darwin-arm64" },
+    { id: "dev_pc", ownerId: owner.id, name: "Dana's PC", tokenHash: tokenHash(PC.authorization.slice(7)), platform: "desktop-win32-x64" },
   ]);
   bot = await makeBot(owner, "Tutor");
   strangersBot = await makeBot(stranger, "Eve's bot");

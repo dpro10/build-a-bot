@@ -269,7 +269,7 @@ describe("what isn't set up is said plainly, once", () => {
     const bot = await makeBot("Thinker");
     const { res, notices } = await say(bot, owner, "hi");
     expect(res.status).toBe("unavailable");
-    expect(res.text).toBe("I can't think right now. The open models we run are coming soon. Until then, switch me to your own AI key or subscription in Settings → Brain.");
+    expect(res.text).toBe("I can't think right now. The open models we run are coming soon. Until then, switch me to your own AI key in Settings → Brain.");
     expect(notices).toEqual([]);
   });
 

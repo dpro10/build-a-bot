@@ -65,7 +65,7 @@ describe("adding credit before Stripe is set up", () => {
   it("isn't offered: the starter credit is what there is, and running out says adding credit is coming soon", async () => {
     expect(creditOpen).toBe(false);
     expect(outOfCreditMessage({ canAdd: creditOpen, ownBrain: true })).toBe(
-      "You're out of credit. Adding credit is coming soon; or switch me to your own AI key or subscription in Settings → Brain (that's free here).",
+      "You're out of credit. Adding credit is coming soon; or switch me to your own AI key in Settings → Brain (that's free here).",
     );
     const owner = await freeOwner("usr_checkout");
     session.user = owner;

@@ -138,7 +138,7 @@ describe("what costs money checks for credit first", () => {
     expect(await checkSpend(db, u, "included")).toEqual({
       ok: false,
       code: "no_credit",
-      message: "You're out of credit. Add credit in Credit & usage, or switch me to your own AI key or subscription in Settings → Brain (that's free here).",
+      message: "You're out of credit. Add credit in Credit & usage, or switch me to your own AI key in Settings → Brain (that's free here).",
     });
     expect(await checkSpend(db, u, "lookup")).toEqual({ ok: false, code: "no_credit", message: "You're out of credit. Add credit in Credit & usage to keep going." });
     // Your own AI is free here, so credit doesn't matter for it.

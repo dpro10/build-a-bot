@@ -3,7 +3,7 @@
   "productName": "Build-a-bot",
   "version": "0.1.0",
   "private": true,
-  "description": "Build-a-bot for your computer: your bots think with your own Claude or ChatGPT plan, take notes in your calls (asking first, and staying visible the whole time), and type what you say.",
+  "description": "Build-a-bot for your computer: your bots take notes in your calls (asking first, and staying visible the whole time) and type what you say.",
   "main": "src/main/main.mjs",
   "type": "module",
   "license": "Apache-2.0",

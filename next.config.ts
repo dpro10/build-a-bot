@@ -7,7 +7,7 @@ const nextConfig: NextConfig = {
   // AGENTS.md is the Cookbook workspace's file; don't let `next dev` append to it.
   agentRules: false,
   // Local data (the dev database and the dev encryption key) must never ship in a server bundle.
-  outputFileTracingExcludes: { "*": [".data/**", "e2e/**", "tests/**", "docs/**", "bridge/**"] },
+  outputFileTracingExcludes: { "*": [".data/**", "e2e/**", "tests/**", "docs/**"] },
   // The SQL migrations are read from disk on first start (src/lib/db): ship them with every function.
   outputFileTracingIncludes: { "*": ["./drizzle/**/*"] },
   async headers() {

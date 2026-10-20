@@ -137,7 +137,7 @@ export default function PrivacyPage() {
           </p>
           <h3>Technical details</h3>
           <p>
-            Your browser&apos;s user agent for each signed-in session, the computers you pair with the Bridge, and monthly usage counts (messages,
+            Your browser&apos;s user agent for each signed-in session, the computers you pair with the desktop app, and monthly usage counts (messages,
             searches, minutes, texts, words typed by voice) with what they cost, for your credit.
           </p>
         </DocSection>
@@ -158,10 +158,6 @@ export default function PrivacyPage() {
             <li>
               <strong>Access is locked down.</strong> Database row-level security is on, and the app checks that every request belongs to you.
             </li>
-            <li>
-              <strong>Subscriptions stay on your computer.</strong> When your bot uses your Claude or ChatGPT plan, the Bridge runs your own CLI
-              there. We never collect, store or relay that login.
-            </li>
           </ul>
         </DocSection>
 
@@ -181,8 +177,8 @@ export default function PrivacyPage() {
         <DocSection id="ai-providers" title={title("ai-providers")}>
           <p>
             To answer you, your bot sends your message and the context it needs to the brain you picked: Nebius Token Factory for the included open
-            models, the provider of an API key you added, or your own computer through the Bridge. That provider processes it under its own terms
-            and privacy policy. We only send what&apos;s needed for the task at hand.
+            models, or the provider of an API key you added. That provider processes it under its own terms and privacy policy, including how
+            long it keeps it. We only send what&apos;s needed for the task at hand.
           </p>
         </DocSection>
 

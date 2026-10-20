@@ -46,7 +46,6 @@ function groups(full: boolean): Group[] {
       hint: `Anthropic, OpenAI, Google and more. Your provider bills you, and we add nothing. Fair use: ${fmt(FAIR_USE.ownBrainMessages)} messages a month.`,
       price: "Free",
     },
-    { label: "Your Claude or ChatGPT subscription", hint: "Runs on your own computer through the Bridge.", price: "Free" },
     {
       label: "Speech heard on your computer",
       hint: "Voice typing and meeting notes in the desktop app: NVIDIA Parakeet hears you on your computer, so the audio never leaves it.",

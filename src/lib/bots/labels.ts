@@ -68,9 +68,8 @@ export function settingsChange(patch: Record<string, unknown> & { limits?: BotLi
   return { title: `Settings changed: ${changed.map((k) => SETTING_NAMES[k] ?? k).join(", ")}`, changed };
 }
 
-/** Human label for a bot's brain, e.g. "Nemotron 3.5 Lightning" or "Your Claude (Bridge)". */
+/** Human label for a bot's brain, e.g. "Nemotron 3.5 Lightning" or "Claude Sonnet 5.5 · your Anthropic key". */
 export function brainLabel(brain: BrainConfig): string {
-  if (brain.kind === "subscription") return brain.provider === "codex" ? "Your ChatGPT · via Bridge" : "Your Claude · via Bridge";
   if (brain.kind === "included") {
     const def = INCLUDED_MODELS.find((m) => m.id === brain.model);
     const label = def?.label ?? brain.model;

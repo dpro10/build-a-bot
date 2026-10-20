@@ -18,7 +18,6 @@ const SECTIONS: TocEntry[] = [
   { id: "acceptable-use", title: "Acceptable use" },
   { id: "other-people", title: "Messaging other people" },
   { id: "third-parties", title: "Third-party services" },
-  { id: "bridge", title: "Subscriptions and the Bridge" },
   { id: "content", title: "Your content" },
   { id: "billing", title: "Credit, billing and refunds" },
   { id: "termination", title: "Suspension and termination" },
@@ -44,7 +43,7 @@ export default function TermsPage() {
         <DocSection id="agreement" title={title("agreement")}>
           <p>
             These terms are an agreement between you and Build-a-bot (&ldquo;we&rdquo;, &ldquo;us&rdquo;) about using our website, apps and
-            services, including the bots you make, the Bridge app and recipes (together, &ldquo;Build-a-bot&rdquo;). By making a bot or an
+            services, including the bots you make, the desktop app and recipes (together, &ldquo;Build-a-bot&rdquo;). By making a bot or an
             account, you agree to these terms and to our <Link href="/legal/privacy">privacy policy</Link>. If you don&apos;t agree, please
             don&apos;t use Build-a-bot.
           </p>
@@ -154,15 +153,6 @@ export default function TermsPage() {
             We don&apos;t control those services and aren&apos;t responsible for them. If one changes, limits or stops its service, parts of
             Build-a-bot may change or stop working too. Usage you pay a provider for directly, such as your own API key, is between you and that
             provider.
-          </p>
-        </DocSection>
-
-        <DocSection id="bridge" title={title("bridge")}>
-          <p>
-            If you run your bot on your own Claude or ChatGPT subscription, it happens <strong>on your own computer</strong>, through the Bridge app,
-            using your own copy of Claude Code or Codex that you signed in to yourself. Your subscription stays under your agreement with Anthropic
-            or OpenAI, and you&apos;re responsible for following their terms. We never collect, store or relay your subscription login, and we
-            don&apos;t run your subscription on our servers.
           </p>
         </DocSection>
 

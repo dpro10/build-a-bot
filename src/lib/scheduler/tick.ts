@@ -11,15 +11,12 @@ import { runTurn, receipt } from "@/lib/agent/run";
 import { truncate } from "@/lib/utils";
 
 const PROACTIVE_TURNS_PER_DAY = 24;
-/** Subscription brains: keep proactive use "ordinary, individual" (vendor terms). */
-const PROACTIVE_TURNS_PER_DAY_SUBSCRIPTION = 10;
 
 /**
  * How one run went, so "Run now" can say so: ok, failed (the brain or the delivery had a
- * problem), queued (thinking on the owner's computer), skipped (today's proactive limit),
- * or paused (STOP).
+ * problem), skipped (today's proactive limit), or paused (STOP).
  */
-export type ScheduleOutcome = "ok" | "failed" | "queued" | "skipped" | "paused";
+export type ScheduleOutcome = "ok" | "failed" | "skipped" | "paused";
 
 export async function runDueSchedules(db: Db, now = new Date(), limit = 25, only?: { scheduleId: string }) {
   const due = await db
@@ -67,7 +64,7 @@ export async function runDueSchedules(db: Db, now = new Date(), limit = 25, only
           .select({ n: sql<number>`count(*)::int` })
           .from(schema.receipts)
           .where(and(eq(schema.receipts.botId, bot.id), eq(schema.receipts.kind, "routine"), sql`${schema.receipts.createdAt} > ${since}`));
-        const cap = bot.brain.kind === "subscription" ? PROACTIVE_TURNS_PER_DAY_SUBSCRIPTION : PROACTIVE_TURNS_PER_DAY;
+        const cap = PROACTIVE_TURNS_PER_DAY;
         if (n >= cap) {
           await receipt(db, bot, "routine", "blocked", `Skipped “${s.title}”: daily proactive limit reached`, { scheduleId: s.id, cap });
           runs.push({ scheduleId: s.id, outcome: "skipped" });
@@ -85,7 +82,7 @@ export async function runDueSchedules(db: Db, now = new Date(), limit = 25, only
           trigger: s.kind === "reminder" ? "reminder" : "routine",
         });
         // No answer (the brain failed, isn't set up, or hit today's ceiling): the chat already says why.
-        const failed = result.status !== "ok" && result.status !== "queued";
+        const failed = result.status !== "ok";
         await receipt(
           db,
           bot,
@@ -95,11 +92,10 @@ export async function runDueSchedules(db: Db, now = new Date(), limit = 25, only
           failed ? { scheduleId: s.id, error: truncate(result.text, 300) } : { scheduleId: s.id },
         );
         if (result.text && channel !== "web") {
-          // The turn already put its reply in the web chat (a reply still waiting on the owner's computer
-          // didn't): deliver it elsewhere, never a second copy in the chat.
+          // The turn already put its reply in the web chat: deliver it elsewhere, never a second copy there.
           await messageOwner(db, bot, owner, result.text, { channel, alsoWeb: false, inWebAlready: Boolean(result.messageId), subject: s.title });
         }
-        runs.push({ scheduleId: s.id, outcome: failed ? "failed" : result.status === "queued" ? "queued" : "ok" });
+        runs.push({ scheduleId: s.id, outcome: failed ? "failed" : "ok" });
       }
       ran++;
     } catch (err) {
@@ -120,10 +116,6 @@ export async function housekeeping(db: Db, now = new Date()) {
   await db.delete(schema.pairingCodes).where(lt(schema.pairingCodes.expiresAt, weekAgo));
   await db.delete(schema.asyncResults).where(lt(schema.asyncResults.expiresAt, now));
   await db.delete(schema.inboundEvents).where(lt(schema.inboundEvents.createdAt, weekAgo));
-  await db
-    .update(schema.bridgeJobs)
-    .set({ status: "expired" })
-    .where(and(eq(schema.bridgeJobs.status, "queued"), lt(schema.bridgeJobs.expiresAt, now)));
   // Meetings whose recorder vanished get wrapped up; notes that never finished get an honest ending.
   const { wrapUpStaleMeetings, rescueStuckNotes } = await import("@/lib/meetings/notes");
   await wrapUpStaleMeetings(db, now);

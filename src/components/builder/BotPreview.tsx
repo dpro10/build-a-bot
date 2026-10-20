@@ -12,7 +12,7 @@ import { ALWAYS_ON } from "@/components/catalog/connector-meta";
 import { AVATARS, COLORWAYS, type AvatarMood, type ColorwayId } from "@/lib/avatars";
 import { CHANNEL_BY_KIND } from "@/lib/channels/catalog";
 import { getConnector, type ConnectorDef } from "@/lib/connectors";
-import { INCLUDED_MODELS, PROVIDER_BY_ID, SUBSCRIPTIONS } from "@/lib/models/catalog";
+import { INCLUDED_MODELS, PROVIDER_BY_ID } from "@/lib/models/catalog";
 import { TRUST } from "@/lib/trust";
 import { cn } from "@/lib/utils";
 import { countedApps, type BuilderState, type StepId } from "./state";
@@ -27,10 +27,6 @@ export function brainSummary(s: BuilderState): { title: string; sub: string } {
   if (b.kind === "included") {
     const m = INCLUDED_MODELS.find((x) => x.id === b.model);
     return { title: m?.label ?? "Open model", sub: `Included · ${m?.maker ?? "open weights"}` };
-  }
-  if (b.kind === "subscription") {
-    const sub = SUBSCRIPTIONS.find((x) => x.id === b.subscription);
-    return { title: `Your ${sub?.name ?? "subscription"}`, sub: `${sub?.plans ?? ""} plan · via your computer` };
   }
   const p = PROVIDER_BY_ID[b.provider];
   const m = p?.models.find((x) => x.id === b.model);
@@ -47,7 +43,7 @@ export function speech(step: StepId, s: BuilderState, appLimit?: number): string
     case "name":
       return name ? `Hi! I'm ${name}.` : "What should I be called?";
     case "brain":
-      return s.brain.kind === "subscription" ? "I'll think with your own plan, on your computer." : s.brain.kind === "byok" ? "Your key, your model. Nice." : "Which brain should I think with?";
+      return s.brain.kind === "byok" ? "Your key, your model. Nice." : "Which brain should I think with?";
     case "apps": {
       // The apps that will really be connected, counted like the fair-use limit counts them (built-in tools aren't apps).
       const n = Math.min(countedApps(s.connectors, s.customMcp), appLimit ?? Infinity);

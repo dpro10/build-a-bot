@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { requireUser } from "@/lib/auth/session";
-import { credentialHint, getOwnedBot, listBridgeDevices } from "@/lib/data";
+import { credentialHint, getOwnedBot } from "@/lib/data";
 import { appUrl, config, demoMode } from "@/lib/env";
 import { isAvatarId, isColorwayId } from "@/lib/avatars";
 import { brainLabel } from "@/lib/bots/labels";
@@ -25,9 +25,8 @@ export default async function SettingsPage({ params }: { params: Promise<{ botId
   const bot = await getOwnedBot(db, user.id, botId);
   if (!bot) notFound();
 
-  const [hint, devices, recipeRows] = await Promise.all([
+  const [hint, recipeRows] = await Promise.all([
     bot.brain.kind === "byok" ? credentialHint(db, user.id, bot.brain.credentialId) : Promise.resolve(null),
-    listBridgeDevices(db, user.id),
     // bots.recipeId is this bot's own published recipe (or, for a bot made from someone's
     // recipe, that recipe's slug): only a row this owner wrote counts as "shared".
     bot.recipeId
@@ -75,16 +74,11 @@ export default async function SettingsPage({ params }: { params: Promise<{ botId
                 provider: bot.brain.provider,
                 model: bot.brain.model,
                 effort: bot.brain.effort,
-                whenOffline: bot.brain.whenOffline,
                 baseUrl: bot.brain.baseUrl ?? null,
               }}
               label={brainLabel(bot.brain)}
               keyHint={hint?.hint ?? null}
               demoBrain={!config.tokenFactory.apiKey && demoMode}
-              devices={devices
-                .filter((d) => !d.revokedAt)
-                .map((d) => ({ id: d.id, name: d.name, platform: d.platform, clis: d.clis ?? {}, lastSeenAt: d.lastSeenAt?.toISOString() ?? null }))}
-              serverNow={new Date().toISOString()}
             />
             <RecipeSection botId={botId} botName={bot.name} hasInstructions={Boolean(bot.instructions?.trim())} initial={recipe} />
             <McpSection botId={botId} botName={bot.name} mcpUrl={`${base}/api/mcp/${botId}`} hasToken={Boolean(bot.mcpTokenHash)} />

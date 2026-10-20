@@ -95,7 +95,7 @@ export async function handleInbound(input: InboundInput): Promise<RunResult & { 
   });
 
   const buttons = await channelButtons(db, owner.id, input.kind, result.approvals);
-  if (input.deliverReply !== false && result.text && result.status !== "queued") {
+  if (input.deliverReply !== false && result.text) {
     await deliver(
       db,
       bot,

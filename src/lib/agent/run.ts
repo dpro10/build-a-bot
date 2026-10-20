@@ -76,7 +76,7 @@ export type AgentEvent =
   | { type: "done"; messageId: string | null; text: string; status: RunStatus }
   | { type: "error"; message: string };
 
-export type RunStatus = "ok" | "paused" | "command" | "limited" | "queued" | "unavailable" | "error";
+export type RunStatus = "ok" | "paused" | "command" | "limited" | "unavailable" | "error";
 
 /** What an approval card shows, built by the tool from trusted server state (see ToolApprovalExtras). */
 export type ApprovalPreview = {
@@ -126,8 +126,6 @@ export type RunInput = {
   noTools?: boolean;
   /** Message id to use for the stored user message (dedupe across webhook retries). */
   messageId?: string;
-  /** Stored on a Bridge job so its result lands in the right place (e.g. { meetingId }). */
-  jobMeta?: Record<string, unknown>;
 };
 
 export type RunResult = {
@@ -197,10 +195,6 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
   // having read outside content, so "email the recap to everyone" can't reach a stranger
   // named in the call without the owner's tap.
   const notesInContext = await meetingNotesInContext(db, bot.id, conversation.id);
-  if (brain.kind === "bridge") {
-    const { runViaBridge } = await import("@/lib/bridge/jobs");
-    return runViaBridge(notesInContext ? { ...input, startTainted: true } : input, brain);
-  }
   // What it costs: an included model is paid from the owner's credit (at cost); their own AI is
   // free here, within a monthly fair-use limit.
   // Out of credit stops everything on our dime: the owner's messages, routines and other people's
@@ -220,7 +214,7 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
   if (brain.included && !(await underDailyCeiling(db, "included"))) {
     const forOwner = input.message?.author !== "contact";
     const text = forOwner
-      ? "So many people are trying Build-a-bot today that the open models we run have reached today's limit. It resets at midnight UTC. To keep going now, switch me to your own AI key or subscription in Settings → Brain."
+      ? "So many people are trying Build-a-bot today that the open models we run have reached today's limit. It resets at midnight UTC. To keep going now, switch me to your own AI key in Settings → Brain."
       : "I can't answer right now. Please try again later.";
     return finish(input, text, "limited", emit, { parts: [] });
   }
@@ -524,7 +518,7 @@ export async function executeToolCall(
       output = { ok: false as const, error: truncate(errorMessage(err), 400) };
     }
     // Each lookup Tavily answered costs a credit: counted and charged now, whoever asked (a turn
-    // here, the Bridge, or another AI app through the bot's MCP server).
+    // here, or another AI app through the bot's MCP server).
     const used = output.ok ? (output.lookups ?? lookups) : 0;
     const searches = spec.name === "read_webpage" ? 0 : used;
     state.searches += searches;
@@ -724,11 +718,6 @@ export async function setPaused(db: Db, bot: Bot, paused: boolean, reason: strin
       .update(schema.approvals)
       .set({ status: "expired", decidedAt: new Date(), decidedVia: "stop" })
       .where(and(eq(schema.approvals.botId, bot.id), eq(schema.approvals.status, "pending")));
-    // So do turns still waiting for the owner's computer: it must not wake up and run them.
-    await db
-      .update(schema.bridgeJobs)
-      .set({ status: "expired", error: "Stopped (STOP)" })
-      .where(and(eq(schema.bridgeJobs.botId, bot.id), eq(schema.bridgeJobs.status, "queued")));
   }
   await receipt(db, bot, "stop", "ok", paused ? "Paused (STOP)" : "Resumed (START)", { reason });
 }

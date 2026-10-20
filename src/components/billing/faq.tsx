@@ -36,7 +36,7 @@ export function billingFaq(where: "pricing" | "app"): BillingFaq[] {
     },
     {
       q: "What's free?",
-      a: `A bot on your own AI key, or on your Claude or ChatGPT subscription through the Bridge: your provider bills you, and we add nothing (fair use: ${FAIR_USE.ownBrainMessages.toLocaleString("en-US")} messages a month). Speech heard on your computer by the desktop app, for voice typing and meeting notes. Chatting on the web, Telegram, Discord and Slack, and connecting apps. You pay only for what costs us money: thinking on the models we run, lookups, texts and calls.`,
+      a: `A bot on your own AI key: your provider bills you, and we add nothing (fair use: ${FAIR_USE.ownBrainMessages.toLocaleString("en-US")} messages a month). Speech heard on your computer by the desktop app, for voice typing and meeting notes. Chatting on the web, Telegram, Discord and Slack, and connecting apps. You pay only for what costs us money: thinking on the models we run, lookups, texts and calls.`,
     },
     where === "pricing"
       ? {
@@ -44,7 +44,7 @@ export function billingFaq(where: "pricing" | "app"): BillingFaq[] {
           a:
             starter > 0
               ? `Better: every account starts with ${formatMicros(starter)} of credit, no card needed, and it doesn't run out on a date. That's about ${about(starter / Math.max(1, perMessageMicros(model)))} messages on ${model.label}.`
-              : "There's nothing to trial: making a bot is free, and a bot on your own AI key or subscription is free to run here.",
+              : "There's nothing to trial: making a bot is free, and a bot on your own AI key is free to run here.",
         }
       : null,
     {
@@ -60,7 +60,7 @@ export function billingFaq(where: "pricing" | "app"): BillingFaq[] {
           of your credit, so $10 of credit is $10 to use. Adding more at once makes the fee a smaller share.
         </>
       ) : (
-        "Adding credit is coming soon. Until then there's the starter credit, and a bot on your own AI key or subscription is free here."
+        "Adding credit is coming soon. Until then there's the starter credit, and a bot on your own AI key is free here."
       ),
     },
     {

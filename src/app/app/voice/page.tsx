@@ -4,7 +4,7 @@ import { AppWindow, AudioLines, BookA, BookCheck, Download, Keyboard, Laptop, Lo
 import { getDb } from "@/lib/db";
 import { requireUser } from "@/lib/auth/session";
 import { listBridgeDevices } from "@/lib/data";
-import { DEVICE_ONLINE_MS } from "@/lib/bridge/jobs";
+import { DEVICE_ONLINE_MS } from "@/lib/bridge/devices";
 import { desktopApp } from "@/lib/meetings";
 import { dictationUsage, dictionaryView, loadVoiceContext } from "@/lib/dictation";
 import { transcriptionSetup } from "@/lib/transcribe";

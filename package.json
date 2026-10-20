@@ -10,7 +10,6 @@
   },
   "scripts": {
     "dev": "next dev",
-    "prebuild": "node scripts/pack-bridge.mjs",
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",

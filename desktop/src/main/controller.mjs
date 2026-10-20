@@ -863,8 +863,8 @@ export class Controller extends EventEmitter {
         return `${base}/app/billing`;
       case "bot":
         return botId ? `${base}/app/bots/${enc(botId)}` : `${base}/app`;
-      case "bridge":
-        return `${base}/app/bridge#desktop`;
+      case "desktop":
+        return `${base}/app/desktop`;
       default:
         return `${base}/app`;
     }

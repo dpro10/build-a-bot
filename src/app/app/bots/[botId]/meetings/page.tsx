@@ -6,7 +6,7 @@ import { getOwnedBot, listBridgeDevices } from "@/lib/data";
 import { hasCredit } from "@/lib/billing/credit";
 import { TYPICAL_MEETING_HOUR, formatMicros, tokensMicros } from "@/lib/billing/prices";
 import { getUsage } from "@/lib/billing/usage";
-import { DEVICE_ONLINE_MS } from "@/lib/bridge/jobs";
+import { DEVICE_ONLINE_MS } from "@/lib/bridge/devices";
 import { DEFAULT_TRANSCRIPT_DAYS, desktopApp, listMeetings, meetingNotesAvailable, meetingsEnabled, meetingView, notesCostCredit } from "@/lib/meetings";
 import { INCLUDED_MODELS } from "@/lib/models/catalog";
 import { safeTimeZone } from "@/components/bot/activity/time";

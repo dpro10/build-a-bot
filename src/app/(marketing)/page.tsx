@@ -38,11 +38,11 @@ const FAQ: { q: string; text: string }[] = [
   },
   {
     q: "Can I use my ChatGPT or Claude plan?",
-    text: "Yes. Install the Bridge on your computer and your bot runs on your own Claude Code (Claude Pro or Max) or Codex (ChatGPT Plus or Pro), signed in by you. Your login never leaves your machine, and we never see it. It works while your computer is awake; when it sleeps, your bot waits, or uses an open model we run (from your credit) if you opt in. Gemini works with an API key.",
+    text: "Not the chat plans: they only run on your own computer, so your bot couldn't think while it's off. Use an API key instead, from Anthropic, OpenAI, Google Gemini, OpenRouter and others. Your provider bills you, it's free here, and what your bot reads and writes follows that provider's rules for keeping data.",
   },
   {
     q: "What does it cost?",
-    text: `There are no plans and no subscription: you pay for what your bots use, at cost, from credit you add. A message on ${DEFAULT_MODEL.label} is about ${formatMicros(perMessageMicros(DEFAULT_MODEL))} and a web lookup ${formatMicros(UNIT_PRICES.lookup)}, exactly what the services charge us.${STARTER > 0 ? ` Every account starts with ${formatMicros(STARTER)} of credit, no card needed.` : ""} A bot on your own API key or your Claude or ChatGPT subscription is free here.`,
+    text: `There are no plans and no subscription: you pay for what your bots use, at cost, from credit you add. A message on ${DEFAULT_MODEL.label} is about ${formatMicros(perMessageMicros(DEFAULT_MODEL))} and a web lookup ${formatMicros(UNIT_PRICES.lookup)}, exactly what the services charge us.${STARTER > 0 ? ` Every account starts with ${formatMicros(STARTER)} of credit, no card needed.` : ""} A bot on your own API key is free here.`,
   },
   {
     q: "What does Full faith mean?",

@@ -114,10 +114,10 @@ export async function creditHistory(db: Db, userId: string, limit = 20) {
 /**
  * "You're out of credit…": what to say when something that costs money can't run. `canAdd`:
  * credit can be added here (Stripe, or demo mode); `ownBrain`: switching the bot to the owner's
- * own AI key or subscription would get around it (it's for thinking).
+ * own AI key would get around it (it's for thinking).
  */
 export function outOfCreditMessage(opts: { canAdd: boolean; ownBrain?: boolean }): string {
   const add = opts.canAdd ? "Add credit in Credit & usage" : "Adding credit is coming soon";
-  if (opts.ownBrain) return `You're out of credit. ${add}${opts.canAdd ? "," : ";"} or switch me to your own AI key or subscription in Settings → Brain (that's free here).`;
+  if (opts.ownBrain) return `You're out of credit. ${add}${opts.canAdd ? "," : ";"} or switch me to your own AI key in Settings → Brain (that's free here).`;
   return `You're out of credit. ${add}${opts.canAdd ? " to keep going." : "."}`;
 }

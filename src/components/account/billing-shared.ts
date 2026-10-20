@@ -37,7 +37,7 @@ export async function usageNumbers(db: Db, userId: string): Promise<{ used: Usag
     period: usage.period,
     used: {
       includedMessages: usage.includedMessages,
-      // Everything answered that wasn't on our included brains (subscription turns aren't recorded).
+      // Everything answered on the owner's own AI key.
       byoMessages: Math.max(0, usage.messages - usage.includedMessages),
       searches: usage.searches,
       voiceMinutes: Math.ceil(usage.voiceSeconds / 60),

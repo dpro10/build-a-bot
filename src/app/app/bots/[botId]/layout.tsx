@@ -5,7 +5,6 @@ import { getOwnedBot, listApprovals } from "@/lib/data";
 import { BotLiveProvider } from "@/components/app/live-state";
 import { BotHeader } from "@/components/app/BotHeader";
 import { brainLabel } from "@/lib/bots/labels";
-import { computerFor } from "@/lib/bridge/jobs";
 import { live } from "@/lib/env";
 
 export default async function BotLayout({ children, params }: { children: React.ReactNode; params: Promise<{ botId: string }> }) {
@@ -14,9 +13,9 @@ export default async function BotLayout({ children, params }: { children: React.
   const db = await getDb();
   const bot = await getOwnedBot(db, user.id, botId);
   if (!bot) notFound();
-  const [pending, computer] = await Promise.all([listApprovals(db, user.id, { botId, status: "pending" }), computerFor(db, bot)]);
+  const pending = await listApprovals(db, user.id, { botId, status: "pending" });
   return (
-    <BotLiveProvider initialPaused={bot.status === "paused"} initialPending={pending.length} initialComputer={computer}>
+    <BotLiveProvider initialPaused={bot.status === "paused"} initialPending={pending.length}>
       <div className="flex min-h-0 flex-1 flex-col">
         <BotHeader
           bot={{ id: bot.id, name: bot.name, avatar: bot.avatar, color: bot.color, trust: bot.trust, status: bot.status, role: bot.role }}

@@ -96,8 +96,7 @@ export function AddCredit({ mode, anonymous }: { mode: CreditMode; anonymous: bo
         ) : mode === "off" ? (
           <>
             <Info className="mt-px size-3.5 shrink-0" aria-hidden />
-            Adding credit is coming soon. Until then there&apos;s your starter credit, and a bot on your own AI key or Claude or ChatGPT subscription
-            is free here.
+            Adding credit is coming soon. Until then there&apos;s your starter credit, and a bot on your own AI key is free here.
           </>
         ) : (
           <>

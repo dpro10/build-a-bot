@@ -13,12 +13,11 @@ async function main() {
   const slugs = new Set<string>();
   const { ALL_CONNECTORS } = await import("../src/lib/connectors/index");
   const { CHANNELS } = await import("../src/lib/channels/catalog");
-  const { PROVIDERS, SUBSCRIPTIONS } = await import("../src/lib/models/catalog");
+  const { PROVIDERS } = await import("../src/lib/models/catalog");
   const { MEETING_APPS } = await import("../src/lib/meetings/apps");
   for (const c of ALL_CONNECTORS) if (c.icon.simpleIcon) slugs.add(c.icon.simpleIcon);
   for (const c of CHANNELS) if (c.brand) slugs.add(c.icon);
   for (const p of PROVIDERS) if (p.icon.simpleIcon) slugs.add(p.icon.simpleIcon);
-  for (const s of SUBSCRIPTIONS) if (s.icon.simpleIcon) slugs.add(s.icon.simpleIcon);
   for (const a of Object.values(MEETING_APPS)) if (a.icon.simpleIcon) slugs.add(a.icon.simpleIcon);
   for (const extra of ["nvidia", "claude", "googlegemini", "anthropic", "openrouter", "meta", "mistralai", "deepseek", "qwen", "huggingface"]) slugs.add(extra);
 

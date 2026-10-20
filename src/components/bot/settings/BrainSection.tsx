@@ -2,7 +2,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Brain, Check, CircleAlert, ExternalLink, KeyRound, Laptop, Lock, Sparkles } from "lucide-react";
+import { Brain, Check, CircleAlert, ExternalLink, KeyRound, Lock, Sparkles } from "lucide-react";
 import { BrandTile } from "@/components/brand/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button, Spinner } from "@/components/ui/button";
@@ -11,23 +11,19 @@ import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
 import { toast } from "@/components/ui/toaster";
 import { api } from "@/lib/client/api";
-import { INCLUDED_MODELS, PROVIDERS, PROVIDER_BY_ID, SUBSCRIPTIONS, contextLabel, type ModelDef, type ProviderId } from "@/lib/models/catalog";
+import { INCLUDED_MODELS, PROVIDERS, PROVIDER_BY_ID, contextLabel, type ModelDef, type ProviderId } from "@/lib/models/catalog";
 import { formatMicros, perMessageMicros } from "@/lib/billing/prices";
 import { cn } from "@/lib/utils";
-import { ago } from "@/components/bot/activity/time";
 import { FieldGroup, SettingsSection, useApiErrorToast } from "./ui";
 import { radioKeyDown, radioTabIndex } from "@/components/bot/activity/radio-keys";
 
 export type BrainValue = {
-  kind: "included" | "byok" | "subscription";
+  kind: "included" | "byok";
   provider: string;
   model: string;
   effort?: "low" | "medium" | "high";
-  whenOffline?: "wait" | "included";
   baseUrl?: string | null;
 };
-
-export type BridgeDeviceView = { id: string; name: string; platform: string | null; clis: Record<string, string | null>; lastSeenAt: string | null };
 
 type Tier = "fast" | "balanced" | "smart";
 const TIERS: { id: Tier; label: string; blurb: string }[] = [
@@ -45,7 +41,6 @@ const EFFORT_HINT = {
 const OTHER = "__other__";
 
 export function brainText(b: BrainValue, demoBrain: boolean): string {
-  if (b.kind === "subscription") return b.provider === "codex" ? "Your ChatGPT · via Bridge" : "Your Claude · via Bridge";
   if (b.kind === "included") {
     const def = INCLUDED_MODELS.find((m) => m.id === b.model);
     return `${def?.label ?? b.model}${demoBrain ? " · demo brain" : ""}`;
@@ -59,10 +54,6 @@ function BrainIcon({ b, size = 40 }: { b: BrainValue; size?: number }) {
   if (b.kind === "byok") {
     const p = PROVIDER_BY_ID[b.provider as ProviderId];
     if (p) return <BrandTile icon={p.icon} size={size} className="rounded-2xl" />;
-  }
-  if (b.kind === "subscription") {
-    const s = SUBSCRIPTIONS.find((x) => (b.provider === "codex" ? x.id === "chatgpt" : x.id === "claude"));
-    if (s) return <BrandTile icon={s.icon} size={size} className="rounded-2xl" />;
   }
   return (
     <span className="flex shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-glow" style={{ width: size, height: size }}>
@@ -78,8 +69,6 @@ export function BrainSection({
   label,
   keyHint,
   demoBrain,
-  devices,
-  serverNow,
 }: {
   botId: string;
   botName: string;
@@ -88,8 +77,6 @@ export function BrainSection({
   label: string;
   keyHint: string | null;
   demoBrain: boolean;
-  devices: BridgeDeviceView[];
-  serverNow: string;
 }) {
   const router = useRouter();
   const onError = useApiErrorToast();
@@ -115,11 +102,6 @@ export function BrainSection({
   const [apiKey, setApiKey] = React.useState("");
   // "unverified": saved, but the provider couldn't be reached to check it (demo servers).
   const [keyState, setKeyState] = React.useState<{ state: "idle" | "checking" | "ok" | "unverified" | "error"; message?: string }>({ state: "idle" });
-
-  // Subscription
-  const [sub, setSub] = React.useState<"claude" | "chatgpt">(initial.kind === "subscription" && initial.provider === "codex" ? "chatgpt" : "claude");
-  const [subModel, setSubModel] = React.useState(initial.kind === "subscription" && initial.provider !== "codex" ? initial.model || "default" : "default");
-  const [whenOffline, setWhenOffline] = React.useState<"wait" | "included">(initial.kind === "subscription" ? (initial.whenOffline ?? "wait") : "wait");
 
   const selected = INCLUDED_MODELS.find((m) => m.id === model) ?? INCLUDED_MODELS[0];
   const hasSavedKey = savedHint?.provider === provider;
@@ -174,12 +156,6 @@ export function BrainSection({
     }
   };
 
-  const saveSub = () =>
-    patch(
-      { kind: "subscription", provider: sub === "chatgpt" ? "codex" : "claude-code", model: sub === "chatgpt" ? "default" : subModel, whenOffline },
-      sub === "chatgpt" ? `${botName} now thinks with your ChatGPT` : `${botName} now thinks with your Claude`,
-    );
-
   const chooseProvider = (id: ProviderId) => {
     setProvider(id);
     const def = PROVIDER_BY_ID[id];
@@ -197,14 +173,6 @@ export function BrainSection({
     current.model === chosenByokModel &&
     !apiKey.trim() &&
     (provider !== "custom" || (current.baseUrl ?? "") === baseUrl.trim());
-  const subProvider = sub === "chatgpt" ? "codex" : "claude-code";
-  const isCurrentSub =
-    current.kind === "subscription" &&
-    current.provider === subProvider &&
-    (sub === "chatgpt" || current.model === subModel) &&
-    (current.whenOffline ?? "wait") === whenOffline;
-  const activeDevices = devices;
-  const now = new Date(serverNow);
 
   return (
     <SettingsSection id="brain" icon={Brain} title="Brain" description={`The AI model ${botName} thinks with. Switch any time; its memory and apps stay the same.`}>
@@ -219,7 +187,7 @@ export function BrainSection({
             </div>
           </div>
           <Badge tone="primary" className="shrink-0">
-            {current.kind === "included" ? "Included" : current.kind === "byok" ? "Your key" : "Your subscription"}
+            {current.kind === "included" ? "Included" : "Your key"}
           </Badge>
         </div>
 
@@ -230,7 +198,6 @@ export function BrainSection({
           options={[
             { value: "included", label: "Included" },
             { value: "byok", label: "API key" },
-            { value: "subscription", label: "Subscription" },
           ]}
           className="self-start"
         />
@@ -293,9 +260,12 @@ export function BrainSection({
               </Button>
             </SaveRow>
           </div>
-        ) : tab === "byok" ? (
+        ) : (
           <div className="flex flex-col gap-5">
-            <p className="text-sm text-muted-foreground">Use your own account with an AI company. You pay them directly, and it&apos;s free here.</p>
+            <p className="text-sm text-muted-foreground">
+              Use your own account with an AI company. You pay them directly, and it&apos;s free here. What {botName} reads and writes then goes to
+              them, and their rules for keeping data apply, not ours.
+            </p>
             <div role="radiogroup" aria-label="Provider" className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
               {PROVIDERS.map((p, i) => {
                 const on = provider === p.id;
@@ -427,160 +397,6 @@ export function BrainSection({
               </Button>
             </SaveRow>
           </div>
-        ) : (
-          <div className="flex flex-col gap-5">
-            <p className="text-sm text-muted-foreground">
-              Already pay for Claude or ChatGPT? {botName} can think with it on your computer: the Build-a-bot desktop app runs your own Claude Code or
-              Codex. Your login never leaves your computer, and we never see it.
-            </p>
-            <div role="radiogroup" aria-label="Subscription" className="grid gap-2 sm:grid-cols-2">
-              {SUBSCRIPTIONS.filter((s) => s.status === "available").map((s, i) => {
-                const id = s.id as "claude" | "chatgpt";
-                const on = sub === id;
-                return (
-                  <button
-                    key={s.id}
-                    type="button"
-                    role="radio"
-                    aria-checked={on}
-                    tabIndex={radioTabIndex(on, i, true)}
-                    onKeyDown={radioKeyDown}
-                    onClick={() => setSub(id)}
-                    className={cn(
-                      "flex items-start gap-3 rounded-2xl border p-3.5 text-left transition",
-                      on ? "border-primary bg-primary-soft/60 ring-4 ring-primary/10" : "border-border bg-card hover:border-foreground/20 hover:bg-muted/40",
-                    )}
-                  >
-                    <BrandTile icon={s.icon} size={36} className="rounded-xl" />
-                    <span className="min-w-0">
-                      <span className="block font-semibold">
-                        {s.name} <span className="font-normal text-muted-foreground">({s.plans})</span>
-                      </span>
-                      <span className="mt-0.5 block text-xs text-muted-foreground">{s.how}</span>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {sub === "claude" ? (
-              <FieldGroup label="Model" htmlFor="sub-model" hint="Uses your Claude plan's limits.">
-                <Select id="sub-model" value={subModel} onChange={(e) => setSubModel(e.target.value)} className="sm:max-w-xs">
-                  {SUBSCRIPTIONS.find((s) => s.id === "claude")!.models.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.label}
-                    </option>
-                  ))}
-                </Select>
-              </FieldGroup>
-            ) : null}
-
-            <FieldGroup label="When your computer is off">
-              <div role="radiogroup" aria-label="When your computer is off" className="grid gap-2 sm:grid-cols-2">
-                {(
-                  [
-                    { value: "wait", title: "Wait until it's back", body: "Messages wait in line. Nothing thinks anywhere else." },
-                    { value: "included", title: "Use an included model meanwhile", body: "An open model answers until your computer wakes up." },
-                  ] as const
-                ).map((o, i) => {
-                  const on = whenOffline === o.value;
-                  return (
-                    <button
-                      key={o.value}
-                      type="button"
-                      role="radio"
-                      aria-checked={on}
-                      tabIndex={radioTabIndex(on, i, true)}
-                      onKeyDown={radioKeyDown}
-                      onClick={() => setWhenOffline(o.value)}
-                      className={cn(
-                        "flex items-start gap-3 rounded-2xl border p-3.5 text-left transition",
-                        on ? "border-primary bg-primary-soft/60" : "border-border bg-card hover:border-foreground/20 hover:bg-muted/40",
-                      )}
-                    >
-                      <span className={cn("mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border-2", on ? "border-primary" : "border-input")} aria-hidden>
-                        {on ? <span className="size-2 rounded-full bg-primary" /> : null}
-                      </span>
-                      <span>
-                        <span className="block text-sm font-semibold">{o.title}</span>
-                        <span className="block text-xs text-muted-foreground">{o.body}</span>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </FieldGroup>
-
-            {activeDevices.length ? (
-              <div className="flex flex-col gap-2 rounded-2xl border border-success/30 bg-success-soft p-4 text-sm">
-                {activeDevices.map((d) => {
-                  const cli = sub === "chatgpt" ? d.clis.codex : d.clis.claude;
-                  return (
-                    <div key={d.id} className="flex items-start gap-3">
-                      <Laptop className="mt-0.5 size-4 shrink-0 text-success" aria-hidden />
-                      <div className="min-w-0 flex-1">
-                        <div className="font-semibold text-foreground">
-                          Paired with {d.name}
-                          {d.lastSeenAt ? <span className="font-normal text-muted-foreground"> · seen {ago(d.lastSeenAt, now)}</span> : null}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {cli ? `${sub === "chatgpt" ? "Codex" : "Claude Code"} ${cli} found.` : `${sub === "chatgpt" ? "Codex" : "Claude Code"} wasn't found on this computer yet.`}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-                <Link href="/app/bridge" className="self-start text-xs font-semibold text-primary hover:underline">
-                  Manage your Bridge
-                </Link>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-3 rounded-2xl border border-warning/30 bg-warning-soft p-4 text-sm sm:flex-row sm:items-center">
-                <Laptop className="size-5 shrink-0 text-warning" aria-hidden />
-                <p className="min-w-0 flex-1 text-foreground">
-                  <span className="font-semibold">Your computer isn&apos;t paired yet.</span>{" "}
-                  <span className="text-muted-foreground">Get the desktop app and pair it. Until then, {botName} can&apos;t think with your subscription.</span>
-                </p>
-                <Button asChild size="sm" variant="secondary">
-                  <Link href="/app/bridge">
-                    Pair your computer <ArrowRight />
-                  </Link>
-                </Button>
-              </div>
-            )}
-
-            <div className="flex flex-col gap-2 rounded-2xl bg-muted/60 p-4 text-sm sm:flex-row sm:items-center">
-              <BrandTile icon={SUBSCRIPTIONS.find((s) => s.id === "gemini")!.icon} size={28} variant="soft" className="rounded-lg" />
-              <p className="min-w-0 flex-1 text-muted-foreground">
-                <span className="font-semibold text-foreground">Gemini?</span> Google only allows Gemini through an API key (there&apos;s a free tier), not your
-                subscription.
-              </p>
-              <Button
-                variant="link"
-                size="sm"
-                className="h-auto self-start px-0 sm:self-center"
-                onClick={() => {
-                  setTab("byok");
-                  chooseProvider("google");
-                }}
-              >
-                Use a Gemini key
-              </Button>
-            </div>
-            <SaveRow note="Scheduled routines on a subscription brain run at most 10 times a day, to keep use personal.">
-              <Button onClick={saveSub} loading={saving} disabled={isCurrentSub}>
-                {isCurrentSub ? (
-                  <>
-                    <Check /> In use
-                  </>
-                ) : sub === "chatgpt" ? (
-                  "Use my ChatGPT"
-                ) : (
-                  "Use my Claude"
-                )}
-              </Button>
-            </SaveRow>
-          </div>
         )}
       </div>
     </SettingsSection>
@@ -593,11 +409,10 @@ function pickModel(def: (typeof PROVIDERS)[number], current: string): string {
   return def.models.find((m) => m.default)?.id ?? def.models[0]?.id ?? OTHER;
 }
 
-function SaveRow({ children, note }: { children: React.ReactNode; note?: string }) {
+function SaveRow({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-3 border-t border-border pt-4">
       <div className="flex flex-wrap items-center justify-end gap-3">
-        {note ? <span className="mr-auto text-xs text-muted-foreground">{note}</span> : null}
         {children}
       </div>
     </div>

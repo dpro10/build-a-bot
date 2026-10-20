@@ -1,9 +1,9 @@
 /**
- * "Your computer" page: the desktop app, where bots on the owner's plan think (the Bridge is built
- * in), and meeting notes and voice typing happen. What it does, where to get it (its signed
- * download once published; until then "Coming soon", or the repo in demo mode), and pairing.
+ * The Desktop app page: the app where meeting notes, voice typing and a bot's synced folder
+ * happen. What it does, where to get it (its signed download once published; until then
+ * "Coming soon", or the repo in demo mode), and pairing.
  */
-import { BrainCircuit, Download, Hand, Keyboard, Laptop, ShieldCheck } from "lucide-react";
+import { Download, FolderSync, Hand, Keyboard, Laptop, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
@@ -17,16 +17,16 @@ const DEV_COMMAND = "cd desktop && npm install && npm start";
 
 const POINTS = [
   {
-    icon: <BrainCircuit />,
-    title: "Thinks with your plan",
-    body: "Bots set to Your Claude or Your ChatGPT think here, with your own Claude Code or Codex. Every built-in tool stays off, and your sign-in never leaves your computer.",
-  },
-  {
     icon: <Hand />,
     title: "Takes notes, only after a yes",
     body: "When a call starts in Zoom, Meet, Teams or another app, your bot peeks up and asks first. While it listens, it stays at the bottom of your screen.",
   },
   { icon: <Keyboard />, title: "Types what you say", body: "Hold a key in any app and talk. What you meant is typed where your cursor is." },
+  {
+    icon: <FolderSync />,
+    title: "Gives your bot a folder",
+    body: "Pick one folder: its files go to your bot's Library and stay in step. Nothing else on your computer is read.",
+  },
   {
     icon: <ShieldCheck />,
     title: "Heard on your computer",
@@ -58,7 +58,7 @@ export function DesktopAppSection({
               The desktop app
             </h2>
             <p className="mt-1.5 text-muted-foreground">
-              One small app in your menu bar or tray: your bots think with your own plan, take notes in your calls, and type what you say. No terminal.
+              One small app in your menu bar or tray: your bot takes notes in your calls, types what you say, and reads the folder you give it.
             </p>
             <ul className="mt-6 flex flex-col gap-4">
               {POINTS.map((p) => (
@@ -84,7 +84,7 @@ export function DesktopAppSection({
           // Nothing to install yet.
           <div className="border-t border-border p-5 sm:p-6">
             <p className="text-sm text-muted-foreground">
-              Signed downloads for Mac and Windows are coming soon. Until then, the Bridge below runs from a terminal.
+              Signed downloads for Mac and Windows are coming soon.
             </p>
           </div>
         ) : (
@@ -128,8 +128,7 @@ export function DesktopAppSection({
                 Pair this computer
               </h3>
               <p className="mt-2 mb-3 text-sm text-muted-foreground">
-                The app asks for a code when it opens. Type the one you get here. Bots on your plan start thinking there as soon as it finds Claude Code or
-                Codex.
+                The app asks for a code when it opens. Type the one you get here.
               </p>
               <DesktopPairing />
             </div>

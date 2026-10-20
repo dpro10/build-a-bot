@@ -1,6 +1,6 @@
 /**
- * Voice typing happens in the desktop app (a paired computer's device token, the same pairing as
- * the Bridge and meeting notes), like Wispr Flow: talking, editing by voice and "Hey {bot}" answer
+ * Voice typing happens in the desktop app (a paired computer's device token, the same one meeting
+ * notes use), like Wispr Flow: talking, editing by voice and "Hey {bot}" answer
  * only the app (`appOnly`). The Voice typing page (a signed-in session) manages the owner's words.
  */
 import { eq } from "drizzle-orm";

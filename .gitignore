@@ -19,13 +19,9 @@ coverage/
 .DS_Store
 *.log
 .vercel
-bridge/node_modules/
-bridge/dist/
 desktop/node_modules/
 desktop/dist/
 desktop/test-results/
-# the Bridge, packed before each build (scripts/pack-bridge.mjs)
-public/downloads/
 # the promo's generated files (video/README.md)
 video/audio/build/
 video/stage/generated/

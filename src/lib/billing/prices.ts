@@ -4,8 +4,8 @@
  * what the service charges Build-a-bot, with nothing added (docs/DECISIONS.md). Safe for the browser.
  *
  *  - Thinking on an included model: the model's Token Factory price per token (models/catalog.ts).
- *  - Your own AI key, or your own Claude or ChatGPT subscription through the Bridge: free here
- *    (your provider bills you). Speech heard on your computer (NVIDIA Parakeet): free.
+ *  - Your own AI key: free here (your provider bills you). Speech heard on your computer
+ *    (NVIDIA Parakeet): free.
  *  - Web lookups, texts, calls and the cloud browser: the per-use prices below.
  *  - Adding credit: Stripe's card fee is added on top, so the credit is all yours.
  */

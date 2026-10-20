@@ -1,11 +1,10 @@
-import { and, eq, gt, inArray } from "drizzle-orm";
+import { and, eq, gt } from "drizzle-orm";
 import { schema } from "@/lib/db";
 import { authedBot, json, type RouteCtx } from "@/lib/api";
 import { ensureConversation } from "@/lib/channels/outbound";
 import { listMessages } from "@/lib/data";
-import { computerFor } from "@/lib/bridge/jobs";
 
-/** Poll for new web messages (bridge replies, approval follow-ups, reminders). */
+/** Poll for new web messages (approval follow-ups, reminders, replies on other channels). */
 export async function GET(req: Request, ctx: RouteCtx<{ botId: string }>) {
   const { botId } = await ctx.params;
   const a = await authedBot(botId);
@@ -20,18 +19,9 @@ export async function GET(req: Request, ctx: RouteCtx<{ botId: string }>) {
     .from(schema.approvals)
     .where(and(eq(schema.approvals.botId, botId), gt(schema.approvals.createdAt, new Date(Date.now() - 7 * 86400_000))));
   const [freshBot] = await a.db.select({ status: schema.bots.status }).from(schema.bots).where(eq(schema.bots.id, botId));
-  const pendingJobs = await a.db
-    .select({ id: schema.bridgeJobs.id, status: schema.bridgeJobs.status })
-    .from(schema.bridgeJobs)
-    .where(and(eq(schema.bridgeJobs.botId, botId), inArray(schema.bridgeJobs.status, ["queued", "running"])));
   return json({
     messages,
     approvals,
     botStatus: freshBot?.status ?? a.bot.status,
-    // Running: the owner's computer is thinking. Queued: waiting for that computer to pick it up.
-    thinkingOnBridge: pendingJobs.some((j) => j.status === "running"),
-    waitingOnBridge: pendingJobs.some((j) => j.status === "queued"),
-    // A bot on the owner's plan that waits for their computer: online, asleep or never paired (else null).
-    computer: await computerFor(a.db, a.bot),
   });
 }

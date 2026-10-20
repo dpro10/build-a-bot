@@ -839,7 +839,7 @@ Diego: "the repo has to be public for the hackathon so i am fine to do that", th
 
 ## Decision: the Bridge lives in the desktop app (Diego, 2026-10-17)
 
-Diego: "the bridge should definetly be apart of this app", then "write up the plan for the bridge merge, and honestly go ahead and just get it done. be careful though, i need your best work." Plan and details: `docs/BRIDGE-IN-APP.md`.
+Diego: "the bridge should definetly be apart of this app", then "write up the plan for the bridge merge, and honestly go ahead and just get it done. be careful though, i need your best work." Plan and details: `docs/BRIDGE-IN-APP.md` (deleted with the Bridge on 2026-10-20; it's in the git history).
 
 - One download does voice typing, meeting notes and the Bridge. Once paired, the app finds Claude Code or Codex (through the login shell's PATH, since an app opened from the Finder gets a bare one) and thinks for the owner's bots on Your Claude or Your ChatGPT. It's on unless the owner turns it off on that computer, from the menu or the pairing window.
 - The terminal Bridge stays, for Linux and servers; both run `bridge/runner.mjs` (the app keeps an identical copy, checked by a test). Its version is 0.2.0.
@@ -925,3 +925,14 @@ Diego, told that two dictations in a row were pasted with no space between them:
 - **What's spaced:** dictations, and what's written at the cursor by an edit with nothing selected. An edit that replaces a selection isn't (it replaces exactly what was selected); a reply pasted from the pill isn't.
 - **Privacy:** those characters are read on the computer, never sent, kept or logged (the log says only "spaced it (before; from the box)"); never in a password box. On by default, *Space my words* in Voice typing settings; the privacy and safety pages say so.
 - **Checked on real computers in CI:** what the readers say is next to the cursor in an Electron app's box and in Notepad or TextEdit (at the end, in the middle, around a selection, after a line break, in an empty box; refused in a password box), then dictations pasted there with the real paste keys and spaced; and, in the installed Windows app with the real shortcut, two dictations in a row and one typed before a word.
+
+## Decision: no Claude or ChatGPT plans; the Bridge is gone, your own API key stays (Diego, 2026-10-20)
+
+Diego: "the more that i think about, the more i think maybe we should drop being able to use your claude or chatgpt subscriptions, i only say this because 1. it goes against a core thing for this product (ZDR) and 2. because you cant talk to those models if the computer is closed. Is this correct? what do you think?" Both were right: a bot on a plan waited (up to 12 hours) whenever the computer slept, and consumer Claude and ChatGPT plans don't offer zero data retention. Then: "yes remove it, keep the api key option".
+
+- **Gone everywhere:** the Subscription choice in the builder and in a bot's Settings → Brain, the Bridge page, the Bridge in the desktop app (its tray items, the pairing window's card, finding Claude Code or Codex), the terminal Bridge (`bridge/`) and the copy the site served, the job queue (`bridge_jobs`, `/api/bridge/jobs`), the per-turn MCP tokens, the "waiting for your computer" states in the chat, the header and meeting notes, and the copy on the site, the pricing page and the legal pages.
+- **Stays:** your own API key, with an honest line wherever it's offered: what the bot reads and writes goes to that provider, under its rules for keeping data. Pairing stays too (`/api/bridge/pair`, `/api/bridge/pairing-code`, the device tokens), since meeting notes, voice typing and a bot's synced folder use it. Its page is now **Desktop app** (`/app/desktop`); `/app/bridge` sends you there, since older apps still open it.
+- **Bots that were on a plan** moved to the default open model (Nemotron 3.5 Lightning) in migration `0009_remove_bridge`, and each one's Activity says why. Computers paired only to run the terminal Bridge were unpaired; desktop apps stay paired.
+- **Older desktop apps, until they update:** the server stops naming any bot that needs Claude Code or Codex, so they never wait for turns, and their heartbeat still gets an answer ("nothing waiting"). The new app also deletes the folder older ones ran the Bridge in.
+- **Still open:** zero data retention on the included models has to be switched on in the Nebius Token Factory console (Diego's login); until it is, the site shouldn't promise it.
+

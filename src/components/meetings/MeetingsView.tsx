@@ -349,7 +349,7 @@ function DesktopCard({ bot, app, devices, blocked }: { bot: BotFace; app: Deskto
         {/* Coming soon: nothing to set up yet. */}
         {soon ? null : (
           <Button asChild variant={devices.length ? "outline" : "primary"} className="shrink-0 self-start sm:self-auto">
-            <Link href="/app/bridge#desktop">
+            <Link href="/app/desktop">
               {devices.length ? "Manage the desktop app" : "Get the desktop app"} <ArrowRight />
             </Link>
           </Button>

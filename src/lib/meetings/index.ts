@@ -55,7 +55,7 @@ export function meetingNotesAvailable(): boolean {
 
 /**
  * Writing this bot's notes costs money: they're written by an included model (paid from credit),
- * not the owner's own AI key or subscription (free here).
+ * not the owner's own AI key (free here).
  */
 export async function notesCostCredit(db: Db, bot: Bot): Promise<boolean> {
   const { resolveBrain } = await import("@/lib/agent/brain");
@@ -80,8 +80,6 @@ export type MeetingView = {
   error: string | null;
   /** Which brain wrote the notes, e.g. "Nemotron 3.5 Lightning". */
   notesBy: string | null;
-  /** The notes are being written on the owner's computer (Bridge). */
-  waitingForComputer: boolean;
   /** One microphone in a room: lines are labeled "Room", not the owner. */
   inPerson: boolean;
   /** The transcript was deleted (by the owner or the retention setting); the notes stay. */
@@ -115,7 +113,6 @@ export function meetingView(m: Meeting): MeetingView {
     actionItems: m.actionItems ?? [],
     error: m.error,
     notesBy: typeof meta.notesBy === "string" ? meta.notesBy : null,
-    waitingForComputer: m.status === "processing" && meta.notesVia === "bridge",
     inPerson: meta.inPerson === true,
     transcriptDeleted: typeof meta.transcriptDeletedAt === "string",
     noticeCopied: Boolean((meta.consent as { noticeCopied?: boolean } | undefined)?.noticeCopied),

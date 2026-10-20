@@ -326,22 +326,6 @@ export function MeetingDetail({
           <div className="shimmer-text font-semibold">{bot.name} is writing your notes…</div>
           <p className="text-sm text-muted-foreground">Usually a few seconds. They&apos;ll show up here and in your chat.</p>
         </Banner>
-      ) : status === "waiting" ? (
-        <Banner
-          tone="warning"
-          avatar={<Avatar avatar={bot.avatar} color={bot.color} mood="sleeping" size={56} title={bot.name} />}
-          live
-          action={
-            <Button asChild variant="outline">
-              <Link href="/app/bridge">Open Bridge</Link>
-            </Button>
-          }
-        >
-          <div className="font-semibold">Waiting for your computer</div>
-          <p className="text-sm text-muted-foreground">
-            {bot.name} writes notes with your own Claude or ChatGPT, on your computer. Start the Bridge there and they&apos;ll appear here.
-          </p>
-        </Banner>
       ) : status === "failed" ? (
         <Banner
           tone="neutral"

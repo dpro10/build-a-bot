@@ -141,7 +141,7 @@ export const makeFlashcardsTool = defineTool({
   summarize: (a) => `Make ${a.cards.length} flashcards: “${a.title}”`,
   async run(args, ctx) {
     const { items, leftOff } = await linksItRead(ctx, args.cards);
-    const set = await createStudySet(ctx.db, { botId: ctx.bot.id, kind: "flashcards", title: args.title, items, fileIds: await fileIds(ctx, args.files), jobId: ctx.jobId ?? null });
+    const set = await createStudySet(ctx.db, { botId: ctx.bot.id, kind: "flashcards", title: args.title, items, fileIds: await fileIds(ctx, args.files) });
     return {
       ok: true,
       content: studyReply(ctx, `Made “${set.title}”: ${set.items.length} flashcards.${leftOff}`),
@@ -169,7 +169,7 @@ export const makeQuizTool = defineTool({
   summarize: (a) => `Make a ${a.questions.length}-question quiz: “${a.title}”`,
   async run(args, ctx) {
     const { items, leftOff } = await linksItRead(ctx, args.questions);
-    const set = await createStudySet(ctx.db, { botId: ctx.bot.id, kind: "quiz", title: args.title, items, fileIds: await fileIds(ctx, args.files), jobId: ctx.jobId ?? null });
+    const set = await createStudySet(ctx.db, { botId: ctx.bot.id, kind: "quiz", title: args.title, items, fileIds: await fileIds(ctx, args.files) });
     return {
       ok: true,
       content: studyReply(ctx, `Made “${set.title}”: a ${set.items.length}-question quiz.${leftOff}`),

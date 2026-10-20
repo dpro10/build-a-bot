@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { ArrowUpRight, Check, CircleAlert, Eye, EyeOff, KeyRound, Laptop, Lock, Sparkles } from "lucide-react";
+import { ArrowUpRight, Check, CircleAlert, Eye, EyeOff, KeyRound, Lock, Sparkles } from "lucide-react";
 import { BrandTile } from "@/components/brand/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button, Spinner } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { FieldHint, Input, Label } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
 import { formatMicros, perMessageMicros } from "@/lib/billing/prices";
-import { INCLUDED_MODELS, PROVIDERS, PROVIDER_BY_ID, SUBSCRIPTIONS, contextLabel, type ModelDef, type ProviderId } from "@/lib/models/catalog";
+import { INCLUDED_MODELS, PROVIDERS, PROVIDER_BY_ID, contextLabel, type ModelDef, type ProviderId } from "@/lib/models/catalog";
 import { cn } from "@/lib/utils";
 import { DEFAULT_MODEL, type BrainChoice } from "../state";
 import { onRadioGroupKeyDown, radioTabIndex } from "../radio-group";
@@ -49,19 +49,11 @@ export function BrainStep({
   const kinds: { id: BrainChoice["kind"]; title: string; blurb: string; icon: React.ReactNode; badge?: string; tone?: "primary" | "success" }[] = [
     {
       id: "included",
-      title: "Open models we run",
+      title: "Open models on Nebius",
       blurb: "Nothing to set up. Paid from your credit, at cost: a fraction of a cent a message.",
       icon: <Sparkles className="size-5" />,
       badge: "Easiest",
       tone: "primary",
-    },
-    {
-      id: "subscription",
-      title: "Your Claude or ChatGPT plan",
-      blurb: "Use the subscription you already pay for, through your own computer.",
-      icon: <Laptop className="size-5" />,
-      badge: "Free here",
-      tone: "success",
     },
     { id: "byok", title: "Your own API key", blurb: "Anthropic, OpenAI, Gemini, OpenRouter, Groq and more.", icon: <KeyRound className="size-5" />, badge: "Free here", tone: "success" },
   ];
@@ -69,14 +61,13 @@ export function BrainStep({
   const pick = (kind: BrainChoice["kind"]) => {
     if (kind === brain.kind) return;
     if (kind === "included") onBrain({ kind, model: DEFAULT_MODEL, effort: "low" });
-    else if (kind === "subscription") onBrain({ kind, subscription: "claude", model: "default", whenOffline: "wait" });
     else onBrain({ kind, provider: "anthropic", model: PROVIDER_BY_ID.anthropic.models.find((m) => m.default)?.id ?? "", baseUrl: "" });
   };
 
   return (
     <div className="flex flex-col gap-6">
       <StepHeading title="Choose its brain" subtitle={`The AI model ${botName || "your bot"} thinks with. Switch anytime — its memory and apps stay put.`} />
-      <div role="radiogroup" aria-label="Brain" onKeyDown={onRadioGroupKeyDown} className="grid gap-2.5 sm:grid-cols-3">
+      <div role="radiogroup" aria-label="Brain" onKeyDown={onRadioGroupKeyDown} className="grid gap-2.5 sm:grid-cols-2">
         {kinds.map((k, i) => {
           const active = brain.kind === k.id;
           return (
@@ -105,7 +96,6 @@ export function BrainStep({
 
       <div key={brain.kind} className="animate-fade-up">
         {brain.kind === "included" ? <IncludedPanel brain={brain} onBrain={onBrain} demo={demo} starterCredit={starterCredit} /> : null}
-        {brain.kind === "subscription" ? <SubscriptionPanel brain={brain} onBrain={onBrain} onUseGeminiKey={() => onBrain({ kind: "byok", provider: "google", model: PROVIDER_BY_ID.google.models[0]?.id ?? "", baseUrl: "" })} /> : null}
         {brain.kind === "byok" ? (
           <ByokPanel brain={brain} onBrain={onBrain} apiKey={apiKey} onApiKey={onApiKey} keyStatus={keyStatus} keyMessage={keyMessage} onValidate={onValidate} />
         ) : null}
@@ -196,101 +186,6 @@ function IncludedPanel({
             { value: "high", label: "Deep", disabled: !thinks },
           ]}
         />
-      </div>
-    </div>
-  );
-}
-
-function SubscriptionPanel({ brain, onBrain, onUseGeminiKey }: { brain: Extract<BrainChoice, { kind: "subscription" }>; onBrain: (b: BrainChoice) => void; onUseGeminiKey: () => void }) {
-  const subs = SUBSCRIPTIONS.filter((s) => s.id === "claude" || s.id === "chatgpt");
-  const current = SUBSCRIPTIONS.find((s) => s.id === brain.subscription)!;
-  const cloud = SUBSCRIPTIONS.find((s) => s.id === "claude_cloud");
-  return (
-    <div className="flex flex-col gap-5 rounded-3xl border border-border bg-background-2/60 p-4 sm:p-5">
-      <div role="radiogroup" aria-label="Subscription" onKeyDown={onRadioGroupKeyDown} className="grid gap-2.5 sm:grid-cols-2">
-        {subs.map((s, i) => {
-          const active = s.id === brain.subscription;
-          return (
-            <button
-              key={s.id}
-              type="button"
-              role="radio"
-              aria-checked={active}
-              tabIndex={radioTabIndex(active, i, !subs.some((x) => x.id === brain.subscription))}
-              onClick={() => onBrain({ ...brain, subscription: s.id as "claude" | "chatgpt", model: "default" })}
-              className={cn("flex items-center gap-3 rounded-2xl border bg-card p-3.5 text-left transition", active ? "border-primary ring-2 ring-primary/20" : "border-border hover:border-foreground/25")}
-            >
-              <BrandTile icon={s.icon} size={44} />
-              <span className="min-w-0">
-                <span className="block font-semibold">{s.name}</span>
-                <span className="block text-sm text-muted-foreground">{s.plans} plan</span>
-              </span>
-              {active ? <Check className="ml-auto size-5 text-primary" strokeWidth={3} /> : null}
-            </button>
-          );
-        })}
-      </div>
-
-      <ol className="grid gap-3 sm:grid-cols-3">
-        {[
-          { t: "Install the Bridge", d: "One command on your Mac, Windows or Linux computer. Takes a minute." },
-          { t: `It uses your own ${current.id === "claude" ? "Claude Code" : "Codex"}`, d: `Already signed in to your ${current.name} account — we never see your login.` },
-          { t: "Your bot sends it work", d: "Answers come back to your bot on every channel. Your computer does the thinking." },
-        ].map((x, i) => (
-          <li key={x.t} className="rounded-2xl bg-card p-3.5 ring-1 ring-border">
-            <span className="mb-1.5 flex size-6 items-center justify-center rounded-full bg-primary-soft text-xs font-bold text-primary">{i + 1}</span>
-            <div className="text-sm font-semibold">{x.t}</div>
-            <div className="text-xs leading-snug text-muted-foreground">{x.d}</div>
-          </li>
-        ))}
-      </ol>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        {current.models.length > 1 ? (
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="sub-model">Model</Label>
-            <Select id="sub-model" value={brain.model} onChange={(e) => onBrain({ ...brain, model: e.target.value })}>
-              {current.models.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label}
-                </option>
-              ))}
-            </Select>
-          </div>
-        ) : null}
-        <div className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium">When your computer is off</span>
-          <Segmented
-            aria-label="When your computer is off"
-            value={brain.whenOffline}
-            onChange={(whenOffline) => onBrain({ ...brain, whenOffline })}
-            options={[
-              { value: "wait", label: "Wait for it" },
-              { value: "included", label: "Use a free model" },
-            ]}
-          />
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-2 text-sm text-muted-foreground">
-        <p className="flex gap-2">
-          <Lock className="mt-0.5 size-4 shrink-0 text-success" />
-          Your subscription login stays on your computer. We never ask for it, store it or send it anywhere.
-        </p>
-        <p className="flex flex-wrap items-center gap-x-1">
-          Have Gemini? Google only allows apps to use Gemini with an API key (there&apos;s a free tier).
-          <button type="button" onClick={onUseGeminiKey} className="font-semibold text-primary underline-offset-2 hover:underline">
-            Use a Gemini key instead
-          </button>
-        </p>
-        {cloud ? (
-          <p>
-            <Badge tone="neutral" className="mr-1.5 align-[1px]">
-              Coming soon
-            </Badge>
-            <span className="font-medium text-foreground">{cloud.name}:</span> {cloud.how}
-          </p>
-        ) : null}
       </div>
     </div>
   );
@@ -431,7 +326,8 @@ function ByokPanel({
 
       <p className="flex gap-2 text-sm text-muted-foreground">
         <Lock className="mt-0.5 size-4 shrink-0 text-success" />
-        Encrypted before it&apos;s stored, never logged, and never shown again — not even to you. Usage is billed by your provider.
+        Encrypted before it&apos;s stored, never logged, and never shown again — not even to you. Usage is billed by your provider, and what your
+        bot reads and writes goes to them, under their rules for keeping data.
       </p>
     </div>
   );

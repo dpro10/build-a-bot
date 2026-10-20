@@ -60,7 +60,7 @@ beforeAll(async () => {
   db = await getDb();
   [owner] = await db.insert(schema.users).values({ id: "usr_dana", email: "dana@example.com", name: "Dana", emailVerifiedAt: new Date(), timezone: "UTC", plan: "free" }).returning();
   [stranger] = await db.insert(schema.users).values({ id: "usr_eve", email: "eve@example.com", name: "Eve", emailVerifiedAt: new Date(), timezone: "UTC", plan: "free" }).returning();
-  await db.insert(schema.bridgeDevices).values({ id: "dev_mac", ownerId: owner.id, name: "Dana's Mac", tokenHash: sha256(TOKEN), platform: "desktop-darwin-arm64", clis: {} });
+  await db.insert(schema.bridgeDevices).values({ id: "dev_mac", ownerId: owner.id, name: "Dana's Mac", tokenHash: sha256(TOKEN), platform: "desktop-darwin-arm64" });
   const res = await createBot(db, owner, {
     avatar: "otto",
     color: "grape",

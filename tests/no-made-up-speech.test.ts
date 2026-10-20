@@ -32,7 +32,7 @@ beforeAll(async () => {
   await resetDbForTests();
   const db = await getDb();
   const [owner] = await db.insert(schema.users).values({ id: "usr_diego", email: "diego@example.com", name: "Diego", emailVerifiedAt: new Date(), timezone: "UTC", plan: "free" }).returning();
-  await db.insert(schema.bridgeDevices).values({ id: "dev_win", ownerId: owner.id, name: "Diego's PC", tokenHash: sha256(TOKEN), platform: "desktop-win32-x64", clis: {} });
+  await db.insert(schema.bridgeDevices).values({ id: "dev_win", ownerId: owner.id, name: "Diego's PC", tokenHash: sha256(TOKEN), platform: "desktop-win32-x64" });
 });
 
 afterAll(async () => {

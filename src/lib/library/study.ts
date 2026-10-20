@@ -112,7 +112,7 @@ export function studySetView(set: StudySet, now = new Date()): StudySetView {
 
 export async function createStudySet(
   db: Db,
-  input: { botId: string; kind: "flashcards" | "quiz"; title: string; items: z.infer<typeof cardInput>[] | z.infer<typeof questionInput>[]; fileIds?: string[]; jobId?: string | null },
+  input: { botId: string; kind: "flashcards" | "quiz"; title: string; items: z.infer<typeof cardInput>[] | z.infer<typeof questionInput>[]; fileIds?: string[] },
 ): Promise<StudySet> {
   const items =
     input.kind === "flashcards"
@@ -134,7 +134,7 @@ export async function createStudySet(
         });
   const [row] = await db
     .insert(schema.studySets)
-    .values({ id: newId("set"), botId: input.botId, kind: input.kind, title: input.title.trim().slice(0, 120) || "Study set", items, fileIds: input.fileIds ?? [], jobId: input.jobId ?? null })
+    .values({ id: newId("set"), botId: input.botId, kind: input.kind, title: input.title.trim().slice(0, 120) || "Study set", items, fileIds: input.fileIds ?? [] })
     .returning();
   return row;
 }
@@ -143,10 +143,6 @@ export async function listStudySets(db: Db, botId: string): Promise<StudySet[]> 
   return db.select().from(schema.studySets).where(eq(schema.studySets.botId, botId)).orderBy(desc(schema.studySets.createdAt)).limit(200);
 }
 
-/** Sets a Bridge job made (shown with that job's answer). */
-export async function listStudySetsForJob(db: Db, jobId: string): Promise<StudySet[]> {
-  return db.select().from(schema.studySets).where(eq(schema.studySets.jobId, jobId)).orderBy(schema.studySets.createdAt);
-}
 
 export async function getStudySet(db: Db, botId: string, id: string): Promise<StudySet | null> {
   const [row] = await db.select().from(schema.studySets).where(and(eq(schema.studySets.botId, botId), eq(schema.studySets.id, id))).limit(1);

@@ -1,6 +1,6 @@
 /**
- * Our MCP server: a bot's tools, served over Streamable HTTP to the owner's own
- * Claude Code / Codex (via the Bridge) or any MCP client the owner points at it.
+ * Our MCP server: a bot's tools, served over Streamable HTTP to any MCP client the owner points
+ * at it (Settings → Use my bot's tools elsewhere).
  *
  * Dual-era and stateless (docs/research/mcp-and-brains-2026-10-14.md §1):
  *  - legacy clients (2025-xx): initialize → notifications/initialized → requests, no session id
@@ -9,13 +9,12 @@
  */
 import { and, eq } from "drizzle-orm";
 import { getDb, schema, type Db } from "@/lib/db";
-import type { Bot, BridgeJob, User } from "@/lib/db/schema";
+import type { Bot, User } from "@/lib/db/schema";
 import { appUrl, demoMode } from "@/lib/env";
 import { sha256 } from "@/lib/crypto";
-import { buildToolset, type Toolset } from "@/lib/tools/registry";
+import { buildToolset } from "@/lib/tools/registry";
 import { toolJsonSchema, type ToolContext } from "@/lib/tools/types";
 import { executeToolCall, newRunState } from "@/lib/agent/run";
-import { readMcpToken, recordTaint } from "@/lib/bridge/jobs";
 
 export const SUPPORTED_LEGACY = ["2025-11-25", "2025-06-18", "2025-03-26"];
 export const MODERN = "2026-07-28";
@@ -25,7 +24,7 @@ const INSTRUCTIONS =
 
 type Rpc = { jsonrpc: "2.0"; id?: string | number | null; method: string; params?: Record<string, unknown> };
 
-type Auth = { bot: Bot; owner: User; job: BridgeJob | null };
+type Auth = { bot: Bot; owner: User };
 
 function rpcResult(id: Rpc["id"], result: unknown, status = 200) {
   return Response.json({ jsonrpc: "2.0", id, result }, { status });
@@ -47,24 +46,12 @@ async function authenticate(db: Db, req: Request, botId: string): Promise<Auth |
   const token = header.toLowerCase().startsWith("bearer ") ? header.slice(7).trim() : "";
   if (!token) return unauthorized("Missing bearer token");
 
-  // 1) A per-turn token minted for a Bridge job.
-  const turn = readMcpToken(token);
-  if (turn) {
-    if (turn.botId !== botId) return unauthorized("Token is for a different bot");
-    const [job] = await db.select().from(schema.bridgeJobs).where(eq(schema.bridgeJobs.id, turn.jobId)).limit(1);
-    if (!job || job.status !== "running") return unauthorized("This turn is over");
-    const [bot] = await db.select().from(schema.bots).where(and(eq(schema.bots.id, botId), eq(schema.bots.ownerId, turn.ownerId))).limit(1);
-    const [owner] = await db.select().from(schema.users).where(eq(schema.users.id, turn.ownerId)).limit(1);
-    if (!bot || !owner) return unauthorized();
-    return { bot, owner, job };
-  }
-
-  // 2) A long-lived per-bot token the owner created (Settings → Use my bot's tools elsewhere).
+  // A long-lived per-bot token the owner created (Settings → Use my bot's tools elsewhere).
   const [bot] = await db.select().from(schema.bots).where(eq(schema.bots.id, botId)).limit(1);
   if (!bot?.mcpTokenHash || bot.mcpTokenHash !== sha256(token)) return unauthorized();
   const [owner] = await db.select().from(schema.users).where(eq(schema.users.id, bot.ownerId)).limit(1);
   if (!owner) return unauthorized();
-  return { bot, owner, job: null };
+  return { bot, owner };
 }
 
 export async function handleMcpRequest(req: Request, botId: string): Promise<Response> {
@@ -122,7 +109,7 @@ export async function handleMcpRequest(req: Request, botId: string): Promise<Res
       return rpcResult(body.id, {});
     case "tools/list": {
       const ctx = toolContext(db, auth);
-      const toolset = await callerToolset(ctx, auth);
+      const toolset = await buildToolset(ctx);
       const tools = toolset.tools.map((t) => ({
         name: t.name,
         title: t.title,
@@ -142,10 +129,10 @@ export async function handleMcpRequest(req: Request, botId: string): Promise<Res
       const name = String(body.params?.name ?? "");
       const args = (body.params?.arguments ?? {}) as Record<string, unknown>;
       const ctx = toolContext(db, auth);
-      const toolset = await callerToolset(ctx, auth);
+      const toolset = await buildToolset(ctx);
       if (!toolset.byName.has(name)) return rpcError(body.id, -32602, `Unknown tool: ${name}`, modern ? 404 : 200);
-      const tainted = Boolean((auth.job?.output as { tainted?: boolean } | null)?.tainted) || !auth.job;
-      const state = newRunState(tainted);
+      // Another AI app is outside our view of what it read: every call counts as tainted.
+      const state = newRunState(true);
       const out = await executeToolCall(
         { id: `mcp_${Date.now().toString(36)}`, name, args, argsText: JSON.stringify(args) },
         toolset,
@@ -154,7 +141,6 @@ export async function handleMcpRequest(req: Request, botId: string): Promise<Res
         () => {},
         "mcp",
       );
-      if (auth.job && state.tainted && !tainted) await recordTaint(db, auth.job.id);
       let isError = Boolean(out.isError);
       try {
         const parsed = JSON.parse(out.content) as { status?: string };
@@ -169,29 +155,14 @@ export async function handleMcpRequest(req: Request, botId: string): Promise<Res
   }
 }
 
-/**
- * The tools a caller may use. A Bridge job that writes meeting notes reads the transcript
- * (other people's words) with the bot's own tools, so it only gets the read-only meeting
- * tools: a line said in a call can skew the notes but can't send, schedule, remember or
- * change anything (the same promise as notes written in the cloud, which use no tools).
- */
-async function callerToolset(ctx: ToolContext, auth: Auth): Promise<Toolset> {
-  const toolset = await buildToolset(ctx);
-  const meetingId = (auth.job?.input as { meta?: { meetingId?: string } | null } | null)?.meta?.meetingId;
-  if (!meetingId) return toolset;
-  const tools = toolset.tools.filter((t) => t.connectorId === "meetings" && t.effect === "read");
-  return { ...toolset, tools, byName: new Map(tools.map((t) => [t.name, t])) };
-}
-
 function toolContext(db: Db, auth: Auth): ToolContext {
   return {
     db,
     bot: auth.bot,
     owner: auth.owner,
-    conversationId: auth.job?.conversationId ?? null,
+    conversationId: null,
     channelKind: "mcp",
     demo: demoMode,
     now: new Date(),
-    jobId: auth.job?.id ?? null,
   };
 }
