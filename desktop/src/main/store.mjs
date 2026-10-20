@@ -51,6 +51,11 @@ export const DEFAULT_SETTINGS = Object.freeze({
     /** Put back what was on the clipboard after pasting. */
     restoreClipboard: true,
     /**
+     * Space a dictation against the words next to the cursor (voice/spacing.mjs): right before
+     * typing, the few characters there are read on this computer, never kept or logged.
+     */
+    spacing: true,
+    /**
      * Learn a word fixed right where it was typed (voice/fix-watch.mjs): for a couple of minutes
      * after pasting, the box it typed into is read on this computer; only the word learned leaves it.
      */

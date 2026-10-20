@@ -1,12 +1,15 @@
 /**
- * Learning from a fix, on a real computer (CI's windows-latest and macos-latest), against real
- * apps and real key presses:
+ * Learning from a fix, and spacing a dictation, on a real computer (CI's windows-latest and
+ * macos-latest), against real apps and real key presses:
  *
  *  - an Electron app's text box (Chromium: how Slack, Discord, Teams, VS Code and Chrome are read)
  *    and the system's own editor (Notepad on Windows, TextEdit on macOS): the reader finds the
  *    text and the caret;
  *  - a fix typed there with real keys ("pro zee" → "Prozzi"), seen by FixWatcher with the real
  *    reader, and learned; a different name typed over one ("Mark" → "Sarah") isn't;
+ *  - what's right next to the cursor, and dictations pasted with the real paste keys, spaced
+ *    against it (Paster with the real reader): "…the lab." + "Bring the slides." → "…the lab.
+ *    Bring the slides.", and a word typed right before another gets a space after it;
  *  - a password box, which is never read.
  *
  * Windows: UI Automation, from the PowerShell the app runs; keys with SendInput (winkey.py).
@@ -25,6 +28,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { FixWatcher, normalizeText, normalizedIndex } from "../src/main/voice/fix-watch.mjs";
+import { Paster } from "../src/main/voice/paste.mjs";
 import { TextReader } from "../src/main/voice/text-reader.mjs";
 
 const APP_DIR = fileURLToPath(new URL("../", import.meta.url));
@@ -169,6 +173,38 @@ async function targetDo(c) {
   await sleep(150);
 }
 
+/** What's around the cursor, as the app asks right before typing (null when it can't tell). */
+async function aroundCursor() {
+  const r = await /** @type {TextReader} */ (reader).around();
+  return r.ok ? { before: r.before, after: r.after } : null;
+}
+
+/**
+ * Pasting the way the app does (paste.mjs), spaced with the real reader: the words go on the
+ * clipboard (copied by the other app, as any app copies) and the real paste keys are pressed in
+ * `front`'s window.
+ * @param {() => Promise<unknown>} front  brings the app typed into to the front
+ */
+function realPaster(front) {
+  const logs = [];
+  const paster = new Paster({
+    clipboard: /** @type {any} */ ({ writeText: (text) => targetDo({ cmd: "clip", text }), readText: async () => "", read: async () => [], write: async () => {}, clear() {} }),
+    makeItem: (d) => d,
+    press: async () => {
+      await front();
+      if (WIN) await winkey("down", "LControl", "tap", "V", "up", "LControl");
+      else await mackey("tap", "v", "cmd");
+      return true;
+    },
+    canPress: () => true,
+    around: aroundCursor,
+    log: (m) => logs.push(m),
+  });
+  /** Type `text` as a dictation into the app typed into. */
+  const dictate = (text) => paster.insert(text, { space: true, restore: false, app: "Target app" });
+  return { paster, dictate, logs };
+}
+
 /** Watch for a fix the way the app does after typing, with the real reader. */
 function watchFor(text, app) {
   const fixes = [];
@@ -245,12 +281,75 @@ test("a fix typed with real keys in an Electron app is learned; another name typ
   other.w.stop("off");
 });
 
+test("what's next to the cursor, for spacing: a few characters on each side of it, or of the selection", { skip }, async () => {
+  await targetFront();
+  /**
+   * The box set to `value`, with the caret at `place` (a number), the words `place` selected (a
+   * string), or the caret at the end (null): what's read ends with `want.before` and starts with
+   * `want.after` (exactly "" when there's nothing), a few characters at most.
+   */
+  const expect = async (value, place, want) => {
+    await targetDo({ cmd: "set", value });
+    if (typeof place === "number") await targetDo({ cmd: "caret", at: place });
+    else if (typeof place === "string") await targetDo({ cmd: "select", text: place });
+    // Chromium on Windows shows an empty box as an object character (U+FFFC): not text.
+    const fits = (got, w, end) => {
+      const text = got.replace(/\uFFFC/g, "");
+      return w === "" ? text === "" : end ? text.endsWith(w) : text.startsWith(w);
+    };
+    let r;
+    await until(`what's around the cursor in ${JSON.stringify(value)} (${JSON.stringify(place)})`, async () => {
+      r = await /** @type {TextReader} */ (reader).ask("around");
+      return r.ok && r.before.length <= 8 && r.after.length <= 4 && fits(normalizeText(r.before).text, want.before, true) && fits(normalizeText(r.after).text, want.after, false);
+    }, 10_000, 300).catch(async (err) => {
+      throw new Error(`${err.message}; last answer: ${JSON.stringify(r)}\n${await whatItSees()}`);
+    });
+    return r;
+  };
+  const r = await expect("Meet at the lab.", null, { before: "lab.", after: "" });
+  console.log(`text reader: around the cursor in an Electron box (${r.role ?? "no role"}, via ${r.via ?? "?"})`);
+  await expect("Hello world", "Hello ".length, { before: "llo ", after: "wo" });
+  await expect("Hello there.", "there", { before: "llo ", after: "." });
+  await expect("Dear team,\nThanks", "Dear team,\n".length, { before: "am,\n", after: "Th" });
+  await expect("", null, { before: "", after: "" });
+  await expect("Hi", 0, { before: "", after: "Hi" });
+});
+
+test("dictations pasted with the real keys into an Electron app's box: spaced against the words there", { skip }, async () => {
+  const { dictate, logs } = realPaster(targetFront);
+  const typed = () => fs.readFileSync(outFile, "utf8");
+  await targetFront();
+  await targetDo({ cmd: "set", value: "" });
+  // Two in a row, as an owner dictates a sentence, then the next.
+  await dictate("Meet at the lab.");
+  await dictate("Bring the slides.");
+  await until("both in the box", () => typed() === "Meet at the lab. Bring the slides.", 10_000).catch((err) => {
+    throw new Error(`${err.message}; the box: ${JSON.stringify(typed())}; log: ${logs.join(" | ")}`);
+  });
+  // Right before a word: a space after it.
+  await targetDo({ cmd: "set", value: "Thanks for the notes." });
+  await targetDo({ cmd: "caret", at: "Thanks for the ".length });
+  await dictate("great");
+  await until("the word in the box", () => typed() === "Thanks for the great notes.", 10_000).catch((err) => {
+    throw new Error(`${err.message}; the box: ${JSON.stringify(typed())}; log: ${logs.join(" | ")}`);
+  });
+  // After a line break, or in an empty box: as it is.
+  await targetDo({ cmd: "set", value: "Dear Sam,\n" });
+  await dictate("Thanks for the notes.");
+  await until("the line in the box", () => typed() === "Dear Sam,\nThanks for the notes.", 10_000);
+  await targetDo({ cmd: "set", value: "" });
+  await dictate("Hi.");
+  await until("the empty box typed into", () => typed() === "Hi.", 10_000);
+  assert.deepEqual(logs, ["voice: spaced it (before; from the box)", "voice: spaced it (after; from the box)"], "what it did, never the words");
+});
+
 test("a password box is never read", { skip }, async () => {
   await targetFront();
   await targetDo({ cmd: "focus", id: "p" });
   await keys.type("hunter2 pro zee");
   const r = await reader.focus();
   assert.deepEqual(r, { ok: false, error: "secure" });
+  assert.deepEqual(await reader.around(), { ok: false, error: "secure" }, "not even what's next to the cursor");
   // And a watch started there ends without reading anything.
   const { w, logs } = watchFor("hunter2 pro zee", "Target app");
   await until("the watch to end", () => !w.watching, 10_000, 100);
@@ -317,4 +416,26 @@ test("the system's own editor (Notepad, TextEdit): read, and a fix typed there l
   });
   assert.deepEqual(fixes[0].words, [{ text: "Prozzi", heard: ["pro zee"] }]);
   w.stop("off");
+
+  // Spacing there: the caret to the end of the line, then a dictation pasted with the real keys.
+  if (WIN) await winkey("focus", "Notepad", "tap", "End");
+  else await mackey("tap", "right", "cmd");
+  let a;
+  await until("what's before the cursor", async () => {
+    a = await reader.ask("around");
+    return a.ok && a.before === "lab." && a.after === "";
+  }, 10_000, 300).catch(async (err) => {
+    throw new Error(`${err.message}; last answer: ${JSON.stringify(a)}\n${await whatItSees()}`);
+  });
+  console.log(`text reader: around the cursor in ${WIN ? "Notepad" : "TextEdit"} (${a.role ?? "no role"}, via ${a.via ?? "?"})`);
+  const { dictate, logs: spaced } = realPaster(() => (WIN ? winkey("focus", "Notepad") : run("open", ["-a", "TextEdit"])));
+  await dictate("See you there.");
+  let r2;
+  await until(`the dictation in ${WIN ? "Notepad" : "TextEdit"}`, async () => {
+    r2 = await reader.focus();
+    return r2.ok && normalizeText(r2.value).text.trim() === "Meet Prozzi at the lab. See you there.";
+  }, 10_000, 500).catch((err) => {
+    throw new Error(`${err.message}; last answer: ${JSON.stringify(r2?.ok ? normalizeText(r2.value).text : r2)}; log: ${spaced.join(" | ")}`);
+  });
+  await reader.forget();
 });

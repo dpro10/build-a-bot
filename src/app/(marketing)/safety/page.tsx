@@ -274,6 +274,11 @@ export default function SafetyPage() {
               You can turn this off in the app.
             </li>
             <li>
+              <strong>It spaces your words, on your computer.</strong> Right before it types, the desktop app looks at the few characters next
+              to your cursor (never in a password box), so what you say doesn&apos;t run into the words already there. Those characters stay on
+              your computer, aren&apos;t logged or kept, and you can turn this off in the app.
+            </li>
+            <li>
               <strong>Your bot only acts when you ask it by name.</strong> Dictated text is just text: it&apos;s cleaned up, never followed as an
               instruction. Only something that starts with your bot&apos;s name (&ldquo;Hey Otto, &hellip;&rdquo;) goes to your bot, with the usual
               checks and approvals, and you can turn that off. Text you select and send along (&ldquo;Hey Otto, add this to my

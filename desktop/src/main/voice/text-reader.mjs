@@ -1,15 +1,19 @@
 /**
- * Reading the text box voice typing just typed into, for learning from a fix (fix-watch.mjs).
- * Only on this computer, and only that box:
+ * Reading the text box voice typing types into: the box it just typed into, for learning from a
+ * fix (fix-watch.mjs), and, right before it types, the few characters next to the cursor, so the
+ * words don't run into the ones there (spacing.mjs). Only on this computer, and only that box:
  *
  *   macOS:   the app's Swift helper (`bab-audio-helper text`, native/macos), with Accessibility,
  *            which voice typing already has for pasting
  *   Windows: UI Automation, from one small PowerShell process kept running (like front-app.mjs)
  *   Linux:   not yet (`supported` is false)
  *
- * Commands go one a line (ping, prime, focus, read, forget) and each gets one JSON line back:
+ * Commands go one a line (ping, prime, focus, read, forget, around) and each gets one JSON line
+ * back:
  *   { ok: true, value, selection?: { location, length }, role?, focused?, pid? }
- *   { ok: false, error: "secure" | "no-focus" | "no-value" | "too-long" | "gone" | "not-trusted" | … }
+ *   { ok: true, before, after }   (around: up to 4 characters before the cursor or the selection,
+ *                                   2 after; nothing else of the box leaves the helper)
+ *   { ok: false, error: "secure" | "no-focus" | "no-value" | "no-caret" | "too-long" | "gone" | "not-trusted" | … }
  * One request at a time. A helper that doesn't answer is stopped and started again next time;
  * one that keeps dying is left alone; one left idle for a while stops (it starts again when the
  * owner next dictates). What's read is never logged.
@@ -27,6 +31,10 @@ export const MAX_CHARS = 20_000;
  * (WM_GETTEXT, EM_GETSEL; a password box, ES_PASSWORD or a password character, is refused). An
  * app that reports the focus on a container: the text control inside it that has the keyboard
  * focus, or its only one.
+ *
+ * `around` reads only the characters next to the cursor: with TextPattern, a range a few
+ * characters long on each side of the selection; a classic box's text, cut down to them there;
+ * a ValuePattern box (no caret) tells only when it's empty.
  */
 export const WIN_TEXT_SCRIPT = `
 $ErrorActionPreference = 'Stop'
@@ -134,6 +142,51 @@ function Get-Box($e, $full) {
   try { $out.focused = [System.Windows.Automation.Automation]::Compare($e, [System.Windows.Automation.AutomationElement]::FocusedElement) } catch { $out.focused = $false }
   return $out
 }
+function Get-Around($e) {
+  $c = $e.Current
+  if ($c.IsPassword) { return @{ ok = $false; error = 'secure' } }
+  $role = $c.ControlType.ProgrammaticName
+  $tp = $null
+  $vp = $null
+  if ($e.TryGetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern, [ref]$tp)) {
+    $ranges = $tp.GetSelection()
+    if (-not $ranges -or $ranges.Length -eq 0) { return @{ ok = $false; error = 'no-caret'; role = $role } }
+    $startPoint = [System.Windows.Automation.Text.TextPatternRangeEndpoint]::Start
+    $endPoint = [System.Windows.Automation.Text.TextPatternRangeEndpoint]::End
+    $char = [System.Windows.Automation.Text.TextUnit]::Character
+    # Only this box's text: in some apps (Chromium's) a range runs on past the box, into the page.
+    $doc = $tp.DocumentRange
+    $pre = $ranges[0].Clone()
+    $pre.MoveEndpointByRange($endPoint, $pre, $startPoint)
+    $null = $pre.MoveEndpointByUnit($startPoint, $char, -4)
+    if ($pre.CompareEndpoints($startPoint, $doc, $startPoint) -lt 0) { $pre.MoveEndpointByRange($startPoint, $doc, $startPoint) }
+    $post = $ranges[0].Clone()
+    $post.MoveEndpointByRange($startPoint, $post, $endPoint)
+    $null = $post.MoveEndpointByUnit($endPoint, $char, 2)
+    if ($post.CompareEndpoints($endPoint, $doc, $endPoint) -gt 0) { $post.MoveEndpointByRange($endPoint, $doc, $endPoint) }
+    return @{ ok = $true; before = [string]$pre.GetText(8); after = [string]$post.GetText(4); role = $role; via = 'range' }
+  }
+  if ($e.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$vp)) {
+    # No caret to go by: only an empty box says what's around it (nothing).
+    if ([string]::IsNullOrEmpty($vp.Current.Value)) { return @{ ok = $true; before = ''; after = ''; role = $role; via = 'empty' } }
+    return @{ ok = $false; error = 'no-caret'; role = $role }
+  }
+  $h = Edit-Handle $c
+  if ($h -eq [IntPtr]::Zero) { return @{ ok = $false; error = 'no-value'; role = $role } }
+  if ([BabEditBox]::IsPassword($h)) { return @{ ok = $false; error = 'secure' } }
+  # The caret's place is only exact below 65,536 characters (EM_GETSEL).
+  $n = [BabEditBox]::Length($h)
+  if ($n -lt 0 -or $n -gt 60000) { return @{ ok = $false; error = 'no-caret'; role = $role } }
+  $text = [BabEditBox]::Text($h, $n)
+  $range = [BabEditBox]::Selection($h)
+  if ($text -eq $null -or $range -eq $null) { return @{ ok = $false; error = 'no-caret'; role = $role } }
+  # A RichEdit box counts a line break as one character but writes it as two: its places would be off.
+  if ($c.ClassName -match '^(RichEdit|RICHEDIT)' -and $text.Contains([string][char]13)) { return @{ ok = $false; error = 'no-caret'; role = $role } }
+  $a = [Math]::Min($range[0], $text.Length)
+  $b = [Math]::Min($range[0] + $range[1], $text.Length)
+  $cut = [Math]::Max(0, $a - 4)
+  return @{ ok = $true; before = $text.Substring($cut, $a - $cut); after = $text.Substring($b, [Math]::Min(2, $text.Length - $b)); role = $role; via = 'window' }
+}
 while ($true) {
   $line = [Console]::In.ReadLine()
   if ($line -eq $null) { break }
@@ -158,6 +211,11 @@ while ($true) {
       else { Send (Get-Box $script:el $false) }
     }
     elseif ($cmd -eq 'forget') { $script:el = $null; Send @{ ok = $true } }
+    elseif ($cmd -eq 'around') {
+      $f = [System.Windows.Automation.AutomationElement]::FocusedElement
+      if ($f -eq $null) { Send @{ ok = $false; error = 'no-focus' } }
+      else { Send (Get-Around (Find-Text $f)) }
+    }
     else { Send @{ ok = $false; error = 'unknown' } }
   } catch [System.Windows.Automation.ElementNotAvailableException] {
     $script:el = $null
@@ -178,6 +236,7 @@ export function parseReply(line) {
     if (!v || typeof v !== "object" || typeof v.ok !== "boolean") return { ok: false, error: "unreadable" };
     if (v.ok && v.value !== undefined && typeof v.value !== "string") return { ok: false, error: "unreadable" };
     if (v.ok && typeof v.value === "string" && v.value.length > MAX_CHARS) return { ok: false, error: "too-long" };
+    for (const k of ["before", "after"]) if (v[k] !== undefined && typeof v[k] !== "string") return { ok: false, error: "unreadable" };
     const sel = v.selection;
     if (sel && !(Number.isFinite(sel.location) && Number.isFinite(sel.length) && sel.location >= 0 && sel.length >= 0)) delete v.selection;
     return v;
@@ -253,12 +312,23 @@ export class TextReader {
     return this.ask("forget");
   }
 
+  /**
+   * What's right before and after the cursor in the focused box (or the selection, which typing
+   * replaces): up to 4 characters before, 2 after, nothing else. For spacing (spacing.mjs).
+   * @returns {Promise<{ ok: true, before: string, after: string } | { ok: false, error: string }>}
+   */
+  async around() {
+    const r = await this.ask("around");
+    if (!r?.ok) return { ok: false, error: String(r?.error ?? "failed") };
+    return { ok: true, before: String(r.before ?? "").slice(-8), after: String(r.after ?? "").slice(0, 8) };
+  }
+
   /** The helper answers (and, on a Mac, whether Accessibility is allowed). */
   ping() {
     return this.ask("ping");
   }
 
-  /** @param {'focus'|'read'|'forget'|'ping'|'prime'} cmd */
+  /** @param {'focus'|'read'|'forget'|'ping'|'prime'|'around'} cmd */
   ask(cmd) {
     const run = () => this.askNow(cmd);
     const p = this.queue.then(run, run);

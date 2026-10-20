@@ -5,9 +5,10 @@
 //   bab-audio-helper tap [--exclude-pid PID]... [--sample-rate 16000]
 //                               the computer's audio output (the call) through a Core Audio tap,
 //                               as raw 16-bit little-endian mono PCM on stdout (macOS 14.2+)
-//   bab-audio-helper text       the text box voice typing just typed into, for learning from a fix
-//                               (src/main/voice/text-reader.mjs): reads a command a line on stdin
-//                               (ping, prime, focus, read, forget), answers a JSON line each
+//   bab-audio-helper text       the text box voice typing types into, for learning from a fix and
+//                               for spacing (src/main/voice/text-reader.mjs): reads a command a
+//                               line on stdin (ping, prime, focus, read, forget, around), answers a
+//                               JSON line each
 //
 // `mic` / `watch` need no permission. They read Core Audio's per-process objects
 // (macOS 14+: kAudioHardwarePropertyProcessObjectList → kAudioProcessPropertyIsRunningInput,
@@ -26,8 +27,10 @@
 //
 // `text` needs Accessibility, which the app already has for pasting (the helper is its child, so
 // macOS asks about the app). `focus` keeps the focused element and reads its value and selection;
-// `read` reads that same element again; `forget` lets it go. It never reads a password box
-// (AXSecureTextField), never more than 20,000 characters, and writes nothing anywhere else.
+// `read` reads that same element again; `forget` lets it go. `around` answers only with the few
+// characters right before and after the cursor in the focused element (AXStringForRange, else cut
+// from its value), for spacing a dictation. It never reads a password box (AXSecureTextField),
+// never answers with more than 20,000 characters, and writes nothing anywhere else.
 // Chromium and Electron apps (Chrome, Slack, VS Code…) build their accessibility tree only when
 // asked: the app in front gets AXManualAccessibility once, as assistive apps do. `prime` does just
 // that, while the owner is still talking, and reads nothing.
@@ -338,6 +341,11 @@ struct TextReply: Codable {
     var focused: Bool? = nil
     /** Why no box was found: Accessibility's error codes along the way (never any text). */
     var detail: String? = nil
+    /** `around`: up to 4 characters right before the cursor (or the selection), and 2 right after. */
+    var before: String? = nil
+    var after: String? = nil
+    /** `around`: how they were read ("range", "value", or "empty": a box with nothing in it). */
+    var via: String? = nil
 }
 
 func axCopy(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
@@ -367,6 +375,16 @@ func axRange(_ element: AXUIElement, _ attribute: String) -> CFRange? {
     guard let v = axCopy(element, attribute), CFGetTypeID(v) == AXValueGetTypeID() else { return nil }
     var range = CFRange(location: 0, length: 0)
     return AXValueGetValue(unsafeBitCast(v, to: AXValue.self), .cfRange, &range) ? range : nil
+}
+
+/** Characters `from` up to `to` of an element's text, asked for on their own (AXStringForRange). */
+func axString(_ element: AXUIElement, _ from: Int, _ to: Int) -> String? {
+    if to <= from { return "" }
+    var range = CFRange(location: from, length: to - from)
+    guard let param = AXValueCreate(.cfRange, &range) else { return nil }
+    var value: CFTypeRef?
+    guard AXUIElementCopyParameterizedAttributeValue(element, kAXStringForRangeParameterizedAttribute as CFString, param, &value) == .success else { return nil }
+    return value as? String
 }
 
 final class TextBox {
@@ -472,6 +490,52 @@ final class TextBox {
         element = nil
     }
 
+    /**
+     * The few characters right before and after the cursor (or the selection, which typing
+     * replaces) in the focused element, and nothing else of it: for spacing a dictation.
+     */
+    func around() -> TextReply {
+        guard AXIsProcessTrusted() else { return TextReply(ok: false, error: "not-trusted") }
+        guard let el = focused() else { return TextReply(ok: false, error: "no-focus", detail: trail.joined(separator: "; ")) }
+        AXUIElementSetMessagingTimeout(el, 0.5)
+        var roleValue: CFTypeRef?
+        let roleError = AXUIElementCopyAttributeValue(el, kAXRoleAttribute as CFString, &roleValue)
+        if roleError == .invalidUIElement { return TextReply(ok: false, error: "gone") }
+        if roleError == .apiDisabled { return TextReply(ok: false, error: "not-trusted") }
+        let role = roleValue as? String
+        let subrole = axCopy(el, kAXSubroleAttribute) as? String
+        // A password box is never read.
+        if role == "AXSecureTextField" || subrole == kAXSecureTextFieldSubrole { return TextReply(ok: false, error: "secure") }
+        guard let sel = axRange(el, kAXSelectedTextRangeAttribute), sel.location >= 0, sel.length >= 0 else {
+            // No cursor to go by: only an empty box says what's around it (nothing).
+            if let text = axCopy(el, kAXValueAttribute) as? String, text.isEmpty {
+                return TextReply(ok: true, role: role, before: "", after: "", via: "empty")
+            }
+            return TextReply(ok: false, error: "no-caret", role: role)
+        }
+        let start = sel.location
+        let end = sel.location + sel.length
+        // Just those characters, from an app that can give a part of its text…
+        if let count = axCopy(el, kAXNumberOfCharactersAttribute) as? Int, end <= count,
+           let before = axString(el, max(0, start - 4), start), let after = axString(el, end, min(count, end + 2)) {
+            return TextReply(ok: true, role: role, before: before, after: after, via: "range")
+        }
+        // …else cut from its text.
+        var value: CFTypeRef?
+        let valueError = AXUIElementCopyAttributeValue(el, kAXValueAttribute as CFString, &value)
+        if valueError == .invalidUIElement { return TextReply(ok: false, error: "gone") }
+        if valueError == .cannotComplete { return TextReply(ok: false, error: "busy") }
+        guard valueError == .success, let text = value as? String else { return TextReply(ok: false, error: "no-value", role: role) }
+        let ns = text as NSString
+        let a = min(start, ns.length)
+        let b = min(end, ns.length)
+        let cut = max(0, a - 4)
+        return TextReply(ok: true, role: role,
+                         before: ns.substring(with: NSRange(location: cut, length: a - cut)),
+                         after: ns.substring(with: NSRange(location: b, length: min(2, ns.length - b))),
+                         via: "value")
+    }
+
     /** Have the app in front build its accessibility tree now (reads nothing). */
     func prime() {
         guard AXIsProcessTrusted() else { return }
@@ -494,6 +558,7 @@ func runText() -> Never {
         case "forget":
             box.forget()
             reply = TextReply(ok: true)
+        case "around": reply = box.around()
         default: reply = TextReply(ok: false, error: "unknown")
         }
         let data = (try? encoder.encode(reply)) ?? Data("{\"ok\":false,\"error\":\"encode\"}".utf8)

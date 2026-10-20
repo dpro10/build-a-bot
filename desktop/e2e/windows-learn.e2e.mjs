@@ -9,6 +9,8 @@
  *  - the app sees the fix (UI Automation) and adds "Prozzi" to the owner's dictionary, as a
  *    correction, with "pro zee" as how it was heard; and says so;
  *  - a different name typed over one ("Mark" → "Sarah") isn't learned;
+ *  - two dictations in a row get a space between them, and one typed right before a word gets a
+ *    space after it (the app reads what's next to the cursor right before typing);
  *  - nothing it read is in the app's log.
  *
  * Against a stand-in for Build-a-bot's server (only what voice typing calls, below). Private
@@ -129,7 +131,7 @@ test("Windows: a name fixed right where it was typed is learned, as the owner's 
     return;
   }
   const { _electron: electron } = await import("playwright");
-  server = await fakeServer(["Meet pro zee at the lab.", "Call Mark tomorrow about the lab."]);
+  server = await fakeServer(["Meet pro zee at the lab.", "Call Mark tomorrow about the lab.", "Meet at the lab.", "Bring the slides.", "great"]);
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), "bab-learn-e2e-"));
 
   app = await electron.launch({
@@ -166,6 +168,7 @@ test("Windows: a name fixed right where it was typed is learned, as the owner's 
   const learnState = (await probe()).learn;
   assert.equal(learnState.supported, true, "Windows can read the box typed into");
   assert.equal(learnState.on, true, "learning from fixes is on by default");
+  assert.equal((await probe()).spacing.on, true, "spacing is on by default");
   await pairWin.close();
 
   // ---- another app in front, with a text box
@@ -223,11 +226,24 @@ test("Windows: a name fixed right where it was typed is learned, as the owner's 
   await sleep(6000);
   assert.equal(server.calls.filter((c) => c.path === "/api/voice/dictionary" && c.method === "POST").length, 1, "nothing more learned");
 
+  // ---- two dictations in a row: a space between them (what's before the cursor, read right before typing)
+  await targetDo({ cmd: "set", value: "" });
+  await dictate("Meet at the lab.");
+  await dictate("Bring the slides.");
+  await step("spaced", () => until("a space between the two", () => typed() === "Meet at the lab. Bring the slides.", 10_000, 100));
+  // ---- typed right before a word: a space after it
+  await targetDo({ cmd: "set", value: "Thanks for the notes." });
+  await targetDo({ cmd: "caret", at: "Thanks for the ".length });
+  await dictate("great");
+  await step("spaced after", () => until("a space after the word", () => typed() === "Thanks for the great notes.", 10_000, 100));
+
   // ---- what it read and learned never reaches the log
   const log = appLog();
   assert.match(log, /learn: watching the box it typed into/);
   assert.match(log, /learn: learned 1 word/);
   assert.match(log, /notify: learned 1 word/);
-  for (const secret of ["Prozzi", "pro zee", "Meet pro", "Call Mark", "Sarah"]) assert.ok(!log.includes(secret), `the log mentions "${secret}"`);
+  assert.match(log, /voice: spaced it \(before; from the box\)/);
+  assert.match(log, /voice: spaced it \(after; from the box\)/);
+  for (const secret of ["Prozzi", "pro zee", "Meet pro", "Call Mark", "Sarah", "Meet at", "Bring the slides", "great notes", "lab."]) assert.ok(!log.includes(secret), `the log mentions "${secret}"`);
   console.log(`windows learn e2e: learned ${JSON.stringify(added.entry)}; ${(await probe()).learn.stats.watched} dictations watched`);
 });

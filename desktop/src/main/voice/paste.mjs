@@ -9,9 +9,15 @@
  *
  * Pressing the keys needs the keyboard hook (macOS: Accessibility) or, on Linux, XTest; without
  * them the words stay on the clipboard and the pill says to paste.
+ *
+ * A dictation is spaced against what's next to the cursor (spacing.mjs), so it doesn't run into
+ * the words already there: right before pasting, the few characters around the cursor are read
+ * from the box (`around`), or, when that can't be done in a moment, the last dictation stands in
+ * for them if it went to the same app shortly before.
  */
 import { execFile } from "node:child_process";
 import { KEY } from "./keys.mjs";
+import { spaceOut } from "./spacing.mjs";
 
 /**
  * Electron's clipboard (async and browser-like since Electron 44), as far as it's used here.
@@ -132,6 +138,12 @@ export function pressCopy(o) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/** `p`'s answer, or null if it takes longer than `ms`. */
+function within(p, ms) {
+  let timer;
+  return Promise.race([p.catch(() => null), new Promise((r) => (timer = setTimeout(() => r(null), ms)))]).finally(() => clearTimeout(timer));
+}
+
 export class Paster {
   /**
    * @param {object} o
@@ -143,23 +155,38 @@ export class Paster {
    * @param {() => Promise<void>} [o.waitForRelease]  until the shortcut's keys are let go
    * @param {number} [o.restoreAfterMs]  how long the app gets to read the clipboard
    * @param {number} [o.copyWaitMs]  how long an app gets to put its selection on the clipboard
+   * @param {() => Promise<{ before: string, after: string } | null>} [o.around]  what's right
+   *   before and after the cursor in the box in front (null when it can't be read)
+   * @param {number} [o.aroundMs]  how long reading it may take before the words go in anyway
+   * @param {number} [o.settleMs]  how long after a paste the box is read (it shows the paste by then)
+   * @param {number} [o.lastMs]  how long the last dictation stands in for a box that can't be read
+   * @param {() => number} [o.now]
    * @param {(msg: string) => void} [o.log]
    */
   constructor(o) {
     this.o = o;
     this.log = o.log ?? (() => {});
+    this.now = o.now ?? (() => Date.now());
     this.restoreAfterMs = o.restoreAfterMs ?? 450;
     this.copyWaitMs = o.copyWaitMs ?? 600;
+    this.aroundMs = o.aroundMs ?? 600;
+    this.settleMs = o.settleMs ?? 250;
+    this.lastMs = o.lastMs ?? 60_000;
     /** @type {Promise<unknown>} */
     this.queue = Promise.resolve();
     /** @type {Promise<void> | null} the clipboard put back (tests wait on it) */
     this.restoring = null;
+    /** When paste was last pressed. */
+    this.pressedAt = 0;
+    /** The last dictation typed (with its spacing), and the app it went to. @type {{ text: string, app: string, at: number } | null} */
+    this.lastTyped = null;
   }
 
   /**
    * Type `text` at the cursor.
    * @param {string} text
-   * @param {{ category?: string, restore?: boolean }} [opts]
+   * @param {{ category?: string, restore?: boolean, space?: boolean, app?: string | null }} [opts]
+   *   `space`: a dictation, spaced against what's next to the cursor; `app`: the app in front
    * @returns {Promise<{ pasted: boolean, copied: boolean }>}
    */
   insert(text, opts = {}) {
@@ -224,14 +251,44 @@ export class Paster {
     return this.o.clipboard.writeText(text).catch(() => {});
   }
 
-  async insertNow(text, { category = "other", restore = true } = {}) {
+  /**
+   * The words spaced against what's next to the cursor (spacing.mjs): read from the box, else
+   * (it can't be read, or not in a moment) the last dictation's end, if it went to this app
+   * shortly before. In a terminal the box's caret isn't the shell's: only the last dictation
+   * counts there. Logs what it did, never the words.
+   * @param {string} text @param {string} category @param {string | null} app
+   */
+  async spaced(text, category, app) {
+    let around = null;
+    let from = "";
+    if (this.o.around && category !== "terminal") {
+      // The last paste has had a moment to show in the box.
+      const wait = this.pressedAt + this.settleMs - this.now();
+      if (wait > 0) await sleep(wait);
+      const read = this.o.around;
+      around = await within(Promise.resolve().then(() => read()), this.aroundMs);
+      if (around) from = "the box";
+    }
+    const last = this.lastTyped;
+    if (!around && last && app && last.app === app && this.now() - last.at < this.lastMs) {
+      around = { before: last.text.slice(-4), after: "" };
+      from = "the last dictation";
+    }
+    const out = spaceOut(text, around);
+    if (out.before || out.after) this.log(`voice: spaced it (${[out.before ? "before" : "", out.after ? "after" : ""].filter(Boolean).join(" and ")}; from ${from})`);
+    return out.text;
+  }
+
+  async insertNow(text, { category = "other", restore = true, space = false, app = null } = {}) {
     const cb = this.o.clipboard;
     if (!this.o.canPress()) {
+      this.lastTyped = null;
       await this.copy(text);
       return { pasted: false, copied: true };
     }
+    const typed = space ? await this.spaced(text, category, app) : text;
     const before = restore ? await snapshotClipboard(cb) : [];
-    await cb.writeText(text);
+    await cb.writeText(typed);
     await this.o.waitForRelease?.();
     let pasted = false;
     try {
@@ -240,13 +297,16 @@ export class Paster {
       this.log(`voice: paste failed (${/** @type {any} */ (err)?.message ?? err})`);
     }
     this.restoring = null;
+    // What went in last, for the next dictation when its box can't be read (anything else pasted: unknown).
+    this.lastTyped = pasted && space && app ? { text: typed, app, at: this.now() } : null;
     if (!pasted) return { pasted: false, copied: true };
+    this.pressedAt = this.now();
     if (restore) {
       this.restoring = new Promise((resolve) => {
         setTimeout(async () => {
           try {
             // Put it back only if the clipboard still holds our words (they may have copied since).
-            if ((await cb.readText()) === text) {
+            if ((await cb.readText()) === typed) {
               if (before.length) await cb.write(before.map((d) => this.o.makeItem(d)));
               else cb.clear();
             }
