@@ -26,8 +26,8 @@ export const SEGMENTS = [
     ],
     lines: [
       { src: 12.65, who: "diego", text: "Hey Otto, when's my bio midterm again?" },
-      { src: 26.85, who: "otto", text: "Your bio midterm is on Thursday, October 29, during lecture time, 9:30 to 10:45 AM, in Science Hall 204.", cut: true },
-      { src: 36.55, who: "diego", text: "Perfect. Quiz me on my Calvin cycle notes." },
+      { src: 26.85, who: "otto", text: "Your bio midterm is on Thursday, October 29, during lecture time, 9:30 to 10:45 AM, in Science Hall 204." },
+      { src: 36.55, who: "diego", text: "Perfect. Quiz me on my Calvin cycle notes.", cut: true },
     ],
   },
 

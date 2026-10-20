@@ -62,7 +62,6 @@
   #caption .who .me { width: 54px; height: 54px; border-radius: 50%; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 24px; letter-spacing: 0; }
   #caption .line { left: 1000px; top: 380px; width: 800px; font-family: var(--display); font-weight: 650; font-size: 52px; line-height: 1.16; letter-spacing: -0.015em; color: var(--ink); }
   #caption .line.long { font-size: 42px; }
-  #caption .line .cut { color: var(--muted); font-family: var(--sans); font-size: 26px; font-weight: 600; letter-spacing: 0; }
 
   /* ---- A desktop app window, floating ---- */
   #window .win { left: 50%; top: 50%; border-radius: 26px; overflow: hidden; box-shadow: 0 2px 8px rgb(32 24 12 / 0.12), 0 50px 110px rgb(32 24 12 / 0.28); background: #fff; }
@@ -197,18 +196,13 @@
       root.querySelector(".av").style.display = otto ? "block" : "none";
       root.querySelector(".me").style.display = otto ? "none" : "flex";
       const name = root.querySelector(".name");
-      name.textContent = otto ? "OTTO" : "DIEGO";
+      // A line that interrupts Otto says so where the speaker's name is.
+      name.textContent = otto ? "OTTO" : cut ? "DIEGO · CUTS IN" : "DIEGO";
       name.style.color = otto ? "var(--primary)" : "var(--ink)";
       const line = root.querySelector(".line");
       line.classList.toggle("long", text.length > 120);
       line.innerHTML = "";
       line.append(document.createTextNode(otto ? text : `“${text}”`));
-      if (cut) {
-        const c = document.createElement("div");
-        c.className = "cut";
-        c.textContent = "Diego cuts in";
-        line.append(c);
-      }
     },
     /** A screenshot of the desktop app in a window, drifting in. */
     window(t, { src, width, say, sub }) {
