@@ -235,7 +235,7 @@ Built (research: `docs/research/meetings-2026-10-14.md`):
 ## Build choice (Claude; Diego to confirm): meeting-notes safety rules
 
 - **It never records before the owner says yes.** No auto-record setting: Granola (botless, like us) was sued on 2026-07-30 and Otter in 2025 over "surreptitious" recording.
-- **It only listens while it's visible on the screen,** enforced in code. The desktop app stops when its window is hidden, minimized, off-screen, or the screen locks. The web recorder runs only while its floating window is open. The window is never hidden from screen shares.
+- **It only listens while it's visible on the screen,** enforced in code. The desktop app stops when its window is hidden, minimized, off-screen, or the screen locks. The web recorder runs only while its floating window is open. The window is never hidden from screen shares. *(Since 2026-10-20 the owner can hide it for a screen share; the menu-bar or tray icon then shows it's listening. See "the bot can hide for a screen share" below.)*
 - **Consent:**
   - The first time, the owner acknowledges a short note about all-party-consent states.
   - The pop-up offers a one-tap heads-up to paste in the call chat.
@@ -888,3 +888,14 @@ Diego: "for this tutor personality, when people upload their coursework and stuf
 - **Not automatic:** nothing runs on upload (most course material is right, and it would spend the site's 300 lookups a day). The tutor checks what it makes, and anything the student asks it to check ("Check my notes for mistakes" is a starter now).
 - Both tools come with Web search (any bot that has it gets them); new tutor bots also get the Web reader, to read the course page.
 - **Tried on Tavily's real API before shipping:** it refuses a `*.edu` domain filter (HTTP 400), so the course search goes by the course's name, school and instructor, which finds the department and catalog pages anyway. A search for the textbook's errata came back with spam and pirated-book sites, so it was dropped (the textbook stays in the note), and pirated-book sites (dokumen.pub, pdfcoffee.com and the like) are left out of every search, with the homework-answer sites.
+
+## Decision: the bot can hide for a screen share while it keeps taking notes (Diego, 2026-10-20)
+
+Diego, with a screenshot of the bot and its 6:40 timer at the bottom of his screen: "there needs to be an option to hide it so when i share my screen people don't see it."
+
+- **How:** hover the recording pill and click the crossed-out eye ("Hide (keeps taking notes)"), or pick "Hide the bot (keeps taking notes)" in the menu-bar or tray menu. The bot leaves the screen and the notes go on. The Build-a-bot icon keeps its recording badge, the menu says "Taking notes (hidden)", and "Show the bot" brings it back.
+- **For one meeting:** it stays hidden through Stop and the writing of the notes (the "notes are ready" notification comes as before, so nothing pops up mid-share) and is on screen again for the next meeting. A problem with the notes is shown.
+- **Only on macOS and Windows,** where the menu-bar or tray icon is always there. On Linux, where a tray icon isn't guaranteed, the bot can't be hidden.
+- **Not content protection.** Electron's `setContentProtection(true)` would keep the bot on Diego's screen and out of the share on Windows, but macOS now lets apps that capture with ScreenCaptureKit (current Zoom, Meet in Chrome, Teams) capture such windows anyway ([Electron docs](https://www.electronjs.org/docs/latest/api/browser-window#winsetcontentprotectionenable-macos-windows)). A bot that only looks hidden would be worse than none, so hiding really hides it.
+- **What changed in the safety rules:** "it only listens while it's on screen" is now "it only listens while you can see it's listening": the bot on screen, or, when you hid it, the recording icon. The one-second check skips a bot the owner hid and waits while it comes back, and everything else stays: it asks before every meeting, the heads-up for the call chat, Stop in one click, and stopping on screen lock, sleep and quit. People on the call learn about the notes from the heads-up, not from the bot in a screen share.
+- **The pill grew by one button,** so the window while it listens is 840 wide (was 720); the extra area is transparent and lets clicks through. Older desktop apps don't send `canHide`, so the page shows them no Hide button.

@@ -11,7 +11,7 @@ const PHASES: BuddyPhase[] = ["asking", "listening", "paused", "saving", "done",
 type Search = Record<string, string | string[] | undefined>;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 
-/** Preview state from the URL: ?phase=listening&name=Inky&avatar=otto&color=grape&app=zoom&elapsed=754&level=0.6&caption=… */
+/** Preview state from the URL: ?phase=listening&name=Inky&avatar=otto&color=grape&app=zoom&elapsed=754&level=0.6&caption=…&hide=1 */
 function initialState(q: Search): BuddyState {
   const phase = PHASES.find((p) => p === one(q.phase)) ?? "asking";
   const avatar = (AVATAR_IDS as readonly string[]).includes(one(q.avatar) ?? "") ? (one(q.avatar) as AvatarId) : "otto";
@@ -28,6 +28,7 @@ function initialState(q: Search): BuddyState {
     caption: caption ? { speaker: caption.split(":")[0] || "Others", text: caption.split(":").slice(1).join(":").trim() || caption, at: Date.now() + 3_600_000 } : null,
     message: one(q.message),
     minutesLeft: one(q.left) ? Number(one(q.left)) : null,
+    canHide: one(q.hide) === "1",
   };
 }
 

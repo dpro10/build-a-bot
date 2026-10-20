@@ -7,7 +7,9 @@
  *  - nothing is captured until the owner taps "Take notes" (or "Take notes now");
  *  - capture starts only after the bot is on screen, and stops (and finishes the
  *    meeting) if the bot can't stay on screen, the screen locks, the computer sleeps
- *    or the app quits; checked every second and on window events;
+ *    or the app quits; checked every second and on window events. The owner may hide
+ *    the bot (for a screen share) where the tray icon shows it's still listening; it
+ *    comes back from the tray;
  *  - Stop is one click; "Stop and delete" deletes everything captured so far;
  *  - audio goes to the upload queue only (memory, or the spool while it waits). NVIDIA Parakeet
  *    hears each piece on this computer and only the lines are sent (meeting-speech.mjs); the
@@ -112,6 +114,7 @@ export class Controller extends EventEmitter {
    * @param {(text: string) => void} o.writeClipboard
    * @param {() => 'loopback'|'off'} [o.systemAudioMode]
    * @param {() => Promise<boolean>} [o.ensureMicAccess]  macOS: ask for the microphone the first time
+   * @param {() => boolean} [o.canTuck]  the bot can be hidden while it takes notes (a tray icon shows it's listening)
    * @param {{ way(): string, waitNote(): string | null, ensure(): void, warm(): void }} [o.hearing]  NVIDIA Parakeet for meetings (voice/index.mjs)
    * @param {Partial<typeof DEFAULT_LIMITS>} [o.limits]
    * @param {(msg: string) => void} [o.log]
@@ -167,7 +170,13 @@ export class Controller extends EventEmitter {
 
   machineCtx() {
     const s = this.settings.get();
-    return { canAsk: this.account.canTakeNotes(), neverApps: s.neverApps, detectionPausedUntil: s.detectionPausedUntil, notNowCooldownMs: this.limits.notNowCooldownMs };
+    return {
+      canAsk: this.account.canTakeNotes(),
+      neverApps: s.neverApps,
+      detectionPausedUntil: s.detectionPausedUntil,
+      notNowCooldownMs: this.limits.notNowCooldownMs,
+      canTuck: this.canTuck(),
+    };
   }
 
   /** @param {{ type: string, [k: string]: any }} event */
@@ -281,10 +290,17 @@ export class Controller extends EventEmitter {
       message: this.state.message ?? undefined,
       minutesLeft: this.account.session?.meetings?.minutesLeft ?? null,
       consentNote: consentNote(bot.name),
+      canHide: this.canTuck(),
     };
   }
 
+  /** The bot can be hidden while it takes notes: only where a tray icon shows it's still listening. */
+  canTuck() {
+    return Boolean(this.o.canTuck?.());
+  }
+
   render() {
+    if (this.state.tucked) return; // the owner hid it: the tray shows it's listening
     const st = this.buddyState();
     if (!st) return;
     if (this.buddy.isShowing() || this.buddyPending) this.buddy.update(st);
@@ -629,6 +645,9 @@ export class Controller extends EventEmitter {
       case "stop":
         if (recording) this.dispatch({ type: "stop", reason: "owner" });
         return;
+      case "tuck":
+        if (phase === "listening" || phase === "paused") this.dispatch({ type: "tuck" });
+        return;
       case "hide":
         if (phase === "done" || phase === "error" || phase === "asking") this.dispatch({ type: "hide" });
         return;
@@ -755,10 +774,31 @@ export class Controller extends EventEmitter {
     this.dispatch({ type: "stop", reason: "owner" });
   }
 
+  /** Hide the bot while it keeps taking notes (from its pill or the tray). */
+  tuck() {
+    this.dispatch({ type: "tuck" });
+  }
+
+  /**
+   * Show the hidden bot again (from the tray). The 1-second check waits while its window comes
+   * back; if it can't, the next check stops the notes, as for any bot that can't stay on screen.
+   */
+  async untuck() {
+    if (!this.state.tucked) return;
+    this.buddyPending = true;
+    try {
+      this.dispatch({ type: "untuck" });
+      const st = this.buddyState();
+      if (st) await this.buddy.show(st);
+    } finally {
+      this.buddyPending = false;
+    }
+  }
+
   // ---------------------------------------------------------------- the 1-second check
 
   checkVisible() {
-    if (!mustBeVisible(this.state.phase) || this.buddyPending) return true;
+    if (!mustBeVisible(this.state.phase) || this.buddyPending || this.state.tucked) return true;
     if (this.buddy.isShowing()) return true;
     if (this.buddy.reassert()) {
       this.log("safety: the bot was off screen; put it back");
@@ -788,8 +828,11 @@ export class Controller extends EventEmitter {
       return;
     }
     if (!mustBeVisible(phase) || this.buddyPending) return;
-    if (!this.checkVisible()) return;
-    if (this.ticks % 5 === 0) this.buddy.reassert(); // stay on top of other always-on-top windows
+    // Hidden by the owner: the tray icon shows it's listening, so it isn't put back.
+    if (!this.state.tucked) {
+      if (!this.checkVisible()) return;
+      if (this.ticks % 5 === 0) this.buddy.reassert(); // stay on top of other always-on-top windows
+    }
     if (phase !== "starting" && elapsed(this.state, now) >= this.limits.maxMeetingMs) this.dispatch({ type: "stop", reason: "max_length" });
   }
 
@@ -903,6 +946,11 @@ export class Controller extends EventEmitter {
 
   /** One line for the tray. */
   statusText() {
+    const line = this.phaseText();
+    return this.state.tucked && (this.state.phase === "listening" || this.state.phase === "paused") ? `${line} (hidden)` : line;
+  }
+
+  phaseText() {
     switch (this.state.phase) {
       case "asking":
         return "Asking about this call";

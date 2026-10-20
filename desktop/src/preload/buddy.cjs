@@ -6,7 +6,7 @@
  */
 const { contextBridge, ipcRenderer } = require("electron");
 
-const ACTIONS = new Set(["take", "dismiss", "never", "pause", "resume", "stop", "discard", "open", "hide"]);
+const ACTIONS = new Set(["take", "dismiss", "never", "pause", "resume", "stop", "discard", "open", "hide", "tuck"]);
 
 let current = null;
 const listeners = new Set();

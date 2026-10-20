@@ -3,10 +3,11 @@
  * The meeting buddy: the owner's bot, small, at the very bottom of the screen, in the desktop
  * app's transparent always-on-top window (/desktop/buddy). It peeks up to ask "Want me to take
  * notes?", then stays there with a red dot and a timer the whole time it listens, so it's never
- * recording out of sight.
+ * recording out of sight. The owner may hide it for a screen share (canHide): it keeps taking
+ * notes, and the desktop app's menu-bar or tray icon shows it and brings it back.
  */
 import * as React from "react";
-import { AlertTriangle, Check, Copy, ExternalLink, Mic, Pause, Play, Square, Trash2, X } from "lucide-react";
+import { AlertTriangle, Check, Copy, ExternalLink, EyeOff, Mic, Pause, Play, Square, Trash2, X } from "lucide-react";
 import { Avatar } from "@/components/avatar";
 import type { AvatarMood } from "@/lib/avatars";
 import { cn } from "@/lib/utils";
@@ -260,7 +261,7 @@ export function Buddy(props: BuddyProps) {
       <span
         className={cn(
           "flex items-center gap-1 overflow-hidden transition-all duration-200",
-          hover ? "ml-1 max-w-56 opacity-100" : "max-w-0 opacity-0",
+          hover ? "ml-1 max-w-64 opacity-100" : "max-w-0 opacity-0",
         )}
       >
         {phase === "listening" ? (
@@ -272,6 +273,12 @@ export function Buddy(props: BuddyProps) {
             <Play className="size-4" />
           </IconButton>
         )}
+        {/* For a screen share: the bot goes away and keeps taking notes; the tray icon brings it back. */}
+        {props.canHide ? (
+          <IconButton label="Hide (keeps taking notes)" onClick={() => act("tuck")}>
+            <EyeOff className="size-4" />
+          </IconButton>
+        ) : null}
         <IconButton label="Stop and write notes" tone="danger" onClick={() => act("stop")}>
           <Square className="size-3.5 fill-current" />
         </IconButton>

@@ -6,7 +6,7 @@
  *
  * Window sizes the desktop app uses per phase (the page is anchored bottom-center,
  * transparent, and only catches the mouse over the bot and its bubble):
- *   asking 440×330 · listening/paused 720×200 (the pill grows to the right of the
+ *   asking 440×330 · listening/paused 840×200 (the pill grows to the right of the
  *   centered bot when hovered) · saving/done/error 420×230
  *
  * Clickable parts carry `data-buddy-interactive`, so a desktop app that can't get
@@ -32,7 +32,9 @@ export type BuddyAction =
   /** open the meeting (or the app) in the browser */
   | "open"
   /** tuck the bot away (done/error) */
-  | "hide";
+  | "hide"
+  /** listening/paused: hide the bot (say, to share the screen); it keeps taking notes, and the tray icon brings it back */
+  | "tuck";
 
 export type BuddyState = {
   phase: BuddyPhase;
@@ -54,6 +56,8 @@ export type BuddyState = {
   consentNote?: string;
   /** A standing note while listening, e.g. "I can only hear your mic here…" (not a transcript line). */
   notice?: string | null;
+  /** The desktop app can hide the bot while it keeps taking notes (older versions can't: no Hide button). */
+  canHide?: boolean;
 };
 
 export interface BabDesktopApi {

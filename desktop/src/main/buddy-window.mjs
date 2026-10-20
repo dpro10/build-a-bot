@@ -5,7 +5,9 @@
  *
  * Safety: the page gets only window.babDesktop (preload/buddy.cjs) — no Node, no
  * token. It can't navigate away from the server, open windows, or use the mic.
- * Never setContentProtection(true): the bot should show in screen shares too.
+ * Never setContentProtection(true): on macOS, apps that capture with ScreenCaptureKit (Zoom, Meet,
+ * Teams) capture it anyway, so "hide it from my screen share" is the owner hiding the bot
+ * (controller.tuck()), never a window that only looks hidden.
  */
 import { BrowserWindow, screen, session } from "electron";
 import { fileURLToPath } from "node:url";
