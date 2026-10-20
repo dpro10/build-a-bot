@@ -6,7 +6,7 @@
  * 0 turns a ceiling off.
  */
 import type { Db } from "@/lib/db";
-import { rateLimit } from "@/lib/safety/ratelimit";
+import { rateLimit, refundRateLimit } from "@/lib/safety/ratelimit";
 
 /** Dictations cost about $0.0003 each, so 20,000 a day is about $6. */
 const DEFAULTS = { included: 3000, search: 300, dictation: 20000 } as const;
@@ -19,11 +19,17 @@ export function dailyCeiling(kind: Ceiling): number {
   return Number.isFinite(n) && n >= 0 ? Math.floor(n) : DEFAULTS[kind];
 }
 
-/** Counts one use against today's ceiling; false once it's reached. */
-export async function underDailyCeiling(db: Db, kind: Ceiling): Promise<boolean> {
+/**
+ * Counts `uses` (one by default: a fact check of several claims is several lookups) against today's
+ * ceiling; false, with nothing counted, when they don't all fit.
+ */
+export async function underDailyCeiling(db: Db, kind: Ceiling, uses = 1): Promise<boolean> {
   const limit = dailyCeiling(kind);
   if (!limit) return true;
-  const { ok } = await rateLimit(db, `ceiling:${kind}`, limit, 86_400);
-  if (!ok) console.warn(`[ceiling] today's ${kind} ceiling (${limit}) is reached`);
+  const { ok } = await rateLimit(db, `ceiling:${kind}`, limit, 86_400, uses);
+  if (!ok) {
+    await refundRateLimit(db, `ceiling:${kind}`, uses);
+    console.warn(`[ceiling] today's ${kind} ceiling (${limit}) is reached`);
+  }
   return ok;
 }

@@ -30,6 +30,8 @@ export type ToolOutput =
       sources?: ToolSource[];
       /** Something to show with the reply (flashcards or a quiz to study). */
       card?: Extract<MessagePart, { type: "study_set" }>;
+      /** Paid lookups it really made (Tavily searches that answered), when that's not one. */
+      lookups?: number;
     }
   | { ok: false; error: string };
 

@@ -65,7 +65,7 @@ export const FEATURED_RECIPES: FeaturedRecipe[] = [
     jobs: ["school", "reminders"],
     instructions: "",
     trust: "ask",
-    connectors: ["web_search", "wikipedia", "notes"],
+    connectors: ["web_search", "web_reader", "wikipedia", "notes"],
     channels: ["telegram", "slack"],
     routines: [
       {

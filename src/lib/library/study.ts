@@ -11,7 +11,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { schema, type Db } from "@/lib/db";
 import type { QuizQuestion, StudyCard, StudyProgress, StudySet, StudySetSummary } from "@/lib/db/schema";
 import { newId } from "@/lib/utils";
-import type { StudySetView } from "./views";
+import { siteOf, type StudySetView } from "./views";
 
 export const MAX_CARDS = 60;
 export const MAX_QUESTIONS = 40;
@@ -20,11 +20,20 @@ export const BOX_DAYS = [1, 3, 7, 16, 35];
 const AGAIN_MS = 10 * 60_000;
 
 const text = (max: number) => z.string().trim().min(1).max(max);
+/** A web page an answer was checked against: http(s) only (it becomes a link). */
+const sourceUrl = z
+  .string()
+  .trim()
+  .max(500)
+  .url()
+  .refine((u) => /^https?:\/\//i.test(u), "a web page's address (http or https)")
+  .describe("For an answer that isn't from their files: the page you checked it against (a link from check_facts or web_search)");
 
 export const cardInput = z.object({
   front: text(500).describe("The prompt: a term, a question, or a fill-in-the-blank"),
   back: text(1200).describe("The answer, short and exact"),
   source: z.string().trim().max(160).optional().describe('Where it came from, e.g. "Bio 101 syllabus, page 2"'),
+  source_url: sourceUrl.optional(),
 });
 
 export const questionInput = z
@@ -35,6 +44,7 @@ export const questionInput = z
     answer: text(600).describe('The right answer. multiple_choice: the right choice, word for word. true_false: "True" or "False".'),
     explanation: z.string().trim().max(1200).optional().describe("Why that's the answer, in a sentence or two"),
     source: z.string().trim().max(160).optional(),
+    source_url: sourceUrl.optional(),
   })
   .superRefine((q, ctx) => {
     if (q.type === "multiple_choice") {
@@ -52,7 +62,7 @@ export function sameAnswer(a: string, b: string): boolean {
 export function summarize(set: StudySet): StudySetSummary {
   const sources = new Set<string>();
   for (const item of set.items as (StudyCard | QuizQuestion)[]) {
-    const s = item.source?.replace(/,?\s*(page|slide|p\.)\s*\d+.*$/i, "").trim();
+    const s = item.source?.replace(/,?\s*(page|slide|p\.)\s*\d+.*$/i, "").trim() || (item.sourceUrl ? siteOf(item.sourceUrl) : "");
     if (s) sources.add(s);
   }
   return { id: set.id, kind: set.kind === "quiz" ? "quiz" : "flashcards", title: set.title, count: set.items.length, sources: [...sources].slice(0, 3) };
@@ -82,7 +92,9 @@ export async function createStudySet(
 ): Promise<StudySet> {
   const items =
     input.kind === "flashcards"
-      ? (input.items as z.infer<typeof cardInput>[]).slice(0, MAX_CARDS).map((c): StudyCard => ({ id: newId("card"), front: c.front, back: c.back, ...(c.source ? { source: c.source } : {}) }))
+      ? (input.items as z.infer<typeof cardInput>[])
+          .slice(0, MAX_CARDS)
+          .map((c): StudyCard => ({ id: newId("card"), front: c.front, back: c.back, ...(c.source ? { source: c.source } : {}), ...(c.source_url ? { sourceUrl: c.source_url } : {}) }))
       : (input.items as z.infer<typeof questionInput>[]).slice(0, MAX_QUESTIONS).map(
           (q): QuizQuestion => ({
             id: newId("q"),
@@ -92,6 +104,7 @@ export async function createStudySet(
             answer: q.type === "true_false" ? (/^t/i.test(q.answer) ? "True" : "False") : q.answer,
             ...(q.explanation ? { explanation: q.explanation } : {}),
             ...(q.source ? { source: q.source } : {}),
+            ...(q.source_url ? { sourceUrl: q.source_url } : {}),
           }),
         );
   const [row] = await db
@@ -187,7 +200,7 @@ export function studySetCsv(set: StudySet): string {
   return (
     [
       "Question,Answer,Choices,Explanation,Source",
-      ...(set.items as QuizQuestion[]).map((q) => [q.question, q.answer, (q.choices ?? []).join(" | "), q.explanation ?? "", q.source ?? ""].map(cell).join(",")),
+      ...(set.items as QuizQuestion[]).map((q) => [q.question, q.answer, (q.choices ?? []).join(" | "), q.explanation ?? "", [q.source, q.sourceUrl].filter(Boolean).join(" ")].map(cell).join(",")),
     ].join("\r\n") + "\r\n"
   );
 }

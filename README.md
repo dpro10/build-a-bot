@@ -11,7 +11,7 @@ Anyone makes their own AI agent in about a minute: pick a face, give it a name, 
 - **The brains:** NVIDIA Nemotron on **Nebius Token Factory**. Nemotron 3.5 Lightning is every new bot's default: fast, and cheap (about $0.0004 for a typical message, at Token Factory's price). Nemotron 3 Super and Nemotron 3 Ultra take the harder jobs. Token Factory also runs the other included open models, and the AI cleanup for voice typing.
 - **The ears:** NVIDIA **Parakeet TDT 0.6B v3** turns speech into text on the user's own computer, for voice typing and meeting notes. The desktop app runs it on NVIDIA's NeMo-Speech.cpp, so the audio never leaves the computer. Our own speech server (`speech/`: Parakeet and **Nemotron 3.5 ASR** on NeMo-Speech.cpp, built to deploy as a **Nebius Serverless AI** endpoint) is optional, for computers where Parakeet can't run.
 - **The voice:** on calls, NVIDIA **Magpie TTS Multilingual** speaks and Parakeet hears, on NeMo-Speech.cpp on our own server (`voice/`), while Nemotron 3.5 Lightning holds the conversation and hands the work to the bot. No speech API hears anyone.
-- **Web search:** Tavily.
+- **Web search and fact checks:** Tavily. Bots search and read the web with it, and the tutor checks its flashcards and quizzes against the student's course: the course's own pages first, then open textbooks (`src/lib/tools/builtin/check.ts`).
 - Our entry in the Nebius × NVIDIA Global AI Hackathon (due October 30): [`docs/HACKATHON.md`](docs/HACKATHON.md).
 
 ## Try it
@@ -109,7 +109,7 @@ Web chat, phone calls and texts (Twilio), email (its own brand-free address), Te
 
 - **Give your bot files:** drop them on the chat, use the paperclip or paste a screenshot, add them on the bot's **Library** tab, or send them on Telegram (or Discord's `/ask`). PDFs, Word, PowerPoint (with speaker notes), text and photos, up to 25 MB each and 500 MB in all.
 - **Read once, cited always:** each file is read into passages with their page or slide, and searched with Postgres full-text search. The bot says which file and page it used. Photos and scanned pages are read by a vision model on Nebius Token Factory, paid from credit.
-- **Flashcards and practice quizzes** that work right in the chat: flip a card, mark *Got it* or *Again* (spaced repetition brings misses back sooner); answer a quiz one question at a time, see why, get a score, and send your mistakes back to the bot to go over. CSV export for Anki and Quizlet.
+- **Flashcards and practice quizzes** that work right in the chat: flip a card, mark *Got it* or *Again* (spaced repetition brings misses back sooner); answer a quiz one question at a time, see why, get a score, and send your mistakes back to the bot to go over. Each answer says where it's from: the file and page, or a web page the bot checked it against (only pages it really looked at). CSV export for Anki and Quizlet.
 - **Private:** files live in a private store, read back only for their owner; people who message the bot can't search them; deleting a bot or the account deletes them. A file's text is outside content to the model, never instructions.
 
 ### Web actions (beta)

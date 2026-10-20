@@ -4,6 +4,15 @@
  */
 import type { QuizQuestion, StudyCard } from "@/lib/db/schema";
 
+/** "https://openstax.org/books/…" → "openstax.org". */
+export function siteOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
 export type StudySetView = {
   id: string;
   kind: "flashcards" | "quiz";

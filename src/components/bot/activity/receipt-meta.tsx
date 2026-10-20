@@ -63,6 +63,8 @@ export const REASON_LABEL: Record<string, string> = {
 
 const TOOL_LABEL: Record<string, string> = {
   web_search: "Web search",
+  check_facts: "Check facts",
+  find_course_sources: "Find the course online",
   read_webpage: "Read a web page",
   news_headlines: "News headlines",
   wikipedia_lookup: "Wikipedia lookup",
@@ -422,6 +424,20 @@ export function detailRows(r: ReceiptView, apps: Record<string, AppInfo>): Detai
     push("status", "Delivery", status === "simulated" ? "Simulated (demo mode, nothing really sent)" : status === "failed" ? "Failed" : status === "sent" ? "Sent" : humanizeKey(status));
   const result = take("result");
   if (typeof result === "string" && result) push("result", "Result", <span className="whitespace-pre-wrap">{result}</span>);
+  const sources = take("sources");
+  const pages = Array.isArray(sources) ? sources.filter((u): u is string => typeof u === "string" && /^https?:\/\//i.test(u)) : [];
+  if (pages.length)
+    push(
+      "sources",
+      "Sources",
+      <span className="flex min-w-0 flex-col gap-0.5">
+        {pages.map((u) => (
+          <a key={u} href={u} target="_blank" rel="noopener noreferrer nofollow" className="truncate text-primary underline-offset-2 hover:underline">
+            {u.replace(/^https?:\/\/(www\.)?/i, "")}
+          </a>
+        ))}
+      </span>,
+    );
   const error = take("error");
   if (error) push("error", "Error", <span className="whitespace-pre-wrap text-danger">{String(error)}</span>);
   const message = take("message");

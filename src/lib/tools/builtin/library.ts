@@ -4,6 +4,7 @@ import { findFile, listFiles } from "@/lib/library";
 import { pagesLabel } from "@/lib/library/limits";
 import { readPassages, searchLibrary } from "@/lib/library/search";
 import { cardInput, createStudySet, MAX_CARDS, MAX_QUESTIONS, questionInput, studyStatus, summarize } from "@/lib/library/study";
+import { pagesReadRecently, sameLink } from "../sources";
 import { defineTool, type ToolContext } from "../types";
 
 const libraryUrl = (ctx: ToolContext) => `${appUrl()}/app/bots/${ctx.bot.id}/library`;
@@ -96,6 +97,26 @@ export const readFileTool = defineTool({
   },
 });
 
+/** Items keep a web link only if it's a page the bot's lookups returned lately (never a made-up one). */
+async function linksItRead<T extends { source_url?: string }>(ctx: ToolContext, items: T[]): Promise<{ items: T[]; leftOff: string }> {
+  if (!items.some((i) => i.source_url)) return { items, leftOff: "" };
+  const read = await pagesReadRecently(ctx.db, ctx.bot.id);
+  let dropped = 0;
+  const kept = items.map((item) => {
+    const link = item.source_url ? sameLink(item.source_url) : null;
+    if (!item.source_url || (link && read.has(link))) return item;
+    dropped++;
+    return { ...item, source_url: undefined };
+  });
+  const leftOff = dropped
+    ? ` Left off ${dropped} link${dropped === 1 ? "" : "s"} that ${dropped === 1 ? "wasn't a page" : "weren't pages"} you looked at; check ${dropped === 1 ? "that answer" : "those answers"} with check_facts to give ${dropped === 1 ? "it" : "them"} a source.`
+    : "";
+  return { items: kept, leftOff };
+}
+
+const SOURCE_HINT =
+  "and where it's from: the file and page (source) when it's from their files, or for an answer that isn't, the page you checked it against (source_url, from check_facts or web_search; only pages you looked at are kept)";
+
 const studyReply = (ctx: ToolContext, what: string) =>
   ctx.channelKind === "web"
     ? `${what} The owner sees it as a card they can study right here (and on the Library page). Say what's in it in a sentence and invite them to try it. Don't list the items again.`
@@ -104,7 +125,7 @@ const studyReply = (ctx: ToolContext, what: string) =>
 export const makeFlashcardsTool = defineTool({
   name: "make_flashcards",
   title: "Make flashcards",
-  description: `Make a set of flashcards (up to ${MAX_CARDS}) the owner can study with spaced repetition. Write them from what you read (read_file or search_files first when it's from their files): one idea per card, the front a short prompt, the back a short exact answer, and the source (file and page) when there is one. Always use this instead of writing flashcards out as text.`,
+  description: `Make a set of flashcards (up to ${MAX_CARDS}) the owner can study with spaced repetition. Write them from what you read (read_file or search_files first when it's from their files): one idea per card, the front a short prompt, the back a short exact answer, ${SOURCE_HINT}. Always use this instead of writing flashcards out as text.`,
   input: z.object({
     title: z.string().trim().min(1).max(120).describe('e.g. "Bio 101: Unit 1 cells"'),
     cards: z.array(cardInput).min(1).max(MAX_CARDS),
@@ -119,10 +140,11 @@ export const makeFlashcardsTool = defineTool({
   ownerOnly: true,
   summarize: (a) => `Make ${a.cards.length} flashcards: “${a.title}”`,
   async run(args, ctx) {
-    const set = await createStudySet(ctx.db, { botId: ctx.bot.id, kind: "flashcards", title: args.title, items: args.cards, fileIds: await fileIds(ctx, args.files), jobId: ctx.jobId ?? null });
+    const { items, leftOff } = await linksItRead(ctx, args.cards);
+    const set = await createStudySet(ctx.db, { botId: ctx.bot.id, kind: "flashcards", title: args.title, items, fileIds: await fileIds(ctx, args.files), jobId: ctx.jobId ?? null });
     return {
       ok: true,
-      content: studyReply(ctx, `Made “${set.title}”: ${set.items.length} flashcards.`),
+      content: studyReply(ctx, `Made “${set.title}”: ${set.items.length} flashcards.${leftOff}`),
       summary: `${set.items.length} flashcards`,
       card: { type: "study_set", set: summarize(set) },
     };
@@ -132,7 +154,7 @@ export const makeFlashcardsTool = defineTool({
 export const makeQuizTool = defineTool({
   name: "make_quiz",
   title: "Make a practice quiz",
-  description: `Make a practice quiz (up to ${MAX_QUESTIONS} questions) the owner takes one question at a time and gets scored on. Mix multiple choice (3 to 5 choices, the answer one of them word for word), true/false and short answer. Give each an explanation and its source (file and page) when there is one. Write it from what you read (read_file or search_files first when it's from their files). Always use this instead of writing a quiz out as text.`,
+  description: `Make a practice quiz (up to ${MAX_QUESTIONS} questions) the owner takes one question at a time and gets scored on. Mix multiple choice (3 to 5 choices, the answer one of them word for word), true/false and short answer. Give each an explanation, ${SOURCE_HINT}. Write it from what you read (read_file or search_files first when it's from their files). Always use this instead of writing a quiz out as text.`,
   input: z.object({
     title: z.string().trim().min(1).max(120),
     questions: z.array(questionInput).min(1).max(MAX_QUESTIONS),
@@ -146,10 +168,11 @@ export const makeQuizTool = defineTool({
   ownerOnly: true,
   summarize: (a) => `Make a ${a.questions.length}-question quiz: “${a.title}”`,
   async run(args, ctx) {
-    const set = await createStudySet(ctx.db, { botId: ctx.bot.id, kind: "quiz", title: args.title, items: args.questions, fileIds: await fileIds(ctx, args.files), jobId: ctx.jobId ?? null });
+    const { items, leftOff } = await linksItRead(ctx, args.questions);
+    const set = await createStudySet(ctx.db, { botId: ctx.bot.id, kind: "quiz", title: args.title, items, fileIds: await fileIds(ctx, args.files), jobId: ctx.jobId ?? null });
     return {
       ok: true,
-      content: studyReply(ctx, `Made “${set.title}”: a ${set.items.length}-question quiz.`),
+      content: studyReply(ctx, `Made “${set.title}”: a ${set.items.length}-question quiz.${leftOff}`),
       summary: `${set.items.length} questions`,
       card: { type: "study_set", set: summarize(set) },
     };

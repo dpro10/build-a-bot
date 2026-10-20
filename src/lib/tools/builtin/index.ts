@@ -1,5 +1,6 @@
 import type { AnyToolSpec } from "../types";
 import { newsHeadlines, readWebpage, webSearch, wikipediaLookup } from "./web";
+import { checkFacts, findCourseSources } from "./check";
 import { getWeather } from "./weather";
 import { calculateTool, convertCurrency } from "./money";
 import { cancelReminder, createReminder, listReminders, scheduleRoutine } from "./reminders";
@@ -13,7 +14,8 @@ import { libraryTools } from "./library";
 
 /** Built-in connector id → its tools. */
 export const BUILTIN_TOOLS: Record<string, AnyToolSpec[]> = {
-  web_search: [webSearch],
+  // Checking facts and finding a course online are Tavily searches too: they come with web search.
+  web_search: [webSearch, checkFacts, findCourseSources],
   web_reader: [readWebpage],
   news: [newsHeadlines],
   wikipedia: [wikipediaLookup],
