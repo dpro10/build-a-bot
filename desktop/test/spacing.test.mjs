@@ -30,8 +30,7 @@ const CASES = [
   ["work is done.", "ents'", "", " work is done."],
   ["Next item.", "🎉", "", " Next item."],
   ["Next item.", "❤️", "", " Next item."],
-  ["can you check?", "￼", "", " can you check?"],
-  ["Bring the slides.", "lab.​", "", " Bring the slides."],
+  ["Bring the slides.", "lab.\u200B", "", " Bring the slides."],
   ["Prochain point.", "été.", "", " Prochain point."],
   // Nothing before it, or already a space, a line break, an opening bracket or quote: as it is.
   ["Bring the slides.", "", "", "Bring the slides."],
@@ -39,12 +38,15 @@ const CASES = [
   ["Bring the slides.", "lab.\n", "", "Bring the slides."],
   ["Bring the slides.", "lab.\r\n", "", "Bring the slides."],
   ["Bring the slides.", "lab.\t", "", "Bring the slides."],
-  ["Bring the slides.", "lab. ", "", "Bring the slides."],
+  ["Bring the slides.", "lab.\u00A0", "", "Bring the slides."],
   ["thing", "the (", "", "thing"],
   ["quote", "said “", "", "quote"],
   ["hi", 'said "', "", "hi"],
   ["hi", '("', "", "hi"],
   ["hi", '"', "", "hi"],
+  // An object in the text (an image, a chip, or how Chromium shows an empty box): nothing known.
+  ["can you check?", "\uFFFC", "", "can you check?"],
+  ["Hi.", "", "\uFFFC", "Hi."],
   // Joined on purpose: mentions, hashtags, amounts, paths, hyphens and dashes.
   ["Sarah", " @", "", "Sarah"],
   ["general", " #", "", "general"],
@@ -100,7 +102,7 @@ test("nothing known about the box, or nothing dictated: the words go in as they 
   assert.deepEqual(spaceOut("Hello.", undefined), { text: "Hello.", before: false, after: false });
   assert.deepEqual(spaceOut("Hello.", {}), { text: "Hello.", before: false, after: false });
   assert.deepEqual(spaceOut("", { before: "lab.", after: "Next" }), { text: "", before: false, after: false });
-  assert.deepEqual(spaceOut("​", { before: "lab.", after: "Next" }), { text: "​", before: false, after: false });
+  assert.deepEqual(spaceOut("\u200B", { before: "lab.", after: "Next" }), { text: "\u200B", before: false, after: false });
 });
 
 // ---------------------------------------------------------------------------

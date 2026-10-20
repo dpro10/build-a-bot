@@ -12,15 +12,18 @@
  * words go in as they are.
  */
 
-const ZERO_WIDTH = /[​-‍⁠﻿]/gu;
-/** Ends a word: letters, digits, accents, emoji, or an object in the text (a mention, an image). */
-const WORDY = /[\p{L}\p{N}\p{M}\p{Extended_Pictographic}￼]/u;
+const ZERO_WIDTH = /[\u200B-\u200D\u2060\uFEFF]/gu;
+/**
+ * Ends a word: letters, digits, accents, emoji. Not an object in the text (U+FFFC): an image or a
+ * mention chip, but also how Chromium shows an empty box, so nothing is known about it.
+ */
+const WORDY = /[\p{L}\p{N}\p{M}\p{Extended_Pictographic}]/u;
 /** Closes a sentence, a clause or a quote: a space goes after it, never before it. */
 const CLOSERS = new Set([".", ",", ";", ":", "!", "?", ")", "]", "}", "”", "’", "»", "›", "…", "%", "‰"]);
 /** Opens a bracket or a quote. */
 const OPENERS = new Set(["(", "[", "{", "“", "‘", "«", "‹", "„", "‚", "¿", "¡"]);
 /** Scripts written without spaces between words, and their punctuation. */
-const NO_SPACES = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}　-〿＀-￯]/u;
+const NO_SPACES = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}\u3000-\u303F\uFF00-\uFFEF]/u;
 const SPACE = /\s/u;
 const LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;
 

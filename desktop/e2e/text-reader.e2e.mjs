@@ -292,7 +292,11 @@ test("what's next to the cursor, for spacing: a few characters on each side of i
     await targetDo({ cmd: "set", value });
     if (typeof place === "number") await targetDo({ cmd: "caret", at: place });
     else if (typeof place === "string") await targetDo({ cmd: "select", text: place });
-    const fits = (got, w, end) => (w === "" ? got === "" : end ? got.endsWith(w) : got.startsWith(w));
+    // Chromium on Windows shows an empty box as an object character (U+FFFC): not text.
+    const fits = (got, w, end) => {
+      const text = got.replace(/\uFFFC/g, "");
+      return w === "" ? text === "" : end ? text.endsWith(w) : text.startsWith(w);
+    };
     let r;
     await until(`what's around the cursor in ${JSON.stringify(value)} (${JSON.stringify(place)})`, async () => {
       r = await /** @type {TextReader} */ (reader).ask("around");
