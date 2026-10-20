@@ -14,7 +14,7 @@ delete process.env.BLOB_READ_WRITE_TOKEN;
 
 const { getDb, resetDbForTests, schema } = await import("@/lib/db");
 const { createBot } = await import("@/lib/bots/create");
-const { runTurn, studyNudge } = await import("@/lib/agent/run");
+const { runTurn, studyNudge, withoutStudySetsOnCalls } = await import("@/lib/agent/run");
 const { ensureConversation } = await import("@/lib/channels/outbound");
 import type { User } from "@/lib/db/schema";
 
@@ -23,6 +23,17 @@ let owner: User;
 
 const tools = (names: string[]) => ({ byName: new Map(names.map((n) => [n, {} as never])) });
 const noParts = { parts: [] };
+
+describe("study sets on a call", () => {
+  it("a quiz is asked out loud: no quiz or flashcards are made unless asked for one to keep", () => {
+    const names = ["search_files", "read_file", "make_flashcards", "make_quiz"];
+    const all = { tools: names.map((name) => ({ name })), byName: new Map(names.map((n) => [n, { name: n }])), apps: [], connections: [] } as never;
+    const offered = (request: string) => [...withoutStudySetsOnCalls(all, request).byName.keys()];
+    expect(offered("Quiz Diego on his Calvin cycle notes")).toEqual(["search_files", "read_file"]);
+    expect(offered("Make Diego flashcards from his notes")).toEqual(["search_files", "read_file", "make_flashcards"]);
+    expect(offered("Make Diego a practice quiz he can take later in the app")).toEqual(names);
+  });
+});
 
 describe("when it nudges", () => {
   it("only for flashcards or a made quiz, only with the tool, and only before one is made", () => {

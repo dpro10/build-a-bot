@@ -99,6 +99,7 @@ describe("what a role changes in the prompt", () => {
     const call = buildStablePrompt({ name: "Otto", avatar: "otto", role: "tutor", jobs: ["school"], trust: "ask" } as Bot, owner, "voice", null);
     expect(call).toContain("To quiz them on a call, ask one short question out loud (no multiple choice, no lettered options)");
     expect(call).toContain("don't make a study set unless they ask for one to keep");
+    expect(call).toContain("Don't say what you're about to do before using a tool");
     const chat = buildStablePrompt({ name: "Otto", avatar: "otto", role: "tutor", jobs: ["school"], trust: "ask" } as Bot, owner, "web", null);
     expect(chat).not.toContain("To quiz them on a call");
   });

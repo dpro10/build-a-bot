@@ -245,6 +245,7 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
     toolset = { ...toolset, tools: relay ? [relay] : [], byName: new Map(relay ? [["message_owner", relay]] : []) };
   }
   if (input.noTools) toolset = { ...toolset, tools: [], byName: new Map() };
+  if (input.channelKind === "voice") toolset = withoutStudySetsOnCalls(toolset, input.message?.text ?? "");
 
   const [recentElsewhere, history] = await Promise.all([
     speakingWith === "owner" ? loadRecentElsewhere(db, bot.id, conversation.id) : Promise.resolve([]),
@@ -263,7 +264,7 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
     buildStablePrompt(bot, owner, input.channelKind, botEmailAddress(bot)),
     "Messages wrapped in <system_directive> come from the Build-a-bot platform (not a person). Follow them.",
     // Stable, so it sits with the stable part of the prompt (what's in the Library comes later).
-    toolset.byName.has("make_flashcards") ? LIBRARY_GUIDANCE : "",
+    toolset.byName.has("search_files") ? LIBRARY_GUIDANCE : "",
     buildDynamicContext({
       bot,
       owner,
@@ -868,6 +869,19 @@ function withoutAppNotes(text: string): string {
  * The owner asked for flashcards or a quiz and the model answered without making one: what to tell
  * it (once) so it does. A casual "quiz me" is asked in the chat, so it doesn't count.
  */
+/**
+ * On a call, a quiz is asked out loud, one question at a time, and a call can't show a study set:
+ * quizzes and flashcards are only made when asked for one to keep (or for flashcards by name).
+ */
+export function withoutStudySetsOnCalls(toolset: Toolset, request: string): Toolset {
+  const keep = /\b(save|keep|later|in the app|study set)\b/i.test(request);
+  const drop = new Set<string>();
+  if (!keep) drop.add("make_quiz");
+  if (!keep && !/\bflash ?cards?\b/i.test(request)) drop.add("make_flashcards");
+  if (![...drop].some((n) => toolset.byName.has(n))) return toolset;
+  return { ...toolset, tools: toolset.tools.filter((t) => !drop.has(t.name)), byName: new Map([...toolset.byName].filter(([n]) => !drop.has(n))) };
+}
+
 export function studyNudge(ownerText: string | null, toolset: Pick<Toolset, "byName">, state: Pick<RunState, "parts">): string | null {
   if (!ownerText) return null;
   const t = ownerText.toLowerCase();
