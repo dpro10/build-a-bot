@@ -420,6 +420,7 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
   }
 
   // 7. Safety post-processing (in code, every time).
+  finalText = honestAboutSends(finalText, state.parts, toolset);
   if (crisis && !finalText.includes("988")) finalText = `${finalText}\n\n${CRISIS_FOOTER}`;
 
   // 8. Usage, cost, receipts.
@@ -866,10 +867,6 @@ function withoutAppNotes(text: string): string {
 }
 
 /**
- * The owner asked for flashcards or a quiz and the model answered without making one: what to tell
- * it (once) so it does. A casual "quiz me" is asked in the chat, so it doesn't count.
- */
-/**
  * On a call, a quiz is asked out loud, one question at a time, and a call can't show a study set:
  * quizzes and flashcards are only made when asked for one to keep (or for flashcards by name).
  */
@@ -882,6 +879,28 @@ export function withoutStudySetsOnCalls(toolset: Toolset, request: string): Tool
   return { ...toolset, tools: toolset.tools.filter((t) => !drop.has(t.name)), byName: new Map([...toolset.byName].filter(([n]) => !drop.has(n))) };
 }
 
+/**
+ * Never a send that didn't happen. A small model sometimes writes "[message sent to …]" (copying the
+ * app's notes) or "Sent! The email has been sent" without calling anything. When a reply claims a
+ * message went out and nothing was sent this turn, the made-up note goes and the owner is told so.
+ */
+const MADE_UP_SEND = /^[ \t]*\[(?:message|email|e-mail|text|sms|dm|reply)s?\s+(?:was\s+)?sent\b[^\]\n]*\][ \t]*/gim;
+const SEND_CLAIM =
+  /\bI(?:'ve| have| just)?\s+(?:emailed|e-mailed|texted|messaged)\b|\bI(?:'ve| have| just)?\s+sent\s+(?:(?:the|your|an?|that|this|her|him|them|it)\s+)?(?:email|e-mail|message|text|reply|invite|invitation|note to)\b|\b(?:email|e-mail|message|text|reply|invitation)\b[^.!?\n]{0,60}\b(?:has been|was|is now)\s+sent\b/i;
+export const NOTHING_SENT = "To be clear: nothing has been sent.";
+
+export function honestAboutSends(text: string, parts: MessagePart[], toolset: Pick<Toolset, "byName">): string {
+  const sendRan = parts.some((p) => p.type === "tool_call" && toolset.byName.get(p.name)?.effect === "send");
+  if (sendRan) return text;
+  const stripped = text.replace(MADE_UP_SEND, "").replace(/\n{3,}/g, "\n\n").trim();
+  if (stripped === text.trim() && !SEND_CLAIM.test(text)) return text;
+  return stripped ? `${stripped}\n\n${NOTHING_SENT}` : NOTHING_SENT;
+}
+
+/**
+ * The owner asked for flashcards or a quiz and the model answered without making one: what to tell
+ * it (once) so it does. A casual "quiz me" is asked in the chat, so it doesn't count.
+ */
 export function studyNudge(ownerText: string | null, toolset: Pick<Toolset, "byName">, state: Pick<RunState, "parts">): string | null {
   if (!ownerText) return null;
   const t = ownerText.toLowerCase();
