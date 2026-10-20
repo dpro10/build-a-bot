@@ -49,10 +49,34 @@ export const questionInput = z
   .superRefine((q, ctx) => {
     if (q.type === "multiple_choice") {
       if (!q.choices?.length) ctx.addIssue({ code: "custom", message: "multiple_choice needs choices", path: ["choices"] });
-      else if (!q.choices.some((c) => sameAnswer(c, q.answer))) ctx.addIssue({ code: "custom", message: "the answer must be one of the choices, word for word", path: ["answer"] });
+      else {
+        const plain = withoutLetters(q.choices, q.answer);
+        if (!plain.choices.some((c) => sameAnswer(c, plain.answer))) ctx.addIssue({ code: "custom", message: "the answer must be one of the choices, word for word", path: ["answer"] });
+      }
     }
     if (q.type === "true_false" && !/^(true|false)$/i.test(q.answer.trim())) ctx.addIssue({ code: "custom", message: 'true_false answers are "True" or "False"', path: ["answer"] });
   });
+
+/** "A) Stroma", "b. Thylakoid", "(C) Granum": a choice's own letter, when it has one. */
+const LETTER = /^\s*(?:\(([a-f])\)|([a-f])[.):])\s+/i;
+
+/**
+ * The quiz shows its own A, B, C beside each choice, so a model's "A) …" would show twice. When the
+ * choices are lettered in order (a, b, c…), the letters go; the answer follows ("C) Stroma", "C" or
+ * "Stroma" all become "Stroma"). Choices that only look lettered ("C. elegans", "E. coli") stay.
+ */
+export function withoutLetters(choices: string[], answer: string): { choices: string[]; answer: string } {
+  const letters = choices.map((c) => {
+    const m = LETTER.exec(c);
+    return m ? (m[1] ?? m[2]).toLowerCase() : null;
+  });
+  if (!letters.every((l, i) => l === String.fromCharCode(97 + i))) return { choices, answer };
+  const plain = choices.map((c) => c.replace(LETTER, "").trim());
+  const asWritten = choices.findIndex((c) => sameAnswer(c, answer));
+  const byLetter = /^\s*\(?([a-f])\)?\s*$/i.exec(answer);
+  const at = asWritten >= 0 ? asWritten : byLetter ? byLetter[1].toLowerCase().charCodeAt(0) - 97 : -1;
+  return { choices: plain, answer: plain[at] ?? answer.replace(LETTER, "").trim() };
+}
 
 export function sameAnswer(a: string, b: string): boolean {
   const norm = (s: string) => s.toLowerCase().replace(/[\s.,;:!?'"()]+/g, " ").trim();
@@ -77,7 +101,7 @@ export function studySetView(set: StudySet, now = new Date()): StudySetView {
     kind: flash ? "flashcards" : "quiz",
     title: set.title,
     cards: flash ? (set.items as StudyCard[]) : [],
-    questions: flash ? [] : (set.items as QuizQuestion[]),
+    questions: flash ? [] : (set.items as QuizQuestion[]).map((q) => (q.type === "multiple_choice" && q.choices ? { ...q, ...withoutLetters(q.choices, q.answer) } : q)),
     dueIds: dueCards(set, now).map((c) => c.id),
     boxes,
     attempts: set.progress?.attempts ?? [],
@@ -95,18 +119,19 @@ export async function createStudySet(
       ? (input.items as z.infer<typeof cardInput>[])
           .slice(0, MAX_CARDS)
           .map((c): StudyCard => ({ id: newId("card"), front: c.front, back: c.back, ...(c.source ? { source: c.source } : {}), ...(c.source_url ? { sourceUrl: c.source_url } : {}) }))
-      : (input.items as z.infer<typeof questionInput>[]).slice(0, MAX_QUESTIONS).map(
-          (q): QuizQuestion => ({
+      : (input.items as z.infer<typeof questionInput>[]).slice(0, MAX_QUESTIONS).map((q): QuizQuestion => {
+          const plain = q.type === "multiple_choice" && q.choices ? withoutLetters(q.choices, q.answer) : null;
+          return {
             id: newId("q"),
             type: q.type,
             question: q.question,
-            ...(q.type === "multiple_choice" ? { choices: q.choices } : q.type === "true_false" ? { choices: ["True", "False"] } : {}),
-            answer: q.type === "true_false" ? (/^t/i.test(q.answer) ? "True" : "False") : q.answer,
+            ...(plain ? { choices: plain.choices } : q.type === "true_false" ? { choices: ["True", "False"] } : {}),
+            answer: plain ? plain.answer : q.type === "true_false" ? (/^t/i.test(q.answer) ? "True" : "False") : q.answer,
             ...(q.explanation ? { explanation: q.explanation } : {}),
             ...(q.source ? { source: q.source } : {}),
             ...(q.source_url ? { sourceUrl: q.source_url } : {}),
-          }),
-        );
+          };
+        });
   const [row] = await db
     .insert(schema.studySets)
     .values({ id: newId("set"), botId: input.botId, kind: input.kind, title: input.title.trim().slice(0, 120) || "Study set", items, fileIds: input.fileIds ?? [], jobId: input.jobId ?? null })
