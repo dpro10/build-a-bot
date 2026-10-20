@@ -508,9 +508,10 @@ export async function executeToolCall(
     };
   }
 
-  // Allowed: run it (paid lookups only while there's credit and today's ceiling allows).
+  // Allowed: run it (paid lookups only while there's credit and today's ceiling allows them all).
   let output;
-  const refusal = PAID_LOOKUPS.has(spec.name) ? await lookupRefusal(ctx, spec.name) : null;
+  const lookups = PAID_LOOKUPS[spec.name]?.(args) ?? 0;
+  const refusal = lookups ? await lookupRefusal(ctx, lookups) : null;
   if (refusal) {
     output = { ok: false as const, error: refusal };
   } else {
@@ -519,12 +520,12 @@ export async function executeToolCall(
     } catch (err) {
       output = { ok: false as const, error: truncate(errorMessage(err), 400) };
     }
-    if (spec.name === "web_search" || spec.name === "news_headlines") state.searches++;
-    // A lookup Tavily answered costs a credit: counted and charged now, whoever asked (a turn here,
-    // the Bridge, or another AI app through the bot's MCP server).
-    if (PAID_LOOKUPS.has(spec.name) && output.ok && config.tavily.apiKey) {
-      await recordUsage(db, ctx.owner.id, { searches: spec.name === "read_webpage" ? 0 : 1, costMicros: UNIT_PRICES.lookup });
-    }
+    // Each lookup Tavily answered costs a credit: counted and charged now, whoever asked (a turn
+    // here, the Bridge, or another AI app through the bot's MCP server).
+    const used = output.ok ? (output.lookups ?? lookups) : 0;
+    const searches = spec.name === "read_webpage" ? 0 : used;
+    state.searches += searches;
+    if (used && config.tavily.apiKey) await recordUsage(db, ctx.owner.id, { searches, costMicros: used * UNIT_PRICES.lookup });
   }
   if (spec.taints ?? spec.effect === "read") state.tainted = true;
   if (spec.effect !== "read") state.actions++;
@@ -536,6 +537,8 @@ export async function executeToolCall(
     risk: spec.risk,
     channel: channelKind,
     ...(output.ok ? { result: truncate(output.summary ?? "", 200) } : { error: output.error }),
+    // The pages a lookup returned: the owner sees them, and they're what a study set may cite.
+    ...(output.ok && output.sources?.length ? { sources: output.sources.map((s) => s.url).slice(0, MAX_RECEIPT_SOURCES) } : {}),
   });
 
   if (output.ok && spec.effect !== "read" && spec.recipients) {
@@ -770,16 +773,25 @@ async function saidToday(db: Db, conversationId: string, text: string): Promise<
   return Boolean(row);
 }
 
-/** Tools that cost per call (web search, news and page reading: Tavily). */
-const PAID_LOOKUPS = new Set(["web_search", "news_headlines", "read_webpage"]);
+/** Tools that cost per lookup (Tavily): how many lookups a call makes at most. */
+const PAID_LOOKUPS: Record<string, (args: Record<string, unknown>) => number> = {
+  web_search: () => 1,
+  news_headlines: () => 1,
+  read_webpage: () => 1,
+  check_facts: (args) => (Array.isArray(args.claims) ? args.claims.length : 1),
+  find_course_sources: () => 2,
+};
 
-/** Why a paid lookup can't run now (the model hears it and says so), or null. */
-async function lookupRefusal(ctx: ToolContext, name: string): Promise<string | null> {
+// A full fact check returns up to 24 pages (8 claims × 3), and each may be cited.
+const MAX_RECEIPT_SOURCES = 30;
+
+/** Why paid lookups can't run now (the model hears it and says so), or null. */
+async function lookupRefusal(ctx: ToolContext, lookups: number): Promise<string | null> {
   if (config.tavily.apiKey) {
     const spend = await checkSpend(ctx.db, ctx.owner, "lookup");
     if (!spend.ok) return `${spend.message} Answer from what you already know, and say you couldn't look it up.`;
   }
-  if (!(await underDailyCeiling(ctx.db, "search"))) {
+  if (!(await underDailyCeiling(ctx.db, "search", lookups))) {
     return "Web lookups have reached today's limit for everyone (it resets at midnight UTC). Answer from what you already know, and say you couldn't look it up.";
   }
   return null;

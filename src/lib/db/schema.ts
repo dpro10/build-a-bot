@@ -616,7 +616,8 @@ export const filePassages = pgTable(
   ],
 );
 
-export type StudyCard = { id: string; front: string; back: string; source?: string };
+/** `source`: where it's from, in words ("Bio 101 syllabus, page 2"); `sourceUrl`: a web page the bot checked it against. */
+export type StudyCard = { id: string; front: string; back: string; source?: string; sourceUrl?: string };
 export type QuizQuestion = {
   id: string;
   type: "multiple_choice" | "true_false" | "short_answer";
@@ -625,6 +626,7 @@ export type QuizQuestion = {
   answer: string;
   explanation?: string;
   source?: string;
+  sourceUrl?: string;
 };
 /** Per card (flashcards): its Leitner box and when it's due; per question (quizzes): the last answer. */
 export type StudyProgress = {

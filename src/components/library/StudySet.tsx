@@ -6,13 +6,29 @@
  * Keys: flashcards — Space flips, 1 "Again", 2 "Got it". Quiz — 1–6 pick a choice, Enter goes on.
  */
 import * as React from "react";
-import { ArrowRight, Check, Download, Layers, ListChecks, LoaderCircle, MessageCircle, RotateCcw, Sparkles, X } from "lucide-react";
+import { ArrowRight, Check, Download, ExternalLink, Layers, ListChecks, LoaderCircle, MessageCircle, RotateCcw, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toaster";
 import type { QuizQuestion, StudySetSummary } from "@/lib/db/schema";
-import type { StudySetView } from "@/lib/library/views";
+import { siteOf, type StudySetView } from "@/lib/library/views";
 import { cn } from "@/lib/utils";
+
+/** The web page an answer was checked against, opened in a new tab. */
+function SourceLink({ url, label }: { url: string; label?: string }) {
+  if (!/^https?:\/\//i.test(url)) return null;
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer nofollow"
+      className="inline-flex max-w-full items-center gap-1 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+    >
+      <span className="truncate">{label || siteOf(url)}</span>
+      <ExternalLink className="size-3 shrink-0" aria-hidden />
+    </a>
+  );
+}
 
 async function call<T>(url: string, body?: unknown): Promise<T> {
   const res = await fetch(url, body === undefined ? undefined : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -188,7 +204,8 @@ function Flashcards({ botId, set, onSaved, onDone }: { botId: string; set: Study
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (finished || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return;
+      // A source link keeps its own Enter.
+      if (finished || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement || e.target instanceof HTMLAnchorElement) return;
       if (e.key === " " || e.key === "Enter") {
         e.preventDefault();
         setFlipped((f) => !f);
@@ -249,10 +266,16 @@ function Flashcards({ botId, set, onSaved, onDone }: { botId: string; set: Study
             </div>
             <div className="absolute inset-0 flex rotate-y-180 flex-col items-center justify-center rounded-3xl border border-primary/30 bg-card p-6 text-center shadow-soft backface-hidden" aria-live="polite">
               <p className="text-lg leading-relaxed text-balance whitespace-pre-wrap sm:text-xl">{flipped ? card.back : ""}</p>
-              {card.source ? <span className="absolute bottom-4 rounded-full bg-muted px-2.5 py-0.5 text-xs text-muted-foreground">{card.source}</span> : null}
+              {card.source && !card.sourceUrl ? <span className="absolute bottom-4 rounded-full bg-muted px-2.5 py-0.5 text-xs text-muted-foreground">{card.source}</span> : null}
             </div>
           </div>
         </button>
+        {/* A link can't sit inside the card's flip button: it goes just under the card. */}
+        {flipped && card.sourceUrl ? (
+          <div className="mt-2 flex justify-center">
+            <SourceLink url={card.sourceUrl} label={card.source} />
+          </div>
+        ) : null}
       </div>
       <div className="mt-5 flex justify-center gap-3 px-5 sm:px-6">
         {flipped ? (
@@ -319,7 +342,7 @@ function Quiz({
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (done || !q || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return;
+      if (done || !q || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement || e.target instanceof HTMLAnchorElement) return;
       if (/^[1-6]$/.test(e.key) && q.choices && !current) {
         const c = q.choices[Number(e.key) - 1];
         if (c) pick(c);
@@ -512,7 +535,13 @@ function Explanation({ q, right }: { q: QuizQuestion; right: boolean }) {
     <div className={cn("mt-4 rounded-2xl px-4 py-3 text-sm animate-fade-up", right ? "bg-success-soft" : "bg-danger-soft")} role="status">
       <div className={cn("font-semibold", right ? "text-success" : "text-danger")}>{right ? "Right!" : `Not quite. The answer is: ${q.answer}`}</div>
       {q.explanation ? <p className="mt-1 text-foreground/90">{q.explanation}</p> : null}
-      {q.source && !q.explanation?.includes(q.source) ? <p className="mt-1.5 text-xs text-muted-foreground">{q.source}</p> : null}
+      {q.sourceUrl ? (
+        <p className="mt-1.5">
+          <SourceLink url={q.sourceUrl} label={q.source} />
+        </p>
+      ) : q.source && !q.explanation?.includes(q.source) ? (
+        <p className="mt-1.5 text-xs text-muted-foreground">{q.source}</p>
+      ) : null}
     </div>
   );
 }

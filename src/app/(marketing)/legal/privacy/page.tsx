@@ -34,7 +34,7 @@ const SUBPROCESSORS: { name: string; purpose: string; data: string }[] = [
   { name: "Our managed Postgres host", purpose: "Storing your account and bots", data: "Account, bots, messages, receipts (secrets stay encrypted)" },
   { name: "Nebius Token Factory", purpose: "The included open models", data: "Messages and context, when your bot uses an included model (and dictated text, when voice typing's cleanup runs there)" },
   { name: "Your chosen AI provider", purpose: "Your own API key, if you add one", data: "Messages and context, sent to that provider only" },
-  { name: "Tavily", purpose: "Web search", data: "Search queries" },
+  { name: "Tavily", purpose: "Web search, reading web pages and checking facts", data: "Search queries, short facts to check (never your files) and the addresses of pages your bot reads" },
   {
     name: "Nebius AI Cloud (our speech server, running NVIDIA's open speech models), with Together AI as a backup",
     purpose: "Turning speech into text only when your computer can't (if Private speech is off, or Parakeet can't run on it)",

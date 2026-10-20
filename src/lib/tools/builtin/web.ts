@@ -4,9 +4,20 @@ import { truncate } from "@/lib/utils";
 import { defineTool, type ToolOutput, type ToolSource } from "../types";
 import { assertPublicUrl, fetchWithTimeout, htmlToText, UnsafeUrlError, USER_AGENT } from "../net";
 
-type TavilyResult = { title: string; url: string; content: string; published_date?: string };
+export type TavilyResult = { title: string; url: string; content: string; published_date?: string };
 
-async function tavilySearch(query: string, opts: { topic?: "general" | "news"; maxResults?: number; signal?: AbortSignal }) {
+export type TavilySearchOptions = {
+  topic?: "general" | "news";
+  maxResults?: number;
+  /** Sites to search: only these, or with `includeDomainsMode: "prefer"` these first. Whole domains: Tavily refuses "*.edu" (HTTP 400). */
+  includeDomains?: string[];
+  includeDomainsMode?: "prefer";
+  excludeDomains?: string[];
+  signal?: AbortSignal;
+};
+
+/** One Tavily search (one credit at basic depth), with Tavily's short answer. */
+export async function tavilySearch(query: string, opts: TavilySearchOptions = {}) {
   const res = await fetchWithTimeout("https://api.tavily.com/search", {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${config.tavily.apiKey}` },
@@ -16,6 +27,8 @@ async function tavilySearch(query: string, opts: { topic?: "general" | "news"; m
       search_depth: "basic",
       max_results: opts.maxResults ?? 5,
       include_answer: true,
+      ...(opts.includeDomains?.length ? { include_domains: opts.includeDomains, ...(opts.includeDomainsMode ? { include_domains_mode: opts.includeDomainsMode } : {}) } : {}),
+      ...(opts.excludeDomains?.length ? { exclude_domains: opts.excludeDomains } : {}),
     }),
     signal: opts.signal,
     timeoutMs: 20000,

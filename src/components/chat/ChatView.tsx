@@ -32,6 +32,8 @@ type ServerEvent =
 
 const TOOL_ACTIVITY: Record<string, string> = {
   web_search: "Searching the web",
+  check_facts: "Checking the facts",
+  find_course_sources: "Looking up the course",
   news_headlines: "Checking the news",
   read_webpage: "Reading the page",
   get_weather: "Checking the weather",
