@@ -98,4 +98,18 @@ describe("a turn where the model narrates instead of acting", () => {
     expect(bodies).toHaveLength(1);
     expect(out.text).toBe("Happy to! From your syllabus or your whiteboard photo?");
   });
+
+  it("doesn't push on a call, where a quiz is one question out loud", async () => {
+    const res = await createBot(db, owner, {
+      avatar: "otto", color: "grape", name: "Caller", jobs: [], brain: { kind: "included", model: "nvidia/Nemotron-3_5-Lightning" },
+      connectors: [], trust: "ask", channels: [], contact: {}, ageConfirmed: true, timezone: "UTC",
+    });
+    if (!res.ok) throw new Error(res.error);
+    const bodies = stubModel(() => ({ text: "Okay. Where in the chloroplast does the Calvin cycle happen." }));
+    const conversation = await ensureConversation(db, res.bot.id, "voice", "call:test");
+    const out = await runTurn({ db, bot: res.bot, owner, conversation, channelKind: "voice", message: { text: "Give me a practice quiz on my Calvin cycle notes", author: "owner" } });
+    expect(bodies).toHaveLength(1);
+    expect(out.text).toMatch(/Where in the chloroplast does the Calvin cycle happen/);
+    expect(out.text).not.toMatch(/\bA\)|make_quiz/);
+  });
 });

@@ -89,6 +89,14 @@ describe("what a role changes in the prompt", () => {
     expect(general).toContain("What Dana wants help with:\n- School:");
   });
 
+  it("on a call, a tutor quizzes out loud, one short question at a time", () => {
+    const call = buildStablePrompt({ name: "Otto", avatar: "otto", role: "tutor", jobs: ["school"], trust: "ask" } as Bot, owner, "voice", null);
+    expect(call).toContain("To quiz them on a call, ask one short question out loud (no multiple choice, no lettered options)");
+    expect(call).toContain("don't make a study set unless they ask for one to keep");
+    const chat = buildStablePrompt({ name: "Otto", avatar: "otto", role: "tutor", jobs: ["school"], trust: "ask" } as Bot, owner, "web", null);
+    expect(chat).not.toContain("To quiz them on a call");
+  });
+
   it("an unknown role is ignored", () => {
     const prompt = buildStablePrompt({ name: "Otto", avatar: "otto", role: "pirate", jobs: [] as string[], trust: "ask" } as Bot, owner, "web", null);
     expect(prompt).toContain("a personal AI assistant for Dana");
