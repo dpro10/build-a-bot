@@ -14,7 +14,7 @@ cd "$(dirname "$0")"
 mkdir -p build
 for arch in arm64 x86_64; do
   xcrun swiftc -O -swift-version 5 -target "${arch}-apple-macos13.0" \
-    -framework CoreAudio -framework AppKit \
+    -framework CoreAudio -framework AppKit -framework ApplicationServices \
     -o "build/bab-audio-helper-${arch}" BabAudioHelper.swift
 done
 lipo -create -output build/bab-audio-helper build/bab-audio-helper-arm64 build/bab-audio-helper-x86_64

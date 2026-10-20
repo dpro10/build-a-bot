@@ -46,6 +46,8 @@
   let mics = [];
   let dict = { entries: [], fromMemories: [], bots: [] };
   let dictLoaded = false;
+  /** When the newest word learned from a fix was learned (undefined until the first render). */
+  let learnedAt;
   /** The history entry being fixed, and what it suggests. */
   let fixing = null;
   let suggestions = {};
@@ -148,6 +150,7 @@
 
     renderShortcuts(s);
     for (const input of document.querySelectorAll("input[data-opt]")) input.checked = Boolean(s.options[input.dataset.opt]);
+    renderLearn(s);
     $("commands-title").textContent = bot ? `Talk to ${bot.name}` : "Talk to your bot";
     $("commands-hint").textContent = bot
       ? `Start with “Hey ${bot.name}” to ask instead of typing: “Hey ${bot.name}, remind me to call Mom at 5.” Writing to someone named ${bot.name}? Turn this off.`
@@ -155,6 +158,21 @@
     renderSelects(s);
     renderLocal(s);
     renderHistory(s);
+  }
+
+  /** Learning from fixes: only where this computer can read the box typed into (macOS, Windows). */
+  function renderLearn(s) {
+    const learn = s.learn || {};
+    $("learn-row").hidden = !learn.supported;
+    const access = s.platform === "darwin" && s.permissions.accessibility === false ? " It needs Accessibility, like pasting does." : "";
+    $("learn-hint").textContent = `Fix a word right where it was typed, and it's spelled your way from then on. For two minutes after typing, it reads that text box on this computer (never a password box); only the word you fixed is saved.${access}`;
+    // A word just learned: show it in Your words.
+    const newest = learn.learned?.[0]?.at ?? null;
+    if (newest !== learnedAt) {
+      const first = learnedAt === undefined;
+      learnedAt = newest;
+      if (!first) void loadDictionary();
+    }
   }
 
   const MB = (b) => Math.round(b / 1e6).toLocaleString();

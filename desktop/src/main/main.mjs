@@ -196,6 +196,8 @@ async function boot() {
     openAppLink,
     showPairing: () => void pairing.show(),
     ensureMicAccess,
+    notify,
+    macHelper: findMacHelper(),
     onChange: () => {
       tray?.update();
       voice?.pushState();
@@ -660,8 +662,9 @@ async function ensureMicAccess() {
   }
 }
 
-function notify({ title, body, onClick }) {
-  log(`notify: ${title}`);
+/** `logAs`: what the log says instead of the title (one that holds the owner's words). */
+function notify({ title, body, onClick, logAs }) {
+  log(`notify: ${logAs ?? title}`);
   if (!Notification.isSupported()) return;
   const n = new Notification({ title, body, icon: process.platform === "linux" ? NOTIFY_ICON : undefined });
   notifications.add(n);

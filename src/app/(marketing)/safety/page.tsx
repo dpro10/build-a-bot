@@ -263,9 +263,15 @@ export default function SafetyPage() {
               being stored, and we keep a count of the words for Credit &amp; usage, that&apos;s all.
             </li>
             <li>
-              <strong>It doesn&apos;t look at your screen.</strong> To match the app&apos;s style, it sends the kind of app you&apos;re typing in
+              <strong>It doesn&apos;t send what&apos;s on your screen.</strong> To match the app&apos;s style, it sends the kind of app you&apos;re typing in
               (&ldquo;chat&rdquo;, &ldquo;email&rdquo;) and, for well-known apps like Slack, its name. Never what&apos;s on your screen or in
               the window.
+            </li>
+            <li>
+              <strong>It learns from your fixes, on your computer.</strong> For two minutes after it types, the desktop app reads the text box it
+              just typed into (never a password box, never another one), so that when you fix a word it got wrong right there, it learns it. What
+              it reads stays on your computer and isn&apos;t logged; only the word you fixed is saved, to your words, where you can remove it.
+              You can turn this off in the app.
             </li>
             <li>
               <strong>Your bot only acts when you ask it by name.</strong> Dictated text is just text: it&apos;s cleaned up, never followed as an

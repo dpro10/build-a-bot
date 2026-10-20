@@ -1,7 +1,8 @@
 /**
  * Voice typing, wired into the app: picks how the shortcut is heard (the keyboard hook, or a
  * plain global shortcut while macOS Accessibility isn't allowed), keeps the pill page loaded,
- * runs the settings window and its messages, and tells the tray what to show.
+ * runs the settings window and its messages, tells the tray what to show, and learns a word the
+ * owner fixes right where it was typed (fix-watch.mjs).
  *
  * Everything here starts only once the owner turns voice typing on, on a paired computer.
  */
@@ -10,15 +11,17 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { ApiError } from "../api.mjs";
 import { VoiceTyping } from "./controller.mjs";
+import { FixWatcher } from "./fix-watch.mjs";
 import { FrontApp, permissionApp } from "./front-app.mjs";
 import { minutesSaved, VoiceHistory, wordsPerMinute, wordsThisWeek } from "./history.mjs";
 import { Hotkey, ToggleHotkey } from "./hotkey.mjs";
 import { checkCustom, keyName, presetsFor, resolveShortcut } from "./keys.mjs";
-import { suggestWords } from "./learn.mjs";
+import { stillToLearn, suggestWords } from "./learn.mjs";
 import { LOCAL_LANGUAGES, LocalSpeech, localFirst } from "./local-speech.mjs";
 import { Paster, pressCopy, pressPaste } from "./paste.mjs";
 import { PillWindow } from "./pill-window.mjs";
 import { VoiceSettingsWindow } from "./settings-window.mjs";
+import { TextReader } from "./text-reader.mjs";
 
 const require = createRequire(import.meta.url);
 const TOGGLE_ACCELERATOR = "CommandOrControl+Shift+Space";
@@ -41,6 +44,8 @@ function toggleLabel(platform) {
  * @param {(url: string, opts?: any) => void} o.openAppLink
  * @param {() => void} o.showPairing
  * @param {() => Promise<boolean>} o.ensureMicAccess
+ * @param {(n: { title: string, body: string, onClick?: () => void, logAs?: string }) => void} o.notify
+ * @param {string | null} [o.macHelper]  the Swift helper (macOS), which reads the box typed into
  * @param {() => void} o.onChange  tray and windows should refresh
  * @param {(m: string) => void} o.log
  */
@@ -77,6 +82,17 @@ export function setupVoice(o) {
   let localTriedAt = 0;
   const frontApp = new FrontApp({ log });
   const settingsWindow = new VoiceSettingsWindow({ log, onClosed: () => stopAccessibilityWatch() });
+  // A word fixed right where it was typed is learned: that box is read on this computer for a
+  // couple of minutes after pasting (never logged), and only the word goes to the dictionary.
+  const reader = new TextReader({ platform, macHelper: o.macHelper ?? null, log });
+  const fixes = new FixWatcher({
+    reader,
+    enabled: learnOn,
+    onFix: (fix) => void learnFix(fix).catch((err) => log(`learn: couldn't learn (${String(err?.message ?? err).slice(0, 120)})`)),
+    log,
+  });
+  /** Words learned this run, for the settings window (newest first). */
+  const learned = /** @type {Array<{ text: string, heard: string[], at: number }>} */ ([]);
 
   /** @type {Hotkey | null} */
   let hook = null;
@@ -222,8 +238,55 @@ export function setupVoice(o) {
     },
   });
   voice.on("change", () => o.onChange());
-  voice.on("dictated", () => pushState());
+  voice.on("dictated", (d) => {
+    // Typed where the cursor was: watch that box for a fix (an edit's words are the AI's, not misheard).
+    if (d?.pasted && !d.edit) fixes.watch({ text: d.text, app: d.app ?? null });
+    pushState();
+  });
+  // Ready by the time the words are typed (it stops again after a while without dictating).
+  voice.on("recording", () => {
+    if (learnOn()) void reader.warm();
+  });
   voice.on("asked", () => pushState());
+
+  /** Learning from fixes is on, and this computer can read the box typed into (macOS: Accessibility). */
+  function learnOn() {
+    const v = settings.get().voice;
+    return Boolean(v.enabled && v.learnFixes !== false && account.device && reader.supported && (platform !== "darwin" || trusted()));
+  }
+
+  /**
+   * Words the owner fixed where they were typed: into the dictionary (as corrections), unless it
+   * already has them; then a notification says what was learned. Never logs the words.
+   * @param {{ words: Array<{ text: string, heard: string[] }> }} fix
+   */
+  async function learnFix(fix) {
+    if (!learnOn()) return;
+    const dict = await call(() => api.dictionary());
+    if (!dict.ok) return log("learn: couldn't read the dictionary; nothing learned");
+    const known = (dict.data?.entries ?? []).filter((x) => x.kind === "word").map((x) => String(x.text));
+    const words = stillToLearn(fix.words, known);
+    if (!words.length) return log("learn: the dictionary already has it");
+    const added = [];
+    for (const w of words) {
+      const r = await call(() => api.addDictionaryEntry({ kind: "word", text: w.text, heard: w.heard, source: "correction" }));
+      if (r.ok) added.push(w);
+      else log(`learn: the server didn't take a word (${String(r.error).slice(0, 120)})`);
+    }
+    if (!added.length) return;
+    log(`learn: learned ${added.length} word${added.length === 1 ? "" : "s"}`);
+    for (const w of added) learned.unshift({ text: w.text, heard: w.heard, at: Date.now() });
+    learned.splice(20);
+    const first = added[0];
+    const more = added.length > 1 ? ` (and ${added.length - 1} more)` : "";
+    o.notify({
+      title: `Learned “${first.text}”${more}`,
+      body: first.heard.length ? `From now on it types “${first.text}”, not “${first.heard[0]}”. Change it in Voice typing settings.` : `From now on it writes it “${first.text}”. Change it in Voice typing settings.`,
+      onClick: () => void showSettings("dictionary"),
+      logAs: `learned ${added.length} word${added.length === 1 ? "" : "s"}`,
+    });
+    pushState();
+  }
 
   /** Open the connection to the server, and start Parakeet, while the owner talks, so sending is quick. */
   function warmUp() {
@@ -313,6 +376,8 @@ export function setupVoice(o) {
       active = null;
       mode = "off";
       problem = null;
+      fixes.stop("off");
+      reader.stop();
       await voice.interrupt();
       pill.destroy();
       o.onChange();
@@ -465,6 +530,7 @@ export function setupVoice(o) {
         micId: v.micId,
         history: v.history,
         restoreClipboard: v.restoreClipboard,
+        learnFixes: v.learnFixes !== false,
       },
       permissions: { mic: micStatus(), accessibility: platform === "darwin" ? trusted() : null, app: askedFor },
       server: sessionVoice ? { available: sessionVoice.available, polish: sessionVoice.polish, edit: sessionVoice.edit === true, simulated: sessionVoice.simulated } : null,
@@ -475,6 +541,8 @@ export function setupVoice(o) {
       bots: account.bots().map((b) => ({ id: b.id, name: b.name })),
       history: v.history ? history.list().slice(0, 50) : [],
       last: voice.last,
+      /** Learning from fixes: whether this computer can (macOS: once Accessibility is allowed), and what it learned. */
+      learn: { supported: reader.supported, learned: learned.slice(0, 5) },
       /** Speech-to-text on this computer: where it's at. */
       local: {
         ...local.status(),
@@ -525,7 +593,7 @@ export function setupVoice(o) {
       fromWindow(e);
       const p = /** @type {Record<string, unknown>} */ (patch ?? {});
       const next = {};
-      for (const k of ["enabled", "polish", "styles", "commands", "edit", "onDevice", "sounds", "history", "restoreClipboard"]) if (typeof p[k] === "boolean") next[k] = p[k];
+      for (const k of ["enabled", "polish", "styles", "commands", "edit", "onDevice", "sounds", "history", "restoreClipboard", "learnFixes"]) if (typeof p[k] === "boolean") next[k] = p[k];
       if (typeof p.language === "string" && /^(auto|[a-z]{2})$/.test(p.language)) next.language = p.language;
       if (typeof p.micId === "string" && p.micId.length <= 300) next.micId = p.micId;
       if (typeof p.shortcut === "string" && (presetsFor(platform).some((x) => x.id === p.shortcut) || (p.shortcut === "custom" && settings.get().voice.customKeys))) next.shortcut = p.shortcut;
@@ -533,6 +601,10 @@ export function setupVoice(o) {
       if (next.history === false) history.clear();
       if (next.onDevice === true) maybeInstall(true);
       if (next.onDevice === false) void local.stop();
+      if (next.learnFixes === false) {
+        fixes.stop("off");
+        reader.stop();
+      }
       if ("enabled" in next || "shortcut" in next || Object.keys(next).length === 0) await apply();
       return state();
     });
@@ -650,9 +722,14 @@ export function setupVoice(o) {
       };
     },
     /** The screen locked or the computer is going to sleep. */
-    interrupt: () => voice.interrupt(),
+    interrupt: () => {
+      fixes.stop("off");
+      return voice.interrupt();
+    },
     /** Unpaired: stop, and forget this account's history. */
     forget() {
+      fixes.stop("off");
+      learned.length = 0;
       voice.forget();
       void apply();
     },
@@ -660,6 +737,8 @@ export function setupVoice(o) {
       void local.stop();
       stopAccessibilityWatch();
       active?.disable();
+      fixes.dispose();
+      reader.dispose();
       frontApp.dispose();
       pill.destroy();
     },
@@ -704,6 +783,16 @@ export function setupVoice(o) {
         return a ? `ok (${a.category}${a.name ? `: ${a.name}` : ""})` : "ok (nothing in front)";
       });
       await step("private speech", async () => (local.supported() ? `ok (${process.platform}-${process.arch})` : `ok (not on ${process.platform}-${process.arch}: the server hears)`));
+      await step("text reader", async () => {
+        if (!reader.supported) {
+          if (platform === "darwin") throw new Error("the helper isn't in the app");
+          return `ok (not on ${platform})`;
+        }
+        const r = await reader.ping();
+        if (!r.ok) throw new Error(`it didn't answer (${r.error})`);
+        if (platform === "darwin") return r.trusted ? "ok (Accessibility allowed)" : "ok (reads once Accessibility is allowed)";
+        return "ok (UI Automation)";
+      });
       return out;
     },
     /** For the e2e test: a read-only look (never includes the token). */
@@ -719,6 +808,8 @@ export function setupVoice(o) {
         usage: voice.usage,
         problem: problem?.message ?? null,
         local: { state: local.status().state, active: onDevice() },
+        // Counts only, never what was read or learned.
+        learn: { supported: reader.supported, on: learnOn(), watching: fixes.watching, found: fixes.found, stats: fixes.stats, learned: learned.length },
       };
     },
   };
