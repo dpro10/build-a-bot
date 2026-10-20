@@ -1,8 +1,9 @@
 /**
  * Voice typing, wired into the app: picks how the shortcut is heard (the keyboard hook, or a
  * plain global shortcut while macOS Accessibility isn't allowed), keeps the pill page loaded,
- * runs the settings window and its messages, tells the tray what to show, and learns a word the
- * owner fixes right where it was typed (fix-watch.mjs).
+ * runs the settings window and its messages, tells the tray what to show, learns a word the
+ * owner fixes right where it was typed (fix-watch.mjs), and spaces a dictation against the words
+ * next to the cursor (spacing.mjs).
  *
  * Everything here starts only once the owner turns voice typing on, on a paired computer.
  */
@@ -132,6 +133,13 @@ export function setupVoice(o) {
       if (!hook?.running) return;
       await hook.waitForRelease(hook.state.down ? 15_000 : 800);
     },
+    // Right before a dictation is typed: the few characters next to the cursor, so it doesn't run
+    // into the words there. Read on this computer (never logged); null when the box can't be read.
+    around: async () => {
+      if (!spaceOn()) return null;
+      const r = await reader.around();
+      return r.ok ? { before: r.before, after: r.after } : null;
+    },
     log,
   });
 
@@ -245,7 +253,7 @@ export function setupVoice(o) {
   });
   // Ready by the time the words are typed (it stops again after a while without dictating).
   voice.on("recording", () => {
-    if (learnOn()) void reader.warm();
+    if (learnOn() || spaceOn()) void reader.warm();
   });
   voice.on("asked", () => pushState());
 
@@ -253,6 +261,12 @@ export function setupVoice(o) {
   function learnOn() {
     const v = settings.get().voice;
     return Boolean(v.enabled && v.learnFixes !== false && account.device && reader.supported && (platform !== "darwin" || trusted()));
+  }
+
+  /** Spacing is on, and this computer can read what's next to the cursor (macOS: Accessibility). */
+  function spaceOn() {
+    const v = settings.get().voice;
+    return Boolean(v.enabled && v.spacing !== false && reader.supported && (platform !== "darwin" || trusted()));
   }
 
   /**
@@ -531,6 +545,7 @@ export function setupVoice(o) {
         history: v.history,
         restoreClipboard: v.restoreClipboard,
         learnFixes: v.learnFixes !== false,
+        spacing: v.spacing !== false,
       },
       permissions: { mic: micStatus(), accessibility: platform === "darwin" ? trusted() : null, app: askedFor },
       server: sessionVoice ? { available: sessionVoice.available, polish: sessionVoice.polish, edit: sessionVoice.edit === true, simulated: sessionVoice.simulated } : null,
@@ -593,7 +608,7 @@ export function setupVoice(o) {
       fromWindow(e);
       const p = /** @type {Record<string, unknown>} */ (patch ?? {});
       const next = {};
-      for (const k of ["enabled", "polish", "styles", "commands", "edit", "onDevice", "sounds", "history", "restoreClipboard", "learnFixes"]) if (typeof p[k] === "boolean") next[k] = p[k];
+      for (const k of ["enabled", "polish", "styles", "commands", "edit", "onDevice", "sounds", "history", "restoreClipboard", "learnFixes", "spacing"]) if (typeof p[k] === "boolean") next[k] = p[k];
       if (typeof p.language === "string" && /^(auto|[a-z]{2})$/.test(p.language)) next.language = p.language;
       if (typeof p.micId === "string" && p.micId.length <= 300) next.micId = p.micId;
       if (typeof p.shortcut === "string" && (presetsFor(platform).some((x) => x.id === p.shortcut) || (p.shortcut === "custom" && settings.get().voice.customKeys))) next.shortcut = p.shortcut;
@@ -601,10 +616,9 @@ export function setupVoice(o) {
       if (next.history === false) history.clear();
       if (next.onDevice === true) maybeInstall(true);
       if (next.onDevice === false) void local.stop();
-      if (next.learnFixes === false) {
-        fixes.stop("off");
-        reader.stop();
-      }
+      if (next.learnFixes === false) fixes.stop("off");
+      // Nothing reads the box anymore: the reader stops (it starts again if one is turned back on).
+      if ((next.learnFixes === false || next.spacing === false) && !learnOn() && !spaceOn()) reader.stop();
       if ("enabled" in next || "shortcut" in next || Object.keys(next).length === 0) await apply();
       return state();
     });
@@ -790,6 +804,9 @@ export function setupVoice(o) {
         }
         const r = await reader.ping();
         if (!r.ok) throw new Error(`it didn't answer (${r.error})`);
+        // It can tell what's next to the cursor (for spacing), or says why not (never "unknown").
+        const a = await reader.around();
+        if (!a.ok && (a.error === "unknown" || a.error === "unreadable")) throw new Error(`it can't tell what's next to the cursor (${a.error})`);
         if (platform === "darwin") return r.trusted ? "ok (Accessibility allowed)" : "ok (reads once Accessibility is allowed)";
         return "ok (UI Automation)";
       });
@@ -810,6 +827,7 @@ export function setupVoice(o) {
         local: { state: local.status().state, active: onDevice() },
         // Counts only, never what was read or learned.
         learn: { supported: reader.supported, on: learnOn(), watching: fixes.watching, found: fixes.found, stats: fixes.stats, learned: learned.length },
+        spacing: { on: spaceOn() },
       };
     },
   };

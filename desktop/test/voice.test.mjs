@@ -591,9 +591,11 @@ function setupVoice(opts = {}) {
     },
   };
   const pasted = [];
+  const inserts = [];
   const paster = {
     async insert(text, o) {
       pasted.push(text);
+      inserts.push(o ?? {});
       calls.push(`paste:${o?.category ?? "-"}`);
       return opts.canPaste === false ? { pasted: false, copied: true } : { pasted: true, copied: false };
     },
@@ -632,7 +634,7 @@ function setupVoice(opts = {}) {
     platform: opts.platform ?? "darwin",
     limits: { doneMs: 30, noteMs: 30, errorMs: 30, replyMs: 60_000 },
   });
-  return { v, hotkey, calls, states, pasted, history, opened, phases: () => states.map((s) => s.phase) };
+  return { v, hotkey, calls, states, pasted, inserts, history, opened, phases: () => states.map((s) => s.phase) };
 }
 
 test("hold, talk, let go: it's typed where the cursor is, in the app's style", async () => {
@@ -649,6 +651,38 @@ test("hold, talk, let go: it's typed where the cursor is, in the app's style", a
   assert.equal(h.app, "Slack");
   assert.equal(env.v.settings.get().voiceStats.total, 4);
   assert.deepEqual(env.v.usage, { words: 4, limit: 8000 });
+});
+
+test("a dictation is spaced against the words next to the cursor (in the app it went to), unless spacing is off", async () => {
+  const env = setupVoice();
+  env.hotkey.emit("start");
+  await flush();
+  env.hotkey.emit("stop");
+  await flush(20);
+  assert.deepEqual(env.inserts, [{ category: "chat", restore: true, space: true, app: "Slack" }]);
+  // What's kept is what was said, without the spacing.
+  assert.equal(env.history.list()[0].text, "Let's meet at 3.");
+
+  const off = setupVoice({ voice: { spacing: false } });
+  off.hotkey.emit("start");
+  await flush();
+  off.hotkey.emit("stop");
+  await flush(20);
+  assert.equal(off.inserts[0].space, false);
+
+  // Over a selection, the edit replaces exactly what was selected; written at the cursor, it's spaced.
+  const edit = setupVoice({ results: [{ kind: "text", text: "Make it friendlier.", words: 3 }] });
+  edit.hotkey.emit("start", { edit: true });
+  await flush();
+  edit.hotkey.emit("stop");
+  await flush(30);
+  assert.deepEqual(edit.inserts, [{ category: "chat", restore: true, space: false, app: "Slack" }]);
+  const write = setupVoice({ selection: null, results: [{ kind: "text", text: "Write a short thank-you note.", words: 5 }], editResults: [{ kind: "replace", text: "Thank you so much for your help!", words: 6, ms: 300 }] });
+  write.hotkey.emit("start", { edit: true });
+  await flush();
+  write.hotkey.emit("stop");
+  await flush(30);
+  assert.deepEqual(write.inserts, [{ category: "chat", restore: true, space: true, app: "Slack" }]);
 });
 
 test("a server that doesn't hear recordings, and Parakeet not ready yet: the pill says why, and nothing is recorded, sent or typed", async () => {

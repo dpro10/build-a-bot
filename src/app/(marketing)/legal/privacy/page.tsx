@@ -121,7 +121,9 @@ export default function PrivacyPage() {
             you&apos;re typing in (like &ldquo;chat&rdquo; or &ldquo;email&rdquo;) and, for well-known apps, its name are sent along so the text fits
             it, never what&apos;s on your screen. To spell your names right, the names your bots remember are used as hints. To learn from
             your fixes, the desktop app reads the text box it just typed into, on your computer, for two minutes (never a password box); what it
-            reads isn&apos;t sent or logged, and only a word you fixed is added to your dictionary (you can turn this off). The desktop app keeps your recent dictations
+            reads isn&apos;t sent or logged, and only a word you fixed is added to your dictionary (you can turn this off). So your words
+            don&apos;t run together, it also looks at the few characters next to your cursor right before it types, on your computer; they
+            aren&apos;t sent, logged or kept (you can turn this off too). The desktop app keeps your recent dictations
             on your own computer, encrypted, and you can turn that off or clear it. A request that starts with your bot&apos;s name (&ldquo;Hey
             Otto, &hellip;&rdquo;) goes to your bot like a typed message, and is kept in your chat with it. When you edit by voice, the text you
             selected is sent along with what you said, used once to make the change, and not stored. If you ask your bot about text you
