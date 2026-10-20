@@ -125,7 +125,7 @@ export function HowItWorks() {
     { title: "Name it", body: "Anything you like. Stuck? Tap Surprise me.", visual: <NameVisual /> },
     {
       title: "Give it a brain",
-      body: "Open models we run (at cost), your own API key, or the Claude or ChatGPT plan you already pay for.",
+      body: "Open models on Nebius (at cost), or your own API key from the AI company you like.",
       visual: <BrainVisual />,
     },
     { title: "Apps & trust", body: "Connect the apps it can use, then decide how much it may do on its own.", visual: <AppsVisual /> },

@@ -34,7 +34,7 @@ export function PayAsYouGo({ className }: { className?: string }) {
     {
       icon: <KeyRound />,
       title: "Free with your own AI",
-      body: `Run your bot on your own API key, or on the Claude or ChatGPT plan you already pay for, and its thinking is free here (fair use: ${FAIR_USE.ownBrainMessages.toLocaleString("en-US")} messages a month).`,
+      body: `Run your bot on your own API key and its thinking is free here (fair use: ${FAIR_USE.ownBrainMessages.toLocaleString("en-US")} messages a month).`,
     },
   ];
   const amounts = TOP_UPS_USD.map((usd) => `$${usd}`);
