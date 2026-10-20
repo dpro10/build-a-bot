@@ -62,6 +62,10 @@ const winkey = (...args) => run("python", [path.join(FIXTURES, "winkey.py"), ...
 const UIA_DUMP = `
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
+try {
+  Add-Type -AssemblyName UIAutomationClientsideProviders
+  [System.Windows.Automation.ClientSettings]::RegisterClientSideProviderAssembly([UIAutomationClientsideProviders.UIAutomationClientSideProviders].Assembly.GetName())
+} catch { 'no client-side providers: ' + $_ }
 $f = [System.Windows.Automation.AutomationElement]::FocusedElement
 $w = [System.Windows.Automation.TreeWalker]::ControlViewWalker
 function Show($e, $depth) {
@@ -80,6 +84,18 @@ function Walk($e, $depth) { Show $e $depth; if ($depth -ge 3) { return }; $k = $
 Walk $top 0
 `;
 const uiaDump = () => run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", UIA_DUMP]).catch((err) => `couldn't look: ${err.message}`);
+
+/** macOS, when a box isn't read: which app the system says is in front (for the log). */
+async function macFront() {
+  try {
+    const asn = await run("lsappinfo", ["front"]);
+    return `front app: ${await run("lsappinfo", ["info", "-only", "name", asn])} (${asn})`;
+  } catch (err) {
+    return `couldn't look: ${/** @type {Error} */ (err).message}`;
+  }
+}
+/** What the platform sees, when a box isn't read. */
+const whatItSees = () => (WIN ? uiaDump() : macFront());
 
 /** macOS: Quartz key events (e2e/fixtures/mackey.swift), built once. */
 let mackeyBin = process.env.BAB_E2E_MACKEY || null;
@@ -191,8 +207,8 @@ test("an Electron app's text box: the text in it, and where the caret is", { ski
   await until("the text box to be read", async () => {
     r = await reader.focus();
     return r.ok && normalizeText(r.value).text.includes("Meet pro zee");
-  }, 15_000, 400).catch((err) => {
-    throw new Error(`${err.message}; last answer: ${JSON.stringify({ ...r, value: r?.value === undefined ? undefined : `${r.value.length} characters` })}`);
+  }, 15_000, 400).catch(async (err) => {
+    throw new Error(`${err.message}; last answer: ${JSON.stringify({ ...r, value: r?.value === undefined ? undefined : `${r.value.length} characters` })}\n${await whatItSees()}`);
   });
   const text = normalizeText(r.value);
   assert.equal(text.text, "Dear team,\nMeet pro zee at the lab.");
@@ -267,13 +283,16 @@ test("the system's own editor (Notepad, TextEdit): read, and a fix typed there l
     await run("open", ["-a", "TextEdit"]);
     extra.push(() => run("pkill", ["-x", "TextEdit"]));
     // Its document's text view has the focus once it's open (else: File › New).
+    let last;
     await until("TextEdit with a document", async () => {
       await run("open", ["-a", "TextEdit"]);
-      const r = await reader.focus();
-      if (r.ok && r.role === "AXTextArea") return true;
+      last = await reader.focus();
+      if (last.ok && last.role === "AXTextArea") return true;
       await mackey("tap", "n", "cmd");
       return false;
-    }, 45_000, 1500);
+    }, 45_000, 1500).catch(async (err) => {
+      throw new Error(`${err.message}; last answer: ${JSON.stringify({ ...last, value: last?.value === undefined ? undefined : `${last.value.length} characters` })}\n${await whatItSees()}`);
+    });
     await reader.forget();
   }
   await keys.type(typed);
@@ -283,7 +302,7 @@ test("the system's own editor (Notepad, TextEdit): read, and a fix typed there l
     return r.ok && normalizeText(r.value).text.trim() === typed;
   }, 10_000, 500).catch(async (err) => {
     const seen = JSON.stringify({ ...r, value: r?.value === undefined ? undefined : `${r.value.length} characters` });
-    throw new Error(`${err.message}; last answer: ${seen}${WIN ? `\n${await uiaDump()}` : ""}`);
+    throw new Error(`${err.message}; last answer: ${seen}\n${await whatItSees()}`);
   });
   console.log(`text reader: ${WIN ? "Notepad" : "TextEdit"} read (${r.role ?? "no role"}, caret ${JSON.stringify(r.selection ?? null)})`);
   await reader.forget();

@@ -243,9 +243,8 @@ export function setupVoice(o) {
     if (d?.pasted && !d.edit) fixes.watch({ text: d.text, app: d.app ?? null });
     pushState();
   });
+  // Ready by the time the words are typed (it stops again after a while without dictating).
   voice.on("recording", () => {
-    fixes.stop("next");
-    // Ready by the time the words are typed (it stops again after a while without dictating).
     if (learnOn()) void reader.warm();
   });
   voice.on("asked", () => pushState());

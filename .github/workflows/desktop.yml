@@ -411,9 +411,17 @@ jobs:
       # /System is protected).
       - name: Allow Accessibility
         run: |
+          sw_vers
           xcrun swiftc -O -o "$RUNNER_TEMP/mackey" e2e/fixtures/mackey.swift
           echo "BAB_E2E_MACKEY=$RUNNER_TEMP/mackey" >> "$GITHUB_ENV"
-          for client in "$APP/Contents/Resources/bin/bab-audio-helper" "$(node -p 'process.execPath')" "$APP/Contents/MacOS/Build-a-bot" "$RUNNER_TEMP/mackey"; do
+          # macOS checks Accessibility for the process "responsible" for these (the app, for an
+          # owner; here, whatever started this job's shell): allow that one too.
+          sudo launchctl procinfo $$ 2>/dev/null | grep -i responsible || true
+          resp_pid="$(sudo launchctl procinfo $$ 2>/dev/null | awk -F' = ' '/^[[:space:]]*responsible pid/ { print $2; exit }')"
+          resp="$(sudo launchctl procinfo $$ 2>/dev/null | awk -F' = ' '/^[[:space:]]*responsible path/ { print $2; exit }')"
+          if [ -z "$resp" ] && [ -n "$resp_pid" ]; then resp="$(ps -o comm= -p "$resp_pid" 2>/dev/null || true)"; fi
+          echo "responsible: ${resp:-unknown} (pid ${resp_pid:-?})"
+          for client in "$APP/Contents/Resources/bin/bab-audio-helper" "$(node -p 'process.execPath')" "$APP/Contents/MacOS/Build-a-bot" "$RUNNER_TEMP/mackey" ${resp:+"$resp"}; do
             sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" \
               "INSERT OR REPLACE INTO access(service,client,client_type,auth_value,auth_reason,auth_version,csreq,policy_id,indirect_object_identifier_type,indirect_object_identifier,indirect_object_code_identity,flags,last_modified) VALUES('kTCCServiceAccessibility','$client',1,2,4,1,NULL,NULL,0,'UNUSED',NULL,0,$(date +%s));" \
               && echo "allowed: $client" || echo "::warning::couldn't allow $client"

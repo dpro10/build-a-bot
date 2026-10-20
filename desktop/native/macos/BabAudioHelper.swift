@@ -336,6 +336,8 @@ struct TextReply: Codable {
     var selection: TextSelection? = nil
     var pid: Int32? = nil
     var focused: Bool? = nil
+    /** Why no box was found: Accessibility's error codes along the way (never any text). */
+    var detail: String? = nil
 }
 
 func axCopy(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
@@ -349,6 +351,18 @@ func axElement(_ value: CFTypeRef?) -> AXUIElement? {
     return unsafeBitCast(v, to: AXUIElement.self)
 }
 
+/** The app whose window is in front (its owner, from the window list: no permission needed). */
+func frontWindowOwner() -> pid_t? {
+    guard let info = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else { return nil }
+    let me = getpid()
+    for window in info {
+        guard let pid = window[kCGWindowOwnerPID as String] as? pid_t, pid != me,
+              (window[kCGWindowLayer as String] as? Int) == 0 else { continue }
+        return pid
+    }
+    return nil
+}
+
 func axRange(_ element: AXUIElement, _ attribute: String) -> CFRange? {
     guard let v = axCopy(element, attribute), CFGetTypeID(v) == AXValueGetTypeID() else { return nil }
     var range = CFRange(location: 0, length: 0)
@@ -360,6 +374,8 @@ final class TextBox {
     private var element: AXUIElement?
     /** Apps already asked to build their accessibility tree. */
     private var asked = Set<pid_t>()
+    /** What the last search for the focused element ran into (error codes; never any text). */
+    private var trail: [String] = []
 
     init() {
         AXUIElementSetMessagingTimeout(system, 0.5)
@@ -369,11 +385,31 @@ final class TextBox {
         axCopy(element, kAXValueAttribute) as? String != nil
     }
 
+    /** An attribute, noting what went wrong in `trail`. */
+    private func copy(_ element: AXUIElement, _ attribute: String, _ what: String) -> CFTypeRef? {
+        var value: CFTypeRef?
+        let error = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+        if error != .success { trail.append("\(what): \(error.rawValue)") }
+        return error == .success ? value : nil
+    }
+
+    /** The app in front: the one the system says has the focus, else the owner of the front window. */
+    private func frontApp() -> AXUIElement? {
+        if let app = axElement(copy(system, kAXFocusedApplicationAttribute, "focused app")) { return app }
+        guard let pid = frontWindowOwner() else {
+            trail.append("no front window")
+            return nil
+        }
+        trail.append("front window's app")
+        return AXUIElementCreateApplication(pid)
+    }
+
     /** The focused element, after asking a Chromium or Electron app in front for its tree if needed. */
     private func focused() -> AXUIElement? {
-        let first = axElement(axCopy(system, kAXFocusedUIElementAttribute))
+        trail = []
+        let first = axElement(copy(system, kAXFocusedUIElementAttribute, "focused element"))
         if let el = first, hasText(el) { return el }
-        guard let app = axElement(axCopy(system, kAXFocusedApplicationAttribute)) else { return first }
+        guard let app = frontApp() else { return first }
         AXUIElementSetMessagingTimeout(app, 0.5)
         var pid: pid_t = 0
         _ = AXUIElementGetPid(app, &pid)
@@ -385,7 +421,7 @@ final class TextBox {
                 if let el = axElement(axCopy(app, kAXFocusedUIElementAttribute)), hasText(el) { return el }
             }
         }
-        return axElement(axCopy(app, kAXFocusedUIElementAttribute)) ?? first
+        return axElement(copy(app, kAXFocusedUIElementAttribute, "app's focused element")) ?? first
     }
 
     private func describe(_ element: AXUIElement, full: Bool) -> TextReply {
@@ -418,7 +454,7 @@ final class TextBox {
     func focus() -> TextReply {
         element = nil
         guard AXIsProcessTrusted() else { return TextReply(ok: false, error: "not-trusted") }
-        guard let el = focused() else { return TextReply(ok: false, error: "no-focus") }
+        guard let el = focused() else { return TextReply(ok: false, error: "no-focus", detail: trail.joined(separator: "; ")) }
         AXUIElementSetMessagingTimeout(el, 0.5)
         element = el
         return describe(el, full: true)

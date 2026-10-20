@@ -22,13 +22,19 @@ export const MAX_CHARS = 20_000;
 /**
  * The Windows helper: UI Automation's focused element, kept between commands. Password boxes
  * (IsPassword) are refused. TextPattern gives the text and the caret; ValuePattern the text only.
- * Some apps report the focus on a container (Windows 11's Notepad: its window's pane): then the
- * text control inside it that has the keyboard focus, or its only one.
+ * Classic Windows text boxes (Notepad's, WordPad's, most older apps') are read through .NET's
+ * client-side providers, which have to be registered (without them they're bare panes). An app
+ * that reports the focus on a container: the text control inside it that has the keyboard focus,
+ * or its only one.
  */
 export const WIN_TEXT_SCRIPT = `
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
+try {
+  Add-Type -AssemblyName UIAutomationClientsideProviders
+  [System.Windows.Automation.ClientSettings]::RegisterClientSideProviderAssembly([UIAutomationClientsideProviders.UIAutomationClientSideProviders].Assembly.GetName())
+} catch { }
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
 $max = ${MAX_CHARS}
 $script:el = $null

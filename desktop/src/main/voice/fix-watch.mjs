@@ -6,15 +6,24 @@
  * the dictionary).
  *
  * What's read, and when:
- *  - only the box that was focused when the words were pasted, for at most two minutes, and only
- *    while the words typed can still be found in it (sent, cleared or rewritten: it stops);
+ *  - only the box the last dictation was typed into, for at most two minutes after each
+ *    dictation, and only while its words can be followed there (sent, cleared, rewritten, or
+ *    another box: it stops);
  *  - never a password box (the readers refuse them), never a box longer than the readers allow;
  *  - the comparison happens here, on this computer; nothing read leaves it, and nothing read is
  *    logged. Only the word learned goes to the owner's dictionary.
  *
+ * Following the words: each reading is compared with the one before (a third of a second apart,
+ * so what changed is one stretch of text). The words move with text added or taken away before
+ * them, grow or shrink with a change inside them (a fix), and stay put for changes after them.
+ * Text typed right at their end, or right against their start, is theirs (a word retyped after
+ * deleting it); a change across their edge, or over all of them, ends it. So another dictation
+ * into the same box, or a greeting typed above, doesn't stop it, and each of the last three
+ * dictations is followed on its own.
+ *
  * A fix is learned once it has held still for a few seconds (`settleMs`), so a word still being
- * typed ("Proz") isn't. When the owner moves on first (sends it, clears it, dictates again), the
- * newest fix counts if it held still a moment (`quickMs`). Each word is learned once a watch.
+ * typed ("Proz") isn't. When the owner moves on first (sends it, clears it, dictates into another
+ * box), the newest fix counts if it held still a moment (`quickMs`). A word is learned once.
  * The pure parts are exported for tests.
  */
 import { learnFromFix } from "./learn.mjs";
@@ -74,16 +83,53 @@ export function findAnchor(value, typed, caret = null) {
 }
 
 /**
- * The typed words as they read now, or null when the text around them changed (sent, cleared,
- * rewritten): everything before them must be as it was, and so must everything after (words
- * typed right after them are part of what's returned; learnFromFix ignores added words).
+ * The one stretch that differs between two readings: [start, before) of the old one became
+ * [start, after) of the new one (all three equal when nothing changed).
+ * @param {string} prev
+ * @param {string} cur
  */
-export function editedSpan(base, anchor, current) {
-  const pre = base.slice(0, anchor.start);
-  const post = base.slice(anchor.end);
-  if (current.length < pre.length + post.length) return null;
-  if (!current.startsWith(pre) || !current.endsWith(post)) return null;
-  return current.slice(pre.length, current.length - post.length);
+export function changedRange(prev, cur) {
+  const min = Math.min(prev.length, cur.length);
+  let start = 0;
+  while (start < min && prev.charCodeAt(start) === cur.charCodeAt(start)) start++;
+  let before = prev.length;
+  let after = cur.length;
+  while (before > start && after > start && prev.charCodeAt(before - 1) === cur.charCodeAt(after - 1)) {
+    before--;
+    after--;
+  }
+  return { start, before, after };
+}
+
+const SPACE = /\s/;
+
+/**
+ * Where the typed words are after one change (changedRange), or null when it took them away: all
+ * of them, or across their edge (rewritten, sent, cleared). `added` is the text the change put in.
+ * @param {{ start: number, end: number }} anchor
+ * @param {{ start: number, before: number, after: number }} change
+ * @param {string} [added]
+ * @returns {{ start: number, end: number } | null}
+ */
+export function moveAnchor(anchor, change, added = "") {
+  const { start, before, after } = change;
+  const delta = after - before;
+  if (start === before) {
+    if (start === after) return anchor;
+    // Text added: before them, after them, or theirs (inside; typed at their end; or typed right
+    // against their start, a word retyped there).
+    const glued = start === anchor.start && !SPACE.test(added.slice(-1));
+    if (start < anchor.start || (start === anchor.start && !glued && anchor.end > anchor.start)) return { start: anchor.start + delta, end: anchor.end + delta };
+    if (start > anchor.end) return anchor;
+    return { start: anchor.start, end: anchor.end + delta };
+  }
+  if (before <= anchor.start) return { start: anchor.start + delta, end: anchor.end + delta };
+  if (start >= anchor.end) return anchor;
+  if (start >= anchor.start && before <= anchor.end) {
+    const end = anchor.end + delta;
+    return end > anchor.start ? { start: anchor.start, end } : null;
+  }
+  return null;
 }
 
 /** Reader errors worth another try right after pasting (the app may not have shown the words yet). */
@@ -92,6 +138,8 @@ const RETRY = new Set(["no-focus", "no-value", "not-found", "failed"]);
 const HICCUP = new Set(["busy", "failed", "unreadable"]);
 /** Ways a watch ends that mean the owner moved on: the newest fix counts if it held still a moment. */
 const MOVED_ON = new Set(["next", "changed", "gone", "time"]);
+/** Dictations followed at once (the newest). */
+const MAX_WATCHES = 3;
 
 export class FixWatcher {
   /**
@@ -112,19 +160,25 @@ export class FixWatcher {
     this.setTimer = o.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
     this.clearTimer = o.clearTimer ?? ((t) => clearTimeout(t));
     this.limits = { firstReadMs: 250, retryMs: 300, tries: 6, pollMs: 300, settleMs: 3000, quickMs: 600, watchMs: 120_000, misses: 2, hiccups: 3, ...(o.limits ?? {}) };
-    /** @type {any} */
-    this.session = null;
+    /** The dictations being watched, oldest first. @type {any[]} */
+    this.watches = [];
+    /** The reading loop's timer, and whether a reading is under way. */
+    this.timer = null;
+    this.reading = false;
+    this.hiccups = 0;
+    /** Words learned lately (by what was written and what it heard), so each is learned once. */
+    this.recent = new Map();
     this.seq = 0;
     this.stats = { watched: 0, learned: 0, ended: /** @type {Record<string, number>} */ ({}) };
   }
 
   get watching() {
-    return Boolean(this.session);
+    return this.watches.length > 0;
   }
 
-  /** The typed words were found in the box, and it's being followed. */
+  /** The newest dictation's words were found in the box, and it's being followed. */
   get found() {
-    return Boolean(this.session?.anchor);
+    return Boolean(this.watches[this.watches.length - 1]?.anchor);
   }
 
   /**
@@ -132,150 +186,181 @@ export class FixWatcher {
    * @param {{ text: string, app?: string | null }} job
    */
   watch(job) {
-    this.stop();
-    if (!this.o.reader.supported || !this.o.enabled()) return;
+    if (!this.o.reader.supported || !this.o.enabled()) return this.stop("off");
     const typed = normalizeText(job.text).text.trim();
     // A word or two is too little to tell where it is; a page is more than anyone fixes this way.
     if (typed.length < 3 || typed.length > 4000) return;
-    const s = {
+    while (this.watches.length >= MAX_WATCHES) this.end(this.watches[0], "next");
+    const w = {
       id: ++this.seq,
       typed,
       app: job.app ?? null,
       startedAt: this.now(),
       tries: 0,
-      base: "",
+      /** The box as last read, and where the words are in it (once found). */
+      prev: "",
       anchor: /** @type {{ start: number, end: number } | null} */ (null),
       /** The newest reading's fix (the words to learn, as JSON); when it first and last read so. */
       last: "[]",
       changedAt: this.now(),
       seenAt: this.now(),
-      /** Words (and what it heard) learned in this watch, so each is learned once. */
-      learned: new Set(),
       misses: 0,
-      hiccups: 0,
       timer: null,
       ended: false,
     };
-    this.session = s;
+    this.watches.push(w);
     this.stats.watched++;
-    this.log(`learn: watching the box it typed into${s.app ? ` (${s.app})` : ""}`);
-    this.later(s, this.limits.firstReadMs, () => this.capture(s));
+    this.log(`learn: watching the box it typed into${w.app ? ` (${w.app})` : ""}`);
+    this.later(w, this.limits.firstReadMs);
   }
 
   /**
-   * Stop watching: "next" when another dictation starts (the newest fix still counts if it held
-   * still a moment); "off" when learning, voice typing or the pairing is turned off (nothing more
-   * is learned).
-   * @param {'next'|'off'} [why]
+   * Stop watching: "off" when learning, voice typing or the pairing is turned off, the screen
+   * locks, or the app quits (nothing more is learned).
+   * @param {'off'|'next'} [why]
    */
-  stop(why = "next") {
-    if (this.session) this.end(this.session, why);
+  stop(why = "off") {
+    for (const w of [...this.watches]) this.end(w, why);
   }
 
   dispose() {
     this.stop("off");
   }
 
-  later(s, ms, fn) {
-    s.timer = this.setTimer(() => {
-      s.timer = null;
-      if (this.session === s) void fn().catch((err) => this.end(s, `error: ${String(err?.message ?? err).slice(0, 80)}`));
+  /** Look for this dictation's words in the focused box in a moment. */
+  later(w, ms) {
+    w.timer = this.setTimer(() => {
+      w.timer = null;
+      if (!w.ended) void this.capture(w).catch((err) => this.end(w, `error: ${String(err?.message ?? err).slice(0, 80)}`));
     }, ms);
   }
 
-  /** Find the typed words in the box that has the focus. */
-  async capture(s) {
+  /** Find the typed words in the box that has the focus (it's the box the others follow too). */
+  async capture(w) {
     let r;
     try {
       r = await this.o.reader.focus();
     } catch {
       r = { ok: false, error: "failed" };
     }
-    if (this.session !== s) return;
+    if (w.ended) return;
     if (!r?.ok) {
       const why = String(r?.error ?? "failed");
-      if (RETRY.has(why) && ++s.tries < this.limits.tries) return this.later(s, this.limits.retryMs, () => this.capture(s));
-      return this.end(s, why);
+      if (RETRY.has(why) && ++w.tries < this.limits.tries) return this.later(w, this.limits.retryMs);
+      return this.end(w, why);
     }
     const base = normalizeText(r.value);
     const sel = r.selection;
     const caret = sel && Number.isFinite(sel.location) ? normalizedIndex(base.map, sel.location + (Number(sel.length) || 0)) : null;
-    const anchor = findAnchor(base.text, s.typed, caret);
+    const anchor = findAnchor(base.text, w.typed, caret);
     if (!anchor) {
-      if (++s.tries < this.limits.tries) return this.later(s, this.limits.retryMs, () => this.capture(s));
-      return this.end(s, "not-found");
+      if (++w.tries < this.limits.tries) return this.later(w, this.limits.retryMs);
+      return this.end(w, "not-found");
     }
-    s.base = base.text;
-    s.anchor = anchor;
-    this.later(s, this.limits.pollMs, () => this.poll(s));
+    w.prev = base.text;
+    w.anchor = anchor;
+    this.loop();
   }
 
-  /** Read the box again: has a fix appeared, and has it settled? */
-  async poll(s) {
-    if (this.now() - s.startedAt >= this.limits.watchMs) return this.end(s, "time");
+  /** Read the box again in a moment (one reading for all the dictations followed). */
+  loop() {
+    if (this.timer || this.reading) return;
+    this.timer = this.setTimer(() => {
+      this.timer = null;
+      void this.poll().catch((err) => {
+        for (const w of [...this.watches]) if (w.anchor) this.end(w, `error: ${String(err?.message ?? err).slice(0, 80)}`);
+      });
+    }, this.limits.pollMs);
+  }
+
+  /** Read the box: has a fix appeared, and has it settled? */
+  async poll() {
+    for (const w of this.watches.filter((x) => x.anchor)) if (this.now() - w.startedAt >= this.limits.watchMs) this.end(w, "time");
+    if (!this.watches.some((x) => x.anchor)) return;
     let r;
+    this.reading = true;
     try {
       r = await this.o.reader.read();
     } catch {
       r = { ok: false, error: "failed" };
+    } finally {
+      this.reading = false;
     }
-    if (this.session !== s) return;
+    const live = this.watches.filter((x) => x.anchor && !x.ended);
+    if (!live.length) return;
     if (!r?.ok) {
       const why = String(r?.error ?? "failed");
-      if (HICCUP.has(why) && ++s.hiccups < this.limits.hiccups) return this.later(s, this.limits.pollMs, () => this.poll(s));
-      return this.end(s, why);
+      if (HICCUP.has(why) && ++this.hiccups < this.limits.hiccups) return this.loop();
+      for (const w of live) this.end(w, why);
+      return;
     }
-    s.hiccups = 0;
-    const after = s.anchor ? editedSpan(s.base, s.anchor, normalizeText(r.value).text) : null;
-    if (after === null) {
-      // Sent, cleared or rewritten (twice in a row, so one odd reading doesn't end it).
-      if (++s.misses >= this.limits.misses) return this.end(s, "changed");
-      return this.later(s, this.limits.pollMs, () => this.poll(s));
-    }
-    s.misses = 0;
-    // Only the typed words and a little after them matter; what's typed later is left out.
-    const fix = JSON.stringify(learnFromFix(s.typed, after.slice(0, s.typed.length * 2 + 200)));
-    const now = this.now();
-    if (fix !== s.last) {
-      s.last = fix;
-      s.changedAt = now;
-    } else if (now - s.changedAt >= this.limits.settleMs) this.learn(s);
-    s.seenAt = now;
-    this.later(s, this.limits.pollMs, () => this.poll(s));
+    this.hiccups = 0;
+    const cur = normalizeText(r.value).text;
+    for (const w of live) this.follow(w, cur);
+    if (this.watches.some((x) => x.anchor)) this.loop();
   }
 
-  /** Learn the newest fix's words that this watch hasn't learned yet (a word, or what it heard, once). */
-  learn(s) {
+  /** One reading, for one dictation: where its words are now, and what fix they show. */
+  follow(w, cur) {
+    const change = changedRange(w.prev, cur);
+    const moved = moveAnchor(w.anchor, change, cur.slice(change.start, change.after));
+    if (!moved) {
+      // Sent, cleared, rewritten or another box (twice in a row, so one odd reading doesn't end
+      // it: the next is compared with the last good one).
+      if (++w.misses >= this.limits.misses) this.end(w, "changed");
+      return;
+    }
+    w.misses = 0;
+    w.prev = cur;
+    w.anchor = moved;
+    // Only the typed words and a little after them matter; what's typed later is left out.
+    const fix = JSON.stringify(learnFromFix(w.typed, cur.slice(moved.start, Math.min(moved.end, moved.start + w.typed.length * 2 + 200))));
+    const now = this.now();
+    if (fix !== w.last) {
+      w.last = fix;
+      w.changedAt = now;
+    } else if (now - w.changedAt >= this.limits.settleMs) this.learn(w);
+    w.seenAt = now;
+  }
+
+  /** Learn the newest fix's words that weren't learned lately (a word, or what it heard, once). */
+  learn(w) {
+    const now = this.now();
+    for (const [k, at] of this.recent) if (now - at > 30 * 60_000) this.recent.delete(k);
     /** @type {Array<{ text: string, heard: string[] }>} */
-    const words = JSON.parse(s.last).filter((/** @type {{ text: string, heard: string[] }} */ w) => {
-      const keys = [`text:${w.text.toLowerCase()}`, ...w.heard.map((h) => `heard:${h.toLowerCase()}`)];
-      if (keys.some((k) => s.learned.has(k))) return false;
-      for (const k of keys) s.learned.add(k);
+    const words = JSON.parse(w.last).filter((/** @type {{ text: string, heard: string[] }} */ x) => {
+      const keys = [`text:${x.text.toLowerCase()}`, ...x.heard.map((h) => `heard:${h.toLowerCase()}`)];
+      if (keys.some((k) => this.recent.has(k))) return false;
+      for (const k of keys) this.recent.set(k, now);
       return true;
     });
     if (!words.length) return;
     this.stats.learned += words.length;
     this.log(`learn: ${words.length} word${words.length === 1 ? "" : "s"} to learn`);
     try {
-      this.o.onFix({ words, app: s.app });
+      this.o.onFix({ words, app: w.app });
     } catch (err) {
       this.log(`learn: couldn't learn (${String(/** @type {any} */ (err)?.message ?? err).slice(0, 80)})`);
     }
   }
 
-  end(s, why) {
-    if (s.ended) return;
-    s.ended = true;
-    if (s.timer) this.clearTimer(s.timer);
-    s.timer = null;
-    if (this.session === s) this.session = null;
+  end(w, why) {
+    if (w.ended) return;
+    w.ended = true;
+    if (w.timer) this.clearTimer(w.timer);
+    w.timer = null;
+    this.watches = this.watches.filter((x) => x !== w);
     this.stats.ended[why] = (this.stats.ended[why] ?? 0) + 1;
-    void Promise.resolve()
-      .then(() => this.o.reader.forget())
-      .catch(() => {});
     this.log(`learn: stopped watching (${why})`);
-    // Sent, cleared or dictated again right after a fix: it counts if it held still a moment (a
+    // Sent, cleared or dictated past right after a fix: it counts if it held still a moment (a
     // word still being typed when the box changed teaches nothing).
-    if (MOVED_ON.has(why) && s.seenAt - s.changedAt >= this.limits.quickMs) this.learn(s);
+    if (MOVED_ON.has(why) && w.anchor && w.seenAt - w.changedAt >= this.limits.quickMs) this.learn(w);
+    if (!this.watches.length) {
+      if (this.timer) this.clearTimer(this.timer);
+      this.timer = null;
+      void Promise.resolve()
+        .then(() => this.o.reader.forget())
+        .catch(() => {});
+    }
   }
 }

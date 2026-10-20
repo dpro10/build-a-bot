@@ -8,7 +8,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { learnFromFix, phoneticKey, soundsAlike, stillToLearn } from "../src/main/voice/learn.mjs";
-import { FixWatcher, editedSpan, findAnchor, normalizeText, normalizedIndex } from "../src/main/voice/fix-watch.mjs";
+import { FixWatcher, changedRange, findAnchor, moveAnchor, normalizeText, normalizedIndex } from "../src/main/voice/fix-watch.mjs";
 import { MAX_CHARS, TextReader, WIN_TEXT_SCRIPT, parseReply } from "../src/main/voice/text-reader.mjs";
 
 // ---------------------------------------------------------------------------
@@ -91,14 +91,54 @@ test("the typed words are found where the caret is, else the last place they are
   assert.equal(findAnchor(box, "Not there"), null);
 });
 
-test("following the typed words: a fix inside them, words added after, and the box sent or rewritten", () => {
-  const base = "Dear team,\nMeet pro zee at the lab.\nThanks";
-  const anchor = findAnchor(base, "Meet pro zee at the lab.");
-  assert.equal(editedSpan(base, anchor, "Dear team,\nMeet Prozzi at the lab.\nThanks"), "Meet Prozzi at the lab.");
-  assert.equal(editedSpan(base, anchor, "Dear team,\nMeet pro zee at the lab. See you!\nThanks"), "Meet pro zee at the lab. See you!");
-  assert.equal(editedSpan(base, anchor, ""), null, "sent or cleared");
-  assert.equal(editedSpan(base, anchor, "Hi all,\nMeet Prozzi at the lab.\nThanks"), null, "what came before it changed");
-  assert.equal(editedSpan(base, anchor, "Dear team,\nMeet Prozzi at the lab.\nCheers"), null, "what came after it changed");
+/** Follow the typed words through readings, one change at a time, as the watcher does. */
+function follow(readings, typed) {
+  let prev = readings[0];
+  let anchor = findAnchor(prev, typed);
+  for (const cur of readings.slice(1)) {
+    const change = changedRange(prev, cur);
+    anchor = anchor && moveAnchor(anchor, change, cur.slice(change.start, change.after));
+    if (!anchor) return null;
+    prev = cur;
+  }
+  return prev.slice(anchor.start, anchor.end);
+}
+
+test("one change between two readings: where it is, what it took out and put in", () => {
+  assert.deepEqual(changedRange("Meet pro zee at", "Meet Prozzi at"), { start: 5, before: 12, after: 11 });
+  assert.deepEqual(changedRange("abc", "abc"), { start: 3, before: 3, after: 3 });
+  assert.deepEqual(changedRange("", "hello"), { start: 0, before: 0, after: 5 });
+  assert.deepEqual(changedRange("hello", ""), { start: 0, before: 5, after: 0 });
+});
+
+test("following the typed words: a fix inside them, text added before or after, the box sent or rewritten", () => {
+  const typed = "Meet pro zee at the lab.";
+  const base = `Dear team,\n${typed}\nThanks`;
+  assert.equal(follow([base, "Dear team,\nMeet Prozzi at the lab.\nThanks"], typed), "Meet Prozzi at the lab.");
+  assert.equal(follow([base, `Hi all, and dear team,\n${typed}\nThanks`, "Hi all, and dear team,\nMeet Prozzi at the lab.\nThanks"], typed), "Meet Prozzi at the lab.", "a greeting typed above");
+  assert.equal(follow([base, `Dear team,\n${typed}\nThanks so much`, "Dear team,\nMeet Prozzi at the lab.\nThanks so much"], typed), "Meet Prozzi at the lab.", "text changed after");
+  assert.equal(follow([`Notes: ${typed}`, `Notes: ${typed} Then call Mark.`], typed), `${typed} Then call Mark.`, "another dictation right after it is part of what's followed (and added words teach nothing)");
+  assert.equal(follow([base, ""], typed), null, "sent or cleared");
+  assert.equal(follow([base, "Something else entirely"], typed), null, "rewritten, or another box");
+  assert.equal(follow([base, "Dear team,\nMeet pro zee at the"], typed), null, "a change across its edge");
+});
+
+test("a word deleted and typed again, at the start or the end, is still part of the words", () => {
+  const end = "Notes: Meet pro zee";
+  const steps = [end];
+  for (let i = 1; i <= "pro zee".length; i++) steps.push(end.slice(0, end.length - i));
+  for (const ch of "Prozzi") steps.push(steps[steps.length - 1] + ch);
+  assert.equal(follow(steps, "Meet pro zee"), "Meet Prozzi");
+
+  const start = "pro zee said hi";
+  const back = [start];
+  for (let i = 1; i <= "pro zee".length; i++) back.push(start.slice(i));
+  let typed = "";
+  for (const ch of "Prozzi") {
+    typed += ch;
+    back.push(typed + start.slice("pro zee".length));
+  }
+  assert.equal(follow(back, "pro zee said hi"), "Prozzi said hi");
 });
 
 // ---------------------------------------------------------------------------
@@ -266,25 +306,67 @@ test("sent right after the fix held still a moment: learned; sent mid-word: noth
   }
 });
 
-test("dictating again right after a fix: it counts if it held still a moment", async () => {
+test("dictating again into the same box: both are followed, and a fix in either is learned", async () => {
+  const b = box();
+  const { w, c, fixes } = watcher(b);
+  w.watch({ text: TYPED });
+  await c.advance(1000);
+  b.value = `Dear team,\n${TYPED} Then ask cooper nettie's.`;
+  w.watch({ text: "Then ask cooper nettie's." });
+  await c.advance(1000);
+  assert.equal(w.watches.length, 2);
+  assert.equal(w.found, true);
+  b.value = `Dear team,\nMeet Prozzi at the lab. Then ask cooper nettie's.`;
+  await c.advance(4000);
+  b.value = `Dear team,\nMeet Prozzi at the lab. Then ask Kubernetes.`;
+  await c.advance(4000);
+  assert.deepEqual(
+    fixes.map((f) => f.words),
+    [[{ text: "Prozzi", heard: ["pro zee"] }], [{ text: "Kubernetes", heard: ["cooper nettie's"] }]],
+  );
+});
+
+test("dictating into another box: the first one's fix, if it held still a moment, is learned, and it stops", async () => {
   const b = box();
   const { w, c, fixes } = watcher(b);
   w.watch({ text: TYPED });
   await c.advance(1000);
   b.value = `Dear team,\nMeet Prozzi at the lab.`;
   await c.advance(900);
-  w.stop("next");
+  // The next dictation goes into another app's box: the reader now reads that one.
+  b.value = "Ping me later.";
+  w.watch({ text: "Ping me later." });
+  await c.advance(2000);
   assert.deepEqual(fixes.map((f) => f.words), [[{ text: "Prozzi", heard: ["pro zee"] }]]);
-  assert.equal(w.watching, false);
+  assert.equal(w.watches.length, 1, "only the new one is followed");
+  assert.equal(w.stats.ended.changed, 1);
 
   const b2 = box();
   const x = watcher(b2);
   x.w.watch({ text: TYPED });
   await x.c.advance(1000);
-  b2.value = `Dear team,\nMeet Prozzi at the lab.`;
+  b2.value = `Dear team,\nMeet Proz at the lab.`;
   await x.c.advance(200);
-  x.w.stop("next");
+  b2.value = "Ping me later.";
+  x.w.watch({ text: "Ping me later." });
+  await x.c.advance(2000);
   assert.equal(x.fixes.length, 0, "changed just before: too soon to tell");
+});
+
+test("at most the last three dictations are followed; a word fixed in two of them is learned once", async () => {
+  const b = box("");
+  const { w, c, fixes } = watcher(b);
+  const lines = ["Ask pro zee first.", "Then ask pro zee again.", "And the lab.", "Last one here."];
+  for (const line of lines) {
+    b.value = b.value ? `${b.value} ${line}` : line;
+    w.watch({ text: line });
+    await c.advance(1000);
+  }
+  assert.equal(w.watches.length, 3);
+  assert.equal(w.stats.ended.next, 1);
+  b.value = "Ask pro zee first. Then ask Prozzi again. And the lab. Last one here.";
+  await c.advance(4000);
+  assert.deepEqual(fixes.map((f) => f.words), [[{ text: "Prozzi", heard: ["pro zee"] }]]);
 });
 
 test("turned off while watching: nothing more is read or learned", async () => {
@@ -365,6 +447,19 @@ test("a box that's busy for a moment is still watched; one that goes away ends t
   assert.equal(w.stats.ended.gone, 1);
 });
 
+test("one odd reading (an app showing an empty box for a moment) doesn't end it", async () => {
+  const b = box();
+  const { w, c, fixes } = watcher(b);
+  w.watch({ text: TYPED });
+  await c.advance(1000);
+  b.value = "";
+  await c.advance(300);
+  b.value = `Dear team,\nMeet Prozzi at the lab.`;
+  await c.advance(4000);
+  assert.equal(w.watching, true);
+  assert.deepEqual(fixes.map((f) => f.words), [[{ text: "Prozzi", heard: ["pro zee"] }]]);
+});
+
 test("Windows line endings and curly quotes in the box don't hide the typed words", async () => {
   const typed = "Tell pro zee “it’s fine”\nsee you";
   const b = box(`Hi\r\nTell pro zee “it’s fine”\r\nsee you`);
@@ -385,19 +480,6 @@ test("it stops after two minutes", async () => {
   await c.advance(2000);
   assert.equal(w.watching, false);
   assert.equal(w.stats.ended.time, 1);
-});
-
-test("a new dictation starts a new watch, and the old one lets go", async () => {
-  const b = box();
-  const { w, c } = watcher(b);
-  w.watch({ text: TYPED });
-  await c.advance(1000);
-  b.value = `Dear team,\n${TYPED} And bring snacks.`;
-  w.watch({ text: "And bring snacks." });
-  assert.equal(w.stats.watched, 2);
-  assert.equal(w.stats.ended.next, 1);
-  await c.advance(1000);
-  assert.equal(w.watching, true);
 });
 
 test("nothing it reads is ever logged", async () => {
