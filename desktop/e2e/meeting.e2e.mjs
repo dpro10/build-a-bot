@@ -24,6 +24,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { _electron as electron, chromium, request } from "playwright";
+import { sizeFor } from "../src/main/placement.mjs";
 
 const APP_DIR = fileURLToPath(new URL("../", import.meta.url));
 const SERVER = process.env.BAB_E2E_SERVER ?? "http://localhost:3000";
@@ -176,7 +177,8 @@ test("pairs, notices a Zoom call, asks first, takes notes, and the notes get wri
   console.log(`system audio under Xvfb: ${s.system}`);
   await until("listening size", async () => {
     const b = (await probe()).buddyBounds;
-    return b.width === 720 && b.height === 200 && b.x === wa.x + Math.round((wa.width - 720) / 2) && b.y === wa.y + wa.height - 200;
+    const { width, height } = sizeFor("listening");
+    return b.width === width && b.height === height && b.x === wa.x + Math.round((wa.width - width) / 2) && b.y === wa.y + wa.height - height;
   });
 
   // Chunks upload and the demo transcript comes back as a live caption.

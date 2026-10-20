@@ -14,7 +14,10 @@
  *  - nothing is captured until the owner says yes (there is no auto-start);
  *  - one prompt per call; after "Not now" (or no answer in 15 s) no prompt for 5 minutes,
  *    and never again during that call;
- *  - "Don't ask in <app>" is remembered by the controller (effect "never").
+ *  - "Don't ask in <app>" is remembered by the controller (effect "never");
+ *  - the owner may hide the bot while it takes notes (for a screen share, where macOS lets
+ *    Zoom, Meet and Teams capture windows that ask not to be): it keeps taking notes, the
+ *    tray icon shows it, and it stays hidden until the owner shows it or the meeting is over.
  */
 import { canNeverAsk } from "./apps.mjs";
 
@@ -42,6 +45,7 @@ export const ASK_TIMEOUT_MS = 15_000;
  * @property {string|null} message  done/error text
  * @property {OpenTarget|null} openTarget  what "Open" opens on the error bubble
  * @property {number|null} askedAt
+ * @property {boolean} tucked  the owner hid the bot while it takes notes (ctx.canTuck: only where the tray icon shows it)
  */
 
 /** @returns {CallState} */
@@ -63,6 +67,7 @@ export function initialState() {
     message: null,
     openTarget: null,
     askedAt: null,
+    tucked: false,
   };
 }
 
@@ -72,6 +77,7 @@ export function initialState() {
  * @property {string[]} [neverApps]
  * @property {number} [detectionPausedUntil]
  * @property {number} [notNowCooldownMs]  (tests use a shorter one)
+ * @property {boolean} [canTuck]  the bot can be hidden while it takes notes (a tray icon shows it's still listening)
  */
 
 /**
@@ -257,6 +263,16 @@ export function reduce(state, event, ctx = {}) {
     case "notes_ready": {
       fx.push({ type: "notify_ready", meetingId: event.meetingId, title: event.title });
       if (s.phase !== "saving" || event.meetingId !== s.meetingId) break;
+      if (s.tucked) {
+        // Hidden (maybe still sharing the screen): the notification says it, the bot stays away.
+        s.phase = "idle";
+        s.message = null;
+        s.lastMeetingId = event.meetingId;
+        s.meetingId = null;
+        if (s.call && !s.calls[s.call.key ?? ""]) s.call = null;
+        fx.push({ type: "hide" });
+        break;
+      }
       s.phase = "done";
       s.message = event.title ?? null;
       s.lastMeetingId = event.meetingId;
@@ -293,6 +309,20 @@ export function reduce(state, event, ctx = {}) {
       break;
     }
 
+    case "tuck": {
+      // The owner hides the bot (say, to share the screen). It keeps taking notes.
+      if ((s.phase === "listening" || s.phase === "paused") && ctx.canTuck && !s.tucked) {
+        s.tucked = true;
+        fx.push({ type: "hide" });
+      }
+      break;
+    }
+
+    case "untuck": {
+      s.tucked = false;
+      break;
+    }
+
     case "hide": {
       if (s.phase === "done" || s.phase === "error") {
         s.phase = "idle";
@@ -308,6 +338,8 @@ export function reduce(state, event, ctx = {}) {
     default:
       break;
   }
+  // Hidden for one meeting only; a problem with its notes is shown.
+  if (s.phase === "idle" || s.phase === "asking" || s.phase === "error") s.tucked = false;
   return { state: s, effects: fx };
 }
 
@@ -331,6 +363,7 @@ function start(s, fx, call, inPerson = false) {
   s.pendingStop = null;
   s.stopReason = null;
   s.message = null;
+  s.tucked = false;
   s.noticeSent = s.noticeCopied;
   // One prompt per call: once the owner has answered for this call, don't ask again during it.
   if (call.key) s.snoozed[call.key] = true;
@@ -377,7 +410,7 @@ export function buddyPhase(phase) {
   }
 }
 
-/** The bot must be on screen in these phases; if it can't be, recording stops. */
+/** The bot must be on screen in these phases (unless the owner hid it); if it can't be, recording stops. */
 export function mustBeVisible(phase) {
   return phase === "starting" || phase === "listening" || phase === "paused";
 }

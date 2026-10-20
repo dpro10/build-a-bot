@@ -11,6 +11,8 @@ import { appShortName } from "./apps.mjs";
  * @property {boolean} signedIn
  * @property {string} phase           the call machine's phase
  * @property {boolean} canTake        "Take notes now" is possible
+ * @property {boolean} [canTuck]      the bot can be hidden while it takes notes (this icon shows it's listening)
+ * @property {boolean} [tucked]       the owner hid it
  * @property {boolean} detectionPaused
  * @property {boolean} captions
  * @property {boolean} openAtLogin
@@ -51,6 +53,10 @@ export function trayItems(m) {
     items.push({ id: "stop", label: "Stop and write notes" });
     if (m.phase === "listening") items.push({ id: "pause", label: "Pause taking notes" });
     if (m.phase === "paused") items.push({ id: "resume", label: "Resume taking notes" });
+    // For a screen share: the bot goes away, the notes go on, and this icon shows it.
+    if (m.canTuck && (m.phase === "listening" || m.phase === "paused")) {
+      items.push(m.tucked ? { id: "untuck", label: "Show the bot" } : { id: "tuck", label: "Hide the bot (keeps taking notes)" });
+    }
     items.push({ id: "copy-heads-up", label: "Copy a heads-up for the call" });
   } else {
     const canTake = m.canTake && m.phase !== "stopping" && m.phase !== "discarding";

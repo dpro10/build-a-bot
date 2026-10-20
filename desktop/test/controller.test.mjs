@@ -17,9 +17,12 @@ function setup(opts = {}) {
     canShow: opts.canShow ?? true,
     canReassert: opts.canReassert ?? true,
     states: [],
+    /** How long the window takes to come up (tests set it). */
+    delayMs: 0,
     async show(st) {
       calls.push("buddy.show");
       this.states.push(st);
+      if (this.delayMs) await new Promise((r) => setTimeout(r, this.delayMs));
       this.visible = this.canShow;
       return this.canShow;
     },
@@ -141,6 +144,7 @@ function setup(opts = {}) {
     openSpecial: (t) => opened.push(`special:${t}`),
     writeClipboard: (t) => calls.push(`clipboard:${t.slice(0, 20)}`),
     ...(opts.hearing ? { hearing: opts.hearing } : {}),
+    ...(opts.canTuck !== undefined ? { canTuck: () => opts.canTuck } : {}),
     limits: { silenceStopMs: 12_000, slowNotesMs: 60_000, ...(opts.limits ?? {}) },
   });
   return { c, calls, buddy, uploads, notes, opened, settingsData };
@@ -367,6 +371,93 @@ test("tray menu: no auto-record option; Stop when recording; bots with notes off
   const out = trayItems({ ...base, signedIn: false, bots: [] });
   assert.ok(labels(out).includes("Pair this computer…"));
   assert.ok(!labels(out).includes("Show live captions"));
+});
+
+test("hiding the bot for a screen share: the notes go on, the 1-second check leaves it hidden, and the tray brings it back", async () => {
+  const env = setup({ canTuck: true });
+  await listening(env);
+  assert.equal(env.buddy.states.at(-1).canHide, true, "the pill offers Hide");
+  env.c.onBuddyAction("tuck");
+  await flush();
+  assert.equal(env.c.state.phase, "listening");
+  assert.equal(env.c.state.tucked, true);
+  assert.equal(env.buddy.visible, false);
+  env.calls.length = 0;
+  for (let i = 0; i < 6; i++) env.c.tick();
+  env.c.onUploaded({ meetingId: "mtg_1", track: "mic" }, { segments: [{ speaker: "You", text: "Next slide, please." }] });
+  env.c.dispatch({ type: "pause" });
+  env.c.dispatch({ type: "resume" });
+  await flush();
+  assert.equal(env.c.state.phase, "listening", "hidden on purpose isn't lost");
+  assert.deepEqual(env.c.stats.stops, []);
+  assert.ok(!env.calls.includes("buddy.show") && !env.calls.includes("buddy.reassert"), "captions, pause and the check don't bring it back");
+  assert.equal(env.c.statusText(), "Taking notes (hidden)");
+
+  await env.c.untuck();
+  assert.equal(env.c.state.tucked, false);
+  assert.equal(env.buddy.visible, true);
+  env.c.tick();
+  assert.equal(env.c.state.phase, "listening");
+  assert.equal(env.c.statusText(), "Taking notes");
+  env.c.dispose();
+});
+
+test("the bot coming back from hiding: the check waits for its window instead of stopping", async () => {
+  const env = setup({ canTuck: true, canReassert: false });
+  await listening(env);
+  env.buddy.delayMs = 40;
+  env.c.tuck();
+  await flush();
+  const back = env.c.untuck();
+  env.c.tick(); // the window is still on its way
+  assert.deepEqual(env.c.stats.stops, []);
+  await back;
+  assert.equal(env.buddy.visible, true);
+  env.c.tick();
+  assert.equal(env.c.state.phase, "listening");
+  env.c.dispose();
+});
+
+test("where no tray icon would show it's listening, the bot can't be hidden", async () => {
+  const env = setup({ canTuck: false });
+  await listening(env);
+  assert.equal(env.buddy.states.at(-1).canHide, false, "no Hide on the pill");
+  env.c.onBuddyAction("tuck");
+  env.c.tuck();
+  await flush();
+  assert.equal(env.c.state.tucked, false);
+  assert.equal(env.buddy.visible, true);
+  env.c.dispose();
+});
+
+test("Stop while hidden: the bot doesn't pop up mid-share; the notification says the notes are ready", async () => {
+  const env = setup({ canTuck: true });
+  await listening(env);
+  env.c.tuck();
+  await flush();
+  env.calls.length = 0;
+  env.c.stopNow();
+  await flush(12);
+  assert.equal(env.c.state.phase, "idle");
+  assert.ok(!env.calls.includes("buddy.show"), "it stays hidden");
+  assert.ok(env.calls.includes("api.finish"));
+  assert.ok(env.notes.some((n) => n.startsWith("Notes from “Launch plan” are ready")));
+  // The next meeting starts with the bot on screen again.
+  await env.c.onCallStart({ key: "fake:meet", app: "meet" });
+  await flush();
+  assert.equal(env.c.state.phase, "asking");
+  assert.ok(env.calls.includes("buddy.show"));
+  env.c.dispose();
+});
+
+test("tray menu: Hide the bot while taking notes where the icon shows it; Show the bot once hidden", () => {
+  const base = { status: "Taking notes", signedIn: true, phase: "listening", canTake: true, detectionPaused: false, captions: true, openAtLogin: false, macTabs: false, platform: "darwin", bots: [{ id: "a", name: "Inky", meetingsOn: true, paused: false }], botId: "a", neverApps: [] };
+  const labels = (items) => items.map((i) => i.label).filter(Boolean);
+  assert.ok(labels(trayItems({ ...base, canTuck: true })).includes("Hide the bot (keeps taking notes)"));
+  assert.ok(labels(trayItems({ ...base, phase: "paused", canTuck: true, tucked: true })).includes("Show the bot"));
+  assert.ok(!labels(trayItems({ ...base, canTuck: false })).some((l) => /the bot/.test(l)), "Linux: no tray icon to rely on");
+  assert.ok(!labels(trayItems({ ...base, phase: "idle", canTuck: true })).some((l) => /Hide the bot|Show the bot/.test(l)));
+  assert.equal(trayIcon({ ...base, tucked: true }), "recording", "the icon says it's listening");
 });
 
 test("pause: the last chunk uploads before the server hears 'paused' (a long pause isn't wrapped up as abandoned)", async () => {

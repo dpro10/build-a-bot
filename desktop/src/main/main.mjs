@@ -172,6 +172,8 @@ async function boot() {
     writeClipboard: (t) => clipboard.writeText(t),
     systemAudioMode: () => (env.BAB_SYSTEM_AUDIO === "off" ? "off" : "loopback"),
     ensureMicAccess,
+    // The bot may hide while it takes notes only where the tray icon shows it's still listening.
+    canTuck: () => Boolean(tray) && (process.platform === "darwin" || process.platform === "win32"),
     hearing,
     limits: {
       askTimeoutMs: num(env.BAB_ASK_TIMEOUT_MS, undefined),
@@ -515,6 +517,8 @@ function trayModel() {
     signedIn: Boolean(account.device),
     phase: controller.state.phase,
     canTake: account.canTakeNotes(),
+    canTuck: controller.canTuck(),
+    tucked: controller.state.tucked,
     detectionPaused: s.detectionPausedUntil > Date.now(),
     captions: s.captions,
     openAtLogin: getOpenAtLogin(),
@@ -536,6 +540,8 @@ function onTrayClick(id, checked) {
   else if (id === "stop") controller.stopNow();
   else if (id === "pause") controller.dispatch({ type: "pause" });
   else if (id === "resume") controller.dispatch({ type: "resume" });
+  else if (id === "tuck") controller.tuck();
+  else if (id === "untuck") void controller.untuck();
   else if (id === "copy-heads-up") controller.copyHeadsUp();
   else if (id === "detect-pause") settings.update({ detectionPausedUntil: Date.now() + 3600_000 });
   else if (id === "detect-resume") settings.update({ detectionPausedUntil: 0 });

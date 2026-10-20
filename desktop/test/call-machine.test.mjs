@@ -260,6 +260,68 @@ test("notes that are slow tuck the bot away; a late 'ready' still notifies", () 
   assert.deepEqual(effects, ["notify_ready"]);
 });
 
+test("hiding the bot while it takes notes: only while recording, only where the tray shows it, for that meeting only", () => {
+  const ctx = { canAsk: true, neverApps: [], canTuck: true };
+  let { state, effects } = run(
+    [
+      { type: "call_start", key: "fake:zoom", app: "zoom", now: 0 },
+      { type: "tuck", now: 500 }, // asking: there's nothing to hide yet
+      { type: "take", now: 1000 },
+      { type: "started", meetingId: "mtg_1", now: 2000 },
+    ],
+    ctx,
+  );
+  assert.equal(state.tucked, false);
+  ({ state, effects } = run([{ type: "tuck", now: 3000 }], { ...ctx, canTuck: false }, state));
+  assert.equal(state.tucked, false, "without a tray icon to show it's listening, it stays");
+  assert.deepEqual(effects, []);
+
+  ({ state, effects } = run([{ type: "tuck", now: 3000 }], ctx, state));
+  assert.equal(state.tucked, true);
+  assert.equal(state.phase, "listening", "it keeps taking notes");
+  assert.deepEqual(effects, ["hide"]);
+  assert.equal(mustBeVisible(state.phase), true, "the controller skips the check only because the owner hid it");
+
+  ({ state } = run([{ type: "pause", now: 4000 }, { type: "resume", now: 5000 }], ctx, state));
+  assert.equal(state.tucked, true, "pause and resume don't bring it back");
+  ({ state } = run([{ type: "untuck", now: 6000 }], ctx, state));
+  assert.equal(state.tucked, false);
+  ({ state } = run([{ type: "tuck", now: 7000 }], ctx, state));
+
+  // The meeting ends while it's hidden (maybe mid-share): no bubble; the notification says it.
+  ({ state, effects } = run(
+    [
+      { type: "call_end", key: "fake:zoom", now: 8000 },
+      { type: "stopped", now: 9000 },
+      { type: "notes_ready", meetingId: "mtg_1", title: "Launch plan", now: 10_000 },
+    ],
+    ctx,
+    state,
+  ));
+  assert.equal(state.phase, "idle");
+  assert.equal(state.lastMeetingId, "mtg_1");
+  assert.equal(state.call, null);
+  assert.deepEqual(effects, ["stop", "poll", "notify_ready", "hide"]);
+  assert.equal(state.tucked, false, "the next meeting starts with the bot on screen");
+});
+
+test("a hidden meeting whose notes fail shows the problem", () => {
+  const ctx = { canAsk: true, neverApps: [], canTuck: true };
+  const { state } = run(
+    [
+      { type: "take", now: 0 },
+      { type: "started", meetingId: "mtg_1", now: 1000 },
+      { type: "tuck", now: 2000 },
+      { type: "stop", now: 3000 },
+      { type: "stopped", now: 4000 },
+      { type: "notes_failed", meetingId: "mtg_1", now: 5000 },
+    ],
+    ctx,
+  );
+  assert.equal(state.phase, "error");
+  assert.equal(state.tucked, false);
+});
+
 test("Take notes in the room (from the tray): the mic only, even with a call going on", () => {
   let st = initialState();
   ({ state: st } = reduce(st, { type: "call_start", key: "fake:zoom", app: "zoom", now: 0 }, { canAsk: false }));

@@ -12,10 +12,10 @@ const right = { id: 2, bounds: { x: 1440, y: -200, width: 2560, height: 1440 }, 
 
 test("placement: bottom-center of the work area, sized per phase", () => {
   assert.deepEqual(buddyBounds(primary.workArea, BUDDY_SIZES.asking), { x: 500, y: 495, width: 440, height: 330 });
-  assert.deepEqual(buddyBounds(primary.workArea, sizeFor("listening")), { x: 360, y: 625, width: 720, height: 200 });
+  assert.deepEqual(buddyBounds(primary.workArea, sizeFor("listening")), { x: 300, y: 625, width: 840, height: 200 });
   assert.deepEqual(buddyBounds(right.workArea, sizeFor("done")), { x: 1440 + 1070, y: 970, width: 420, height: 230 });
   // Slid along the bottom, it snaps back inside the work area.
-  assert.equal(buddyBounds(primary.workArea, sizeFor("listening"), { offsetX: 5000 }).x, 1440 - 720);
+  assert.equal(buddyBounds(primary.workArea, sizeFor("listening"), { offsetX: 5000 }).x, 1440 - 840);
   assert.equal(buddyBounds(primary.workArea, sizeFor("listening"), { offsetX: -5000 }).x, 0);
   // A tiny screen: never bigger than the work area.
   assert.deepEqual(buddyBounds({ x: 0, y: 0, width: 300, height: 150 }, sizeFor("asking")), { x: 0, y: 0, width: 300, height: 150 });

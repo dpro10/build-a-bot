@@ -8,15 +8,14 @@
 /** @typedef {{ id: number, bounds: Rect, workArea: Rect }} DisplayLike */
 
 /**
- * Window sizes per buddy phase (from the web app's desktop-api.ts contract), except
- * listening/paused: the contract says 420 wide, but the pill with Pause, Stop and
- * "Stop and delete" grows to the right of the centered bot and was cut off, so those
- * windows are 720 wide. The extra area is transparent and lets clicks through.
+ * Window sizes per buddy phase (from the web app's desktop-api.ts contract). The pill with
+ * Pause, Hide, Stop and "Stop and delete" grows to the right of the centered bot, so the
+ * listening/paused windows are 840 wide. The extra area is transparent and lets clicks through.
  */
 export const BUDDY_SIZES = Object.freeze({
   asking: Object.freeze({ width: 440, height: 330 }),
-  listening: Object.freeze({ width: 720, height: 200 }),
-  paused: Object.freeze({ width: 720, height: 200 }),
+  listening: Object.freeze({ width: 840, height: 200 }),
+  paused: Object.freeze({ width: 840, height: 200 }),
   saving: Object.freeze({ width: 420, height: 230 }),
   done: Object.freeze({ width: 420, height: 230 }),
   error: Object.freeze({ width: 420, height: 230 }),
