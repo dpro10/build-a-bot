@@ -231,6 +231,8 @@ export class VoiceTyping extends EventEmitter {
     this.rec = rec;
     this.seq++;
     this.failed = null;
+    // Another dictation: whatever box the last one was typed into isn't watched anymore.
+    this.emit("recording");
     this.o.warmUp?.();
     rec.app = this.o.frontApp.detect(1500).catch(() => null);
     const bot = rec.bot ? this.botInfo(rec.bot) : null;
@@ -368,7 +370,7 @@ export class VoiceTyping extends EventEmitter {
       this.history.add({ kind: "text", text: res.text, heard: res.heard, app: job.app?.name ?? null, words: res.words, polished: Boolean(res.polished), pasted: out.pasted });
     }
     this.last = { kind: "text", text: res.text, heard: res.heard, at: this.now(), pasted: out.pasted };
-    this.emit("dictated", { text: res.text, pasted: out.pasted, words: res.words });
+    this.emit("dictated", { text: res.text, pasted: out.pasted, words: res.words, app: job.app?.name ?? null });
     if (seq !== this.seq || this.rec) return;
     if (out.pasted) await this.showPill({ phase: "done", text: res.text, simulated: Boolean(res.simulated), local: Boolean(res.local) }, this.limits.doneMs);
     else await this.showPill({ phase: "note", message: copiedNote(this.platform, this.o.canPaste()), actions: this.platform === "darwin" && !this.o.canPaste() ? ["accessibility"] : [] }, this.limits.noteMs);

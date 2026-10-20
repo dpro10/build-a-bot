@@ -5,6 +5,9 @@
 //   bab-audio-helper tap [--exclude-pid PID]... [--sample-rate 16000]
 //                               the computer's audio output (the call) through a Core Audio tap,
 //                               as raw 16-bit little-endian mono PCM on stdout (macOS 14.2+)
+//   bab-audio-helper text       the text box voice typing just typed into, for learning from a fix
+//                               (src/main/voice/text-reader.mjs): reads a command a line on stdin
+//                               (ping, prime, focus, read, forget), answers a JSON line each
 //
 // `mic` / `watch` need no permission. They read Core Audio's per-process objects
 // (macOS 14+: kAudioHardwarePropertyProcessObjectList → kAudioProcessPropertyIsRunningInput,
@@ -21,12 +24,21 @@
 // and leaves out Build-a-bot's own processes. The Electron app doesn't use `tap` yet; see
 // desktop/README.md ("System audio on macOS").
 //
+// `text` needs Accessibility, which the app already has for pasting (the helper is its child, so
+// macOS asks about the app). `focus` keeps the focused element and reads its value and selection;
+// `read` reads that same element again; `forget` lets it go. It never reads a password box
+// (AXSecureTextField), never more than 20,000 characters, and writes nothing anywhere else.
+// Chromium and Electron apps (Chrome, Slack, VS Code…) build their accessibility tree only when
+// asked: the app in front gets AXManualAccessibility once, as assistive apps do. `prime` does just
+// that, while the owner is still talking, and reads nothing.
+//
 // Output of `mic`:
 //   {"ok":true,"api":"process-objects","inputInUse":true,
 //    "processes":[{"pid":4410,"bundleId":"us.zoom.xos","input":true,"output":true,
 //                  "windows":[{"x":0,"y":25,"w":1440,"h":875}]}]}
 
 import AppKit
+import ApplicationServices
 import CoreAudio
 import Darwin
 import Foundation
@@ -306,6 +318,152 @@ enum HelperError: Error, CustomStringConvertible {
     }
 }
 
+// MARK: - text: the text box voice typing just typed into
+
+let textMaxChars = 20_000
+
+struct TextSelection: Codable {
+    let location: Int
+    let length: Int
+}
+
+struct TextReply: Codable {
+    var ok: Bool
+    var error: String? = nil
+    var trusted: Bool? = nil
+    var value: String? = nil
+    var role: String? = nil
+    var selection: TextSelection? = nil
+    var pid: Int32? = nil
+    var focused: Bool? = nil
+}
+
+func axCopy(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success else { return nil }
+    return value
+}
+
+func axElement(_ value: CFTypeRef?) -> AXUIElement? {
+    guard let v = value, CFGetTypeID(v) == AXUIElementGetTypeID() else { return nil }
+    return unsafeBitCast(v, to: AXUIElement.self)
+}
+
+func axRange(_ element: AXUIElement, _ attribute: String) -> CFRange? {
+    guard let v = axCopy(element, attribute), CFGetTypeID(v) == AXValueGetTypeID() else { return nil }
+    var range = CFRange(location: 0, length: 0)
+    return AXValueGetValue(unsafeBitCast(v, to: AXValue.self), .cfRange, &range) ? range : nil
+}
+
+final class TextBox {
+    private let system = AXUIElementCreateSystemWide()
+    private var element: AXUIElement?
+    /** Apps already asked to build their accessibility tree. */
+    private var asked = Set<pid_t>()
+
+    init() {
+        AXUIElementSetMessagingTimeout(system, 0.5)
+    }
+
+    private func hasText(_ element: AXUIElement) -> Bool {
+        axCopy(element, kAXValueAttribute) as? String != nil
+    }
+
+    /** The focused element, after asking a Chromium or Electron app in front for its tree if needed. */
+    private func focused() -> AXUIElement? {
+        let first = axElement(axCopy(system, kAXFocusedUIElementAttribute))
+        if let el = first, hasText(el) { return el }
+        guard let app = axElement(axCopy(system, kAXFocusedApplicationAttribute)) else { return first }
+        AXUIElementSetMessagingTimeout(app, 0.5)
+        var pid: pid_t = 0
+        _ = AXUIElementGetPid(app, &pid)
+        if pid > 0, !asked.contains(pid) {
+            asked.insert(pid)
+            _ = AXUIElementSetAttributeValue(app, "AXManualAccessibility" as CFString, kCFBooleanTrue)
+            for _ in 0..<8 {
+                usleep(100_000)
+                if let el = axElement(axCopy(app, kAXFocusedUIElementAttribute)), hasText(el) { return el }
+            }
+        }
+        return axElement(axCopy(app, kAXFocusedUIElementAttribute)) ?? first
+    }
+
+    private func describe(_ element: AXUIElement, full: Bool) -> TextReply {
+        var roleValue: CFTypeRef?
+        let roleError = AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleValue)
+        if roleError == .invalidUIElement { return TextReply(ok: false, error: "gone") }
+        if roleError == .apiDisabled { return TextReply(ok: false, error: "not-trusted") }
+        let role = roleValue as? String
+        let subrole = axCopy(element, kAXSubroleAttribute) as? String
+        // A password box is never read.
+        if role == "AXSecureTextField" || subrole == kAXSecureTextFieldSubrole { return TextReply(ok: false, error: "secure") }
+        var value: CFTypeRef?
+        let valueError = AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &value)
+        if valueError == .invalidUIElement { return TextReply(ok: false, error: "gone") }
+        if valueError == .cannotComplete { return TextReply(ok: false, error: "busy") }
+        guard valueError == .success, let text = value as? String else { return TextReply(ok: false, error: "no-value", role: role) }
+        if text.utf16.count > textMaxChars { return TextReply(ok: false, error: "too-long", role: role) }
+        var reply = TextReply(ok: true, value: text, role: role)
+        if let range = axRange(element, kAXSelectedTextRangeAttribute) {
+            reply.selection = TextSelection(location: range.location, length: range.length)
+        }
+        if full {
+            var pid: pid_t = 0
+            if AXUIElementGetPid(element, &pid) == .success { reply.pid = pid }
+        }
+        if let now = axElement(axCopy(system, kAXFocusedUIElementAttribute)) { reply.focused = CFEqual(now, element) }
+        return reply
+    }
+
+    func focus() -> TextReply {
+        element = nil
+        guard AXIsProcessTrusted() else { return TextReply(ok: false, error: "not-trusted") }
+        guard let el = focused() else { return TextReply(ok: false, error: "no-focus") }
+        AXUIElementSetMessagingTimeout(el, 0.5)
+        element = el
+        return describe(el, full: true)
+    }
+
+    func read() -> TextReply {
+        guard let el = element else { return TextReply(ok: false, error: "no-element") }
+        return describe(el, full: false)
+    }
+
+    func forget() {
+        element = nil
+    }
+
+    /** Have the app in front build its accessibility tree now (reads nothing). */
+    func prime() {
+        guard AXIsProcessTrusted() else { return }
+        _ = focused()
+    }
+}
+
+func runText() -> Never {
+    let box = TextBox()
+    let encoder = JSONEncoder()
+    while let line = readLine() {
+        let reply: TextReply
+        switch line.trimmingCharacters(in: .whitespacesAndNewlines) {
+        case "ping": reply = TextReply(ok: true, trusted: AXIsProcessTrusted())
+        case "prime":
+            box.prime()
+            reply = TextReply(ok: true)
+        case "focus": reply = box.focus()
+        case "read": reply = box.read()
+        case "forget":
+            box.forget()
+            reply = TextReply(ok: true)
+        default: reply = TextReply(ok: false, error: "unknown")
+        }
+        let data = (try? encoder.encode(reply)) ?? Data("{\"ok\":false,\"error\":\"encode\"}".utf8)
+        FileHandle.standardOutput.write(data)
+        FileHandle.standardOutput.write(Data("\n".utf8))
+    }
+    exit(0)
+}
+
 // MARK: - main
 
 let args = Array(CommandLine.arguments.dropFirst())
@@ -314,6 +472,8 @@ case "mic":
     print(emit(makeReport()))
 case "watch":
     watch()
+case "text":
+    runText()
 case "tap":
     guard #available(macOS 14.2, *) else {
         FileHandle.standardError.write(Data("tap needs macOS 14.2 or later\n".utf8))
@@ -336,6 +496,6 @@ case "tap":
     signal(SIGINT) { _ in exit(0) }
     dispatchMain()
 default:
-    FileHandle.standardError.write(Data("usage: bab-audio-helper mic | watch | tap [--exclude-pid PID]... [--sample-rate HZ]\n".utf8))
+    FileHandle.standardError.write(Data("usage: bab-audio-helper mic | watch | text | tap [--exclude-pid PID]... [--sample-rate HZ]\n".utf8))
     exit(64)
 }

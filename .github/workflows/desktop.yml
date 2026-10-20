@@ -1,8 +1,9 @@
 # The desktop app (desktop/): its tests on Linux and Windows; Private speech with NVIDIA's real
 # runtime and Parakeet on Windows and macOS, hearing speech the system's own voice says; the
 # Windows installer: installed, checking itself, then voice typing end to end in the installed app
-# (the real Ctrl + Windows shortcut, Parakeet on the computer, the words pasted into another app);
-# and the Mac app (one app for Apple silicon and Intel), checking itself.
+# (the real Ctrl + Windows shortcut, Parakeet on the computer, the words pasted into another app,
+# and a misheard name fixed there with real keys, learned); and the Mac app (one app for Apple
+# silicon and Intel), checking itself, and its helper reading real apps' text boxes for fixes.
 #
 # Signing: with the repository's signing secrets (desktop/README.md › Packaging and signing), the
 # Windows installer is signed with Azure Artifact Signing and the Mac app with Apple's Developer ID,
@@ -53,6 +54,11 @@ jobs:
           cache-dependency-path: desktop/package-lock.json
       - run: npm ci
       - run: npm test
+      # Learning from a fix: UI Automation reads an Electron app's box and Notepad's, never a
+      # password box, and a fix typed there with real keys is learned.
+      - name: Reading the box typed into, for real
+        if: runner.os == 'Windows'
+        run: node --test --test-timeout=300000 e2e/text-reader.e2e.mjs
 
   private-speech:
     name: Private speech, for real (${{ matrix.os }})
@@ -211,6 +217,13 @@ jobs:
           $env:BAB_E2E_APP = $env:BAB_APP_EXE
           $env:BAB_E2E_SPEECH_WAV = "$env:RUNNER_TEMP\said.wav"
           node --test --test-timeout=900000 e2e/windows-voice.e2e.mjs
+      - name: A misheard name fixed where it was typed is learned, in the installed app
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+        run: |
+          $env:BAB_E2E_APP = $env:BAB_APP_EXE
+          $env:BAB_E2E_SPEECH_WAV = "$env:RUNNER_TEMP\said.wav"
+          node --test --test-timeout=600000 e2e/windows-learn.e2e.mjs
       # Installing a new version over it keeps the owner's data; uninstalling removes the app and
       # its data, even with Private speech's engine left running from that folder (a stand-in: a
       # copy of node.exe named nemo-speech.exe, with the engine's model in its command line).
@@ -375,6 +388,27 @@ jobs:
             echo "::error::The packaged Mac app's self-check failed (exit code $code)."
             exit 1
           fi
+          grep -q '"text reader": "ok' "$BAB_SMOKE_OUT" || { echo "::error::The packaged app's text reader didn't answer."; exit 1; }
+      # What an owner does once for the app (voice typing pastes with it): allow Accessibility.
+      # Here, for the processes this job runs the helper from, and the test's own key presser
+      # (e2e/fixtures/mackey.swift). The system's TCC database is writable on these machines (only
+      # /System is protected).
+      - name: Allow Accessibility
+        run: |
+          xcrun swiftc -O -o "$RUNNER_TEMP/mackey" e2e/fixtures/mackey.swift
+          echo "BAB_E2E_MACKEY=$RUNNER_TEMP/mackey" >> "$GITHUB_ENV"
+          for client in "$APP/Contents/Resources/bin/bab-audio-helper" "$(node -p 'process.execPath')" "$APP/Contents/MacOS/Build-a-bot" "$RUNNER_TEMP/mackey"; do
+            sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" \
+              "INSERT OR REPLACE INTO access(service,client,client_type,auth_value,auth_reason,auth_version,csreq,policy_id,indirect_object_identifier_type,indirect_object_identifier,indirect_object_code_identity,flags,last_modified) VALUES('kTCCServiceAccessibility','$client',1,2,4,1,NULL,NULL,0,'UNUSED',NULL,0,$(date +%s));" \
+              && echo "allowed: $client" || echo "::warning::couldn't allow $client"
+          done
+          sudo launchctl stop com.apple.tccd 2>/dev/null || true
+          sleep 2
+          echo "the key presser may press keys: $("$RUNNER_TEMP/mackey" trusted)"
+      # Learning from a fix: the app's own helper reads an Electron app's box and TextEdit's,
+      # never a password box, and a fix typed there with real keys is learned.
+      - name: Reading the box typed into, for real (the app's own helper)
+        run: BAB_MAC_HELPER="$APP/Contents/Resources/bin/bab-audio-helper" node --test --test-timeout=300000 e2e/text-reader.e2e.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: build-a-bot-mac

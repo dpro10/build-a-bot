@@ -4,7 +4,9 @@ desktop e2e tests on a Windows computer.
 Usage: python winkey.py focus "Target app" down LControl down LWin sleep 4 up LWin up LControl front
 
   focus <title>   bring the window whose title contains <title> to the front
-  down|up|tap <k> press, let go, or press and let go a key (LControl, RControl, LWin, LShift, Escape, …)
+  down|up|tap <k> press, let go, or press and let go a key (LControl, RControl, LWin, LShift, Escape,
+                  Left, Right, Home, End, Back, Return, …)
+  type <text>     type text the way a keyboard does, a character at a time (Unicode key events)
   sleep <s>       wait <s> seconds
   front           print the title of the window in front
 """
@@ -18,6 +20,7 @@ user32 = ctypes.WinDLL("user32", use_last_error=True)
 INPUT_KEYBOARD = 1
 KEYEVENTF_EXTENDEDKEY = 0x0001
 KEYEVENTF_KEYUP = 0x0002
+KEYEVENTF_UNICODE = 0x0004
 ULONG_PTR = ctypes.c_size_t
 
 
@@ -47,9 +50,11 @@ user32.SendInput.restype = wintypes.UINT
 VK = {
     "LControl": 0xA2, "RControl": 0xA3, "LWin": 0x5B, "RWin": 0x5C, "LShift": 0xA0, "RShift": 0xA1,
     "LMenu": 0xA4, "RMenu": 0xA5, "Escape": 0x1B, "F24": 0x87, "A": 0x41, "V": 0x56,
+    "Back": 0x08, "Tab": 0x09, "Return": 0x0D, "End": 0x23, "Home": 0x24, "Left": 0x25, "Up": 0x26,
+    "Right": 0x27, "Down": 0x28, "Delete": 0x2E,
 }
 # Keys Windows sends with the "extended" flag.
-EXTENDED = {0xA3, 0x5B, 0x5C, 0xA5}
+EXTENDED = {0xA3, 0x5B, 0x5C, 0xA5, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x2E}
 
 
 def key(name, down):
@@ -58,6 +63,19 @@ def key(name, down):
     inp = INPUT(type=INPUT_KEYBOARD, u=_UNION(ki=KEYBDINPUT(wVk=vk, wScan=user32.MapVirtualKeyW(vk, 0), dwFlags=flags, time=0, dwExtraInfo=0)))
     if user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(INPUT)) != 1:
         raise OSError(ctypes.get_last_error(), "SendInput failed")
+
+
+def type_text(text):
+    """Each character as a key press and release, the way an on-screen keyboard or IME types it."""
+    units = text.encode("utf-16-le")
+    for i in range(0, len(units), 2):
+        code = int.from_bytes(units[i : i + 2], "little")
+        for flags in (KEYEVENTF_UNICODE, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP):
+            inp = INPUT(type=INPUT_KEYBOARD, u=_UNION(ki=KEYBDINPUT(wVk=0, wScan=code, dwFlags=flags, time=0, dwExtraInfo=0)))
+            if user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(INPUT)) != 1:
+                raise OSError(ctypes.get_last_error(), "SendInput failed")
+        # About a fast typist's pace.
+        time.sleep(0.04)
 
 
 def title_of(hwnd):
@@ -116,6 +134,8 @@ while i < len(args):
     elif a == "tap":
         key(b, True)
         key(b, False)
+    elif a == "type":
+        type_text(b)
     elif a == "sleep":
         time.sleep(float(b))
     else:

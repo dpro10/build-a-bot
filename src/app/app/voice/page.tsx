@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AppWindow, AudioLines, BookA, Download, Keyboard, Laptop, Lock, MessageCircle, ShieldCheck, Sparkles, Trash2, Wand2 } from "lucide-react";
+import { AppWindow, AudioLines, BookA, BookCheck, Download, Keyboard, Laptop, Lock, MessageCircle, ShieldCheck, Sparkles, Trash2, Wand2 } from "lucide-react";
 import { getDb } from "@/lib/db";
 import { requireUser } from "@/lib/auth/session";
 import { listBridgeDevices } from "@/lib/data";
@@ -55,6 +55,7 @@ const privatePoints = () => {
     },
     { icon: <Laptop />, text: "Your history stays on your computer, encrypted, and you can turn it off." },
     { icon: <ShieldCheck />, text: "So the words fit, only the kind of app you're in (“chat”, “email”) and a well-known app's name are sent. Never what's on your screen." },
+    { icon: <BookCheck />, text: "Fix a word it got wrong right where it typed it, and it learns it: for two minutes, the app reads that one box on your computer (never a password box), and only the word you fixed is saved to Your words. You can turn this off." },
     { icon: <Wand2 />, text: "When you edit by voice, the text you selected is sent once to change it, and never kept." },
   ];
 };

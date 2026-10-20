@@ -50,6 +50,11 @@ export const DEFAULT_SETTINGS = Object.freeze({
     history: true,
     /** Put back what was on the clipboard after pasting. */
     restoreClipboard: true,
+    /**
+     * Learn a word fixed right where it was typed (voice/fix-watch.mjs): for a couple of minutes
+     * after pasting, the box it typed into is read on this computer; only the word learned leaves it.
+     */
+    learnFixes: true,
     /** The setup window has been shown once. */
     introduced: false,
   }),

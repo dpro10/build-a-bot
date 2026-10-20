@@ -2,6 +2,10 @@
  * Learning from a fix: when the owner corrects a dictation in the history ("pro zee" → "Prozzi"),
  * the words they changed become dictionary suggestions, with what speech-to-text wrote as
  * "heard as". Ordinary edits ("there" → "their", a reworded sentence) aren't suggested.
+ *
+ * A fix made right where the words were typed (fix-watch.mjs) is learned without asking, so it
+ * takes more (learnFromFix): a word replaced by one that sounds like it, never an everyday word,
+ * a different name ("Mark" → "Sarah"), or the same word changed ("Prozzi" → "Prozzi's").
  * Pure, so it's tested.
  */
 
@@ -92,4 +96,118 @@ export function suggestWords(before, after, known = []) {
     if (out.length >= 5) break;
   }
   return out;
+}
+
+/**
+ * How a word sounds, roughly (the server's phoneticKey in src/lib/dictation/text.ts, the same
+ * rules): "Prozzi" and "pro zee", "Jon" and "John", "GitHub" and "git hub" match.
+ */
+export function phoneticKey(word) {
+  let w = String(word)
+    .normalize("NFKD")
+    .replace(/\p{M}+/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z]/g, "");
+  if (!w) return "";
+  w = w
+    .replace(/ph/g, "f")
+    .replace(/ck/g, "k")
+    .replace(/q/g, "k")
+    .replace(/x/g, "ks")
+    .replace(/z/g, "s")
+    .replace(/c(?=[eiy])/g, "s")
+    .replace(/c/g, "k")
+    .replace(/gh/g, "")
+    .replace(/wh/g, "w")
+    .replace(/^kn/, "n")
+    .replace(/th/g, "t")
+    .replace(/dg/g, "j")
+    .replace(/y/g, "i")
+    .replace(/([aeiou])h/g, "$1")
+    .replace(/(.)\1+/g, "$1")
+    .replace(/[aeiou]+/g, "a");
+  return w;
+}
+
+function editDistance(a, b) {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+/**
+ * Could speech-to-text have written one for the other? Short words must sound the same ("Tom" and
+ * "Sam" don't); longer ones may differ by about a third ("Kubernetes" and "cooper nettie's").
+ */
+export function soundsAlike(a, b) {
+  const ka = phoneticKey(a);
+  const kb = phoneticKey(b);
+  if (ka.length < 2 || kb.length < 2) return false;
+  const longest = Math.max(ka.length, kb.length);
+  const d = editDistance(ka, kb);
+  return longest <= 4 ? d === 0 : d <= Math.floor(longest / 3);
+}
+
+/**
+ * What to learn from a fix made where the words were typed (no list to accept: it's learned on
+ * its own, so only clear cases, and at most three):
+ *  - a word speech-to-text got wrong, replaced by one that sounds like it: "pro zee" → "Prozzi";
+ *  - a word that's spelled its own way, fixed: "github" → "GitHub".
+ * Never added or removed words, an everyday word swapped, a different name, the same word changed
+ * ("Prozzi" → "Prozzi's"), or a rewrite.
+ * @param {string} before  what was typed
+ * @param {string} after   what it reads now
+ * @param {string[]} [known]  words already in the dictionary (a word they taught is never unlearned)
+ * @returns {Array<{ text: string, heard: string[] }>}
+ */
+export function learnFromFix(before, after, known = []) {
+  const a = String(before).match(WORD) ?? [];
+  const b = String(after).match(WORD) ?? [];
+  const have = new Set(known.map(norm));
+  const out = [];
+  for (const c of changes(a, b)) {
+    // A replacement, short enough to be a fix rather than a rewrite.
+    if (!c.from.length || !c.to.length || c.to.length > 3 || c.from.length > 4) continue;
+    const text = c.to.join(" ");
+    const heard = c.from.join(" ");
+    if (text.length > 80 || heard.length > 80) continue;
+    const nt = norm(text);
+    const nh = norm(heard);
+    if (out.some((o) => norm(o.text) === nt)) continue;
+    if (nt === nh) {
+      // Only how it's written changed: worth it for "GitHub", not for "Today".
+      if (distinctive(text) && !have.has(nt)) out.push({ text, heard: [] });
+    } else {
+      // The same word changed ("Prozzi" → "Prozzi's", "lab" → "laboratory"), not misheard.
+      if (nt.startsWith(nh) || nh.startsWith(nt)) continue;
+      // Names and odd spellings; never an everyday word.
+      if (!c.to.some((w) => distinctive(w) || (/^\p{Lu}/u.test(w) && !COMMON.has(norm(w))))) continue;
+      // What it wrote can't be everyday words, or every "the cafe" would change later.
+      if (c.from.every((w) => COMMON.has(norm(w)))) continue;
+      if (c.from.length === 1 && COMMON.has(nh)) continue;
+      // A word they taught it is never turned into something else.
+      if (have.has(nh)) continue;
+      // "Mark" → "Sarah" is a different name, not a word it misheard.
+      if (!soundsAlike(heard, text)) continue;
+      out.push({ text, heard: [heard] });
+    }
+    if (out.length >= 3) break;
+  }
+  return out;
+}
+
+/**
+ * The words from learnFromFix the dictionary doesn't already settle: a word it already spells that
+ * way isn't added again, and a word they taught is never turned into another ("heard as" can't be
+ * one of their words).
+ * @param {Array<{ text: string, heard: string[] }>} words
+ * @param {string[]} known  the dictionary's words
+ */
+export function stillToLearn(words, known) {
+  const have = new Set(known.map(norm));
+  return words.filter((w) => (w.heard.length ? !w.heard.some((h) => have.has(norm(h))) : !have.has(norm(w.text))));
 }
