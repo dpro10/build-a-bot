@@ -380,5 +380,8 @@ test("Windows: around reads a few characters on each side of the selection, neve
   assert.match(fn, /if \(\[BabEditBox\]::IsPassword\(\$h\)\) \{ return @\{ ok = \$false; error = 'secure' \} \}/);
   assert.match(fn, /MoveEndpointByUnit\(\$startPoint, \$char, -4\)/);
   assert.match(fn, /MoveEndpointByUnit\(\$endPoint, \$char, 2\)/);
-  assert.doesNotMatch(fn.slice(0, fn.indexOf("\nwhile")), /DocumentRange/, "never the whole document");
+  // Kept to the box's own text (Chromium's ranges run on into the page around the box).
+  assert.match(fn, /if \(\$pre\.CompareEndpoints\(\$startPoint, \$doc, \$startPoint\) -lt 0\) \{ \$pre\.MoveEndpointByRange\(\$startPoint, \$doc, \$startPoint\) \}/);
+  assert.match(fn, /if \(\$post\.CompareEndpoints\(\$endPoint, \$doc, \$endPoint\) -gt 0\) \{ \$post\.MoveEndpointByRange\(\$endPoint, \$doc, \$endPoint\) \}/);
+  assert.doesNotMatch(fn.slice(0, fn.indexOf("\nwhile")), /GetText\(-1\)|DocumentRange\.GetText/, "never the whole document's text");
 });

@@ -154,12 +154,16 @@ function Get-Around($e) {
     $startPoint = [System.Windows.Automation.Text.TextPatternRangeEndpoint]::Start
     $endPoint = [System.Windows.Automation.Text.TextPatternRangeEndpoint]::End
     $char = [System.Windows.Automation.Text.TextUnit]::Character
+    # Only this box's text: in some apps (Chromium's) a range runs on past the box, into the page.
+    $doc = $tp.DocumentRange
     $pre = $ranges[0].Clone()
     $pre.MoveEndpointByRange($endPoint, $pre, $startPoint)
     $null = $pre.MoveEndpointByUnit($startPoint, $char, -4)
+    if ($pre.CompareEndpoints($startPoint, $doc, $startPoint) -lt 0) { $pre.MoveEndpointByRange($startPoint, $doc, $startPoint) }
     $post = $ranges[0].Clone()
     $post.MoveEndpointByRange($startPoint, $post, $endPoint)
     $null = $post.MoveEndpointByUnit($endPoint, $char, 2)
+    if ($post.CompareEndpoints($endPoint, $doc, $endPoint) -gt 0) { $post.MoveEndpointByRange($endPoint, $doc, $endPoint) }
     return @{ ok = $true; before = [string]$pre.GetText(8); after = [string]$post.GetText(4); role = $role; via = 'range' }
   }
   if ($e.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$vp)) {
