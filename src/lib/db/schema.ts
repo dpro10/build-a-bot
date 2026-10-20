@@ -120,6 +120,11 @@ export const loginTokens = pgTable("login_tokens", {
   email: text("email").notNull(),
   /** The anonymous account that asked for the link; its bots move to the verified account. */
   userId: text("user_id"),
+  /**
+   * sha256 of a random value in a cookie on the browser that asked for the link. Only that browser
+   * can bring the anonymous account along; opened anywhere else, the link only signs in.
+   */
+  browserHash: text("browser_hash"),
   redirectTo: text("redirect_to"),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   usedAt: timestamp("used_at", { withTimezone: true }),

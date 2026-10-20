@@ -936,3 +936,11 @@ Diego: "the more that i think about, the more i think maybe we should drop being
 - **Older desktop apps, until they update:** the server stops naming any bot that needs Claude Code or Codex, so they never wait for turns, and their heartbeat still gets an answer ("nothing waiting"). The new app also deletes the folder older ones ran the Bridge in.
 - **Still open:** zero data retention on the included models has to be switched on in the Nebius Token Factory console (Diego's login); until it is, the site shouldn't promise it.
 
+## Security: a sign-in link brings an account along only in the browser that asked for it (2026-10-20)
+
+Found in the review before the hackathon. Opening a sign-in link used to sign in on the spot, wherever it was opened, and the anonymous account that asked for it (its bots, keys and credit) moved into the email's account, or got the email.
+
+- **Now:** the browser that asks for a link gets a random value in a cookie (`bab_signin`), and the link keeps its hash (`login_tokens.browser_hash`, migration `0010_login_browser`). Opened there, the link signs in right away and brings the anonymous account along, as before.
+- **Opened anywhere else** (another device, or a mail scanner checking the link), nothing is used up. `/auth/confirm` shows the email, and its button (a POST from this site) signs in to that email's own account only. Bots made in the other browser stay there; opening the link in that browser brings them along.
+- **Rate limits:** one network can ask for 30 sign-in links an hour, on top of the 5 per address per 15 minutes.
+

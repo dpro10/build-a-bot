@@ -1,13 +1,17 @@
+import { cookies } from "next/headers";
 import { z } from "zod";
 import { getDb } from "@/lib/db";
-import { apiError, json, parseJson, sameOrigin } from "@/lib/api";
+import { apiError, clientIp, json, parseJson, sameOrigin } from "@/lib/api";
 import { getUser } from "@/lib/auth/session";
-import { createLoginLink } from "@/lib/auth/magic";
+import { SIGNIN_COOKIE, SIGNIN_COOKIE_MAX_AGE, createLoginLink } from "@/lib/auth/magic";
 import { sendLoginEmail } from "@/lib/channels/email";
-import { demoMode, live } from "@/lib/env";
+import { demoMode, isProduction, live } from "@/lib/env";
 import { rateLimit } from "@/lib/safety/ratelimit";
 import { adminEmails } from "@/lib/admin/metrics";
-import { timingSafeEqualStr } from "@/lib/crypto";
+import { randomToken, timingSafeEqualStr } from "@/lib/crypto";
+
+/** Sign-in links one network can ask for in an hour, whatever the addresses (each one is an email we send). */
+const LINKS_PER_IP_PER_HOUR = 30;
 
 export async function POST(req: Request) {
   if (!sameOrigin(req)) return apiError(403, "Bad origin");
@@ -17,6 +21,10 @@ export async function POST(req: Request) {
   );
   if (!parsed.ok) return parsed.res;
   const db = await getDb();
+  const ip = clientIp(req);
+  if (ip && !(await rateLimit(db, `magic-ip:${ip}`, LINKS_PER_IP_PER_HOUR, 60 * 60)).ok) {
+    return apiError(429, "Too many sign-in links from here. Try again in a while.");
+  }
   const limited = await rateLimit(db, `magic:${parsed.data.email}`, 5, 15 * 60);
   if (!limited.ok) return apiError(429, "Too many sign-in links. Try again in a few minutes.");
   // A demo server without email shows the link on screen, so anyone could ask for anyone's. The operator's
@@ -29,7 +37,13 @@ export async function POST(req: Request) {
     if (!timingSafeEqualStr(parsed.data.adminCode.trim(), code)) return apiError(403, "That admin code isn't right.", { needsAdminCode: true });
   }
   const current = await getUser();
-  const link = await createLoginLink(db, { email: parsed.data.email, anonymousUserId: current && !current.email ? current.id : null, next: parsed.data.next });
+  // This browser marks itself (the same mark for every link it asks for), so only here can a link
+  // bring the anonymous account along (lib/auth/magic.ts).
+  const jar = await cookies();
+  const mark = jar.get(SIGNIN_COOKIE)?.value;
+  const browser = mark && /^[\w-]{32,128}$/.test(mark) ? mark : randomToken(32);
+  jar.set(SIGNIN_COOKIE, browser, { httpOnly: true, secure: isProduction, sameSite: "lax", path: "/", maxAge: SIGNIN_COOKIE_MAX_AGE });
+  const link = await createLoginLink(db, { email: parsed.data.email, anonymousUserId: current && !current.email ? current.id : null, next: parsed.data.next, browser });
   const sent = await sendLoginEmail(parsed.data.email, link);
   // Once email is set up, the link only ever goes to the inbox, demo mode or not. Showing it here
   // when a send fails would hand anyone's account to whoever asked, and a send can be made to fail

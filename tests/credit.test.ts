@@ -194,8 +194,10 @@ describe("signing in to an account you already had", () => {
     const anon = await person("usr_built_first", false);
     await addCredit(db, { userId: anon.id, kind: "demo", amountMicros: 5_000_000 });
     await recordUsage(db, anon.id, { costMicros: 3_000_000 }); // $1 of starter credit, then $2 of the $5
-    const link = await createLoginLink(db, { email: existing.email!, anonymousUserId: anon.id });
-    const signedIn = await consumeLoginLink(db, new URL(link).searchParams.get("token")!);
+    // Opened in the browser that asked for it (its sign-in cookie), so the account comes along.
+    const browser = "b".repeat(43);
+    const link = await createLoginLink(db, { email: existing.email!, anonymousUserId: anon.id, browser });
+    const signedIn = await consumeLoginLink(db, new URL(link).searchParams.get("token")!, browser);
     expect(signedIn?.user.id).toBe(existing.id);
     expect((await db.select().from(schema.users).where(eq(schema.users.id, anon.id))).length).toBe(0);
     expect(await getCredit(db, existing.id)).toMatchObject({ addedMicros: 3_000_000, balanceMicros: 4_000_000 });
@@ -209,8 +211,9 @@ describe("signing in to an account you already had", () => {
     for (const [i, expected] of [[1, 20_000_000], [2, 20_000_000]] as const) {
       const throwaway = await person(`usr_throwaway_${i}`, false);
       await addCredit(db, { userId: throwaway.id, kind: "demo", amountMicros: 20_000_000 });
-      const link = await createLoginLink(db, { email: main.email!, anonymousUserId: throwaway.id });
-      expect((await consumeLoginLink(db, new URL(link).searchParams.get("token")!))?.user.id).toBe(main.id);
+      const browser = `browser-${i}`.padEnd(43, "x");
+      const link = await createLoginLink(db, { email: main.email!, anonymousUserId: throwaway.id, browser });
+      expect((await consumeLoginLink(db, new URL(link).searchParams.get("token")!, browser))?.user.id).toBe(main.id);
       expect((await getCredit(db, main.id)).addedMicros).toBe(expected);
     }
   });
