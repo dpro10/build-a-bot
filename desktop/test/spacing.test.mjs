@@ -306,6 +306,79 @@ test("the box is read only once the last paste has had a moment to show in it", 
   assert.equal(box.value, "Meet at the lab. Bring the slides.");
 });
 
+test("an app slower than that: the box is read again until it shows the last dictation", async () => {
+  const cb = fakeClipboard();
+  const box = fakeBox();
+  const { p, logs } = paster(cb, box, {
+    settleMs: 20,
+    press: async () => {
+      // Shows the paste well after the paster's usual wait (a busy computer).
+      const text = cb.text;
+      setTimeout(() => box.paste(text), 250);
+      return true;
+    },
+  });
+  await p.insert("Meet at the lab.", { space: true, app: "Slack", restore: false });
+  await p.insert("Bring the slides.", { space: true, app: "Slack", restore: false });
+  await sleep(300);
+  assert.equal(box.value, "Meet at the lab. Bring the slides.");
+  assert.ok(box.reads >= 3, `read ${box.reads} times`);
+  assert.deepEqual(logs, ["voice: spaced it (before; from the box)"]);
+});
+
+test("a box that doesn't show the last dictation because the owner moved on: what the box says, after a moment", async () => {
+  const cb = fakeClipboard();
+  const box = fakeBox();
+  const { p } = paster(cb, box, { catchUpMs: 300 });
+  await p.insert("Meet at the lab.", { space: true, app: "Mail", restore: false });
+  // The cursor moved to the start by hand.
+  box.caret = 0;
+  const t0 = Date.now();
+  const reads = box.reads;
+  await p.insert("Bring the slides.", { space: true, app: "Mail", restore: false });
+  assert.equal(box.value, "Bring the slides. Meet at the lab.");
+  assert.ok(box.reads - reads > 1, "read again while the paste might still be on its way");
+  assert.ok(Date.now() - t0 < 1_000, `waited ${Date.now() - t0} ms`);
+  // Long after the last paste, it isn't waited for: read once.
+  let now = 1_000_000;
+  const later = fakeBox();
+  const q = paster(cb, later, { now: () => now }).p;
+  await q.insert("One.", { space: true, app: "Mail", restore: false });
+  later.value = "";
+  later.caret = 0;
+  now += 5_000;
+  const readsBefore = later.reads;
+  await q.insert("Two.", { space: true, app: "Mail", restore: false });
+  assert.equal(later.reads - readsBefore, 1);
+  assert.equal(later.value, "Two.");
+});
+
+test("the box shows the last dictation: its last few characters, spaces at the end and zero-width ones aside", async () => {
+  const cb = fakeClipboard();
+  for (const [shown, typed] of [
+    ["lab.", "Meet at the lab."],
+    ["eat ", "great "],
+    ["ab.\u200B", "the lab."],
+    ["Hi.", "Hi."],
+    ["s a", "a"],
+  ]) {
+    const box = fakeBox();
+    box.around = async () => (box.reads++, { before: shown, after: "" });
+    const { p } = paster(cb, box, { catchUpMs: 2_000, press: async () => true });
+    p.lastTyped = { text: typed, app: "Notes", at: Date.now() };
+    await p.insert("Next.", { space: true, app: "Notes", restore: false });
+    assert.equal(box.reads, 1, `${JSON.stringify(shown)} shows ${JSON.stringify(typed)}`);
+  }
+  for (const shown of ["", "\uFFFC", "ab", "lab"]) {
+    const box = fakeBox();
+    box.around = async () => (box.reads++, { before: shown, after: "" });
+    const { p } = paster(cb, box, { catchUpMs: 250, press: async () => true });
+    p.lastTyped = { text: "Meet at the lab.", app: "Notes", at: Date.now() };
+    await p.insert("Next.", { space: true, app: "Notes", restore: false });
+    assert.ok(box.reads > 1, `${JSON.stringify(shown)} doesn't show it: read again`);
+  }
+});
+
 test("when it can't press keys, the words go on the clipboard as they are, and nothing is read", async () => {
   const cb = fakeClipboard();
   const box = fakeBox("Meet at the lab.");
