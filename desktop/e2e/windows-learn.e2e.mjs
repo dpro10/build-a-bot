@@ -27,6 +27,7 @@ import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { quitApp } from "./quit.mjs";
 
 const APP_DIR = fileURLToPath(new URL("../", import.meta.url));
 const FIXTURES = fileURLToPath(new URL("./fixtures/", import.meta.url));
@@ -119,10 +120,15 @@ async function fakeServer(said) {
 let app = null;
 let target = null;
 let server = null;
+/** The app's log so far (set once it's running). */
+let appLog = () => "";
 after(async () => {
   target?.kill();
-  if (app) await app.close().catch(() => {});
-  server?.close();
+  try {
+    await quitApp(app, appLog);
+  } finally {
+    server?.close();
+  }
 });
 
 test("Windows: a name fixed right where it was typed is learned, as the owner's own word", { timeout: 600_000 }, async () => {
@@ -143,7 +149,7 @@ test("Windows: a name fixed right where it was typed is learned, as the owner's 
   const logs = [];
   app.process().stdout?.on("data", (d) => logs.push(String(d)));
   app.process().stderr?.on("data", (d) => logs.push(String(d)));
-  const appLog = () => {
+  appLog = () => {
     const file = path.join(userData, "logs", "main.log");
     return logs.join("") + (fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "");
   };

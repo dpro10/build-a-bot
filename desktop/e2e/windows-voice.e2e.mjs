@@ -22,6 +22,7 @@ import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { quitApp } from "./quit.mjs";
 
 const APP_DIR = fileURLToPath(new URL("../", import.meta.url));
 const FIXTURES = fileURLToPath(new URL("./fixtures/", import.meta.url));
@@ -146,10 +147,15 @@ async function fakeServer() {
 let app = null;
 let target = null;
 let server = null;
+/** The app's log so far (set once it's running). */
+let appLog = () => "";
 after(async () => {
   target?.kill();
-  if (app) await app.close().catch(() => {});
-  server?.close();
+  try {
+    await quitApp(app, appLog);
+  } finally {
+    server?.close();
+  }
 });
 
 test("Windows: hold Ctrl + Windows, talk, let go: NVIDIA Parakeet hears it on the computer and it's typed in the app in front", { timeout: 900_000 }, async () => {
@@ -173,7 +179,7 @@ test("Windows: hold Ctrl + Windows, talk, let go: NVIDIA Parakeet hears it on th
   const logs = [];
   app.process().stdout?.on("data", (d) => logs.push(String(d)));
   app.process().stderr?.on("data", (d) => logs.push(String(d)));
-  const appLog = () => {
+  appLog = () => {
     const file = path.join(userData, "logs", "main.log");
     return logs.join("") + (fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "");
   };

@@ -122,7 +122,11 @@ async function boot() {
 
   settings = new Settings(path.join(userData, "settings.json"));
   // Older versions ran the Bridge in here; a turn cut short could leave its prompt behind.
-  fs.rmSync(path.join(userData, "bridge"), { recursive: true, force: true });
+  try {
+    fs.rmSync(path.join(userData, "bridge"), { recursive: true, force: true });
+  } catch (err) {
+    log(`couldn't remove the old Bridge folder: ${/** @type {any} */ (err)?.code ?? err}`);
+  }
   if (serverOverride) {
     const s = normalizeServer(serverOverride);
     if (s) settings.update({ server: s });
@@ -293,19 +297,34 @@ async function boot() {
     e.preventDefault();
     if (shuttingDown) return;
     shuttingDown = true;
-    detector.stop();
-    void voice.interrupt();
-    voice.dispose();
-    library.dispose();
+    // Quitting always quits: a step that throws or never finishes can't keep the app open.
+    setTimeout(() => {
+      log("shutdown: still going after 40 s; quitting anyway");
+      app.exit(0);
+    }, 40_000);
+    /** @param {string} what @param {() => unknown} step */
+    const tidy = (what, step) => {
+      try {
+        step();
+      } catch (err) {
+        log(`shutdown: ${what}: ${err}`);
+      }
+    };
+    tidy("call detection", () => detector.stop());
+    tidy("voice typing", () => {
+      Promise.resolve(voice.interrupt()).catch((err) => log(`shutdown: voice typing: ${err}`));
+      voice.dispose();
+    });
+    tidy("the folder", () => library.dispose());
     controller
       .shutdown()
       .catch((err) => log(`shutdown: ${err}`))
       .finally(() => {
         readyToQuit = true;
-        buddy.destroy();
-        capture.destroy();
-        decoder.close();
-        tray.destroy();
+        tidy("the bot", () => buddy.destroy());
+        tidy("capture", () => capture.destroy());
+        tidy("speech", () => decoder.close());
+        tidy("tray", () => tray.destroy());
         app.quit();
       });
   });
