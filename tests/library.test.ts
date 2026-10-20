@@ -419,6 +419,25 @@ describe("study sets", () => {
     expect(study.dueCards(set as never, new Date("2026-10-17T12:11:00Z")).map((c) => c.id)).toEqual(["c1", "c2"]);
   });
 
+  it("a quiz's own letters go (the quiz shows A, B, C itself); look-alikes like “C. elegans” stay", async () => {
+    const lettered = ["A) Thylakoid membrane", "B) Granum", "C) Stroma", "D) Intermembrane space"];
+    const plain = ["Thylakoid membrane", "Granum", "Stroma", "Intermembrane space"];
+    expect(study.withoutLetters(lettered, "C) Stroma")).toEqual({ choices: plain, answer: "Stroma" });
+    expect(study.withoutLetters(lettered, "C").answer).toBe("Stroma");
+    expect(study.withoutLetters(lettered, "Stroma").answer).toBe("Stroma");
+    expect(study.withoutLetters(["a. 3 ATP", "b. 9 ATP"], "b. 9 ATP")).toEqual({ choices: ["3 ATP", "9 ATP"], answer: "9 ATP" });
+    const organisms = ["C. elegans", "E. coli", "S. cerevisiae"];
+    expect(study.withoutLetters(organisms, "E. coli")).toEqual({ choices: organisms, answer: "E. coli" });
+    // Saved without them, and the answer still counts as one of the choices.
+    const set = await study.createStudySet(db, { botId: bot.id, kind: "quiz", title: "Letters", items: [{ type: "multiple_choice", question: "Where?", choices: lettered, answer: "C) Stroma" }] });
+    expect(set.items[0]).toMatchObject({ choices: plain, answer: "Stroma" });
+    // Lettered choices with the answer named plainly pass the check too.
+    expect(tool("make_quiz").input.safeParse({ title: "Q", questions: [{ type: "multiple_choice", question: "Where?", choices: lettered, answer: "Stroma" }] }).success).toBe(true);
+    // Quizzes made before this show without letters as well.
+    const old = { ...set, items: [{ id: "q1", type: "multiple_choice", question: "Where?", choices: lettered, answer: "C) Stroma" }] };
+    expect(study.studySetView(old as never).questions[0]).toMatchObject({ choices: plain, answer: "Stroma" });
+  });
+
   it("exports CSV that Anki and Quizlet import, quoting what needs it", async () => {
     const set = await study.createStudySet(db, { botId: bot.id, kind: "flashcards", title: "CSV", items: [{ front: 'Say "hi"', back: "a, b\nc" }] });
     expect(study.studySetCsv(set)).toBe('Front,Back\r\n"Say ""hi""","a, b\nc"\r\n');
