@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Handwritten notes: the Calvin cycle</title>
+<style>
+  html, body { margin: 0; }
+  body {
+    width: 1500px; height: 1000px; overflow: hidden;
+    background:
+      radial-gradient(ellipse at 30% 20%, rgba(255,255,255,0.18), transparent 60%),
+      repeating-linear-gradient(92deg, #8a5a3b 0 14px, #94623f 14px 30px, #7f5234 30px 41px),
+      #8a5a3b;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .paper {
+    width: 1120px; height: 860px; position: relative;
+    transform: rotate(-2.2deg) perspective(1800px) rotateX(4deg);
+    background:
+      linear-gradient(90deg, transparent 118px, #e88a8a 118px, #e88a8a 121px, transparent 121px),
+      repeating-linear-gradient(180deg, transparent 0 47px, #9dc0e8 47px 49px),
+      linear-gradient(180deg, #fffdf6, #fbf6e8);
+    background-position: 0 0, 0 92px, 0 0;
+    box-shadow: 0 30px 60px rgba(0,0,0,0.35), 0 4px 10px rgba(0,0,0,0.2);
+    border-radius: 3px;
+    font-family: "Noteworthy", "Bradley Hand", cursive;
+    color: #1c2a5a;
+    padding: 34px 60px 0 150px;
+    font-size: 33px; line-height: 49px;
+  }
+  .paper::before { /* punched holes */
+    content: ""; position: absolute; left: 36px; top: 120px; width: 30px; height: 30px; border-radius: 50%;
+    background: #8a5a3b; box-shadow: 0 300px 0 #8a5a3b, 0 600px 0 #8a5a3b; opacity: 0.9;
+  }
+  .date { position: absolute; right: 60px; top: 30px; font-size: 26px; color: #3b4a7a; }
+  h1 { font-size: 46px; margin: 0 0 0; font-weight: 700; line-height: 98px; text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 8px; }
+  p { margin: 0; }
+  .red { color: #c0392b; }
+  .box { display: inline-block; border: 3px solid #c0392b; border-radius: 10px 14px 9px 12px; padding: 0 12px; line-height: 40px; }
+  .indent { padding-left: 40px; }
+  .star { color: #c0392b; font-size: 40px; }
+</style>
+</head>
+<body>
+  <div class="paper">
+    <div class="date">Oct 20 · Lecture 9</div>
+    <h1>Calvin cycle (light-independent)</h1>
+    <p>Happens in the <span class="box">STROMA</span> of the chloroplast</p>
+    <p>Uses ATP + NADPH from the light reactions</p>
+    <p>3 steps:</p>
+    <p class="indent">1) Carbon fixation: RuBisCO sticks CO₂ onto RuBP</p>
+    <p class="indent">2) Reduction: ATP + NADPH → G3P (3-carbon sugar)</p>
+    <p class="indent">3) Regeneration: G3P rebuilds RuBP</p>
+    <p>3 turns → 1 G3P out (costs 9 ATP + 6 NADPH)</p>
+    <p>Light rxns = thylakoids → make O₂, ATP, NADPH</p>
+    <p class="red"><span class="star">★</span> Midterm Oct 29: know WHERE each stage happens!</p>
+    <p class="red">Compare w/ respiration (mitochondria)</p>
+  </div>
+</body>
+</html>

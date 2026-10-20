@@ -27,8 +27,20 @@ function args() {
 async function open(scale = 1) {
   fs.mkdirSync(path.join(V, "stage/generated"), { recursive: true });
   fs.writeFileSync(path.join(V, "stage/generated/data.js"), `window.TL = ${JSON.stringify(TL)};\nwindow.VO = ${JSON.stringify(VO)};\n`);
-  const browser = await chromium.launch({ args: ["--force-color-profile=srgb", "--font-render-hinting=none", "--disable-lcd-text", "--hide-scrollbars"] });
-  const page = await browser.newPage({ viewport: { width: TL.width, height: TL.height }, deviceScaleFactor: scale });
+  // PW_CHANNEL=chrome uses the installed Chrome when Playwright's own Chromium isn't there. Its
+  // screenshots are cut to the real window, so the window itself is sized (no viewport emulation).
+  const channel = process.env.PW_CHANNEL || undefined;
+  const args = ["--force-color-profile=srgb", "--font-render-hinting=none", "--disable-lcd-text", "--hide-scrollbars"];
+  let browser, page;
+  for (let top = 87, i = 0; ; i++) {
+    browser = await chromium.launch({ channel, args: channel ? [...args, `--window-size=${TL.width},${TL.height + top}`, `--force-device-scale-factor=${scale}`] : args });
+    page = await browser.newPage(channel ? { viewport: null } : { viewport: { width: TL.width, height: TL.height }, deviceScaleFactor: scale });
+    if (!channel) break;
+    const h = await page.evaluate(() => innerHeight);
+    if (h === TL.height || i > 2) break;
+    top += TL.height - h;
+    await browser.close();
+  }
   page.on("console", (m) => (m.type() === "error" || m.type() === "warning") && console.error("[stage]", m.text()));
   page.on("pageerror", (e) => console.error("[stage error]", e.message));
   await page.goto(pathToFileURL(path.join(V, "stage/index.html")).href);
