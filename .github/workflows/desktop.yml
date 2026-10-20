@@ -433,6 +433,18 @@ jobs:
       # never a password box, and a fix typed there with real keys is learned.
       - name: Reading the box typed into, for real (the app's own helper)
         run: BAB_MAC_HELPER="$APP/Contents/Resources/bin/bab-audio-helper" node --test --test-timeout=300000 e2e/text-reader.e2e.mjs
+      # On an owner's Mac only the app is allowed, and its helper reads under the app's permission
+      # (macOS asks about the process responsible for it). Here: the helper and node lose theirs,
+      # so it reads only because the process responsible for this job is allowed.
+      - name: Reading the box typed into, allowed the way an owner allows it (only the responsible process)
+        run: |
+          for client in "$APP/Contents/Resources/bin/bab-audio-helper" "$(node -p 'process.execPath')"; do
+            sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" "DELETE FROM access WHERE service='kTCCServiceAccessibility' AND client='$client';"
+          done
+          sudo launchctl stop com.apple.tccd 2>/dev/null || true
+          sleep 2
+          sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" "SELECT client FROM access WHERE service='kTCCServiceAccessibility';"
+          BAB_MAC_HELPER="$APP/Contents/Resources/bin/bab-audio-helper" node --test --test-timeout=300000 e2e/text-reader.e2e.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: build-a-bot-mac

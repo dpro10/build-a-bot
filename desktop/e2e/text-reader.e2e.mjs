@@ -210,7 +210,7 @@ test("an Electron app's text box: the text in it, and where the caret is", { ski
   assert.equal(text.text, "Dear team,\nMeet pro zee at the lab.");
   assert.ok(r.selection, `no caret in ${JSON.stringify({ ...r, value: undefined })}`);
   assert.equal(normalizedIndex(text.map, r.selection.location + r.selection.length), text.text.length, "the caret is at the end");
-  console.log(`text reader: Electron box read (${r.role ?? "no role"})`);
+  console.log(`text reader: Electron box read (${r.role ?? "no role"}${r.detail ? `; ${r.detail}` : ""})`);
   await reader.forget();
 });
 
@@ -291,6 +291,9 @@ test("the system's own editor (Notepad, TextEdit): read, and a fix typed there l
     });
     await reader.forget();
   }
+  // An empty document (an editor may reopen the last one).
+  if (WIN) await winkey("down", "LControl", "tap", "A", "up", "LControl", "tap", "Delete");
+  else await mackey("tap", "a", "cmd", "tap", "delete", "-");
   await keys.type(typed);
   let r;
   await until(`${WIN ? "Notepad" : "TextEdit"}'s text read`, async () => {
@@ -300,7 +303,7 @@ test("the system's own editor (Notepad, TextEdit): read, and a fix typed there l
     const seen = JSON.stringify({ ...r, value: r?.value === undefined ? undefined : `${r.value.length} characters` });
     throw new Error(`${err.message}; last answer: ${seen}\n${await whatItSees()}`);
   });
-  console.log(`text reader: ${WIN ? "Notepad" : "TextEdit"} read (${r.role ?? "no role"}, caret ${JSON.stringify(r.selection ?? null)})`);
+  console.log(`text reader: ${WIN ? "Notepad" : "TextEdit"} read (${r.role ?? "no role"}, caret ${JSON.stringify(r.selection ?? null)}${r.detail ? `; ${r.detail}` : ""})`);
   await reader.forget();
 
   const { fixes, logs, w } = watchFor(typed, WIN ? "Notepad" : "TextEdit");

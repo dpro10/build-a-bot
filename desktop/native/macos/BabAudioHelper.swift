@@ -457,7 +457,10 @@ final class TextBox {
         guard let el = focused() else { return TextReply(ok: false, error: "no-focus", detail: trail.joined(separator: "; ")) }
         AXUIElementSetMessagingTimeout(el, 0.5)
         element = el
-        return describe(el, full: true)
+        var reply = describe(el, full: true)
+        // How it was found (error codes on the way, or the front window's app), for the logs.
+        if !trail.isEmpty { reply.detail = trail.joined(separator: "; ") }
+        return reply
     }
 
     func read() -> TextReply {
