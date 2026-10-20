@@ -1,7 +1,7 @@
 /**
  * Meeting notes end to end on a real (in-memory) Postgres with the demo brain and the
  * demo transcript: start → audio chunks → live transcript → finish → notes → tools,
- * plus the guards (meetings off, out of credit, devices, prompt injection, the Bridge).
+ * plus the guards (meetings off, out of credit, devices, prompt injection).
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
@@ -25,8 +25,6 @@ const { readMeeting, searchMeetings, listMeetings } = await import("@/lib/tools/
 const { cleanSegments } = await import("@/lib/transcribe");
 const { recordUsage } = await import("@/lib/billing/usage");
 const { config } = await import("@/lib/env");
-const { completeJob } = await import("@/lib/bridge/jobs");
-const { demoMeetingNotes } = await import("@/lib/llm/demo");
 const { sha256 } = await import("@/lib/crypto");
 const audioRoute = await import("@/app/api/bots/[botId]/meetings/[meetingId]/audio/route");
 const meetingsRoute = await import("@/app/api/bots/[botId]/meetings/route");
@@ -37,13 +35,13 @@ import type { ToolContext } from "@/lib/tools/types";
 let db: Awaited<ReturnType<typeof getDb>>;
 let owner: User;
 
-async function makeBot(opts: { connectors?: string[]; trust?: "ask" | "full"; who?: User; subscription?: boolean } = {}): Promise<Bot> {
+async function makeBot(opts: { connectors?: string[]; trust?: "ask" | "full"; who?: User } = {}): Promise<Bot> {
   const res = await createBot(db, opts.who ?? owner, {
     avatar: "otto",
     color: "grape",
     name: "Inky",
     jobs: [],
-    brain: opts.subscription ? { kind: "subscription", subscription: "claude" } : { kind: "included", model: "nvidia/Nemotron-3_5-Lightning" },
+    brain: { kind: "included", model: "nvidia/Nemotron-3_5-Lightning" },
     connectors: opts.connectors ?? ["meetings"],
     trust: opts.trust ?? "ask",
     channels: [],
@@ -207,7 +205,7 @@ describe("meeting notes", () => {
     try {
       const r2 = await startMeeting(db, { bot: brokeBot, owner: broke, source: "desktop" });
       expect(r2).toMatchObject({ ok: false, status: 402, code: "no_credit" });
-      expect(!r2.ok && r2.error).toBe("You're out of credit. Add credit in Credit & usage, or switch me to your own AI key or subscription in Settings → Brain (that's free here).");
+      expect(!r2.ok && r2.error).toBe("You're out of credit. Add credit in Credit & usage, or switch me to your own AI key in Settings → Brain (that's free here).");
     } finally {
       config.tokenFactory.apiKey = undefined;
     }
@@ -216,7 +214,7 @@ describe("meeting notes", () => {
   it("the desktop app uses its device token, only for its owner's bots", async () => {
     const bot = await makeBot();
     const token = "bab_dev_test_token_123";
-    await db.insert(schema.bridgeDevices).values({ id: "dev_desk", ownerId: owner.id, name: "Dana's Mac", tokenHash: sha256(token), platform: "desktop-darwin-arm64", clis: {} });
+    await db.insert(schema.bridgeDevices).values({ id: "dev_desk", ownerId: owner.id, name: "Dana's Mac", tokenHash: sha256(token), platform: "desktop-darwin-arm64" });
     const headers = { authorization: `Bearer ${token}` };
 
     const ok = await meetingAuth(new Request("http://localhost/x", { headers }), bot.id);
@@ -300,25 +298,6 @@ describe("meeting notes", () => {
     expect((row.meta as { endedBy?: string }).endedBy).toBe("stale");
   });
 
-  it("a bot on the owner's own subscription writes the notes on their computer", async () => {
-    const bot = await makeBot({ subscription: true });
-    const m = await record(bot, owner, 6);
-    await finishMeeting(db, m);
-    await writeMeetingNotes(db, m.id);
-    const [waiting] = await db.select().from(schema.meetings).where(eq(schema.meetings.id, m.id));
-    expect(waiting.status).toBe("processing");
-    expect((waiting.meta as { notesVia?: string }).notesVia).toBe("bridge");
-    const [job] = await db.select().from(schema.bridgeJobs).where(eq(schema.bridgeJobs.botId, bot.id));
-    expect((job.input as { meta?: { meetingId?: string } }).meta?.meetingId).toBe(m.id);
-    expect(String((job.input as { directive?: string }).directive)).toMatch(/read_meeting/);
-
-    const transcript = transcriptLines(await getSegments(db, m.id), "Dana").join("\n");
-    await completeJob(db, { ...job, status: "running" }, { ok: true, text: demoMeetingNotes(transcript), model: "claude-sonnet" });
-    const [ready] = await db.select().from(schema.meetings).where(eq(schema.meetings.id, m.id));
-    expect(ready.status).toBe("ready");
-    expect((ready.meta as { notesBy?: string }).notesBy).toBe("claude-sonnet on your computer");
-    expect(ready.actionItems.length).toBeGreaterThan(2);
-  });
 });
 
 describe("consent, in-person meetings and retention", () => {
@@ -327,7 +306,7 @@ describe("consent, in-person meetings and retention", () => {
   const token2 = "bab_dev_test_token_456";
   beforeAll(async () => {
     owner2 = await newOwner("usr_meet2");
-    await db.insert(schema.bridgeDevices).values({ id: "dev_desk2", ownerId: owner2.id, name: "Dana's PC", tokenHash: sha256(token2), platform: "desktop-win32-x64", clis: {} });
+    await db.insert(schema.bridgeDevices).values({ id: "dev_desk2", ownerId: owner2.id, name: "Dana's PC", tokenHash: sha256(token2), platform: "desktop-win32-x64" });
   });
 
   it("records who said yes and whether they told the others; labels in-person lines as the room", async () => {

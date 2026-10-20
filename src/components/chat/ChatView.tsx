@@ -16,7 +16,6 @@ import { ACCEPT } from "@/lib/library/limits";
 import type { StudySetSummary } from "@/lib/db/schema";
 import { cn } from "@/lib/utils";
 import type { AvatarId, ColorwayId } from "@/lib/avatars";
-import type { ComputerState } from "@/lib/bridge/jobs";
 
 
 
@@ -88,7 +87,6 @@ export function ChatView({
   needsGreeting,
   brainLabel,
   initialInput,
-  viaBridge = false,
   canAttach = false,
 }: {
   botId: string;
@@ -104,8 +102,6 @@ export function ChatView({
   brainLabel: string;
   /** Prefilled message (e.g. "Ask Inky about this meeting" links), not sent until the owner says so. */
   initialInput?: string;
-  /** Thinks with the owner's own subscription, on their computer (through the Bridge). */
-  viaBridge?: boolean;
   /** Files can be attached (the Library is set up here). */
   canAttach?: boolean;
 }) {
@@ -114,8 +110,6 @@ export function ChatView({
   const [approvals, setApprovals] = React.useState<Record<string, ApprovalView>>(() => Object.fromEntries(initialApprovals.map((a) => [a.id, a])));
   const [input, setInput] = React.useState(initialInput ?? "");
   const [streaming, setStreaming] = React.useState(false);
-  const [bridgeThinking, setBridgeThinking] = React.useState(false);
-  const [bridgeWaiting, setBridgeWaiting] = React.useState(false);
   const abortRef = React.useRef<AbortController | null>(null);
   const listRef = React.useRef<HTMLDivElement>(null);
   const stickToBottom = React.useRef(true);
@@ -187,8 +181,6 @@ export function ChatView({
         { id: pendingId, key: pendingId, clientClock: true, role: "assistant", text: "", createdAt: new Date().toISOString(), tools: [], approvals: [], notices: [], pending: true },
       ]);
       let finalStatus = "ok";
-      // The turn's last status. A turn handed to the owner's computer says "waiting" when no computer is there to think yet.
-      let lastState = "";
       try {
         const res = await fetch(url, {
           method: "POST",
@@ -207,7 +199,6 @@ export function ChatView({
               if (ev.state === "thinking") live.setMood("thinking");
               if (ev.state === "working") live.setMood("working");
               if (ev.state === "waiting") live.setMood("alert");
-              lastState = ev.state;
               if (ev.label) live.setActivity(ev.label);
               break;
             case "text":
@@ -239,13 +230,7 @@ export function ChatView({
               break;
             case "done":
               finalStatus = ev.status;
-              if (ev.status === "queued") {
-                if (lastState === "waiting") setBridgeWaiting(true);
-                else setBridgeThinking(true);
-                setMessages((prev) => prev.filter((m) => !(m.pending && !m.text && !m.notices.length)).map((m) => (m.pending ? { ...m, pending: false } : m)));
-              } else {
-                patchLast((m) => ({ ...m, id: ev.messageId ?? m.id, text: ev.text || m.text, pending: false }));
-              }
+              patchLast((m) => ({ ...m, id: ev.messageId ?? m.id, text: ev.text || m.text, pending: false }));
               break;
             case "error":
               patchLast((m) => ({ ...m, notices: [...m.notices, { tone: "danger", text: ev.message }] }));
@@ -261,12 +246,10 @@ export function ChatView({
         setStreaming(false);
         live.setActivity(null);
         abortRef.current = null;
-        if (finalStatus !== "queued") {
-          // No happy bounce for a turn that couldn't be answered (no brain, a limit, a brain error).
-          const failed = finalStatus === "unavailable" || finalStatus === "limited" || finalStatus === "error";
-          live.setMood(failed ? "idle" : "happy");
-          if (!failed) setTimeout(() => live.setMood("idle"), 2400);
-        }
+        // No happy bounce for a turn that couldn't be answered (no brain, a limit, a brain error).
+        const failed = finalStatus === "unavailable" || finalStatus === "limited" || finalStatus === "error";
+        live.setMood(failed ? "idle" : "happy");
+        if (!failed) setTimeout(() => live.setMood("idle"), 2400);
         // STOP / START typed in the chat: show the new state in the header right away.
         if (finalStatus === "command" || finalStatus === "paused") setTimeout(() => void syncRef.current(true), 0);
       }
@@ -282,7 +265,7 @@ export function ChatView({
     }
   }, [needsGreeting, botId, runStream]);
 
-  // Pick up messages that arrive without a stream (bridge replies, reminders, approval follow-ups),
+  // Pick up messages that arrive without a stream (texts and calls, reminders, approval follow-ups),
   // and the bot's paused state (STOP from another channel). The latest tick lives in a ref so the
   // timer isn't restarted by every message, and a chat command can sync right away.
   React.useEffect(() => {
@@ -298,14 +281,8 @@ export function ChatView({
           messages: { id: string; role: string; author: string; text: string; createdAt: string; parts: unknown[]; meta: Record<string, unknown> }[];
           approvals: (ApprovalView & { status: string })[];
           botStatus: string;
-          thinkingOnBridge: boolean;
-          waitingOnBridge?: boolean;
-          computer?: ComputerState | null;
         };
-        setBridgeThinking(data.thinkingOnBridge);
-        setBridgeWaiting(Boolean(data.waitingOnBridge));
         live.setPaused(data.botStatus === "paused");
-        live.setComputer(data.computer ?? null);
         setApprovals((prev) => {
           const next = { ...prev };
           for (const a of data.approvals) next[a.id] = { ...next[a.id], ...a };
@@ -326,20 +303,13 @@ export function ChatView({
       }
     };
   }, [botId, messages, streaming, live]);
-  // Once on open: replies may already be waiting on the owner's computer.
+  // Once on open: a reply may have landed since the page was rendered.
   React.useEffect(() => {
     const t = setTimeout(() => void syncRef.current(), 400);
     return () => clearTimeout(t);
   }, []);
-  // A bot on the owner's own Claude or ChatGPT answers from their computer. Its job is only
-  // "thinking" once the Bridge there picks it up; until then the owner's message just waits.
-  const last = messages.length > 0 ? messages[messages.length - 1] : null;
-  const waitingOnComputer = viaBridge && !streaming && !bridgeThinking && (last?.role === "user" || bridgeWaiting) && !live.paused;
-  const quickPoll = bridgeThinking || waitingOnComputer;
-  // Said once: when the bot's last message already says why it's waiting, the status line below stays out.
-  const showWaiting = waitingOnComputer && !last?.notices.length;
   React.useEffect(() => {
-    const interval = setInterval(() => void syncRef.current(), quickPoll ? 2500 : 6000);
+    const interval = setInterval(() => void syncRef.current(), 6000);
     const onVisible = () => {
       if (document.visibilityState === "visible") void syncRef.current();
     };
@@ -348,7 +318,7 @@ export function ChatView({
       clearInterval(interval);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [quickPoll]);
+  }, []);
 
   const send = async (text: string, opts: { withFiles?: boolean } = {}) => {
     const t = text.trim();
@@ -456,37 +426,6 @@ export function ChatView({
               onAsk={(text) => void send(text, { withFiles: false })}
             />
           ))}
-          {bridgeThinking ? (
-            <div className="flex items-center gap-3 text-sm text-muted-foreground" role="status">
-              <Avatar avatar={avatar} color={color} size={32} mood="thinking" />
-              <span className="shimmer-text font-medium">Thinking on your computer…</span>
-            </div>
-          ) : showWaiting ? (
-            <div className="flex items-start gap-3 text-sm text-muted-foreground" role="status">
-              <Avatar avatar={avatar} color={color} size={32} mood="sleeping" />
-              {live.computer === "unpaired" ? (
-                <div className="min-w-0 pt-1">
-                  <div className="font-medium text-foreground">Pair your computer to start</div>
-                  <p className="text-xs">
-                    {botName} thinks with your own plan, on your computer, and answers once it&apos;s paired.{" "}
-                    <Link href="/app/bridge" className="font-semibold text-primary hover:underline">
-                      Open Bridge (your computer)
-                    </Link>
-                  </p>
-                </div>
-              ) : (
-                <div className="min-w-0 pt-1">
-                  <div className="font-medium text-foreground">Waiting for your computer</div>
-                  <p className="text-xs">
-                    {botName} thinks on your computer and answers as soon as the Bridge is running there.{" "}
-                    <Link href="/app/bridge" className="font-semibold text-primary hover:underline">
-                      Check the Bridge
-                    </Link>
-                  </p>
-                </div>
-              )}
-            </div>
-          ) : null}
         </div>
       </div>
 

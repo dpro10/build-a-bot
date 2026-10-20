@@ -33,15 +33,12 @@ const updatedAt = () => timestamp("updated_at", { withTimezone: true }).notNull(
 // ---------------------------------------------------------------------------
 
 export type BrainConfig = {
-  /** included = our open-weight models (Nebius Token Factory); byok = the user's API key;
-   *  subscription = the user's own Claude Code / Codex via the Bridge on their computer. */
-  kind: "included" | "byok" | "subscription";
-  provider: string; // "nebius" | "anthropic" | "openai" | "google" | "openrouter" | ... | "claude-code" | "codex" | "demo"
+  /** included = our open-weight models (Nebius Token Factory); byok = the user's API key. */
+  kind: "included" | "byok";
+  provider: string; // "nebius" | "anthropic" | "openai" | "google" | "openrouter" | ... | "demo"
   model: string;
   credentialId?: string | null;
   baseUrl?: string | null;
-  /** What to do when a subscription brain's computer is asleep. Opt-in fallback only. */
-  whenOffline?: "wait" | "included";
   /** Thinking depth for models that support it. */
   effort?: "low" | "medium" | "high";
 };
@@ -153,7 +150,7 @@ export const bots = pgTable(
     pausedReason: text("paused_reason"),
     /** Brand-free handle used for the bot's own email address etc. (rename insurance). */
     handle: text("handle").notNull(),
-    /** sha256 of the bearer token for this bot's MCP endpoint (Bridge + MCP clients). */
+    /** sha256 of the bearer token for this bot's MCP endpoint (other AI apps the owner connects). */
     mcpTokenHash: text("mcp_token_hash"),
     recipeId: text("recipe_id"),
     /** A ready-made role (src/lib/roles.ts): "tutor", "job_applier"…; null for a general assistant. */
@@ -647,12 +644,10 @@ export const studySets = pgTable(
     progress: jsonb("progress").$type<StudyProgress>().notNull().default({}),
     /** Library files it was made from. */
     fileIds: jsonb("file_ids").$type<string[]>().notNull().default([]),
-    /** The Bridge job that made it, so its card shows with that answer. */
-    jobId: text("job_id"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [index("study_sets_bot_idx").on(t.botId, t.createdAt), index("study_sets_job_idx").on(t.jobId)],
+  (t) => [index("study_sets_bot_idx").on(t.botId, t.createdAt)],
 );
 
 // ---------------------------------------------------------------------------
@@ -712,7 +707,7 @@ export const credits = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// Bridge (subscription brains on the user's own computer)
+// Paired computers: the desktop app (meeting notes, voice typing, the Library)
 // ---------------------------------------------------------------------------
 
 export const bridgeDevices = pgTable(
@@ -725,37 +720,11 @@ export const bridgeDevices = pgTable(
     name: text("name").notNull(),
     tokenHash: text("token_hash").notNull(),
     platform: text("platform"),
-    clis: jsonb("clis").$type<Record<string, string | null>>().notNull().default({}),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
     createdAt: createdAt(),
   },
   (t) => [index("bridge_devices_owner_idx").on(t.ownerId), uniqueIndex("bridge_devices_token_uq").on(t.tokenHash)],
-);
-
-export const bridgeJobs = pgTable(
-  "bridge_jobs",
-  {
-    id: text("id").primaryKey(),
-    ownerId: text("owner_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    botId: text("bot_id")
-      .notNull()
-      .references(() => bots.id, { onDelete: "cascade" }),
-    conversationId: text("conversation_id"),
-    deviceId: text("device_id"),
-    status: text("status").notNull().default("queued"), // queued | running | done | failed | expired | canceled
-    input: jsonb("input").$type<Record<string, unknown>>().notNull(),
-    output: jsonb("output").$type<Record<string, unknown>>(),
-    progress: text("progress"),
-    error: text("error"),
-    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-    claimedAt: timestamp("claimed_at", { withTimezone: true }),
-    finishedAt: timestamp("finished_at", { withTimezone: true }),
-    createdAt: createdAt(),
-  },
-  (t) => [index("bridge_jobs_owner_status_idx").on(t.ownerId, t.status)],
 );
 
 // ---------------------------------------------------------------------------
@@ -913,7 +882,6 @@ export type ScheduleRow = typeof schedules.$inferSelect;
 export type Usage = typeof usage.$inferSelect;
 export type CreditRow = typeof credits.$inferSelect;
 export type BridgeDevice = typeof bridgeDevices.$inferSelect;
-export type BridgeJob = typeof bridgeJobs.$inferSelect;
 export type Meeting = typeof meetings.$inferSelect;
 export type MeetingSegment = typeof meetingSegments.$inferSelect;
 export type Recipe = typeof recipes.$inferSelect;

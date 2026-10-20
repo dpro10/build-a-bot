@@ -36,12 +36,6 @@ const brainSchema = z.discriminatedUnion("kind", [
     baseUrl: z.string().url().max(400).optional(),
     effort: z.enum(["low", "medium", "high"]).optional(),
   }),
-  z.object({
-    kind: z.literal("subscription"),
-    subscription: z.enum(["claude", "chatgpt"]),
-    model: z.string().max(60).optional(),
-    whenOffline: z.enum(["wait", "included"]).optional(),
-  }),
 ]);
 
 /** A bot's name: short, and never the product's own name (it stays out of anything a bot owns). */
@@ -116,7 +110,7 @@ export async function createBot(db: Db, owner: User, input: CreateBotInput): Pro
   if (input.brain.kind === "included") {
     const model = INCLUDED_MODELS.find((m) => m.id === input.brain.model) ?? INCLUDED_MODELS.find((m) => m.default)!;
     brain = { kind: "included", provider: "nebius", model: model.id, effort: input.brain.effort ?? "low" };
-  } else if (input.brain.kind === "byok") {
+  } else {
     const provider = input.brain.provider as ProviderId;
     if (!PROVIDER_BY_ID[provider]) return { ok: false, error: "Unknown AI provider." };
     if (provider === "custom" && !input.brain.baseUrl) return { ok: false, error: "Add your endpoint's base URL." };
@@ -135,14 +129,6 @@ export async function createBot(db: Db, owner: User, input: CreateBotInput): Pro
       baseUrl: input.brain.baseUrl ?? null,
       effort: input.brain.effort ?? "medium",
     };
-  } else {
-    brain = {
-      kind: "subscription",
-      provider: input.brain.subscription === "claude" ? "claude-code" : "codex",
-      model: input.brain.model ?? "default",
-      whenOffline: input.brain.whenOffline ?? "wait",
-    };
-    notes.push("One more step for your subscription: pair your computer on the Bridge page (it takes a minute).");
   }
 
   // User profile bits from the builder.

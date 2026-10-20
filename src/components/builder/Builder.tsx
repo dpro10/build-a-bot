@@ -277,9 +277,7 @@ export function Builder({ demo, live, comingSoon, recipe, botCount, signedIn, ow
       const brain =
         b.kind === "included"
           ? { kind: "included", model: b.model, effort: b.effort }
-          : b.kind === "subscription"
-            ? { kind: "subscription", subscription: b.subscription, model: b.model, whenOffline: b.whenOffline }
-            : { kind: "byok", provider: b.provider, model: b.model, apiKey: apiKey.trim(), ...(b.provider === "custom" && b.baseUrl ? { baseUrl: b.baseUrl } : {}) };
+          : { kind: "byok", provider: b.provider, model: b.model, apiKey: apiKey.trim(), ...(b.provider === "custom" && b.baseUrl ? { baseUrl: b.baseUrl } : {}) };
       const res = await api<{ id: string; notes: string[] }>("/api/bots", {
         body: {
           avatar: state.avatar,

@@ -182,7 +182,7 @@ function SidebarContent({
         ) : null}
         <NavItem href="/app/approvals" icon={<Bell className="size-[18px]" />} label="Approvals" active={pathname === "/app/approvals"} badge={pendingTotal} />
         <NavItem href="/app/voice" icon={<Mic className="size-[18px]" />} label="Voice typing" active={pathname === "/app/voice"} />
-        <NavItem href="/app/bridge" icon={<Laptop className="size-[18px]" />} label="Bridge (your computer)" active={pathname === "/app/bridge"} />
+        <NavItem href="/app/desktop" icon={<Laptop className="size-[18px]" />} label="Desktop app" active={pathname === "/app/desktop"} />
         <NavItem
           href="/app/billing"
           icon={<CreditCard className="size-[18px]" />}

@@ -124,22 +124,6 @@
       choose.onclick = async () => render(await api.chooseFolder(lib.folder ? lib.botId : select.hidden ? s.bots[0].id : select.value));
       $("library-stop").onclick = async () => render(await api.stopFolder());
     }
-    // The Bridge: bots on the owner's own Claude or ChatGPT plan think here.
-    const b = s.bridge;
-    $("bridge-card").hidden = !(b && b.show);
-    if (b && b.show) {
-      $("bridge-line").textContent = b.status;
-      $("bridge-hint").textContent = b.enabled
-        ? "Bots set to Your Claude or Your ChatGPT think here: only your own bots, with every built-in tool off. Your sign-in never leaves this computer."
-        : "Turn it on to let bots set to Your Claude or Your ChatGPT think here, with your own Claude Code or Codex.";
-      $("bridge-toggle").textContent = b.enabled ? "Turn off here" : "Turn on here";
-      $("bridge-toggle").onclick = async () => render(await api.setBridge(!b.enabled));
-      $("bridge-get").hidden = !b.getCli;
-      if (b.getCli) {
-        $("bridge-get").textContent = `Get ${b.getCli.name}`;
-        $("bridge-get").onclick = () => api.open(`get-${b.getCli.id}`);
-      }
-    }
   }
 
   function render(s) {

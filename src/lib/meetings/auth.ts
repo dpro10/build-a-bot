@@ -1,6 +1,6 @@
 /**
- * Meeting notes are taken in the desktop app (a paired computer's device token, the same pairing
- * the Bridge uses), which hears the call on the owner's computer: starting a meeting and sending
+ * Meeting notes are taken in the desktop app (a paired computer's device token, the same one voice
+ * typing uses), which hears the call on the owner's computer: starting a meeting and sending
  * what was said answer only the app (`appOnly`). The web app (a signed-in session) shows the
  * meetings, writes notes again, stops a recording and deletes.
  */

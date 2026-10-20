@@ -32,10 +32,8 @@ export function costLine(s: BuilderState): string {
   if (brain.kind === "included") {
     const m = INCLUDED_MODELS.find((x) => x.id === brain.model) ?? INCLUDED_MODELS.find((x) => x.default)!;
     parts.push(`About ${formatMicros(perMessageMicros(m))} a message on ${m.label}, paid from your credit at cost.`);
-  } else if (brain.kind === "byok") {
-    parts.push(`Free here: ${PROVIDER_BY_ID[brain.provider]?.name ?? "your provider"} bills you for the thinking.`);
   } else {
-    parts.push(`Free here: it thinks on your ${brain.subscription === "claude" ? "Claude" : "ChatGPT"} subscription, on your computer.`);
+    parts.push(`Free here: ${PROVIDER_BY_ID[brain.provider]?.name ?? "your provider"} bills you for the thinking.`);
   }
   if (s.connectors.includes("web_search") || s.connectors.includes("news") || s.connectors.includes("web_reader")) parts.push(`Each web lookup is ${formatMicros(UNIT_PRICES.lookup)}.`);
   if (s.channels.includes("sms") || s.channels.includes("voice")) parts.push("Texts and calls are paid from credit too.");

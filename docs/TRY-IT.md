@@ -53,9 +53,8 @@ No account needed. A live preview builds the bot as you go.
 
 1. **Face:** pick a character and a color.
 2. **Name:** type one or tap "Surprise me", and say what it should call you.
-3. **Brain:** keep **Open models we run** (each one shows what a message costs, at cost). Optional detours:
+3. **Brain:** keep **Open models on Nebius** (each one shows what a message costs, at cost). Optional detour:
    - Open **Your own API key** and paste a made-up key: it's checked live with the provider and refused (when your computer is online).
-   - Open **Your Claude or ChatGPT plan** to see how the Bridge works.
 4. **Apps:** under "What should … help with?" tap **Inbox**, **Calendar**, **Meetings** and **Errands** (each brings its built-in tools, like notes and web search). Then search for and add **Gmail** and **Google Calendar**.
 5. **Trust:** keep **Ask me first** for now, and read the hard limits. (Full faith is there for every bot; you'll try it in step 6.)
 6. **Talk:** pick any channels. Web chat is always on.
@@ -100,7 +99,7 @@ npm run dev
 ```
 
 1. A Build-a-bot icon appears in the menu bar (Mac) or tray (Windows/Linux), and the pairing window opens. Its **Server** is already `http://localhost:3000`.
-2. In the web app, open the bot's **Meetings** tab. If you didn't pick Meetings in the builder, press **Turn on meeting notes**. **Get the desktop app** leads to **Bridge (your computer)** → **Desktop app** → **Get a pairing code**. Type the code into the app and press **Pair**.
+2. In the web app, open the bot's **Meetings** tab. If you didn't pick Meetings in the builder, press **Turn on meeting notes**. **Get the desktop app** leads to the **Desktop app** page → **Get a pairing code**. Type the code into the app and press **Pair**.
 3. Under **Who takes notes**, pick your bot. NVIDIA Parakeet starts downloading (about 0.7 GB, once; voice typing uses the same one), and the window shows how far it's got.
 4. Start a call: a Zoom, Meet or Teams call, or join any meeting.
 
@@ -177,7 +176,7 @@ Without Accessibility on a Mac it still works: press **⌘ Shift Space** to star
   - **Share as a recipe** (a public `/r/…` link, never with your data);
   - **Other AI apps** (use the bot's apps from Claude Desktop or Claude Code, under the same rules).
 - **Credit & usage:** the balance (it starts at $1), Add $5, $10 or $20 (free in demo mode), what you used this month and what it cost, the credit you added, and every price.
-- **Bridge (your computer):** pairing for the Bridge (subscription brains) and the desktop app.
+- **Desktop app:** where to get it, a pairing code, and your paired computers (unpair one there).
 - **Account:**
   - **Add your email** saves the account (in demo mode the magic link appears on screen instead of in your inbox);
   - **Download my data** exports everything as JSON, meetings and transcripts included;
@@ -190,10 +189,6 @@ Without Accessibility on a Mac it still works: press **⌘ Shift Space** to star
 - build-a-bot.site is live, but in demo mode until the last keys are in.
 - **Real channels** need accounts: a Telegram manager bot, a Twilio number (plus A2P registration for texts), a brand-free email domain, and Slack and Discord apps.
 - **The demo brain** only knows everyday requests. Anything else gets an honest "I'm on the demo brain" answer. With a Token Factory key, the real models answer.
-- **Subscriptions (the Bridge):** it runs on a computer that has the `claude` or `codex` CLI installed and signed in.
-  - Pair it from **Bridge (your computer)**.
-  - On your own computer the app shows commands that run from this folder, like `node bridge/bab-bridge.mjs pair ABCD-1234 --server http://localhost:3000`, then `node bridge/bab-bridge.mjs` to start it.
-  - On a deployment it shows `npx -y https://build-a-bot.site/downloads/build-a-bot-bridge-0.2.0.tgz …`: the site serves its own copy of the Bridge, so it works without the repo or anything on npm.
 
 **Meeting notes:**
 - They're in the desktop app only; the website doesn't record. NVIDIA Parakeet hears the call on your computer, so no speech-to-text key is needed.

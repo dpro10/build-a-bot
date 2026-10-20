@@ -144,7 +144,6 @@ describe("which memories a turn gets", () => {
   it("bigger brains get more", () => {
     expect(mem.brainTier({ kind: "included", provider: "nebius", model: "nvidia/Nemotron-3_5-Lightning" })).toBe("fast");
     expect(mem.brainTier({ kind: "byok", provider: "openai", model: "gpt-6.1-sol" })).toBe("smart");
-    expect(mem.brainTier({ kind: "subscription", provider: "claude-code", model: "default" })).toBe("smart");
     expect(mem.brainTier({ kind: "byok", provider: "custom", model: "my-model" })).toBe("balanced");
     expect(mem.MEMORY_BUDGET.smart.count).toBeGreaterThan(mem.MEMORY_BUDGET.fast.count);
   });

@@ -38,7 +38,7 @@ The app is one Next.js project plus a Postgres database. Recommended: **Vercel +
 | Meeting notes and voice typing | `NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL` | Both are only in the desktop app, which hears them on the user's computer with NVIDIA Parakeet: no speech-to-text is needed on the server. Until signed downloads are published (§9) and this is `https://build-a-bot.site/download`, a real server shows both as "Coming soon". |
 | Server speech-to-text (optional fallback) | `TRANSCRIBE_PROVIDER=nvidia`, `TRANSCRIBE_BASE_URL`, `TRANSCRIBE_API_KEY` (+ optional `TRANSCRIBE_FALLBACK_*`) | Only for computers where Parakeet can't run, or with Private speech off. NVIDIA's open speech models on our own server (`speech/`): deploy its image as a Nebius Serverless AI endpoint (steps and costs in `speech/README.md`; about $190/month for an 8-vCPU CPU machine), then point these at it. Backup: `TRANSCRIBE_FALLBACK_PROVIDER=together` with a Together AI key (NVIDIA Parakeet, $0.0015/audio minute; Whisper for the languages Parakeet doesn't speak). Groq's Whisper also works (`TRANSCRIBE_PROVIDER=groq`, paid tier). Token Factory has no speech-to-text. |
 
-Own-key (BYOK) and subscription brains need nothing from you.
+Own-key (BYOK) brains need nothing from you.
 
 ## 5. Channels
 
@@ -76,7 +76,6 @@ A paid Checkout for an account deleted before Stripe confirmed it adds no credit
 - [ ] Twilio A2P/toll-free registration done; email domain verified (SPF/DKIM/DMARC).
 - [ ] Google: Gmail/Drive through Composio's verified app, or your own app with Google's verification (restricted Gmail scopes need a yearly CASA assessment).
 - [ ] Support email set (`NEXT_PUBLIC_SUPPORT_EMAIL`); crisis protocol page live (`/safety`).
-- [ ] The Bridge needs nothing published. Before each build, `scripts/pack-bridge.mjs` packs `bridge/` into `public/downloads/`, and the app tells owners to run `npx -y {APP_URL}/downloads/build-a-bot-bridge-<version>.tgz`. Don't set `BRIDGE_CLI` in production unless you mean to override that.
 - [ ] Re-render avatar pictures if characters change: `npm run avatars`.
 - [ ] Meeting notes and voice typing:
   - a lawyer reviews the consent flow and transcript retention;

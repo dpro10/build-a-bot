@@ -15,8 +15,6 @@ export type ToolContext = {
   demo: boolean;
   now: Date;
   signal?: AbortSignal;
-  /** The Bridge job this call is part of (a bot thinking on the owner's computer). */
-  jobId?: string | null;
 };
 
 export type ToolSource = { title: string; url: string };

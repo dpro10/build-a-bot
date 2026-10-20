@@ -60,13 +60,12 @@ const patchSchema = z.object({
     .optional(),
   brain: z
     .object({
-      kind: z.enum(["included", "byok", "subscription"]),
+      kind: z.enum(["included", "byok"]),
       provider: z.string().max(40).optional(),
       model: z.string().max(200).optional(),
       apiKey: z.string().min(8).max(400).optional(),
       baseUrl: z.string().url().optional(),
       effort: z.enum(["low", "medium", "high"]).optional(),
-      whenOffline: z.enum(["wait", "included"]).optional(),
     })
     .optional(),
 });
@@ -95,7 +94,7 @@ export async function PATCH(req: Request, ctx: RouteCtx<{ botId: string }>) {
     if (p.brain.kind === "included") {
       const def = INCLUDED_MODELS.find((m) => m.id === p.brain!.model) ?? INCLUDED_MODELS.find((m) => m.default)!;
       brain = { kind: "included", provider: "nebius", model: def.id, effort: p.brain.effort ?? a.bot.brain.effort ?? "low" };
-    } else if (p.brain.kind === "byok") {
+    } else {
       const provider = (p.brain.provider ?? a.bot.brain.provider) as ProviderId;
       if (!PROVIDER_BY_ID[provider]) return apiError(422, "Unknown provider");
       let credentialId = a.bot.brain.kind === "byok" && a.bot.brain.provider === provider ? a.bot.brain.credentialId : null;
@@ -110,13 +109,6 @@ export async function PATCH(req: Request, ctx: RouteCtx<{ botId: string }>) {
         credentialId,
         baseUrl: p.brain.baseUrl ?? null,
         effort: p.brain.effort ?? "medium",
-      };
-    } else {
-      brain = {
-        kind: "subscription",
-        provider: p.brain.provider === "codex" ? "codex" : "claude-code",
-        model: p.brain.model ?? "default",
-        whenOffline: p.brain.whenOffline ?? "wait",
       };
     }
     updates.brain = brain;

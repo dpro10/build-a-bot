@@ -26,7 +26,6 @@ export type StepId = (typeof STEPS)[number]["id"];
 
 export type BrainChoice =
   | { kind: "included"; model: string; effort: "low" | "medium" | "high" }
-  | { kind: "subscription"; subscription: "claude" | "chatgpt"; model: string; whenOffline: "wait" | "included" }
   | { kind: "byok"; provider: ProviderId; model: string; baseUrl: string };
 
 export type BuilderState = {
@@ -137,7 +136,8 @@ export function initialState(recipe: (RecipeData & { slug?: string }) | null | u
 
 /** A saved draft on top of a fresh state, keeping only what works here: its channels and apps, and a model we still serve. */
 export function withDraft(base: BuilderState, draft: Partial<BuilderState>, ctx: BuilderContext): BuilderState {
-  const brain = draft.brain ?? base.brain;
+  // A draft saved before 2026-10-20 can hold a Claude or ChatGPT plan, which is gone: back to the default.
+  const brain = draft.brain && (draft.brain.kind as string) !== "subscription" ? draft.brain : base.brain;
   return {
     ...base,
     ...draft,

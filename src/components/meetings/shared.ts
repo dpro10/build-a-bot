@@ -43,20 +43,19 @@ export function meetingAppName(app: string | null | undefined): string {
   return MEETING_APPS[isMeetingApp(app) ? app : "other"].name;
 }
 
-export type MeetingStatusKey = "recording" | "writing" | "waiting" | "ready" | "failed";
+export type MeetingStatusKey = "recording" | "writing" | "ready" | "failed";
 
 export const STATUS: Record<MeetingStatusKey, { label: string; tone: "danger" | "primary" | "warning" | "success" | "neutral" }> = {
   recording: { label: "Recording now", tone: "danger" },
   writing: { label: "Writing notes", tone: "primary" },
-  waiting: { label: "Waiting for your computer", tone: "warning" },
   ready: { label: "Ready", tone: "success" },
   failed: { label: "Notes failed", tone: "neutral" },
 };
 
 /** What the owner should see. Notes that couldn't be written come back as "ready" with an error and no notes. */
-export function statusOf(m: Pick<MeetingView, "status" | "waitingForComputer" | "notes">): MeetingStatusKey {
+export function statusOf(m: Pick<MeetingView, "status" | "notes">): MeetingStatusKey {
   if (m.status === "recording") return "recording";
-  if (m.status === "processing") return m.waitingForComputer ? "waiting" : "writing";
+  if (m.status === "processing") return "writing";
   return m.notes ? "ready" : "failed";
 }
 

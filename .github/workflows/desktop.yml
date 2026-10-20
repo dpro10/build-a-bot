@@ -497,7 +497,7 @@ jobs:
               echo "- **Mac (Apple silicon and Intel, macOS 13 or later):** \`Build-a-bot-$APP_VERSION-mac-universal.dmg\`, not signed yet, for testing: macOS won't open it until you allow it in **System Settings → Privacy & Security → Open Anyway**."
             fi
             echo
-            echo "Pair it with a code from build-a-bot.site (**Bridge (your computer)**), then **Set up voice typing**: NVIDIA Parakeet downloads (about 0.7 GB) and hears you on the computer. A newer test build installs over this one and keeps your pairing, settings and Parakeet. See desktop/README.md for everything it does."
+            echo "Pair it with a code from https://build-a-bot.site/app/desktop, then **Set up voice typing**: NVIDIA Parakeet downloads (about 0.7 GB) and hears you on the computer. A newer test build installs over this one and keeps your pairing, settings and Parakeet. See desktop/README.md for everything it does."
           } > notes.md
           gh release create desktop-test dist/windows/*.exe dist/mac/*.dmg --prerelease --target "$GITHUB_SHA" \
             --title "Desktop app (test build, $APP_VERSION)" --notes-file notes.md

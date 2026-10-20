@@ -85,10 +85,23 @@ test("settings: defaults, saved changes, and server URLs", () => {
   assert.equal("autoStart" in again, false, "there is no auto-record setting");
 
   assert.equal(normalizeServer("build-a-bot.site"), "https://build-a-bot.site");
-  assert.equal(normalizeServer("http://localhost:3000/app/bridge"), "http://localhost:3000");
+  assert.equal(normalizeServer("http://localhost:3000/app/desktop"), "http://localhost:3000");
   assert.equal(normalizeServer("http://example.com"), null, "plain http only for this computer");
   assert.equal(normalizeServer("https://user:pw@example.com"), null);
   assert.equal(normalizeServer("javascript:alert(1)"), null);
+});
+
+test("settings: an older version's file still loads, and a setting that's gone is dropped", () => {
+  const file = tmpFile();
+  // The Bridge's switch, from before it was removed, next to settings that stay.
+  fs.writeFileSync(file, JSON.stringify({ captions: false, bridge: { enabled: false }, voice: { enabled: true } }));
+  const s = new Settings(file);
+  assert.equal(s.get().captions, false);
+  assert.equal(s.get().voice.enabled, true);
+  assert.equal(s.get().voice.polish, true, "the rest of voice typing gets its defaults");
+  assert.equal("bridge" in s.get(), false);
+  s.update({ captions: true });
+  assert.equal("bridge" in JSON.parse(fs.readFileSync(file, "utf8")), false, "gone from the file at the next save");
 });
 
 test("the heads-up says it's an AI and names the bot", () => {

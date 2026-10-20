@@ -9,9 +9,6 @@
  * Voice typing (voice/): hold a shortcut anywhere and talk; what you meant is typed where your
  * cursor is. Off until the owner sets it up.
  *
- * The Bridge (bridge/): bots whose brain is the owner's own Claude or ChatGPT plan think here, with
- * their Claude Code or Codex. On whenever one is found, unless the owner turns it off here.
- *
  * "Give my bot a folder" (library/): the files in one folder the owner picks go to a bot's
  * Library and stay in step. Nothing else on the disk is read.
  *
@@ -44,7 +41,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Account, deviceName } from "./account.mjs";
 import { createApi } from "./api.mjs";
-import { Bridge, GET_CLI_URL, findClis } from "./bridge/index.mjs";
 import { LibrarySync } from "./library/index.mjs";
 import { BuddyWindow } from "./buddy-window.mjs";
 import { CaptureWindow } from "./capture-window.mjs";
@@ -89,8 +85,6 @@ protocol.registerSchemesAsPrivileged([{ scheme: SCHEME, privileges: { standard: 
 /** @type {ReturnType<typeof createLogger>} */
 let log = (m) => console.log(m);
 let settings, tokens, api, account, spool, uploads, buddy, capture, decoder, controller, pairing, detector, tray, voice;
-/** @type {Bridge} */
-let bridge;
 /** @type {LibrarySync} */
 let library;
 /** @type {Updates | null} */
@@ -127,6 +121,8 @@ async function boot() {
   if (process.platform === "win32") app.setAppUserModelId("site.build-a-bot.desktop");
 
   settings = new Settings(path.join(userData, "settings.json"));
+  // Older versions ran the Bridge in here; a turn cut short could leave its prompt behind.
+  fs.rmSync(path.join(userData, "bridge"), { recursive: true, force: true });
   if (serverOverride) {
     const s = normalizeServer(serverOverride);
     if (s) settings.update({ server: s });
@@ -219,20 +215,6 @@ async function boot() {
     log,
   });
 
-  bridge = new Bridge({
-    api,
-    account,
-    settings,
-    workRoot: path.join(userData, "bridge", "work"),
-    // A CLI that's a Node script, on a Windows computer without Node: the app's own Node runs it.
-    find: () => findClis({ node: { file: process.execPath, args: [], env: { ELECTRON_RUN_AS_NODE: "1" } } }),
-    notify: ({ title, body }) => notify({ title, body }),
-    log,
-  });
-  bridge.on("change", () => {
-    tray?.update();
-    pairing.send(pairingState());
-  });
   library = new LibrarySync({ api, account, settings, stateFile: path.join(userData, "library-sync.json"), log });
   library.on("change", () => {
     tray?.update();
@@ -271,7 +253,6 @@ async function boot() {
     voice.pushState();
     // A bot takes notes here: get NVIDIA Parakeet now, so the first call's notes don't wait for it.
     if (account.bots().some((b) => b.meetingsOn)) voice.meetings.ensure();
-    void bridge.apply();
     // Tests: a folder to sync, without the folder dialog.
     if (env.BAB_LIBRARY_FOLDER && account.session && !settings.get().library.folder && account.bots()[0]) {
       void library.choose(path.resolve(env.BAB_LIBRARY_FOLDER), account.bots()[0].id);
@@ -284,7 +265,6 @@ async function boot() {
     spool.clear();
     // Voice typing stops, and this computer's voice history goes with the pairing.
     voice.forget();
-    bridge.forget();
     library.forget();
     // Unpaired from the web app: say so where the owner can pair again.
     if (reason) {
@@ -317,7 +297,8 @@ async function boot() {
     void voice.interrupt();
     voice.dispose();
     library.dispose();
-    Promise.all([controller.shutdown(), bridge.shutdown()])
+    controller
+      .shutdown()
       .catch((err) => log(`shutdown: ${err}`))
       .finally(() => {
         readyToQuit = true;
@@ -336,7 +317,6 @@ async function boot() {
   else account.once("change", () => void controller.resumeLeftovers(spool));
   detector.start();
   await voice.apply();
-  bridge.start();
   library.start();
   if (env.BAB_SMOKE === "1") await smoke();
 }
@@ -380,9 +360,6 @@ async function smoke() {
     results.updates = updatesOn({ packaged: true, platform: process.platform, flag: buildFlags().babUpdates, env: {} }) ? "on (off while checking itself)" : "off (not a signed release build)";
     results["pairing window"] = pairing.webContents?.getURL().startsWith("bab-app://pairing") ? "ok" : "FAILED: it didn't load";
     Object.assign(results, await voice.smoke());
-    // Whether this computer has Claude Code or Codex is up to its owner: reported, never a failure.
-    const found = await bridge.detect(true);
-    results.bridge = `Claude Code ${found?.clis.claude ?? "not found"} · Codex ${found?.clis.codex ?? "not found"}`;
   } catch (err) {
     results.error = `FAILED: ${/** @type {any} */ (err)?.message ?? err}`;
   }
@@ -459,17 +436,11 @@ function registerIpc() {
   ipcMain.handle("pairing:open", (e, arg) => {
     fromPairing(e);
     const what = arg?.what;
-    if (what === "pair-page") openAppLink(`${normalizeServer(account.server() ?? settings.get().server) ?? DEFAULT_SERVER}/app/bridge#desktop`, { anyServer: true });
+    if (what === "pair-page") openAppLink(`${normalizeServer(account.server() ?? settings.get().server) ?? DEFAULT_SERVER}/app/desktop`, { anyServer: true });
     else if (what === "bot-apps") openAppLink(controller.urlFor("apps", { botId: arg?.botId ?? null }));
     else if (what === "voice") void voice.showSettings("setup");
-    else if (what === "get-claude" || what === "get-codex") void shell.openExternal(GET_CLI_URL[what === "get-codex" ? "codex" : "claude"]);
     else openAppLink(controller.urlFor("app"));
     return true;
-  });
-  ipcMain.handle("pairing:bridge", (e, on) => {
-    fromPairing(e);
-    bridge.setEnabled(on === true);
-    return pairingState();
   });
   ipcMain.handle("pairing:library-choose", async (e, botId) => {
     fromPairing(e);
@@ -501,7 +472,6 @@ function pairingState() {
     trayWord: process.platform === "darwin" ? "menu bar" : "tray",
     voice: voice.trayInfo(),
     hearing: account.bots().some((b) => b.meetingsOn) ? voice.meetings.line() : null,
-    bridge: bridge.info(),
     library: library.info(),
   };
 }
@@ -531,7 +501,6 @@ function trayModel() {
     neverApps: s.neverApps,
     voice: voice ? voice.trayInfo() : null,
     update: updates?.menu() ?? null,
-    bridge: bridge ? bridge.info() : null,
     library: library ? library.info() : null,
   };
 }
@@ -557,16 +526,11 @@ function onTrayClick(id, checked) {
   else if (id === "mac-tabs") settings.update({ macTabs: Boolean(checked) });
   else if (id === "voice-setup" || id === "voice-settings") void voice.showSettings(id === "voice-setup" ? "setup" : undefined);
   else if (id === "voice-paste-last") void voice.voice.pasteLast();
-  else if (id === "bridge-toggle") bridge.setEnabled(Boolean(checked));
   else if (id === "library-choose") void chooseLibraryFolder(null);
   else if (id === "library-stop") library.stop();
   else if (id === "library-open") {
     const folder = settings.get().library.folder;
     if (folder) void shell.openPath(folder);
-  }
-  else if (id.startsWith("bridge-get:")) {
-    const url = GET_CLI_URL[/** @type {'claude'|'codex'} */ (id.slice(11))];
-    if (url) void shell.openExternal(url);
   }
   else if (id === "open-app") openAppLink(controller.urlFor("app"));
   else if (id === "pair" || id === "account") void pairing.show();
@@ -734,7 +698,6 @@ function exposeTestProbe() {
         spoolFiles: spool.list().length,
         tray: trayModel().status,
         voice: voice.probe(),
-        bridge: bridge.info(),
         library: library.info(),
       };
     },

@@ -108,7 +108,7 @@ test("every dashboard page renders for a signed-in owner", async ({ page }) => {
   await visit(page, `/app/bots/${id}/meetings`);
   await visit(page, `/app/bots/${id}/meetings/${meetingId}`);
   await visit(page, `/app/bots/${id}`);
-  for (const path of ["/app?all=1", "/app/approvals", "/app/billing", "/app/bridge", "/app/account"]) {
+  for (const path of ["/app?all=1", "/app/approvals", "/app/billing", "/app/desktop", "/app/account"]) {
     await visit(page, path);
   }
 });

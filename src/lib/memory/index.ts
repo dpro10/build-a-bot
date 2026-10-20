@@ -29,8 +29,6 @@ export const MEMORY_BUDGET: Record<Tier, MemoryBudget> = {
 };
 
 export function brainTier(brain: Pick<BrainConfig, "kind" | "provider" | "model">): Tier {
-  // Subscriptions run the owner's Claude or ChatGPT: top models.
-  if (brain.kind === "subscription") return "smart";
   if (brain.kind === "included" || brain.provider === "demo") return findModel("nebius", brain.model)?.tier ?? "fast";
   return findModel(brain.provider as ProviderId, brain.model)?.tier ?? "balanced";
 }

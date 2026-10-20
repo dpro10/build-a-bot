@@ -180,7 +180,7 @@ export function createApi(o) {
   const otherServer = () => ({ status: 404, body: { error: "This computer is paired with another server now.", code: "other_server" } });
 
   return {
-    /** Trade a pairing code for a device token. */
+    /** Trade a pairing code for a device token (the route keeps its old name). */
     pair({ server, code, name, platform }) {
       return json("POST", "/api/bridge/pair", { server, auth: false, json: { code, name, platform, clis: {} } });
     },
@@ -318,26 +318,6 @@ export function createApi(o) {
     /** A file left the folder. @param {string} botId @param {string} path */
     libraryDelete(botId, path) {
       return json("DELETE", "/api/desktop/library/files", { json: { botId, path } });
-    },
-
-    // The Bridge (bridge/): bots on the owner's own Claude or ChatGPT plan think here ---------
-
-    /**
-     * Which CLIs this computer has (version lines, or null): a bot can think here while one is
-     * reported. The answer says how many turns are waiting (`queued`, from newer servers).
-     * @param {{ claude: string | null, codex: string | null }} clis
-     */
-    bridgeHeartbeat(clis) {
-      return json("POST", "/api/bridge/heartbeat", { json: { clis } });
-    },
-    /** The next turn to think about (waits up to 25 s on the server), or null. */
-    async bridgeJob({ signal } = {}) {
-      const data = await json("GET", "/api/bridge/jobs?wait=25", { timeoutMs: 40_000, signal });
-      return data?.job ?? null;
-    },
-    /** @param {string} jobId @param {{ ok: boolean, text?: string, error?: string, costUsd?: number, model?: string }} result */
-    bridgeResult(jobId, result) {
-      return json("POST", `/api/bridge/jobs/${encodeURIComponent(jobId)}/result`, { json: result, timeoutMs: 30_000 });
     },
   };
 }

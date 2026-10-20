@@ -123,7 +123,8 @@ function brainText(b: Record<string, unknown>): string {
   const kind = String(b.kind ?? "");
   const provider = String(b.provider ?? "");
   const model = String(b.model ?? "");
-  if (kind === "subscription") return provider === "codex" ? "Your ChatGPT, via the Bridge" : "Your Claude, via the Bridge";
+  // Receipts from before 2026-10-20, when a bot could think with its owner's own plan on their computer.
+  if (kind === "subscription") return provider === "codex" ? "Your ChatGPT plan, on your computer" : "Your Claude plan, on your computer";
   if (kind === "byok") return `${modelLabel(model)} · your ${PROVIDER_BY_ID[provider as ProviderId]?.name ?? provider} key`;
   return `${modelLabel(model)} · included`;
 }
@@ -307,6 +308,7 @@ const PAID_BY: Record<string, string> = {
   // Receipts from before there was credit.
   plan: "Your plan",
   "owner's key": "Your own API key",
+  // Receipts from before 2026-10-20 (a bot on its owner's Claude or ChatGPT plan).
   "your subscription": "Your subscription",
 };
 
@@ -517,10 +519,11 @@ export function detailRows(r: ReceiptView, apps: Record<string, AppInfo>): Detai
   const paidBy = take("paidBy");
   if (typeof paidBy === "string") push("paidBy", "Paid by", PAID_BY[paidBy] ?? paidBy);
   if (r.kind === "billing" || r.costMicros > 0) push("cost", "Cost", r.costMicros > 0 ? formatUsdMicros(r.costMicros) : "Nothing extra");
+  // Turns run on the owner's computer, before 2026-10-20.
   const cliCost = take("costUsdReportedByCli");
   if (cliCost !== undefined && cliCost !== null) push("cliCost", "Cost your computer reported", `$${num(cliCost).toFixed(4)}`);
   const jobId = take("jobId");
-  if (typeof jobId === "string") push("jobId", "Bridge job", <span className="font-mono text-xs">{jobId}</span>);
+  if (typeof jobId === "string") push("jobId", "Job on your computer", <span className="font-mono text-xs">{jobId}</span>);
 
   for (const [k, v] of Object.entries(d)) push(k, humanizeKey(k), genericValue(v));
   return rows;

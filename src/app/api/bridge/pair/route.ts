@@ -6,7 +6,7 @@ import { randomToken, sha256 } from "@/lib/crypto";
 import { rateLimit } from "@/lib/safety/ratelimit";
 import { newId } from "@/lib/utils";
 
-/** Called by the Bridge CLI with a pairing code. Returns a device token (shown once). */
+/** Called by the desktop app with a pairing code. Returns a device token (shown once). */
 export async function POST(req: Request) {
   const parsed = await parseJson(
     req,
@@ -14,7 +14,6 @@ export async function POST(req: Request) {
       code: z.string().trim().toUpperCase().regex(/^[A-Z0-9]{4}-[A-Z0-9]{4}$/),
       name: z.string().trim().min(1).max(80),
       platform: z.string().max(40).optional(),
-      clis: z.record(z.string(), z.string().nullable()).optional(),
     }),
   );
   if (!parsed.ok) return parsed.res;
@@ -34,7 +33,7 @@ export async function POST(req: Request) {
       ),
     )
     .returning();
-  if (!row) return apiError(404, "That code is wrong or expired. Get a new one in the app (Bridge, your computer).");
+  if (!row) return apiError(404, "That code is wrong or expired. Get a new one in the app (Desktop app).");
 
   const token = `bab_dev_${randomToken(32)}`;
   const id = newId("dev");
@@ -44,7 +43,6 @@ export async function POST(req: Request) {
     name: parsed.data.name,
     tokenHash: sha256(token),
     platform: parsed.data.platform ?? null,
-    clis: parsed.data.clis ?? {},
     lastSeenAt: new Date(),
   });
   return json({ deviceId: id, token });

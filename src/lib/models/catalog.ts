@@ -1,10 +1,8 @@
 /**
  * Brains a bot can run on.
  *
- *  included      Open-weight models we serve through Nebius Token Factory (paid from the owner's credit, at cost).
- *  byok          The owner's own API key (encrypted at rest, never shown again).
- *  subscription  The owner's own Claude / ChatGPT plan, run by their own CLI on their own
- *                computer through the Bridge (vendor rules: docs/DECISIONS.md).
+ *  included  Open-weight models served by Nebius Token Factory (paid from the owner's credit, at cost).
+ *  byok      The owner's own API key (encrypted at rest, never shown again).
  *
  * Prices are USD per 1M tokens (input / output). For included models they are what Token Factory
  * charges, and what the owner pays (at cost); for the owner's own key, an estimate (their bill is authoritative).
@@ -375,7 +373,7 @@ export const PROVIDERS: ProviderDef[] = [
     keyPlaceholder: "AIza…",
     icon: { simpleIcon: "googlegemini", color: "8E75B2" },
     freeformModel: true,
-    note: "Gemini works with an API key only; Google doesn't allow apps to reuse Gemini subscriptions.",
+    note: "Get a key from Google AI Studio (there's a free tier).",
     models: [
       { id: "gemini-4-argon", label: "Gemini 4 Argon", blurb: "Google's flagship.", tier: "smart", priceIn: 2, priceOut: 10, tools: true, default: true },
     ],
@@ -484,69 +482,6 @@ export const PROVIDERS: ProviderDef[] = [
 ];
 
 export const PROVIDER_BY_ID = Object.fromEntries(PROVIDERS.map((p) => [p.id, p])) as Record<ProviderId, ProviderDef>;
-
-// ---------------------------------------------------------------------------
-// Subscriptions (run on the owner's computer through the Bridge)
-// ---------------------------------------------------------------------------
-
-export type SubscriptionDef = {
-  id: "claude" | "chatgpt" | "gemini" | "claude_cloud";
-  name: string;
-  plans: string;
-  cli: string;
-  how: string;
-  status: "available" | "api_key_only" | "waitlist";
-  icon: { simpleIcon?: string; lucide?: string; letter?: string; color: string };
-  models: { id: string; label: string }[];
-};
-
-export const SUBSCRIPTIONS: SubscriptionDef[] = [
-  {
-    id: "claude",
-    name: "Claude",
-    plans: "Pro or Max",
-    cli: "claude",
-    how: "Runs through your own Claude Code on your computer. Your login never leaves your machine.",
-    status: "available",
-    icon: { simpleIcon: "claude", color: "D97757" },
-    models: [
-      { id: "default", label: "Your Claude Code default" },
-      { id: "opus", label: "Opus" },
-      { id: "sonnet", label: "Sonnet" },
-      { id: "haiku", label: "Haiku" },
-    ],
-  },
-  {
-    id: "chatgpt",
-    name: "ChatGPT",
-    plans: "Plus or Pro",
-    cli: "codex",
-    how: "Runs through your own Codex CLI on your computer, signed in with your ChatGPT account.",
-    status: "available",
-    icon: OPENAI_MARK,
-    models: [{ id: "default", label: "Your Codex default" }],
-  },
-  {
-    id: "gemini",
-    name: "Gemini",
-    plans: "AI Pro or Ultra",
-    cli: "gemini",
-    how: "Google only allows Gemini through an API key (free tier available). We'll set that up instead.",
-    status: "api_key_only",
-    icon: { simpleIcon: "googlegemini", color: "8E75B2" },
-    models: [],
-  },
-  {
-    id: "claude_cloud",
-    name: "Claude, always on",
-    plans: "Pro or Max",
-    cli: "claude",
-    how: "Your own unmodified Claude Code in a private cloud sandbox, signed in on Anthropic's page. Works while your laptop sleeps.",
-    status: "waitlist",
-    icon: { simpleIcon: "claude", color: "D97757" },
-    models: [],
-  },
-];
 
 export function findModel(provider: ProviderId | "nebius", id: string): ModelDef | undefined {
   if (provider === "nebius") return INCLUDED_MODELS.find((m) => m.id === id || resolveIncludedModelId(m) === id);

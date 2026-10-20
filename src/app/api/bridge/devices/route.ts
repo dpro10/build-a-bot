@@ -1,6 +1,6 @@
 import { authed, json } from "@/lib/api";
 import { listBridgeDevices } from "@/lib/data";
-import { DEVICE_ONLINE_MS } from "@/lib/bridge/jobs";
+import { DEVICE_ONLINE_MS } from "@/lib/bridge/devices";
 import { toDeviceView } from "@/components/account/bridge-shared";
 
 /** The owner's paired computers (not revoked), with live online status. Polled by the Bridge page. */

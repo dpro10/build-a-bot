@@ -70,7 +70,7 @@ export default async function DownloadPage() {
               {primary ? OPEN_IT[primary] : `${OPEN_IT.mac} On Windows: ${OPEN_IT.windows.charAt(0).toLowerCase()}${OPEN_IT.windows.slice(1)}`}
             </Step>
             <Step n={2} title="Pair it with your bot">
-              It asks for a code. Get one in the Build-a-bot web app, under <strong className="font-semibold text-foreground">Bridge (your computer)</strong>.
+              It asks for a code. Get one in the Build-a-bot web app, on the <strong className="font-semibold text-foreground">Desktop app</strong> page.
             </Step>
             <Step n={3} title="Talk, or let it take notes">
               NVIDIA Parakeet downloads once (about 0.7 GB). Then hold the shortcut and talk in any app, and your bot asks before it takes notes in a call.

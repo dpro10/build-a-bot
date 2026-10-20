@@ -84,7 +84,7 @@ beforeAll(async () => {
   });
   if (!res.ok) throw new Error(res.error);
   bot = res.bot;
-  await db.insert(schema.bridgeDevices).values({ id: "dev_mac", ownerId: owner.id, name: "Dana's Mac", tokenHash: sha256(TOKEN), platform: "desktop-darwin-arm64", clis: {} });
+  await db.insert(schema.bridgeDevices).values({ id: "dev_mac", ownerId: owner.id, name: "Dana's Mac", tokenHash: sha256(TOKEN), platform: "desktop-darwin-arm64" });
 });
 
 afterAll(async () => {

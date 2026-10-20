@@ -51,7 +51,7 @@ test("the Meetings tab gets you the desktop app; the website itself doesn't reco
   await page.getByRole("button", { name: "Turn on meeting notes" }).click();
   await expect(page.getByRole("heading", { name: /The desktop app/ })).toBeVisible();
   await expect(page.getByText(/turns the call into text right on your computer/)).toBeVisible();
-  await expect(page.getByRole("link", { name: /Get the desktop app/ })).toHaveAttribute("href", "/app/bridge#desktop");
+  await expect(page.getByRole("link", { name: /Get the desktop app/ })).toHaveAttribute("href", "/app/desktop");
   // Nothing on the page records.
   await expect(page.getByRole("button", { name: /Start taking notes/ })).toHaveCount(0);
   const start = await page.request.post(`/api/bots/${id}/meetings`, { data: { app: "zoom" } });

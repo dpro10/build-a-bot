@@ -1,7 +1,7 @@
 /**
  * Dashboard details that are easy to break: STOP typed in chat shows up in the header
  * right away, routines stay in place when switched off, the phone menu behaves like
- * a dialog, and the Bridge pairing code fits on a phone.
+ * a dialog, and the desktop app's pairing code fits on a phone.
  */
 import { expect, test, type Page } from "@playwright/test";
 
@@ -93,9 +93,10 @@ test.describe("on a phone", () => {
     await expect(menu).toBeHidden();
   });
 
-  test("a Bridge pairing code fits on the screen", async ({ page }) => {
+  test("a pairing code for the desktop app fits on the screen", async ({ page }) => {
     await newBot(page, "Fern");
-    await page.goto("/app/bridge");
+    await page.goto("/app/bridge"); // the old address, which older desktop apps still open
+    await expect(page).toHaveURL(/\/app\/desktop$/);
     await page.getByRole("button", { name: "Get a pairing code" }).first().click();
     await expect(page.getByText("Your pairing code")).toBeVisible();
     const [scrollWidth, clientWidth] = await page.locator("#app-scroll").evaluate((el) => [el.scrollWidth, el.clientWidth]);

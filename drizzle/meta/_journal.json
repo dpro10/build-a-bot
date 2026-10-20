@@ -64,6 +64,13 @@
       "when": 1792260391226,
       "tag": "0008_library",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792535124630,
+      "tag": "0009_remove_bridge",
+      "breakpoints": true
     }
   ]
 }

@@ -100,7 +100,7 @@ describe("limits when anyone can sign up", () => {
       const next = await say(bot, user, "search the web for rye bread");
       expect(next.status).toBe("limited");
       expect(next.text).toBe(
-        "You're out of credit. Add credit in Credit & usage, or switch me to your own AI key or subscription in Settings → Brain (that's free here).",
+        "You're out of credit. Add credit in Credit & usage, or switch me to your own AI key in Settings → Brain (that's free here).",
       );
     } finally {
       config.tavily.apiKey = undefined;

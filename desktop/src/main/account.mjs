@@ -1,6 +1,6 @@
 /**
- * This computer's link to the owner's Build-a-bot account: pairing (the same
- * pairing codes as the Bridge), the device token (encrypted, in TokenStore), the
+ * This computer's link to the owner's Build-a-bot account: pairing (with a code
+ * from the desktop app page), the device token (encrypted, in TokenStore), the
  * desktop session (/api/desktop/session) and which bot takes notes.
  */
 import { EventEmitter } from "node:events";
@@ -9,9 +9,7 @@ import { ApiError } from "./api.mjs";
 import { normalizeServer } from "./store.mjs";
 
 /**
- * `subscription`: the bot thinks with its owner's own plan, on their computer (the Bridge): with
- * Claude Code ("claude") or Codex ("codex"). Older servers don't say.
- * @typedef {{ id: string, name: string, avatar: string, color: string, paused: boolean, meetingsOn: boolean, notesNeedCredit?: boolean, subscription?: 'claude' | 'codex' | null }} SessionBot
+ * @typedef {{ id: string, name: string, avatar: string, color: string, paused: boolean, meetingsOn: boolean, notesNeedCredit?: boolean }} SessionBot
  */
 /**
  * `meetings.local`: the server takes the lines this computer heard (NVIDIA Parakeet), which is how
@@ -104,7 +102,7 @@ export class Account extends EventEmitter {
     } catch (err) {
       const e = /** @type {ApiError} */ (err);
       if (e.status === 0) return { ok: false, error: "I can't reach that server. Check the address and your internet, then try again." };
-      if (e.status === 404) return { ok: false, error: "That code is wrong or expired. Get a new one on the Bridge (your computer) page in Build-a-bot." };
+      if (e.status === 404) return { ok: false, error: "That code is wrong or expired. Get a new one on the desktop app page in Build-a-bot." };
       return { ok: false, error: e.message || "Pairing didn't work. Try again in a moment." };
     }
     if (!res?.token || !res?.deviceId) return { ok: false, error: "The server answered in a way I didn't expect. Try again." };
@@ -158,7 +156,7 @@ export class Account extends EventEmitter {
   /**
    * Unpair: revoke the token on the server first (best effort; a 401 means it's already
    * gone), then forget it here. Offline, it's forgotten locally and the owner can revoke
-   * it from Bridge (your computer) in the app.
+   * it from the desktop app page in Build-a-bot.
    * @returns {Promise<{ revoked: boolean }>}
    */
   async unpair() {

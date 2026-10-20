@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { speech } from "@/components/builder/BotPreview";
-import { DEFAULT_MODEL, countedApps, initialState, withDraft, type BuilderContext } from "@/components/builder/state";
+import { DEFAULT_MODEL, countedApps, initialState, withDraft, type BuilderContext, type BuilderState } from "@/components/builder/state";
 import { adjustmentsFor, costLine } from "@/components/builder/steps/ReviewStep";
 import { isAvailable, suggestedFor } from "@/components/catalog/connector-meta";
 import { getConnector } from "@/lib/connectors";
@@ -56,6 +56,9 @@ describe("the builder", () => {
     expect(withDraft(fresh(), draft, ctx()).brain).toMatchObject({ model: SUPER });
     const gone = { ...fresh(), brain: { kind: "included" as const, model: "someone/retired-model", effort: "low" as const } };
     expect(withDraft(fresh(), gone, ctx()).brain).toMatchObject({ model: DEFAULT_MODEL });
+    // A draft saved while a Claude or ChatGPT plan was still on offer (before 2026-10-20).
+    const plan = { ...fresh(), brain: { kind: "subscription", subscription: "chatgpt", model: "default", whenOffline: "wait" } } as unknown as BuilderState;
+    expect(withDraft(fresh(), plan, ctx()).brain).toEqual(fresh().brain);
   });
 
   it("the review step says what the bot will cost, at cost", () => {
@@ -67,8 +70,6 @@ describe("the builder", () => {
     );
     const ownKey = { ...fresh(), brain: { kind: "byok" as const, provider: "anthropic" as const, model: "claude-sonnet-5-5", baseUrl: "" } };
     expect(costLine(ownKey)).toBe("Free here: Anthropic (Claude) bills you for the thinking.");
-    const sub = { ...fresh(), brain: { kind: "subscription" as const, subscription: "chatgpt" as const, model: "default", whenOffline: "wait" as const } };
-    expect(costLine(sub)).toBe("Free here: it thinks on your ChatGPT subscription, on your computer.");
     // Only the fair-use limit on apps is ever adjusted, and never in demo mode.
     const many = { ...fresh(), customMcp: Array.from({ length: 201 }, (_, i) => ({ url: `https://mcp.example.com/${i}` })) };
     expect(adjustmentsFor(many, false)).toEqual(["A bot can connect up to 200 apps. The first 200 are added now."]);

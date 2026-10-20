@@ -1,9 +1,9 @@
 # Build-a-bot
 
-Anyone makes their own AI agent in about a minute: pick a face, give it a name, choose a brain (or connect the AI subscription they already pay for), give it their apps, decide how much it can do on its own, and talk to it anywhere — calls, texts, email, Telegram, Discord, Slack. Call it, from the app or a phone, and it answers in its own voice and gets things done while you talk. It can also sit in on their calls and take the notes, and type for them by voice in any app.
+Anyone makes their own AI agent in about a minute: pick a face, give it a name, choose a brain (an open model we include, or their own API key), give it their apps, decide how much it can do on its own, and talk to it anywhere — calls, texts, email, Telegram, Discord, Slack. Call it, from the app or a phone, and it answers in its own voice and gets things done while you talk. It can also sit in on their calls and take the notes, and type for them by voice in any app.
 
 - **Site:** [build-a-bot.site](https://build-a-bot.site), live on Vercel + Supabase since 2026-10-14, still in demo mode until the last keys are in (`docs/DECISIONS.md` → *Live*).
-- **Status (2026-10-17):** the whole product is built (the website, the dashboard, and a desktop app for meeting notes, voice typing and the Bridge) and runs locally in demo mode with zero keys. Meeting notes and voice typing are only in the desktop app, which hears them on the user's own computer. Calls with a bot run on our voice server (`voice/`), live since 2026-10-17 with a real test call after every deploy, and phones reach bots through Twilio. The repository is public under Apache 2.0, and the desktop app downloads from build-a-bot.site/download: the Mac app signed with Developer ID and notarized, the Windows installer signed with Azure Artifact Signing (`docs/DEPLOY.md` §9). `docs/DEPLOY.md` lists what each integration needs.
+- **Status (2026-10-17):** the whole product is built (the website, the dashboard, and a desktop app for meeting notes, voice typing and a bot's synced folder) and runs locally in demo mode with zero keys. Meeting notes and voice typing are only in the desktop app, which hears them on the user's own computer. Calls with a bot run on our voice server (`voice/`), live since 2026-10-17 with a real test call after every deploy, and phones reach bots through Twilio. The repository is public under Apache 2.0, and the desktop app downloads from build-a-bot.site/download: the Mac app signed with Developer ID and notarized, the Windows installer signed with Azure Artifact Signing (`docs/DEPLOY.md` §9). `docs/DEPLOY.md` lists what each integration needs.
 - **Reviewing it?** Start with [`docs/TRY-IT.md`](docs/TRY-IT.md): how to run both apps, what to click, and what's simulated.
 
 ## Built on NVIDIA and Nebius
@@ -29,7 +29,7 @@ npm install
 npm run dev        # pairs with http://localhost:3000
 ```
 
-Pair it from the web app: **Bridge (your computer)** → **Desktop app**. Real keys go in `.env.local` (see `.env.example`); anything left out stays simulated.
+Pair it from the web app: **Desktop app** → **Get a pairing code**. Real keys go in `.env.local` (see `.env.example`); anything left out stays simulated.
 
 ## What it does
 
@@ -53,7 +53,7 @@ Recipes prefill it (`/build?recipe=inbox-zero`, or any shared `/r/[slug]`). The 
 
 - **Included open models** on Nebius Token Factory: Nemotron 3.5 Lightning by default, plus Qwen, gpt-oss, DeepSeek, GLM, MiniMax, Kimi and Hermes, each at Token Factory's price.
 - **The owner's own key:** Anthropic, OpenAI, Gemini, OpenRouter, Groq, Mistral, xAI, DeepSeek, Together, Fireworks, Cerebras, or any OpenAI-compatible endpoint. Checked live, then encrypted.
-- **Their Claude or ChatGPT subscription, through the Bridge**: built into the desktop app since 2026-10-17 (or `bridge/`, the same thing for a terminal). It runs their own `claude -p` or `codex exec` on their computer, signed in by them, with only the bot's tools. We never see the login. While the computer sleeps the bot waits, unless the owner opts in to fall back to the included model.
+- **Not a Claude or ChatGPT chat plan** (removed on 2026-10-20, `docs/DECISIONS.md`). It ran on the owner's computer through the Bridge, so a bot on one couldn't think while that computer slept, and consumer plans don't offer zero data retention. An API key from the same company works instead.
 
 ### Apps
 
@@ -129,11 +129,11 @@ An optional morning brief (on by default), routines and reminders, on any channe
 ### The dashboard (`/app`)
 
 - **For each bot:** Chat with inline approvals and file attachments, Library (files, flashcards, quizzes), Meetings, Activity (receipts), Apps & trust, Channels, Routines, Memory, Settings (look, personality, brain, recipes, MCP access).
-- **For the account:** Approvals inbox, Voice typing, Bridge (your computer, including the desktop app), Credit & usage, Account (export, delete).
+- **For the account:** Approvals inbox, Voice typing, Desktop app (download and pairing), Credit & usage, Account (export, delete).
 
 ### The business side
 
-- **No plans: people pay for what they use, at cost** (Diego, 2026-10-16). A message on an included model costs Token Factory's price for its tokens, a web lookup Tavily's $0.008, a text or a call Twilio's price, and a bot on your own AI key or subscription is free here. Every account starts with $1 of credit; adding $5, $10 or $20 goes through Stripe Checkout, with Stripe's card fee on top so the credit is all yours. Prices are in `src/lib/billing/prices.ts`, on `/pricing` and in `docs/DECISIONS.md`. In demo mode, credit is added without paying; on a real server without Stripe, adding credit says "Coming soon".
+- **No plans: people pay for what they use, at cost** (Diego, 2026-10-16). A message on an included model costs Token Factory's price for its tokens, a web lookup Tavily's $0.008, a text or a call Twilio's price, and a bot on your own AI key is free here. Every account starts with $1 of credit; adding $5, $10 or $20 goes through Stripe Checkout, with Stripe's card fee on top so the credit is all yours. Prices are in `src/lib/billing/prices.ts`, on `/pricing` and in `docs/DECISIONS.md`. In demo mode, credit is added without paying; on a real server without Stripe, adding credit says "Coming soon".
 - An operator dashboard (`/admin`, locked to `ADMIN_EMAILS`): credit sold against what was used (are we breaking even?), growth, usage and costs, as aggregates only.
 - Shareable recipes (`/r/[slug]`). Each bot is also an MCP server, usable from Claude Desktop or Claude Code.
 - A public site: landing, pricing, safety, legal drafts, explore.
@@ -172,16 +172,16 @@ axe finds no serious WCAG 2.2 AA problems on the main public and dashboard pages
 - `src/lib`: the engine.
   - `agent`: runs a turn.
   - `policy`: trust.
-  - `tools`, `connectors`, `channels`, `bridge`, `billing`, `scheduler`, `db`.
+  - `tools`, `connectors`, `channels`, `billing`, `scheduler`, `db`.
+  - `bridge`: pairing the desktop app (device tokens). The name is from the Bridge, gone since 2026-10-20.
   - `meetings` and `transcribe`: meeting notes and speech-to-text.
   - `library`: the owner's files (storage, reading, search) and study sets.
   - `calls`: calls with a bot: who's calling, the phone PIN, call tokens, what the voice server asks the app.
   - `web-actions`: the cloud browser.
 - `src/components`: the UI, including `avatar` (the five characters), `meetings` (the meetings, their notes, and the bot the desktop app shows at the bottom of the screen) and `call` (the Call button and the call itself).
-- `desktop/`: the desktop app for meeting notes, voice typing and the Bridge (Electron), with NVIDIA Parakeet on the computer. Its README covers permissions, building and signing.
+- `desktop/`: the desktop app for meeting notes, voice typing and a bot's synced folder (Electron), with NVIDIA Parakeet on the computer. Its README covers permissions, building and signing.
 - `speech/`: our optional speech-to-text server: NVIDIA Parakeet and Nemotron on NVIDIA NeMo-Speech.cpp, for a Nebius Serverless AI endpoint. Its README covers deploying it and what it costs.
 - `voice/`: the voice server for calls: NVIDIA Parakeet and Magpie on NeMo-Speech.cpp, Silero VAD, turn-taking, Twilio Media Streams and the browser. Its README covers how it works and how fast it is; `docs/DEPLOY.md` §8 covers deploying it.
-- `bridge/`: the Bridge for a terminal, which runs a subscription brain on the owner's computer (`runner.mjs` is shared with the desktop app).
 - `tests/` and `e2e/`: unit and end-to-end tests.
 - `docs/`:
   - `TRY-IT.md`: the review guide.
@@ -203,7 +203,7 @@ The full notes, with Diego's own words, are in `docs/DECISIONS.md`.
 - **Bots act on the web:** they need to fill things out online.
 - **Dead-simple setup:** choose an avatar from a small set, a name, and a model, or connect a subscription you already pay for. It must look clean and modern and be easy enough for anyone.
 - **Keep the name** Build-a-bot.
-- **The user picks the model.** Don't apply for Sign in with ChatGPT yet. Subscriptions run the way Cookbook's Bridge does: the user's own CLI, signed in by them.
+- **The user picks the model.** Don't apply for Sign in with ChatGPT yet. Subscriptions run the way Cookbook's Bridge does: the user's own CLI, signed in by them. (Reversed on 2026-10-20: no subscriptions, see below.)
 
 **Diego, 2026-10-14**
 
@@ -211,6 +211,10 @@ The full notes, with Diego's own words, are in `docs/DECISIONS.md`.
 - **Meeting notes** (an idea from his mom): the bot notices a meeting, pops up to ask, and stays visible at the very bottom of the screen while it transcribes.
 - **Consent:** "It's one party consent. So as long as one person hits record, we're good." It still asks first and stays visible.
 - **Apple:** he already has an Apple Developer account, for signing the Mac app.
+
+**Diego, 2026-10-20**
+
+- **No Claude or ChatGPT plans:** "it goes against a core thing for this product (ZDR) and ... you cant talk to those models if the computer is closed." Then: "yes remove it, keep the api key option." The Bridge is gone from the web app, the desktop app and the repo; bots on a plan moved to the default open model.
 
 **Claude's build choices, for Diego to confirm:**
 
@@ -229,22 +233,21 @@ The current list is in `docs/DECISIONS.md`.
 1. **First users:** tinkerers or everyday iPhone users? A 3-week hand-built test with 5 non-developers could decide.
 2. **Pricing:** pay for usage at cost is decided (2026-10-16). Open: the starter credit ($1), refunding unused credit by hand when asked, and when, if ever, to add a margin.
 3. **Web actions:** confirm Browser Use Cloud, then test with a live key on about 10 real forms before turning it on for everyone.
-4. **Before launch:** a brand-free domain for bot inboxes, Twilio A2P 10DLC registration, and a Composio plan. The Bridge needs nothing on npm: the site serves its own copy.
+4. **Before launch:** a brand-free domain for bot inboxes, Twilio A2P 10DLC registration, and a Composio plan.
 5. **Trademark clearance** before spending on the brand.
 6. **Meeting notes and voice typing before launch:**
    - a lawyer's look at the consent flow and retention;
    - signed downloads, since both are only in the app: done on 2026-10-17: the Mac app is signed and notarized, the Windows installer is signed with Azure Artifact Signing, and both download from the public repository's releases.
 7. **Meeting notes, next:** meeting titles from the calendar, telling the call's speakers apart, and languages beyond Parakeet's 25.
-8. **Calls:** the voice server and Twilio are live (2026-10-17); texting waits on A2P 10DLC registration. Next: the bot calling you back when a job is done, a call starting your other agents (desk tasks through the Bridge, research, the cloud browser), and calls heard on your own computer.
+8. **Calls:** the voice server and Twilio are live (2026-10-17); texting waits on A2P 10DLC registration. Next: the bot calling you back when a job is done, a call starting your other agents (research, the cloud browser), and calls heard on your own computer.
 
 ## Ground rules
 
 These hold whatever gets built next.
 
-**Subscriptions (vendor rules):**
-- **ChatGPT:** allowed on the user's own computer (locally hosted). From our cloud it needs OpenAI's approval via Sign in with ChatGPT, which we are not applying for yet. Never put a Codex login on our servers.
-- **Claude:** allowed on the user's own computer through their own Claude Code. In the cloud, only as the unmodified Claude Code in a per-user sandbox, signed in on Anthropic's own page; we never collect, store or relay the token. Max plans include $100–200/mo of API credit usable through an API key.
-- **Gemini:** API keys only.
+**Subscriptions:**
+- **None** since 2026-10-20: bots don't think with a Claude, ChatGPT or Gemini chat plan, anywhere. Owners bring an API key instead.
+- **Never** collect, store or relay a Claude or ChatGPT login, and never reuse one on our servers.
 
 **Keys:**
 - Users' own API keys are encrypted at rest, never logged, and never sent back to the browser after entry.

@@ -31,7 +31,6 @@ export type ResolvedBrain =
       effort: Effort;
       label: string;
     }
-  | { kind: "bridge"; cli: "claude" | "codex"; model: string; label: string }
   | { kind: "unavailable"; reason: string };
 
 export function includedModelDef(id: string): ModelDef {
@@ -76,12 +75,7 @@ export async function resolveBrain(db: Db, bot: Bot): Promise<ResolvedBrain> {
   const brain = bot.brain;
   const effort: Effort = brain.effort ?? "low";
 
-  if (brain.kind === "subscription") {
-    const cli = brain.provider === "codex" ? "codex" : "claude";
-    return { kind: "bridge", cli, model: brain.model || "default", label: cli === "claude" ? "Your Claude (via Bridge)" : "Your ChatGPT (via Bridge)" };
-  }
-
-  if (brain.kind === "included" || brain.provider === "demo") {
+  if (brain.kind !== "byok" || brain.provider === "demo") {
     const def = includedModelDef(brain.model);
     if (config.tokenFactory.apiKey && brain.provider !== "demo") {
       const { extra, maxTokens } = includedRequestOptions(def, effort);
@@ -111,7 +105,7 @@ export async function resolveBrain(db: Db, bot: Bot): Promise<ResolvedBrain> {
         label: `${def.label} (demo brain)`,
       };
     }
-    return { kind: "unavailable", reason: "The open models we run are coming soon. Until then, switch me to your own AI key or subscription in Settings → Brain." };
+    return { kind: "unavailable", reason: "The open models we run are coming soon. Until then, switch me to your own AI key in Settings → Brain." };
   }
 
   // Bring your own key.

@@ -29,14 +29,6 @@ export async function generateMetadata(): Promise<Metadata> {
 const fmt = new Intl.NumberFormat("en-US");
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
 
-/** Subscription models are stored by the CLI's short names. */
-const SUBSCRIPTION_MODEL: Record<string, string> = {
-  default: "Subscription default",
-  opus: "Claude Opus (subscription)",
-  sonnet: "Claude Sonnet (subscription)",
-  haiku: "Claude Haiku (subscription)",
-};
-
 /** Approval and receipt states, in the words the app uses for them. */
 const STATUS_LABEL: Record<string, string> = {
   executed: "Approved and done",
@@ -58,9 +50,8 @@ export default async function AdminPage() {
   const m = await adminMetrics(await getDb());
 
   const label = {
-    brain: (k: string) => ({ included: "Included models", byok: "Own API key", subscription: "Subscription (Bridge)" })[k] ?? k,
-    model: (k: string) =>
-      INCLUDED_MODELS.find((x) => x.id === k)?.label ?? PROVIDERS.flatMap((p) => p.models).find((x) => x.id === k)?.label ?? SUBSCRIPTION_MODEL[k] ?? k,
+    brain: (k: string) => ({ included: "Included models", byok: "Own API key" })[k] ?? k,
+    model: (k: string) => INCLUDED_MODELS.find((x) => x.id === k)?.label ?? PROVIDERS.flatMap((p) => p.models).find((x) => x.id === k)?.label ?? k,
     trust: (k: string) => (isTrustLevel(k) ? `${TRUST[k].emoji} ${TRUST[k].name}` : k),
     avatar: (k: string) => (isAvatarId(k) ? AVATARS[k].character : k),
     channel: (k: string) => CHANNEL_BY_KIND[k as ChannelKind]?.name ?? k,

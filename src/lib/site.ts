@@ -17,8 +17,8 @@ export const SITE = {
   supportEmail,
   /** Where people manage their data, export it and reach us when no email is configured. */
   accountPath: "/app/account",
-  legalUpdated: "October 16, 2026",
-  legalUpdatedISO: "2026-10-16",
+  legalUpdated: "October 20, 2026",
+  legalUpdatedISO: "2026-10-20",
   year: 2026,
 } as const;
 

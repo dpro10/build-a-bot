@@ -58,7 +58,7 @@ test("dashboard pages", async ({ page }) => {
   expect(asked.ok()).toBeTruthy();
   await asked.text();
   for (const tab of ["", "/meetings", "/tools", "/channels", "/routines", "/activity", "/memory", "/settings"]) await scan(page, `/app/bots/${id}${tab}`);
-  for (const path of ["/app/approvals", "/app/billing", "/app/voice", "/app/bridge", "/app/account"]) await scan(page, path);
+  for (const path of ["/app/approvals", "/app/billing", "/app/voice", "/app/desktop", "/app/account"]) await scan(page, path);
 });
 
 test("meeting notes pages", async ({ page }) => {
@@ -122,7 +122,7 @@ test("dark mode", async ({ page }) => {
   const { id } = await res.json();
   // A request by voice with selected text: the quote in the owner's bubble is checked in dark too.
   await (await page.request.post("/api/voice/ask", { data: { botId: id, text: "Remind me about this tomorrow at 9.", selection: "Team lunch Friday at 12:30." } })).text();
-  for (const path of ["/", "/pricing", "/safety", "/build", `/app/bots/${id}`, `/app/bots/${id}/meetings`, `/app/bots/${id}/tools`, `/app/bots/${id}/channels`, `/app/bots/${id}/settings`, "/app/billing", "/app/bridge"]) {
+  for (const path of ["/", "/pricing", "/safety", "/build", `/app/bots/${id}`, `/app/bots/${id}/meetings`, `/app/bots/${id}/tools`, `/app/bots/${id}/channels`, `/app/bots/${id}/settings`, "/app/billing", "/app/desktop"]) {
     await scan(page, path);
   }
 });
@@ -138,11 +138,9 @@ async function scanBuilder(page: Page, theme: string) {
   await scanHere(page, `${theme} build: name`);
   await next();
   await scanHere(page, `${theme} build: brain (included)`);
-  await page.getByRole("radio", { name: /Your Claude or ChatGPT plan/ }).click();
-  await scanHere(page, `${theme} build: brain (plan)`);
   await page.getByRole("radio", { name: /Your own API key/ }).click();
   await scanHere(page, `${theme} build: brain (own key)`);
-  await page.getByRole("radio", { name: /Open models we run/ }).click();
+  await page.getByRole("radio", { name: /Open models on Nebius/ }).click();
   await next();
   await page.getByRole("button", { name: /Meetings/ }).first().click();
   await scanHere(page, `${theme} build: apps`);

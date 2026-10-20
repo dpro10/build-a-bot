@@ -399,7 +399,7 @@ function DeleteAccount({ botCount, creditLeft }: { botCount: number; creditLeft:
                 : `All ${botCount} of your bots, with their chats, memories, notes, meetings and routines`,
               "Every receipt and approval",
               "Your saved API keys and app connections",
-              "Paired computers (Bridge and the desktop app)",
+              "Computers paired with the desktop app",
               ...(creditLeft ? [`The ${creditLeft} of credit you added and haven't used`] : []),
             ].map((line) => (
               <li key={line} className="flex gap-2.5">

@@ -159,7 +159,6 @@ export function RoutinesView({
           action: reminder ? seeActivity : openChat,
         });
       else if (res.outcome === "skipped") toast(`“${s.title}” didn't run`, { description: `${botName} has done all the routine runs it can today. Try again tomorrow.` });
-      else if (res.outcome === "queued") toast.success(`Sent “${s.title}” to your computer`, { description: "The result lands in your chat when it's done.", action: openChat });
       else if (!res.ran) toast("Nothing ran", { description: "It may already have run a moment ago. Check Activity." });
       else
         toast.success(reminder ? "Reminder sent" : `Ran “${s.title}”`, {

@@ -24,7 +24,7 @@ Build-a-bot is one Next.js 16 app (App Router, TypeScript) with Postgres behind 
 |---|---|
 | `src/app/(marketing)` | Public site: landing, pricing, safety, legal drafts, recipe gallery (`/explore`, `/r/[slug]`) |
 | `src/app/build` | The builder (seven steps, no account needed) |
-| `src/app/app` | The dashboard: bots, chat, activity, apps & trust, channels, routines, memory, settings, approvals, billing, Bridge, account |
+| `src/app/app` | The dashboard: bots, chat, activity, apps & trust, channels, routines, memory, settings, approvals, billing, the desktop app's page, account |
 | `src/app/api` | JSON + SSE routes, channel webhooks, OAuth callbacks, the MCP endpoint, cron |
 | `src/lib/agent` | The agent loop, prompts, brain resolution, approvals |
 | `src/lib/policy` | The policy engine (pure function + tests) |
@@ -32,7 +32,7 @@ Build-a-bot is one Next.js 16 app (App Router, TypeScript) with Postgres behind 
 | `src/lib/tools` | Tool specs, built-in tools, the per-bot toolset, SSRF-safe networking |
 | `src/lib/connectors` | The app catalog (data), MCP client + OAuth 2.1, Composio, demo tools |
 | `src/lib/channels` | Inbound/outbound for every channel, setup flows, webhook verification |
-| `src/lib/bridge`, `bridge/` | Subscription brains on the owner's computer (server side + the CLI) |
+| `src/lib/bridge` | Pairing the desktop app: one-time codes and device tokens (named after the Bridge, gone since 2026-10-20) |
 | `src/lib/meetings`, `src/lib/transcribe`, `desktop/` | Meeting notes: the desktop app that notices calls and hears them on the computer, the transcript, notes |
 | `src/lib/dictation`, `src/components/voice`, `desktop/src/main/voice` | Voice typing: the dictation pipeline, the personal dictionary, the `/app/voice` page and the desktop app's hold-to-talk |
 | `src/lib/calls`, `src/components/call`, `voice/` | Calls: who's calling, the phone PIN, the call API the voice server uses, the Call button; the voice server itself (NVIDIA Parakeet and Magpie, turn-taking, Twilio Media Streams) |
@@ -47,7 +47,7 @@ Build-a-bot is one Next.js 16 app (App Router, TypeScript) with Postgres behind 
 
 Postgres via Drizzle (`src/lib/db/schema.ts`). Locally and in tests it's PGlite (embedded Postgres), so `npm run dev` needs nothing installed. Migrations run on first use behind an advisory lock.
 
-Main tables: `users`, `sessions`, `bots`, `connections` (a bot's apps + per-capability permissions), `channels`, `conversations`, `messages`, `approvals`, `receipts`, `contacts`, `memories`, `notes`, `schedules`, `usage`, `credentials` (encrypted secrets), `bridge_devices`, `bridge_jobs`, `recipes`, `meetings`, `meeting_segments`, `dictionary` (voice typing's words and snippets), `calls` (who called, the transcript, the report, what it cost).
+Main tables: `users`, `sessions`, `bots`, `connections` (a bot's apps + per-capability permissions), `channels`, `conversations`, `messages`, `approvals`, `receipts`, `contacts`, `memories`, `notes`, `schedules`, `usage`, `credentials` (encrypted secrets), `bridge_devices` (paired computers), `recipes`, `meetings`, `meeting_segments`, `dictionary` (voice typing's words and snippets), `calls` (who called, the transcript, the report, what it cost).
 
 - **Receipts are append-only.** A trigger rejects updates and deletes (`drizzle/0001_safety.sql`); only account/bot deletion may remove them, inside a transaction that sets `app.allow_receipt_delete`.
 - **Row-level security is on** for every table with no policies, so the database's public API roles (e.g. Supabase's) see nothing; the app connects as the owner role.
@@ -59,7 +59,7 @@ Main tables: `users`, `sessions`, `bots`, `connections` (a bot's apps + per-capa
 
 1. **Owner commands** (STOP, START, HELP) are handled before any model call. STOP pauses the bot from any channel; while paused nothing runs, not even reads.
 2. **Credit**: a turn on an included model needs credit left; on the owner's own AI, a monthly fair-use limit applies (`checkSpend` in `src/lib/billing/usage.ts`). What the turn cost (tokens at Token Factory's price, lookups at Tavily's) is recorded as it happens.
-3. **Brain** (`src/lib/agent/brain.ts`): included models on Nebius Token Factory, the owner's API key (12 providers + any OpenAI-compatible endpoint), or the owner's subscription via the Bridge. Thinking knobs differ per model family (`includedRequestOptions`); reasoning models get generous `max_tokens`.
+3. **Brain** (`src/lib/agent/brain.ts`): included models on Nebius Token Factory, or the owner's API key (12 providers + any OpenAI-compatible endpoint). Not a Claude or ChatGPT chat plan: the Bridge that ran one on the owner's computer was removed on 2026-10-20 (`docs/DECISIONS.md`). Thinking knobs differ per model family (`includedRequestOptions`); reasoning models get generous `max_tokens`.
 4. **Tools** (`src/lib/tools/registry.ts`): built-ins + the bot's apps (MCP or Composio), capped at 48 and filtered by trust (Look only never even sees action tools).
 5. **Every tool call goes through the policy engine** and gets a receipt. "Ask" creates an approval (24-hour expiry) the owner can tap from the web or any channel; approving runs the exact stored call.
 6. **Replies to other people** carry an AI disclosure; crisis language adds resources (988 in the US) and the bot does not act as a therapist.
@@ -74,7 +74,7 @@ What a bot knows about its owner lives in `memories`: up to 2,000 per bot, of wh
   |---|---|---|
   | Fast models | 24 | 2,400 |
   | Balanced models | 40 | 4,500 |
-  | Smart models and subscriptions | 80 | 9,000 |
+  | Smart models | 80 | 9,000 |
 
   The prompt says how many there are in all; the bot finds the rest with `recall`, which uses the same ranking.
 - **Keeping it clean:** `remember` skips a fact it already has and updates one when the new fact adds a little detail (`compareFacts`), or when the model names the fact it `replaces`. `forget` deletes on request. The owner edits, pins and deletes in the Memory tab.
@@ -156,16 +156,11 @@ Tools from MCP/Composio are classified by name into effects and risks (`effects.
 
 Owners prove each channel is theirs (codes for phone/email, the Slack sign-in that adds the app or a link code, link codes for Discord, the managed-bot flow for Telegram); only the verified owner can drive the bot. Other people who message it get a disclosed AI assistant that can't use the owner's tools.
 
-## Subscriptions: the Bridge
+## Pairing the desktop app
 
-Vendor rules allow a person's Claude or ChatGPT plan only through their own CLI on their own computer. The Bridge (`bridge/bab-bridge.mjs`) is a tiny Node CLI the owner runs:
+The owner gets a one-time code on the Desktop app page (`POST /api/bridge/pairing-code`, 15 minutes, works once) and types it into the app, which trades it for a device token (`POST /api/bridge/pair`). The server keeps only the token's hash (`bridge_devices`); the app keeps the token in the system keychain. Meeting notes, voice typing and a bot's synced folder all use it (`authDevice` in `src/lib/bridge/auth.ts`). The owner unpairs a computer from that page, or the app unpairs itself.
 
-1. `pair CODE` exchanges a one-time pairing code for a device token.
-2. `start` long-polls `/api/bridge/jobs`. For each job it runs the owner's own `claude -p` or `codex exec` in an empty folder, with built-in tools and hooks disabled, and only our MCP server mounted (with a short-lived, job-scoped token). API keys are scrubbed from the child's environment so it uses the owner's own login.
-3. Tool calls come back to `/api/mcp/[botId]` and go through the same policy engine, approvals and receipts.
-4. The reply is posted back and delivered on the right channel.
-
-When the computer is asleep, the bot waits (default) or, if the owner opted in, answers with the included model.
+The routes keep the Bridge's old names: until 2026-10-20 the same pairing let a bot think with the owner's own Claude or ChatGPT plan on their computer. That's gone (`docs/DECISIONS.md`). Older apps still send a heartbeat, which now only answers that nothing is waiting, until they update.
 
 ## Meeting notes
 
@@ -188,9 +183,9 @@ POST …/finish  →  the bot writes notes  →  web chat + the owner's best cha
 ```
 
 - **Tables:** `meetings` (title, app, status recording → processing → ready, summary, notes, action items) and `meeting_segments` (time-sortable transcript lines; a chunk with no speech leaves an empty marker so retries are idempotent).
-- **Auth:** starting a meeting and sending what was said take the desktop app's device token only (the same pairing as the Bridge; `meetingAuth(…, { appOnly: true })` in `src/lib/meetings/auth.ts`). The web app (the session) lists meetings, stops a recording, writes notes again and deletes.
+- **Auth:** starting a meeting and sending what was said take the desktop app's device token only (`meetingAuth(…, { appOnly: true })` in `src/lib/meetings/auth.ts`). The web app (the session) lists meetings, stops a recording, writes notes again and deletes.
 - **Hearing it on the computer** (`desktop/src/main/meeting-speech.mjs`, `decoder-window.mjs`, `voice/local-speech.mjs`): the same Parakeet engine and "Private speech" setting as voice typing. The upload queue holds a piece until it can be heard; the notes are written only once every piece is in, and while pieces wait the app sends `PATCH { hearing: true }` so the server doesn't wrap the meeting up as abandoned. The desktop session says what the server takes: `meetings.local` (lines heard on the computer) and `meetings.available` (audio it hears itself).
-- **Notes** (`src/lib/meetings/notes.ts`): one model call with no tools, the transcript wrapped as untrusted content, so a hostile line in a call can only skew the notes. Meetings over about an hour are summarized in parts first. Bots on the owner's own Claude/ChatGPT plan write their notes on the owner's computer, as a Bridge job that reads the transcript through the bot's tools.
+- **Notes** (`src/lib/meetings/notes.ts`): one model call with no tools, the transcript wrapped as untrusted content, so a hostile line in a call can only skew the notes. Meetings over about an hour are summarized in parts first. A bot on its owner's own API key writes them with that key.
 - **Tools:** `list_meetings`, `read_meeting`, `search_meetings`. All three taint the run, so a transcript can't get the bot to email a stranger without the owner's tap, even under Full faith (tested).
 - **Limits:** no minutes cap: hearing a call on the computer is free, and the notes on an included model need credit (a recording heard on our server instead needs it too); minutes are counted (wall-clock time, once across both tracks) for Credit & usage; 4 hours per meeting; one recording per bot at a time; the scheduler wraps up recordings whose recorder vanished (20 minutes without audio), gives notes that never finished an honest ending, and deletes transcripts past each bot's retention (90 days by default; the notes stay).
 - **Consent:** never before the owner says yes, no auto-record, and only while the bot is visible (the desktop app's window at the bottom of the screen). Each meeting records who said yes, when, and whether the heads-up was copied for the call.
@@ -233,8 +228,8 @@ keeps a word count, never the words
 - **Speech-to-text** (`src/lib/transcribe`, `speech/`): one client for any OpenAI-compatible `/audio/transcriptions`. The recommended main provider is our own speech server, `speech/`: NVIDIA Parakeet TDT 0.6B v3 (English and 24 European languages) and NVIDIA Nemotron 3.5 ASR (Japanese, Chinese, Korean, Hindi, Arabic, Vietnamese, Turkish, Norwegian) on NVIDIA NeMo-Speech.cpp, behind a small Node server that checks a key, turns any recording into 16 kHz WAV (plus a second of silence, so the last word isn't cut), picks the model by language and answers in OpenAI's shape. It runs as a Nebius Serverless AI endpoint. The backup (`TRANSCRIBE_FALLBACK_*`) is NVIDIA Parakeet on Together AI, with Whisper there for languages neither NVIDIA model hears; a language the main provider can't hear goes straight to the backup. NVIDIA's models take no prompt, so the owner's words reach them afterwards: a name that sounds like one of theirs sends the text through the AI cleanup, which knows them, and the dictionary's spellings apply last.
 - **Editing by voice** (`src/lib/dictation/edit.ts`, `POST /api/voice/edit`): Shift with the shortcut makes the recording an instruction. The desktop app copies the selection (a marker on the clipboard, then copy, then the clipboard put back; never in a terminal), dictates the instruction with the AI cleanup and commands off, and sends both. One model call, no tools: the selection is wrapped in tags as text to work on, after worked examples that include a selection giving orders; the reply must be `<replace>` (typed over the selection) or `<answer>` (shown in the pill), and a chat-style preamble, our own tags or a reply far longer than the job is refused. "Make this shorter" with nothing selected is refused before any model call. Typed words count like dictation; the selection is never stored.
 - **"Hey {bot}"** goes into the bot's web conversation like a typed message (`meta.via = "voice"`), with a directive to answer briefly, so it runs through `runTurn`, the policy engine and approvals like everything else, and shows up in the chat later.
-  - **With a selection** (Shift held), the selected text goes along (`meta.selection`, shown in the chat bubble). The model reads it wrapped as `<untrusted_content>` (`src/lib/agent/selection.ts`, for included brains and the Bridge alike), and the run is tainted while it's in that conversation's history, so the injection guard asks before a send to anyone new, even under Full faith.
-- **Auth:** the desktop app's device token (the same pairing as the Bridge) for talking, editing and asking; the web session (same-origin checked for writes) only for the dictionary: `src/lib/dictation/auth.ts`.
+  - **With a selection** (Shift held), the selected text goes along (`meta.selection`, shown in the chat bubble). The model reads it wrapped as `<untrusted_content>` (`src/lib/agent/selection.ts`), and the run is tainted while it's in that conversation's history, so the injection guard asks before a send to anyone new, even under Full faith.
+- **Auth:** the desktop app's device token for talking, editing and asking; the web session (same-origin checked for writes) only for the dictionary: `src/lib/dictation/auth.ts`.
 - **Limits:** no word limit. `usage.dictationWords` is counted when text is typed, never for commands or nothing heard. What costs money is paid from credit: a recording heard on the server, and the AI cleanup (without credit, the plain cleanup is typed). The per-owner daily cap and the site ceiling (`DICTATION_DAILY_LIMIT`) keep it from being a blank check.
 - **The desktop half:** a keyboard hook (`uiohook-napi`) hears the shortcut anywhere (a pure state machine: hold, tap, double tap for hands-free, chords left alone); the pill is a small focus-less window; the text is pasted with the clipboard (snapshot → paste → put back) and real key presses. It works out the app's kind locally and sends only that. History is encrypted on the computer. See `desktop/README.md`.
 

@@ -4,7 +4,7 @@
  */
 const { contextBridge, ipcRenderer } = require("electron");
 
-const OPEN = new Set(["pair-page", "bot-apps", "app", "voice", "get-claude", "get-codex"]);
+const OPEN = new Set(["pair-page", "bot-apps", "app", "voice"]);
 
 contextBridge.exposeInMainWorld(
   "babPairing",
@@ -17,8 +17,6 @@ contextBridge.exposeInMainWorld(
     /** "Give my bot a folder": pick the folder (for this bot), or stop syncing it. */
     chooseFolder: (botId) => ipcRenderer.invoke("pairing:library-choose", botId ? String(botId) : null),
     stopFolder: () => ipcRenderer.invoke("pairing:library-stop"),
-    /** "Think with my Claude or ChatGPT plan here" on or off. */
-    setBridge: (on) => ipcRenderer.invoke("pairing:bridge", on === true),
     open: (what, botId) => (OPEN.has(what) ? ipcRenderer.invoke("pairing:open", { what, botId: botId ? String(botId) : null }) : Promise.resolve(false)),
     close: () => ipcRenderer.send("pairing:close"),
     onState(cb) {

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, KeyRound, Laptop, Sparkles } from "lucide-react";
+import { ArrowRight, KeyRound, Sparkles } from "lucide-react";
 import { Avatar } from "@/components/avatar";
 import { BrandTile } from "@/components/brand/icons";
 import { Button } from "@/components/ui/button";
@@ -59,7 +59,6 @@ function BrainVisual() {
   const rows = [
     { label: "Included", tag: "At cost", icon: <Sparkles className="size-3.5" />, on: true },
     { label: "Your API key", icon: <KeyRound className="size-3.5" /> },
-    { label: "Your subscription", icon: <Laptop className="size-3.5" /> },
   ];
   return (
     <Frame className="flex-col gap-1.5">

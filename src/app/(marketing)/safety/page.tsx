@@ -337,8 +337,7 @@ export default function SafetyPage() {
               the last few characters) and never written to logs.
             </li>
             <li>
-              <strong>Your Claude or ChatGPT login never leaves your computer.</strong> The Bridge runs your own Claude Code or Codex there; we never
-              see, store or relay your sign-in.
+              <strong>On your own API key,</strong> what your bot reads and writes goes to that provider, and its rules for keeping data apply.
             </li>
             <li>
               <strong>We don&apos;t sell your data, and we don&apos;t use it to train AI models.</strong> It&apos;s used to run your bots.
