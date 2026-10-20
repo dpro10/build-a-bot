@@ -110,7 +110,8 @@ export function CallPanel({
                 status === "speaking" ? "bg-primary/20" : status === "hearing" ? "bg-success/20" : live ? "bg-muted" : "bg-transparent",
               )}
             />
-            <Avatar avatar={bot.avatar as AvatarId} color={bot.color as ColorwayId} size={112} mood={moodFor(status, working)} />
+            {/* Above the ring: positioned, so it paints over it (the ring is opaque while listening). */}
+            <Avatar avatar={bot.avatar as AvatarId} color={bot.color as ColorwayId} size={112} mood={moodFor(status, working)} className="relative" />
           </div>
           <div className="text-center">
             <div className="font-display text-xl font-bold">{bot.name}</div>
