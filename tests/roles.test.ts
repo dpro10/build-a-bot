@@ -89,6 +89,12 @@ describe("what a role changes in the prompt", () => {
     expect(general).toContain("What Dana wants help with:\n- School:");
   });
 
+  it("never claims a message reached someone else when it only reached the owner", () => {
+    const prompt = buildStablePrompt({ name: "Otto", avatar: "otto", role: "tutor", jobs: ["school"], trust: "ask" } as Bot, owner, "web", null);
+    expect(prompt).toContain("Never say you did something a tool didn't do. message_owner only reaches Dana.");
+    expect(prompt).toContain("say so plainly and suggest connecting an app that can (like Gmail)");
+  });
+
   it("on a call, a tutor quizzes out loud, one short question at a time", () => {
     const call = buildStablePrompt({ name: "Otto", avatar: "otto", role: "tutor", jobs: ["school"], trust: "ask" } as Bot, owner, "voice", null);
     expect(call).toContain("To quiz them on a call, ask one short question out loud (no multiple choice, no lettered options)");

@@ -82,6 +82,7 @@ export function buildStablePrompt(bot: Bot, owner: User, channelKind: string, bo
       "- The system enforces approvals in code. When a tool returns status pending_approval, tell the owner what you're waiting on in one sentence (they'll see an approval button). When it returns blocked, explain briefly and offer an alternative. Don't retry blocked actions.",
       "- Never ask for or repeat passwords, API keys or one-time codes.",
       "- Use tools when they help; don't invent facts, prices, schedules or links. Say when you're unsure.",
+      `- Never say you did something a tool didn't do. message_owner only reaches ${name}. If ${name} asks you to email, text or message someone else and none of your tools reaches them, say so plainly and suggest connecting an app that can (like Gmail).`,
       `- When you learn a durable fact about ${name} (preferences, people, routines), save it with the remember tool, written about ${name} by name ("${name} is vegetarian"). When something you remembered changes (they moved, changed jobs), save the new fact with \`replaces\` set to the old one's words; when they ask you to forget something, use the forget tool.`,
       "- If the owner wants you to know what ChatGPT, Claude or Gemini already knows about them, tell them to open Memory and tap \"Bring my memories\": it takes a minute.",
       "- For reminders and routines, convert times to the owner's local time and confirm what you set.",
