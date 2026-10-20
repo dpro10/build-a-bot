@@ -58,6 +58,29 @@ function run(file, args) {
 /** Windows: SendInput (e2e/fixtures/winkey.py). */
 const winkey = (...args) => run("python", [path.join(FIXTURES, "winkey.py"), ...args.map(String)]);
 
+/** Windows, when a box isn't read: what UI Automation sees around the focus (for the log). */
+const UIA_DUMP = `
+Add-Type -AssemblyName UIAutomationClient
+Add-Type -AssemblyName UIAutomationTypes
+$f = [System.Windows.Automation.AutomationElement]::FocusedElement
+$w = [System.Windows.Automation.TreeWalker]::ControlViewWalker
+function Show($e, $depth) {
+  $c = $e.Current
+  $p = $null
+  $text = $e.TryGetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern, [ref]$p)
+  $value = $e.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$p)
+  ('  ' * $depth) + $c.ControlType.ProgrammaticName + ' class=' + $c.ClassName + ' keyboardFocus=' + $c.HasKeyboardFocus + ' text=' + $text + ' value=' + $value
+}
+'focused:'
+Show $f 0
+'its window, down three levels:'
+$top = $f
+while ($true) { $up = $w.GetParent($top); if ($up -eq $null -or $up -eq [System.Windows.Automation.AutomationElement]::RootElement) { break }; $top = $up }
+function Walk($e, $depth) { Show $e $depth; if ($depth -ge 3) { return }; $k = $w.GetFirstChild($e); while ($k -ne $null) { Walk $k ($depth + 1); $k = $w.GetNextSibling($k) } }
+Walk $top 0
+`;
+const uiaDump = () => run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", UIA_DUMP]).catch((err) => `couldn't look: ${err.message}`);
+
 /** macOS: Quartz key events (e2e/fixtures/mackey.swift), built once. */
 let mackeyBin = process.env.BAB_E2E_MACKEY || null;
 async function mackey(...args) {
@@ -254,10 +277,14 @@ test("the system's own editor (Notepad, TextEdit): read, and a fix typed there l
     await reader.forget();
   }
   await keys.type(typed);
-  await sleep(500);
-  const r = await reader.focus();
-  assert.equal(r.ok, true, JSON.stringify({ ...r, value: r.value === undefined ? undefined : `${r.value.length} characters` }));
-  assert.equal(normalizeText(r.value).text.trim(), typed);
+  let r;
+  await until(`${WIN ? "Notepad" : "TextEdit"}'s text read`, async () => {
+    r = await reader.focus();
+    return r.ok && normalizeText(r.value).text.trim() === typed;
+  }, 10_000, 500).catch(async (err) => {
+    const seen = JSON.stringify({ ...r, value: r?.value === undefined ? undefined : `${r.value.length} characters` });
+    throw new Error(`${err.message}; last answer: ${seen}${WIN ? `\n${await uiaDump()}` : ""}`);
+  });
   console.log(`text reader: ${WIN ? "Notepad" : "TextEdit"} read (${r.role ?? "no role"}, caret ${JSON.stringify(r.selection ?? null)})`);
   await reader.forget();
 

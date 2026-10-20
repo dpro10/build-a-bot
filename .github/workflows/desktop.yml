@@ -54,10 +54,26 @@ jobs:
           cache-dependency-path: desktop/package-lock.json
       - run: npm ci
       - run: npm test
-      # Learning from a fix: UI Automation reads an Electron app's box and Notepad's, never a
-      # password box, and a fix typed there with real keys is learned.
+
+  # Learning from a fix: UI Automation reads an Electron app's box and Notepad's, never a password
+  # box, and a fix typed there with real keys is learned. (The Mac's runs in the Mac app's job,
+  # with the app's own helper.)
+  learn-windows:
+    name: Learning from fixes, for real (windows-latest)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci
       - name: Reading the box typed into, for real
-        if: runner.os == 'Windows'
         run: node --test --test-timeout=300000 e2e/text-reader.e2e.mjs
 
   private-speech:
@@ -426,7 +442,7 @@ jobs:
     name: Publish
     # A push to main, or a build started by hand on main (gh workflow run desktop.yml --ref main).
     if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
-    needs: [windows-installer, mac-app, private-speech]
+    needs: [windows-installer, mac-app, private-speech, learn-windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write

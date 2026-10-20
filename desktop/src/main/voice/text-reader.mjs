@@ -22,6 +22,8 @@ export const MAX_CHARS = 20_000;
 /**
  * The Windows helper: UI Automation's focused element, kept between commands. Password boxes
  * (IsPassword) are refused. TextPattern gives the text and the caret; ValuePattern the text only.
+ * Some apps report the focus on a container (Windows 11's Notepad: its window's pane): then the
+ * text control inside it that has the keyboard focus, or its only one.
  */
 export const WIN_TEXT_SCRIPT = `
 $ErrorActionPreference = 'Stop'
@@ -33,6 +35,22 @@ $script:el = $null
 function Send($o) {
   [Console]::Out.WriteLine((ConvertTo-Json -InputObject $o -Compress -Depth 4))
   [Console]::Out.Flush()
+}
+function Has-Text($e) {
+  $p = $null
+  if ($e.TryGetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern, [ref]$p)) { return $true }
+  return $e.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$p)
+}
+function Find-Text($f) {
+  if (Has-Text $f) { return $f }
+  $keyboard = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::HasKeyboardFocusProperty, $true)
+  $inner = $f.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $keyboard)
+  if ($inner -ne $null -and (Has-Text $inner)) { return $inner }
+  $isDoc = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Document)
+  $isEdit = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Edit)
+  $all = $f.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.OrCondition]::new([System.Windows.Automation.Condition[]]@($isDoc, $isEdit)))
+  if ($all.Count -eq 1 -and (Has-Text $all[0])) { return $all[0] }
+  return $f
 }
 function Get-Box($e, $full) {
   $c = $e.Current
@@ -80,7 +98,7 @@ while ($true) {
       $script:el = $null
       $f = [System.Windows.Automation.AutomationElement]::FocusedElement
       if ($f -eq $null) { Send @{ ok = $false; error = 'no-focus' } }
-      else { $script:el = $f; Send (Get-Box $f $true) }
+      else { $f = Find-Text $f; $script:el = $f; Send (Get-Box $f $true) }
     }
     elseif ($cmd -eq 'read') {
       if ($script:el -eq $null) { Send @{ ok = $false; error = 'no-element' } }
