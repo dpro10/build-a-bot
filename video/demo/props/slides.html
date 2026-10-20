@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lecture 9: Photosynthesis</title>
+<style>
+  @page { size: 13.333in 7.5in; margin: 0; }
+  :root { --ink: #14261c; --muted: #4f6357; --green: #1f8a52; --leaf: #58b947; --sun: #f5b82e; --soft: #eef7f0; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { font-family: "Helvetica Neue", Arial, sans-serif; color: var(--ink); }
+  .slide { width: 13.333in; height: 7.5in; padding: 0.7in 0.85in; position: relative; overflow: hidden; break-after: page; background: #fff; }
+  .slide::after { content: attr(data-n); position: absolute; right: 0.5in; bottom: 0.35in; font-size: 11pt; color: #9aa9a0; }
+  .tag { font-size: 12pt; letter-spacing: 0.14em; text-transform: uppercase; color: var(--green); font-weight: 700; }
+  h1 { font-size: 46pt; margin: 10px 0 16px; letter-spacing: -0.02em; line-height: 1.05; }
+  h2 { font-size: 32pt; margin: 6px 0 26px; letter-spacing: -0.01em; }
+  ul { margin: 0; padding-left: 0.35in; font-size: 21pt; line-height: 1.55; }
+  li { margin-bottom: 6px; }
+  li b { color: var(--green); }
+  .title { background: linear-gradient(135deg, #0f3d26 0%, #1f8a52 70%, #58b947 100%); color: #fff; display: flex; flex-direction: column; justify-content: center; }
+  .title .tag { color: #bfe9c9; }
+  .title h1 { font-size: 64pt; }
+  .title p { font-size: 20pt; opacity: 0.9; margin: 0; }
+  .equation { font-size: 30pt; text-align: center; padding: 26px; background: var(--soft); border-radius: 18px; margin: 10px 0 26px; font-weight: 600; }
+  .equation .arrow { color: var(--sun); padding: 0 12px; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5in; align-items: center; }
+  .card { background: var(--soft); border-radius: 18px; padding: 22px 26px; font-size: 18pt; line-height: 1.45; }
+  .card h3 { margin: 0 0 8px; font-size: 20pt; color: var(--green); }
+  table { border-collapse: collapse; width: 100%; font-size: 17pt; }
+  th, td { border-bottom: 1px solid #d7e5db; padding: 12px 14px; text-align: left; }
+  th { color: var(--muted); font-size: 13pt; text-transform: uppercase; letter-spacing: 0.08em; }
+  .note { font-size: 14pt; color: var(--muted); margin-top: 18px; }
+</style>
+</head>
+<body>
+
+<section class="slide title" data-n="1">
+  <div class="tag">BIO 101 · Lecture 9 · Week 9</div>
+  <h1>Photosynthesis</h1>
+  <p>How plants turn light into sugar · Dr. Maya Okafor</p>
+</section>
+
+<section class="slide" data-n="2">
+  <div class="tag">The big picture</div>
+  <h2>One equation to remember</h2>
+  <div class="equation">6 CO₂ + 6 H₂O <span class="arrow">— light →</span> C₆H₁₂O₆ + 6 O₂</div>
+  <ul>
+    <li>Photosynthesis stores <b>light energy</b> as chemical energy in sugar (glucose).</li>
+    <li>It happens in the <b>chloroplasts</b> of plant cells and algae.</li>
+    <li>It is roughly the reverse of cellular respiration.</li>
+  </ul>
+</section>
+
+<section class="slide" data-n="3">
+  <div class="tag">Where it happens</div>
+  <h2>Inside the chloroplast</h2>
+  <div class="cols">
+    <svg viewBox="0 0 520 300" width="100%" role="img" aria-label="Chloroplast diagram">
+      <ellipse cx="260" cy="150" rx="250" ry="135" fill="#d9f0dc" stroke="#1f8a52" stroke-width="6"/>
+      <ellipse cx="260" cy="150" rx="232" ry="118" fill="#eef8ee" stroke="#58b947" stroke-width="3"/>
+      <g fill="#58b947" stroke="#1f6e3f" stroke-width="2">
+        <rect x="120" y="95" width="56" height="12" rx="6"/><rect x="120" y="111" width="56" height="12" rx="6"/><rect x="120" y="127" width="56" height="12" rx="6"/><rect x="120" y="143" width="56" height="12" rx="6"/>
+        <rect x="236" y="150" width="56" height="12" rx="6"/><rect x="236" y="166" width="56" height="12" rx="6"/><rect x="236" y="182" width="56" height="12" rx="6"/>
+        <rect x="350" y="100" width="56" height="12" rx="6"/><rect x="350" y="116" width="56" height="12" rx="6"/><rect x="350" y="132" width="56" height="12" rx="6"/><rect x="350" y="148" width="56" height="12" rx="6"/>
+      </g>
+      <g font-family="Helvetica Neue, Arial" font-size="18" fill="#14261c">
+        <text x="98" y="80">Granum (stack of thylakoids)</text>
+        <text x="196" y="236">Stroma (the fluid inside)</text>
+      </g>
+    </svg>
+    <div>
+      <div class="card"><h3>Thylakoids</h3>Flattened sacs stacked into <b>grana</b>. Their membranes hold chlorophyll. The <b>light reactions</b> happen here.</div>
+      <div class="card" style="margin-top:18px"><h3>Stroma</h3>The fluid around the thylakoids. The <b>Calvin cycle</b> happens here.</div>
+    </div>
+  </div>
+</section>
+
+<section class="slide" data-n="4">
+  <div class="tag">Stage 1</div>
+  <h2>The light reactions (thylakoid membranes)</h2>
+  <ul>
+    <li>Chlorophyll in <b>photosystem II</b> and <b>photosystem I</b> absorbs light.</li>
+    <li>Water is split: this is where the <b>oxygen</b> we breathe comes from.</li>
+    <li>The energy makes <b>ATP</b> and <b>NADPH</b>, carried to the Calvin cycle.</li>
+    <li>Needs light. Produces O₂, ATP and NADPH.</li>
+  </ul>
+</section>
+
+<section class="slide" data-n="5">
+  <div class="tag">Stage 2</div>
+  <h2>The Calvin cycle (stroma)</h2>
+  <ul>
+    <li><b>Carbon fixation:</b> the enzyme <b>RuBisCO</b> attaches CO₂ to RuBP.</li>
+    <li><b>Reduction:</b> ATP and NADPH turn the products into <b>G3P</b>, a 3-carbon sugar.</li>
+    <li><b>Regeneration:</b> most G3P is recycled to rebuild RuBP.</li>
+    <li>3 turns of the cycle make 1 G3P to export, using 9 ATP and 6 NADPH.</li>
+  </ul>
+  <p class="note">Also called the light-independent reactions. It doesn't need light directly, but it depends on the ATP and NADPH the light reactions make.</p>
+</section>
+
+<section class="slide" data-n="6">
+  <div class="tag">Compare</div>
+  <h2>Photosynthesis vs. cellular respiration</h2>
+  <table>
+    <tr><th></th><th>Photosynthesis</th><th>Cellular respiration</th></tr>
+    <tr><td>Where</td><td>Chloroplasts</td><td>Mitochondria (and cytoplasm)</td></tr>
+    <tr><td>Goes in</td><td>CO₂, H₂O, light energy</td><td>Glucose, O₂</td></tr>
+    <tr><td>Comes out</td><td>Glucose, O₂</td><td>CO₂, H₂O, ATP</td></tr>
+    <tr><td>Energy</td><td>Stores energy in sugar</td><td>Releases energy as ATP</td></tr>
+  </table>
+</section>
+
+<section class="slide" data-n="7">
+  <div class="tag">Adaptations</div>
+  <h2>C₃, C₄ and CAM plants</h2>
+  <div class="cols" style="grid-template-columns: repeat(3, 1fr); gap: 0.3in;">
+    <div class="card"><h3>C₃</h3>Most plants (wheat, rice). Fix CO₂ straight into the Calvin cycle. Lose water on hot days.</div>
+    <div class="card"><h3>C₄</h3>Corn, sugarcane. Fix CO₂ in one cell, run the Calvin cycle in another. Efficient in heat.</div>
+    <div class="card"><h3>CAM</h3>Cacti, pineapple. Open stomata at night, store CO₂, and fix it by day. Save water.</div>
+  </div>
+</section>
+
+<section class="slide" data-n="8">
+  <div class="tag">Lab preview</div>
+  <h2>What changes the rate of photosynthesis?</h2>
+  <ul>
+    <li><b>Light intensity:</b> more light, faster, until it levels off.</li>
+    <li><b>CO₂ concentration:</b> more CO₂, faster, until it levels off.</li>
+    <li><b>Temperature:</b> enzymes like RuBisCO work best in a middle range.</li>
+    <li>Friday's lab: count the O₂ bubbles from pondweed (Elodea) at three light levels.</li>
+  </ul>
+</section>
+
+</body>
+</html>
