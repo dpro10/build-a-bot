@@ -357,8 +357,9 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
     if (!calls.length) {
       // A small model sometimes says it's making flashcards or a quiz without calling the tool.
       // Not when it's asking them something (which file? how many?): that's theirs to answer first.
+      // Not on a call either: there, a quiz is asked out loud, one question at a time.
       const asking = /\?\s*(\**\s*)?$/.test(withoutAppNotes(stepText));
-      const nudge = nudged || asking ? null : studyNudge(input.message?.author === "owner" ? input.message.text : null, toolset, state);
+      const nudge = nudged || asking || input.channelKind === "voice" ? null : studyNudge(input.message?.author === "owner" ? input.message.text : null, toolset, state);
       if (nudge) {
         nudged = true;
         transcript.push({ role: "assistant", content: stepText || "…" });

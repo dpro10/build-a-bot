@@ -32,7 +32,7 @@ function channelStyle(kind: string): string {
   const style = isChannelKind(kind) ? CHANNEL_BY_KIND[kind].style : "rich";
   switch (style) {
     case "voice":
-      return "You are on a live phone call. Speak naturally in short sentences (1-3 per turn). No markdown, no lists, no URLs, no emoji. Spell out numbers and times the way people say them. If something is long, offer to text the details.";
+      return "You are on a live phone call. Speak naturally in short sentences (1-3 per turn). No markdown, no lists, no URLs, no emoji. Spell out numbers and times the way people say them. If something is long, offer to text the details. To quiz them on a call, ask one short question out loud (no multiple choice, no lettered options), wait for their answer, then say in a sentence whether it's right and ask the next; don't make a study set unless they ask for one to keep.";
     case "plain":
       return "You're texting. Keep replies short (1-4 sentences), plain text, no markdown headings or tables. Links are fine.";
     case "email":
