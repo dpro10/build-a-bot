@@ -62,10 +62,6 @@ const winkey = (...args) => run("python", [path.join(FIXTURES, "winkey.py"), ...
 const UIA_DUMP = `
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
-try {
-  Add-Type -AssemblyName UIAutomationClientsideProviders
-  [System.Windows.Automation.ClientSettings]::RegisterClientSideProviderAssembly([UIAutomationClientsideProviders.UIAutomationClientSideProviders].Assembly.GetName())
-} catch { 'no client-side providers: ' + $_ }
 $f = [System.Windows.Automation.AutomationElement]::FocusedElement
 $w = [System.Windows.Automation.TreeWalker]::ControlViewWalker
 function Show($e, $depth) {

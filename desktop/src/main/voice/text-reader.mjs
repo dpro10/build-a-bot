@@ -22,19 +22,51 @@ export const MAX_CHARS = 20_000;
 /**
  * The Windows helper: UI Automation's focused element, kept between commands. Password boxes
  * (IsPassword) are refused. TextPattern gives the text and the caret; ValuePattern the text only.
- * Classic Windows text boxes (Notepad's, WordPad's, most older apps') are read through .NET's
- * client-side providers, which have to be registered (without them they're bare panes). An app
- * that reports the focus on a container: the text control inside it that has the keyboard focus,
- * or its only one.
+ * Classic Windows text boxes (Edit and RichEdit: Notepad's, WordPad's, most older apps') show up
+ * in .NET's UI Automation as bare panes, so they're read the classic way, with window messages
+ * (WM_GETTEXT, EM_GETSEL; a password box, ES_PASSWORD or a password character, is refused). An
+ * app that reports the focus on a container: the text control inside it that has the keyboard
+ * focus, or its only one.
  */
 export const WIN_TEXT_SCRIPT = `
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
-try {
-  Add-Type -AssemblyName UIAutomationClientsideProviders
-  [System.Windows.Automation.ClientSettings]::RegisterClientSideProviderAssembly([UIAutomationClientsideProviders.UIAutomationClientSideProviders].Assembly.GetName())
-} catch { }
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+public static class BabEditBox {
+  [DllImport("user32.dll", EntryPoint = "SendMessageTimeoutW")]
+  static extern IntPtr Send(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, uint flags, uint timeout, out IntPtr result);
+  [DllImport("user32.dll", EntryPoint = "SendMessageTimeoutW", CharSet = CharSet.Unicode)]
+  static extern IntPtr SendText(IntPtr hWnd, uint msg, IntPtr wParam, StringBuilder lParam, uint flags, uint timeout, out IntPtr result);
+  [DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
+  static extern int GetStyle(IntPtr hWnd, int index);
+  const uint AbortIfHung = 2, Wait = 500;
+  public static bool IsPassword(IntPtr h) {
+    if ((GetStyle(h, -16) & 0x20) != 0) return true;
+    IntPtr ch;
+    return Send(h, 0xD2, IntPtr.Zero, IntPtr.Zero, AbortIfHung, Wait, out ch) != IntPtr.Zero && ch != IntPtr.Zero;
+  }
+  public static int Length(IntPtr h) {
+    IntPtr n;
+    return Send(h, 0x0E, IntPtr.Zero, IntPtr.Zero, AbortIfHung, Wait, out n) == IntPtr.Zero ? -1 : (int)n.ToInt64();
+  }
+  public static string Text(IntPtr h, int length) {
+    StringBuilder text = new StringBuilder(length + 1);
+    IntPtr got;
+    return SendText(h, 0x0D, (IntPtr)(length + 1), text, AbortIfHung, Wait, out got) == IntPtr.Zero ? null : text.ToString();
+  }
+  public static int[] Selection(IntPtr h) {
+    IntPtr r;
+    if (Send(h, 0xB0, IntPtr.Zero, IntPtr.Zero, AbortIfHung, Wait, out r) == IntPtr.Zero) return null;
+    long v = r.ToInt64();
+    int start = (int)(v & 0xFFFF), end = (int)((v >> 16) & 0xFFFF);
+    return end >= start ? new int[] { start, end - start } : null;
+  }
+}
+'@
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
 $max = ${MAX_CHARS}
 $script:el = $null
@@ -42,10 +74,15 @@ function Send($o) {
   [Console]::Out.WriteLine((ConvertTo-Json -InputObject $o -Compress -Depth 4))
   [Console]::Out.Flush()
 }
+function Edit-Handle($c) {
+  if ($c.NativeWindowHandle -ne 0 -and $c.ClassName -match '^(Edit|RichEdit|RICHEDIT)') { return [IntPtr]$c.NativeWindowHandle }
+  return [IntPtr]::Zero
+}
 function Has-Text($e) {
   $p = $null
   if ($e.TryGetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern, [ref]$p)) { return $true }
-  return $e.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$p)
+  if ($e.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$p)) { return $true }
+  return (Edit-Handle $e.Current) -ne [IntPtr]::Zero
 }
 function Find-Text($f) {
   if (Has-Text $f) { return $f }
@@ -78,6 +115,16 @@ function Get-Box($e, $full) {
     } catch { $sel = $null }
   } elseif ($e.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$vp)) {
     $value = $vp.Current.Value
+  } else {
+    $h = Edit-Handle $c
+    if ($h -ne [IntPtr]::Zero) {
+      if ([BabEditBox]::IsPassword($h)) { return @{ ok = $false; error = 'secure' } }
+      $n = [BabEditBox]::Length($h)
+      if ($n -gt $max) { return @{ ok = $false; error = 'too-long' } }
+      if ($n -ge 0) { $value = [BabEditBox]::Text($h, $n) }
+      $range = [BabEditBox]::Selection($h)
+      if ($value -ne $null -and $range -ne $null) { $sel = @{ location = $range[0]; length = $range[1] } }
+    }
   }
   if ($value -eq $null) { return @{ ok = $false; error = 'no-value'; role = $c.ControlType.ProgrammaticName } }
   if ($value.Length -gt $max) { return @{ ok = $false; error = 'too-long' } }
