@@ -739,6 +739,11 @@ A code review of the server and the desktop app. Each fix has a test that fails 
 
 ## Gotchas found while building
 
+- **The Windows app could stay running after quitting** (2026-10-20). It happened about one time in three in CI: the Windows e2e's dictation passed, then the app never exited. The log stopped in the middle of shutting down voice typing, and the app's own 40 s timer never ran, so it was stuck in native code. Leftover processes then held the test open for 15 minutes.
+  - **The fix:** voice typing's pieces (the speech engine, the PowerShell readers, the pill) are now stopped and waited for (up to 6 s) before the app quits. Before the Bridge was removed, its shutdown gave them that time.
+  - **Backstops:** the app's own timer now runs at 30 s. On Windows, a watchdog outside the app (`desktop/src/main/quit-watchdog.mjs`) ends it after 40 s. The watchdog holds the app's process while it waits, so its id can't go to another program.
+  - **Diagnosis:** the log is written straight to disk, with `shutdown: started` and `shutdown: quitting`, so the last step reached before a stall shows. The e2e prints the app log whenever quitting takes over 10 s.
+
 - Nemotron and other reasoning models: thinking eats `max_tokens`. Included models get 8–16K, and thinking is off on "Quick".
 - Avatars and the logo use per-instance SVG gradient ids. A duplicate id inside a hidden copy (the desktop sidebar on phones) blanks every later copy.
 - Custom OpenAI-compatible endpoints are checked against private and metadata addresses and may not redirect (SSRF).
@@ -935,4 +940,12 @@ Diego: "the more that i think about, the more i think maybe we should drop being
 - **Bots that were on a plan** moved to the default open model (Nemotron 3.5 Lightning) in migration `0009_remove_bridge`, and each one's Activity says why. Computers paired only to run the terminal Bridge were unpaired; desktop apps stay paired.
 - **Older desktop apps, until they update:** the server stops naming any bot that needs Claude Code or Codex, so they never wait for turns, and their heartbeat still gets an answer ("nothing waiting"). The new app also deletes the folder older ones ran the Bridge in.
 - **Still open:** zero data retention on the included models has to be switched on in the Nebius Token Factory console (Diego's login); until it is, the site shouldn't promise it.
+
+## Security: a sign-in link brings an account along only in the browser that asked for it (2026-10-20)
+
+Found in the review before the hackathon. Opening a sign-in link used to sign in on the spot, wherever it was opened, and the anonymous account that asked for it (its bots, keys and credit) moved into the email's account, or got the email.
+
+- **Now:** the browser that asks for a link gets a random value in a cookie (`bab_signin`), and the link keeps its hash (`login_tokens.browser_hash`, migration `0010_login_browser`). Opened there, the link signs in right away and brings the anonymous account along, as before.
+- **Opened anywhere else** (another device, or a mail scanner checking the link), nothing is used up. `/auth/confirm` shows the email, and its button (a POST from this site) signs in to that email's own account only. Bots made in the other browser stay there; opening the link in that browser brings them along.
+- **Rate limits:** one network can ask for 30 sign-in links an hour, on top of the 5 per address per 15 minutes.
 

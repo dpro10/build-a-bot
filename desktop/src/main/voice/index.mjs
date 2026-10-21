@@ -747,14 +747,16 @@ export function setupVoice(o) {
       voice.forget();
       void apply();
     },
+    /** Stop everything; resolves once the speech engine has stopped (quitting waits for it). */
     dispose() {
-      void local.stop();
+      const stopped = local.stop().catch(() => {});
       stopAccessibilityWatch();
       active?.disable();
       fixes.dispose();
       reader.dispose();
       frontApp.dispose();
       pill.destroy();
+      return stopped;
     },
     /**
      * The packaged app's self-check (BAB_SMOKE=1, run by CI right after installing it): the native

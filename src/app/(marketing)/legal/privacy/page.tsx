@@ -74,7 +74,6 @@ export default function PrivacyPage() {
               <strong>We don&apos;t sell your data, and we don&apos;t use it to train AI models.</strong> No ads, no ad trackers.
             </li>
             <li>API keys and app logins are encrypted at rest and never shown again.</li>
-            <li>Your Claude or ChatGPT login never leaves your computer.</li>
             <li>Meeting notes only listen after you say yes, in the desktop app, which turns the call into text on your own computer. The audio never reaches our servers.</li>
             <li>Voice typing only listens while you hold its key, and the desktop app turns your voice into text on your own computer. Neither the audio nor what you dictate is kept on our servers: we count the words, that&apos;s all.</li>
             <li>

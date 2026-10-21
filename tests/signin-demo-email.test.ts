@@ -13,6 +13,17 @@ delete process.env.ADMIN_SIGNIN_CODE;
 delete process.env.DATABASE_URL;
 delete process.env.AGENTMAIL_API_KEY;
 
+// The route marks the browser that asks for a link with a cookie.
+const jar = vi.hoisted(() => new Map<string, string>());
+vi.mock("next/headers", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/headers")>()),
+  cookies: async () => ({
+    get: (name: string) => (jar.has(name) ? { name, value: jar.get(name)! } : undefined),
+    set: (name: string, value: string) => void jar.set(name, value),
+    delete: (opts: string | { name: string }) => void jar.delete(typeof opts === "string" ? opts : opts.name),
+  }),
+}));
+
 vi.mock("@/lib/auth/session", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/session")>()),
   getUser: async () => null,

@@ -138,6 +138,19 @@ export function pressCopy(o) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/** How often a box that doesn't show the last paste yet is read again. */
+const REREAD_MS = 80;
+
+/**
+ * The box shows `typed` right before the cursor (`before`: a few characters there): the last
+ * few characters of each, spaces at the end and zero-width ones aside.
+ */
+function showsEnd(before, typed) {
+  const trim = (s) => String(s ?? "").replace(/[\u200B-\u200D\u2060\uFEFF]/gu, "").replace(/\s+$/u, "");
+  const want = Array.from(trim(typed)).slice(-3).join("");
+  return trim(before).endsWith(want);
+}
+
 /** `p`'s answer, or null if it takes longer than `ms`. */
 function within(p, ms) {
   let timer;
@@ -159,6 +172,8 @@ export class Paster {
    *   before and after the cursor in the box in front (null when it can't be read)
    * @param {number} [o.aroundMs]  how long reading it may take before the words go in anyway
    * @param {number} [o.settleMs]  how long after a paste the box is read (it shows the paste by then)
+   * @param {number} [o.catchUpMs]  how long after a paste the box may not show it yet (a box that
+   *   doesn't is read again until it does, for that long)
    * @param {number} [o.lastMs]  how long the last dictation stands in for a box that can't be read
    * @param {() => number} [o.now]
    * @param {(msg: string) => void} [o.log]
@@ -171,6 +186,7 @@ export class Paster {
     this.copyWaitMs = o.copyWaitMs ?? 600;
     this.aroundMs = o.aroundMs ?? 600;
     this.settleMs = o.settleMs ?? 250;
+    this.catchUpMs = o.catchUpMs ?? 1500;
     this.lastMs = o.lastMs ?? 60_000;
     /** @type {Promise<unknown>} */
     this.queue = Promise.resolve();
@@ -261,15 +277,28 @@ export class Paster {
   async spaced(text, category, app) {
     let around = null;
     let from = "";
+    const last = this.lastTyped;
     if (this.o.around && category !== "terminal") {
       // The last paste has had a moment to show in the box.
       const wait = this.pressedAt + this.settleMs - this.now();
       if (wait > 0) await sleep(wait);
       const read = this.o.around;
-      around = await within(Promise.resolve().then(() => read()), this.aroundMs);
+      const readNow = (ms) => within(Promise.resolve().then(() => read()), ms);
+      around = await readNow(this.aroundMs);
+      // Said back to back, a dictation goes in right after the last one, and a slow app may not
+      // show that one yet: the box is read again until it does, for a moment after that paste
+      // (then it's what the box says: the owner may have moved the cursor).
+      if (around && last && app && last.app === app) {
+        const until = Date.now() + (last.at + this.catchUpMs - this.now());
+        while (!showsEnd(around.before, last.text) && Date.now() + REREAD_MS < until) {
+          await sleep(REREAD_MS);
+          const got = await readNow(Math.max(1, Math.min(this.aroundMs, until - Date.now())));
+          if (!got) break;
+          around = got;
+        }
+      }
       if (around) from = "the box";
     }
-    const last = this.lastTyped;
     if (!around && last && app && last.app === app && this.now() - last.at < this.lastMs) {
       around = { before: last.text.slice(-4), after: "" };
       from = "the last dictation";

@@ -71,6 +71,13 @@
       "when": 1792535124630,
       "tag": "0009_remove_bridge",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792537410942,
+      "tag": "0010_login_browser",
+      "breakpoints": true
     }
   ]
 }

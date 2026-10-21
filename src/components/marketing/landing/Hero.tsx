@@ -60,7 +60,7 @@ export function Hero() {
           </div>
 
           <ul className="mt-7 flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted-foreground">
-            {["Free to start, no card", "Use your Claude or ChatGPT plan", "Always says it's an AI"].map((t) => (
+            {["Free to start, no card", "Or bring your own AI key", "Always says it's an AI"].map((t) => (
               <li key={t} className="inline-flex items-center gap-1.5">
                 <Check className="size-4 text-success" aria-hidden="true" />
                 {t}

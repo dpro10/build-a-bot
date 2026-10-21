@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     template: "%s · Build-a-bot",
   },
   description:
-    "Pick a face, name it, choose its brain — bring your Claude or ChatGPT, or use open models for free — connect your apps, and talk to it on the web, Telegram, Discord or Slack. Calls, texts and email are coming soon.",
+    "Pick a face, name it, choose its brain (open models at cost, or your own API key), connect your apps, and talk to it on the web, Telegram, Discord or Slack.",
   applicationName: "Build-a-bot",
   openGraph: {
     title: "Build-a-bot — your own AI agent, in about a minute",

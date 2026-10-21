@@ -53,6 +53,7 @@ import { SCHEME } from "./local-pages.mjs";
 import { createLogger } from "./log.mjs";
 import { meetingSender } from "./meeting-speech.mjs";
 import { PairingWindow } from "./pairing-window.mjs";
+import { startQuitWatchdog } from "./quit-watchdog.mjs";
 import { Spool } from "./spool.mjs";
 import { DEFAULT_SERVER, Settings, TokenStore, normalizeServer } from "./store.mjs";
 import { AppTray } from "./tray.mjs";
@@ -122,7 +123,11 @@ async function boot() {
 
   settings = new Settings(path.join(userData, "settings.json"));
   // Older versions ran the Bridge in here; a turn cut short could leave its prompt behind.
-  fs.rmSync(path.join(userData, "bridge"), { recursive: true, force: true });
+  try {
+    fs.rmSync(path.join(userData, "bridge"), { recursive: true, force: true });
+  } catch (err) {
+    log(`couldn't remove the old Bridge folder: ${/** @type {any} */ (err)?.code ?? err}`);
+  }
   if (serverOverride) {
     const s = normalizeServer(serverOverride);
     if (s) settings.update({ server: s });
@@ -293,19 +298,41 @@ async function boot() {
     e.preventDefault();
     if (shuttingDown) return;
     shuttingDown = true;
-    detector.stop();
-    void voice.interrupt();
-    voice.dispose();
-    library.dispose();
-    controller
-      .shutdown()
+    log("shutdown: started");
+    // Quitting always quits: a step that throws or never finishes can't keep the app open (a
+    // meeting being wrapped up gets 25 s), and if the app gets stuck where its own timers can't
+    // run (in native code, seen on Windows), a watchdog outside it ends it.
+    setTimeout(() => {
+      log("shutdown: still going after 30 s; quitting anyway");
+      app.exit(0);
+    }, 30_000);
+    startQuitWatchdog({ ms: 40_000, log });
+    /** @param {string} what @param {() => unknown} step */
+    const tidy = (what, step) => {
+      try {
+        return step();
+      } catch (err) {
+        log(`shutdown: ${what}: ${err}`);
+      }
+    };
+    tidy("call detection", () => detector.stop());
+    // Voice typing's pieces (the speech engine, the readers, the pill) are gone before the app
+    // goes, rather than still going away under it (the app used to quit right on top of them).
+    const voiceStopped = tidy("voice typing", () => {
+      const interrupted = Promise.resolve(voice.interrupt()).catch((err) => log(`shutdown: voice typing: ${err}`));
+      return Promise.all([interrupted, voice.dispose()]);
+    });
+    tidy("the folder", () => library.dispose());
+    const capped = (/** @type {unknown} */ p, /** @type {number} */ ms) => Promise.race([p, new Promise((r) => setTimeout(r, ms))]);
+    Promise.all([controller.shutdown(), capped(voiceStopped, 6000)])
       .catch((err) => log(`shutdown: ${err}`))
       .finally(() => {
         readyToQuit = true;
-        buddy.destroy();
-        capture.destroy();
-        decoder.close();
-        tray.destroy();
+        tidy("the bot", () => buddy.destroy());
+        tidy("capture", () => capture.destroy());
+        tidy("speech", () => decoder.close());
+        tidy("tray", () => tray.destroy());
+        log("shutdown: quitting");
         app.quit();
       });
   });

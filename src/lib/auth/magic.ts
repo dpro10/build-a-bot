@@ -1,24 +1,36 @@
 /**
  * Passwordless sign-in links. One-time, 20 minutes, stored hashed.
+ *
+ * A link only brings an anonymous account along (its bots, keys and credit) when it's opened in
+ * the browser that asked for it: that browser holds a random value (SIGNIN_COOKIE) whose hash the
+ * link keeps. Anywhere else, someone who got the link (the inbox's owner, or a mail scanner) can
+ * only sign in to the email's own account, and only with a click (`/auth/confirm`): otherwise
+ * anyone could ask for a link to someone else's email and, once it was opened, have that
+ * person's verified email on their own anonymous account, or slip their bots into it.
  */
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { schema, type Db } from "@/lib/db";
 import type { User } from "@/lib/db/schema";
-import { randomToken, sha256 } from "@/lib/crypto";
+import { randomToken, sha256, timingSafeEqualStr } from "@/lib/crypto";
 import { appUrl } from "@/lib/env";
 import { carryCredit } from "@/lib/billing/credit";
 
 const TTL_MS = 20 * 60 * 1000;
 
+/** The cookie that marks the browser that asked for a link (a random value; the link keeps its hash). */
+export const SIGNIN_COOKIE = "bab_signin";
+export const SIGNIN_COOKIE_MAX_AGE = TTL_MS / 1000;
+
 export async function createLoginLink(
   db: Db,
-  input: { email: string; anonymousUserId?: string | null; next?: string | null },
+  input: { email: string; anonymousUserId?: string | null; next?: string | null; browser?: string | null },
 ): Promise<string> {
   const token = randomToken(32);
   await db.insert(schema.loginTokens).values({
     id: sha256(token),
     email: input.email.trim().toLowerCase(),
     userId: input.anonymousUserId ?? null,
+    browserHash: input.browser ? sha256(input.browser) : null,
     redirectTo: safeNext(input.next),
     expiresAt: new Date(Date.now() + TTL_MS),
   });
@@ -34,11 +46,27 @@ export function safeNext(next: string | null | undefined): string {
   return next;
 }
 
+/** A link that can still be used (not used up, not expired), without using it. */
+export async function findLoginLink(db: Db, token: string) {
+  const [row] = await db
+    .select()
+    .from(schema.loginTokens)
+    .where(and(eq(schema.loginTokens.id, sha256(token)), isNull(schema.loginTokens.usedAt), gt(schema.loginTokens.expiresAt, new Date())))
+    .limit(1);
+  return row ?? null;
+}
+
+/** It's being opened in the browser that asked for it (`browser`: that browser's SIGNIN_COOKIE). */
+export function sameBrowser(link: { browserHash: string | null }, browser: string | null | undefined): boolean {
+  return Boolean(link.browserHash && browser && timingSafeEqualStr(sha256(browser), link.browserHash));
+}
+
 /**
- * Consume a link: returns the user to sign in as. If an anonymous account asked for
- * the link, its bots move to the verified account (or the anonymous account becomes it).
+ * Consume a link: returns the user to sign in as. Opened in the browser that asked for it
+ * (`browser`, its SIGNIN_COOKIE), the anonymous account that asked brings its bots to the
+ * verified account (or becomes it). Anywhere else, it only signs in to the email's own account.
  */
-export async function consumeLoginLink(db: Db, token: string): Promise<{ user: User; redirectTo: string } | null> {
+export async function consumeLoginLink(db: Db, token: string, browser?: string | null): Promise<{ user: User; redirectTo: string } | null> {
   const id = sha256(token);
   return db.transaction(async (tx) => {
     const [row] = await tx
@@ -49,9 +77,10 @@ export async function consumeLoginLink(db: Db, token: string): Promise<{ user: U
     if (!row) return null;
     const email = row.email;
     const [existing] = await tx.select().from(schema.users).where(eq(schema.users.email, email)).limit(1);
-    const anon = row.userId
-      ? (await tx.select().from(schema.users).where(eq(schema.users.id, row.userId)).limit(1))[0]
-      : undefined;
+    const anon =
+      row.userId && sameBrowser(row, browser)
+        ? (await tx.select().from(schema.users).where(eq(schema.users.id, row.userId)).limit(1))[0]
+        : undefined;
 
     let user: User;
     if (existing) {
