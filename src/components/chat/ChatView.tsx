@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { ArrowUp, Brain, FileUp, Mic, MicOff, Paperclip, Sparkles, Square } from "lucide-react";
+import { ArrowUp, Brain, FileUp, Paperclip, Sparkles, Square } from "lucide-react";
 import { Avatar } from "@/components/avatar";
 import { useBotLive } from "@/components/app/live-state";
 import { ApprovalCard, type ApprovalView } from "./ApprovalCard";
@@ -604,14 +604,9 @@ function Composer({
   /** Attached files are still uploading or being read: sending waits. */
   waiting?: boolean;
 }) {
+  // No microphone here: a browser's speech recognition sends the audio to its maker, and voice typing
+  // lives in the desktop app (which types into this box too). Phone keyboards dictate on their own.
   const fileRef = React.useRef<HTMLInputElement>(null);
-  const [listening, setListening] = React.useState(false);
-  const recRef = React.useRef<{ stop: () => void } | null>(null);
-  const [canListen, setCanListen] = React.useState(false);
-  React.useEffect(() => {
-    const w = window as unknown as { SpeechRecognition?: unknown; webkitSpeechRecognition?: unknown };
-    setCanListen(Boolean(w.SpeechRecognition || w.webkitSpeechRecognition));
-  }, []);
 
   React.useEffect(() => {
     const el = inputRef.current;
@@ -619,31 +614,6 @@ function Composer({
     el.style.height = "0px";
     el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
   }, [value, inputRef]);
-
-  const toggleMic = () => {
-    if (listening) {
-      recRef.current?.stop();
-      return;
-    }
-    const w = window as unknown as { SpeechRecognition?: new () => SpeechRec; webkitSpeechRecognition?: new () => SpeechRec };
-    const Rec = w.SpeechRecognition ?? w.webkitSpeechRecognition;
-    if (!Rec) return;
-    const rec = new Rec();
-    rec.lang = navigator.language || "en-US";
-    rec.interimResults = true;
-    rec.continuous = false;
-    const base = value ? `${value} ` : "";
-    rec.onresult = (e: SpeechEvent) => {
-      let text = "";
-      for (let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript;
-      onChange(base + text);
-    };
-    rec.onend = () => setListening(false);
-    rec.onerror = () => setListening(false);
-    recRef.current = rec;
-    setListening(true);
-    rec.start();
-  };
 
   return (
     <div className={cn("flex items-end gap-2 rounded-[28px] border border-input bg-card p-1.5 shadow-soft transition focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/15", onFiles ? "pl-1.5" : "pl-4")}>
@@ -692,19 +662,6 @@ function Composer({
         className="max-h-[180px] min-h-[40px] min-w-0 flex-1 resize-none bg-transparent py-2.5 text-[15px] outline-none placeholder:overflow-hidden placeholder:text-ellipsis placeholder:whitespace-nowrap placeholder:text-muted-foreground/70"
         aria-label="Message"
       />
-      {canListen ? (
-        <button
-          type="button"
-          onClick={toggleMic}
-          className={cn(
-            "inline-flex size-10 shrink-0 items-center justify-center rounded-full transition",
-            listening ? "animate-pulse-ring bg-danger text-white" : "text-muted-foreground hover:bg-muted hover:text-foreground",
-          )}
-          aria-label={listening ? "Stop dictation" : "Dictate"}
-        >
-          {listening ? <MicOff className="size-5" /> : <Mic className="size-5" />}
-        </button>
-      ) : null}
       {streaming ? (
         <button type="button" onClick={onStop} className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-foreground text-background" aria-label="Stop">
           <Square className="size-4 fill-current" />
@@ -725,14 +682,3 @@ function Composer({
   );
 }
 
-type SpeechEvent = { results: { length: number; [i: number]: { [j: number]: { transcript: string } } } };
-type SpeechRec = {
-  lang: string;
-  interimResults: boolean;
-  continuous: boolean;
-  onresult: (e: SpeechEvent) => void;
-  onend: () => void;
-  onerror: () => void;
-  start: () => void;
-  stop: () => void;
-};

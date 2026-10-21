@@ -136,6 +136,11 @@ export function transcriptionSetup(): Omit<Setup, "apiKey"> | null {
   return rest;
 }
 
+/** Who turns audio into text on this server (the main service, then its backup), for the privacy policy. */
+export function speechServices(): string[] {
+  return [config.transcribe, config.transcribe.fallback].map(resolveSetup).flatMap((s) => (s ? [s.label] : []));
+}
+
 /** The key speech-to-text uses when it runs on Groq: voice typing's cleanup can use the same provider. */
 export function groqApiKey(): string | null {
   for (const t of [config.transcribe, config.transcribe.fallback]) {
@@ -148,6 +153,17 @@ export function groqApiKey(): string | null {
 /** Meeting notes can run: a real speech-to-text key (or, in tests, scripted speech). */
 export function transcriptionAvailable(): boolean {
   return Boolean(transcriptionSetup()) || demoSpeech;
+}
+
+/**
+ * The audio of voice typing and meeting notes never leaves the user's computer: this server can't
+ * turn recordings into text, so the desktop app never sends any (NVIDIA Parakeet hears it there, or
+ * the app says why it can't). When this server can, the app sends audio here wherever Parakeet can't
+ * hear: Private speech off, a computer it can't run on, a language it doesn't know, or (voice typing)
+ * while it downloads. What the site says about audio follows this.
+ */
+export function audioStaysOnComputer(): boolean {
+  return !transcriptionAvailable();
 }
 
 export class TranscriptionError extends Error {

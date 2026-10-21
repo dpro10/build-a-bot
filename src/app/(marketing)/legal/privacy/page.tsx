@@ -2,7 +2,9 @@ import Link from "next/link";
 import { DocLayout, DocSection, type TocEntry } from "@/components/marketing/DocLayout";
 import { LegalHeader } from "@/components/marketing/LegalHeader";
 import { getConnector } from "@/lib/connectors";
+import { live } from "@/lib/env";
 import { contactLink, pageMetadata } from "@/lib/site";
+import { audioStaysOnComputer, groqApiKey, speechServices } from "@/lib/transcribe";
 
 export const metadata = pageMetadata({
   title: "Privacy Policy",
@@ -30,35 +32,59 @@ const n = (id: string) => SECTIONS.findIndex((s) => s.id === id) + 1;
 const title = (id: string) => `${n(id)}. ${SECTIONS[n(id) - 1].title}`;
 
 const SUBPROCESSORS: { name: string; purpose: string; data: string }[] = [
-  { name: "Vercel", purpose: "Hosting and running the app", data: "Everything passing through the app while it's processed" },
+  { name: "Vercel", purpose: "Hosting and running the app, and storing your bots' files (the Library)", data: "Everything passing through the app while it's processed, and the files you give your bots" },
   { name: "Our managed Postgres host", purpose: "Storing your account and bots", data: "Account, bots, messages, receipts (secrets stay encrypted)" },
-  { name: "Nebius Token Factory", purpose: "The included open models", data: "Messages and context, when your bot uses an included model (and dictated text, when voice typing's cleanup runs there)" },
+  {
+    name: "Nebius Token Factory",
+    purpose: "The included open models",
+    data: "Messages and context when your bot uses an included model, including the meeting and call transcripts it works from; photos and scanned pages from your Library; dictated text, when voice typing's cleanup runs there",
+  },
   { name: "Your chosen AI provider", purpose: "Your own API key, if you add one", data: "Messages and context, sent to that provider only" },
   { name: "Tavily", purpose: "Web search, reading web pages and checking facts", data: "Search queries, short facts to check (never your files) and the addresses of pages your bot reads" },
-  {
-    name: "Nebius AI Cloud (our speech server, running NVIDIA's open speech models), with Together AI as a backup",
-    purpose: "Turning speech into text only when your computer can't (if Private speech is off, or Parakeet can't run on it)",
-    data: "Audio, only while it's turned into text",
-  },
   { name: "Composio", purpose: "Sign-in and actions for many apps", data: "App tokens and the actions your bot takes in those apps" },
-  { name: "Twilio", purpose: "Phone calls and texts", data: "Phone numbers, texts, call speech and transcripts" },
+  {
+    name: "Twilio",
+    purpose: "Phone calls and texts",
+    data: "Phone numbers, texts, and call audio while it's heard. When our voice server isn't answering, Twilio's speech recognition hears the caller and Amazon Polly reads the replies",
+  },
   { name: "AgentMail and Resend", purpose: "Your bot's email address and sign-in emails", data: "Email addresses and email content" },
   { name: "Telegram, Discord, Slack", purpose: "Chat channels you turn on", data: "Messages in those channels and your account IDs there" },
   { name: "Stripe", purpose: "Payments", data: "Billing details (we never see your full card number)" },
-  { name: "Open-Meteo, Frankfurter, Wikipedia, Google News", purpose: "Weather, currency rates and public lookups", data: "Only the search terms, like a city name" },
+  { name: "Open-Meteo, Frankfurter, Wikipedia", purpose: "Weather, currency rates and public lookups", data: "Only the search terms, like a city name" },
 ];
 
-/** Web actions run in a cloud browser (Browser Use); listed only once that feature is switched on. */
-function subprocessors() {
+type Processor = (typeof SUBPROCESSORS)[number];
+
+/**
+ * The fixed list, plus the services only some setups use, listed only when they're switched on: a
+ * speech-to-text service (for computers where NVIDIA Parakeet can't hear), the voice server (on a
+ * Google Cloud machine, voice/deploy/gce.sh) and web actions in a cloud browser (Browser Use).
+ */
+function subprocessors(): Processor[] {
+  const extra: Processor[] = [];
+  const speech = speechServices();
+  if (speech.length) {
+    extra.push({
+      name: speech.length > 1 ? `Speech-to-text: ${speech[0]}, with ${speech[1]} as a backup` : `Speech-to-text: ${speech[0]}`,
+      purpose: "Turning speech into text only where your computer can't: Private speech off, NVIDIA Parakeet unable to run, or (voice typing) before it has downloaded",
+      data: `Audio, only while it's turned into text${groqApiKey() ? " (and dictated text, when voice typing's cleanup runs on Groq)" : ""}`,
+    });
+  }
+  if (live.voiceServer) {
+    extra.push({ name: "Google Cloud", purpose: "The machine our voice server runs on: it hears and speaks on calls with NVIDIA's open speech models", data: "Call audio, only while the call is on" });
+  }
   const webActions = getConnector("browser");
-  if (!webActions || webActions.status === "soon") return SUBPROCESSORS;
-  const row = { name: "Browser Use", purpose: "Web actions in a cloud browser", data: "The pages your bot visits and what it types into them" };
-  return [...SUBPROCESSORS.slice(0, 6), row, ...SUBPROCESSORS.slice(6)];
+  if (webActions && webActions.status !== "soon") {
+    extra.push({ name: "Browser Use", purpose: "Web actions in a cloud browser", data: "The pages your bot visits and what it types into them" });
+  }
+  return [...SUBPROCESSORS.slice(0, 5), ...extra, ...SUBPROCESSORS.slice(5)];
 }
 
 export default function PrivacyPage() {
   const contact = contactLink("Privacy question");
   const processors = subprocessors();
+  // Without speech-to-text on this server, the desktop app never sends audio (audioStaysOnComputer).
+  const audioStays = audioStaysOnComputer();
   return (
     <>
       <LegalHeader
@@ -74,8 +100,12 @@ export default function PrivacyPage() {
               <strong>We don&apos;t sell your data, and we don&apos;t use it to train AI models.</strong> No ads, no ad trackers.
             </li>
             <li>API keys and app logins are encrypted at rest and never shown again.</li>
-            <li>Meeting notes only listen after you say yes, in the desktop app, which turns the call into text on your own computer. The audio never reaches our servers.</li>
+            <li>
+              Meeting notes only listen after you say yes, in the desktop app, which turns the call into text on your own computer.{" "}
+              {audioStays ? "The audio never reaches our servers." : "Where it can't, the audio is turned into text on our server, and isn't kept."}
+            </li>
             <li>Voice typing only listens while you hold its key, and the desktop app turns your voice into text on your own computer. Neither the audio nor what you dictate is kept on our servers: we count the words, that&apos;s all.</li>
+            <li>Calls with your bot aren&apos;t recorded: what&apos;s said is heard as it&apos;s said, and its transcript is kept in your chat with the bot. Our website only listens when you call your bot from it.</li>
             <li>
               You can export everything or delete your account from your <Link href="/app/account">Account page</Link>.
             </li>
@@ -106,16 +136,20 @@ export default function PrivacyPage() {
             said yes and whether you shared the heads-up. Lines are labeled by microphone (&ldquo;You&rdquo;, &ldquo;Others&rdquo; or &ldquo;Room&rdquo;),
             never by recognizing voices. The desktop app turns the call into text on your own computer, with NVIDIA&apos;s Parakeet speech model, and
             sends only the words. Each piece of audio waits on your computer only until it&apos;s been heard (or while the app is offline), then it&apos;s
-            deleted. If Private speech is off, or Parakeet can&apos;t run on your computer, the audio is sent to be turned into text, and isn&apos;t stored.
+            deleted.{" "}
+            {audioStays
+              ? "If Parakeet can't run on your computer, no audio is sent instead: the app says it can't take notes there."
+              : "If Private speech is off, or Parakeet can't run on your computer, the audio is sent to be turned into text by the speech-to-text service listed below, and isn't stored."}
           </p>
           <h3>Voice typing</h3>
           <p>
             If you use voice typing: the words and snippets you add to your dictionary, and a monthly count of the words you typed by voice. The
             desktop app turns what you say into text on your own computer, with NVIDIA&apos;s Parakeet speech model (downloaded once from NVIDIA&apos;s
-            pages on GitHub and Hugging Face), and sends us only the text. Voice typing works only in the desktop app; our website doesn&apos;t
-            listen. If you turn that off, talk in a language the model doesn&apos;t know, or it fails, the recording is sent once and turned into
-            text by the speech-to-text service listed above, when we have one; otherwise it isn&apos;t sent at all. Either way, the text is
-            cleaned up and sent back to you;
+            pages on GitHub and Hugging Face), and sends us only the text. Voice typing works only in the desktop app.{" "}
+            {audioStays
+              ? "If Parakeet can't hear you (it hasn't downloaded yet, you turned it off, it fails, or you talk in a language it doesn't know), the recording isn't sent anywhere: voice typing says why instead."
+              : "If Parakeet can't hear you (it hasn't downloaded yet, you turned it off, it fails, or you talk in a language it doesn't know), the recording is sent once and turned into text by the speech-to-text service listed below."}{" "}
+            Either way, the text is cleaned up and sent back to you;
             neither the audio nor the text is stored on our servers. The kind of app
             you&apos;re typing in (like &ldquo;chat&rdquo; or &ldquo;email&rdquo;) and, for well-known apps, its name are sent along so the text fits
             it, never what&apos;s on your screen. To spell your names right, the names your bots remember are used as hints. To learn from
@@ -128,6 +162,20 @@ export default function PrivacyPage() {
             selected is sent along with what you said, used once to make the change, and not stored. If you ask your bot about text you
             selected (&ldquo;Hey Otto, add this to my calendar&rdquo;), that text goes to your bot with your request and is kept in your chat with
             it.
+          </p>
+          <h3>Your files (the Library)</h3>
+          <p>
+            Files you give a bot: ones you upload, ones you send it on Telegram or Discord, and the folder you sync from the desktop app (nothing
+            else on your computer is read). They&apos;re stored privately, with their text, so your bot can read and quote them. Photos and scanned
+            pages are read by a vision model on Nebius Token Factory.
+          </p>
+          <h3>Calls</h3>
+          <p>
+            If you call your bot, or it calls you: the phone numbers on the call (including people who call your bot&apos;s number), when it
+            happened and how long it lasted, and a transcript of what was said, kept in your chat with the bot. Calls aren&apos;t recorded: the
+            audio is heard while the call is on, by our voice server (NVIDIA&apos;s open speech models) or Twilio&apos;s speech recognition, and
+            isn&apos;t kept. Calling your bot from our website works the same way, through your browser&apos;s microphone, and only while the call
+            is on.
           </p>
           <h3>Connection tokens and keys</h3>
           <p>
@@ -228,7 +276,8 @@ export default function PrivacyPage() {
         <DocSection id="retention" title={title("retention")}>
           <ul>
             <li>We keep your data while your account is open, so your bots remember what they should.</li>
-            <li>Delete a bot and its messages, memories, notes, meetings and receipts go with it. Delete your account and everything goes.</li>
+            <li>Delete a bot and its messages, memories, notes, meetings, files and receipts go with it. Delete your account and everything goes.</li>
+            <li>Files in the Library stay until you delete them. Call transcripts are part of your chat with the bot, and go with it.</li>
             <li>You can delete individual memories and notes in the app at any time.</li>
             <li>
               Meeting transcripts are deleted after 90 days, unless you choose 30 days or to keep them. The notes from a meeting stay until you

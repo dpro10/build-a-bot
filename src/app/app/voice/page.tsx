@@ -31,22 +31,25 @@ const HOW = [
 ];
 
 /**
- * What stays private. A recording reaches our server only when this site has speech-to-text and
- * the owner turned Private speech off (or talks in a language Parakeet doesn't know); who hears it
- * then is named when it's NVIDIA's models on our own server.
+ * What stays private. A recording reaches our server only when this site has speech-to-text, and
+ * then only where Parakeet can't hear: before it has downloaded, with Private speech off, or in a
+ * language it doesn't know. Who hears it then is named.
  */
 const privatePoints = () => {
   const stt = transcriptionSetup();
   return [
     { icon: <AudioLines />, text: "The mic is on only while you hold the key, and the pill on your screen shows it the whole time." },
-    { icon: <Lock />, text: "The app hears you on your own computer, with NVIDIA's Parakeet speech model (English and 24 European languages), so your voice stays there. Only the words come to us, to be cleaned up." },
+    {
+      icon: <Lock />,
+      text: `The app hears you on your own computer, with NVIDIA's Parakeet speech model (English and 24 European languages)${stt ? "" : ", so your voice stays there"}. Only the words come to us, to be cleaned up.`,
+    },
     {
       icon: <Trash2 />,
       text: !stt
         ? "We keep a word count, never your words."
         : stt.provider === "nvidia"
-          ? "If you turn Private speech off, or talk in a language Parakeet doesn't know, the recording is turned into text on our own server, by NVIDIA's open speech models, and thrown away. We keep a word count, never your words."
-          : "If you turn Private speech off, or talk in a language Parakeet doesn't know, the recording is turned into text on our server and thrown away. We keep a word count, never your words.",
+          ? "Until Parakeet has downloaded, if you turn Private speech off, or in a language Parakeet doesn't know, the recording is turned into text on our own server, by NVIDIA's open speech models, and thrown away. We keep a word count, never your words."
+          : `Until Parakeet has downloaded, if you turn Private speech off, or in a language Parakeet doesn't know, the recording is sent through our server to ${stt.label}, turned into text and thrown away. We keep a word count, never your words.`,
     },
     { icon: <Laptop />, text: "Your history stays on your computer, encrypted, and you can turn it off." },
     { icon: <ShieldCheck />, text: "So the words fit, only the kind of app you're in (“chat”, “email”) and a well-known app's name are sent. Never what's on your screen." },

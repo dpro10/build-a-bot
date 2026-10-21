@@ -97,8 +97,8 @@ export const CHANNELS: ChannelDef[] = [
   {
     kind: "telegram",
     name: "Telegram",
-    tagline: "Your own named bot, one tap",
-    description: "Get a Telegram bot with your bot's name. Free and instant.",
+    tagline: "Your own named bot",
+    description: "Get a Telegram bot with your bot's name. Free.",
     icon: "telegram",
     brand: true,
     color: "#26A5E4",

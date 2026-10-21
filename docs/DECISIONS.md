@@ -978,3 +978,25 @@ From Diego's "its time to start rounding this off into one cohesive product", th
 - **A recipe or role starts in the web chat.** Its channels are suggested in the Talk step, not picked, so a new bot never stops on a phone number or opens with "Finish setup: Telegram". Old drafts keep the channels they had.
 - **Gmail, Calendar and Drive through Google's own MCP servers need a client Google approved** (`MCP_OAUTH_CLIENTS`, keyed `accounts.google.com`). Google doesn't let apps register themselves there, so without one (and without Composio) they're "coming soon" instead of failing at sign-in. The message for any app that only lets in approved apps now reads for people.
 - **The desktop app has one home**, the Desktop app page: get it, then pair it. Voice typing and Meetings link there, and the landing page links to `/download`, which needs no account. The app is always offered (its download defaults to `/download`), so the "coming soon" and "run it from the repo" states are gone.
+
+## Build choice (Claude; Diego to confirm): every claim matches what the code does (2026-10-21)
+
+The second cohesion pass after Diego's "its time to start rounding this off into one cohesive product". It fixes what the site, the app, the desktop app and the docs promised that the code doesn't do.
+
+- **"It stays on your screen the whole time it listens"** stopped being true on 2026-10-20, when the bot learned to hide for a screen share. Everywhere it was said (the hard limits, the safety page, the landing page, the download page, the Meetings tab, the catalog, the bot's own guidance, the desktop app), it now matches the rule from that day: it only listens while you can see it's listening. That means the bot on screen or, when you hid it, the menu-bar or tray icon's recording badge.
+- **What the site says about audio follows the server's setup** (`audioStaysOnComputer()` in `src/lib/transcribe`).
+  - **Without speech-to-text on the server** (build-a-bot.site's docs say it has none), the desktop app never sends audio: NVIDIA Parakeet hears it on the computer, or the app says why it can't. There the site keeps saying "the audio never leaves your computer".
+  - **With speech-to-text on the server**, the app sends audio wherever Parakeet can't hear. That covers Private speech off, a computer it can't run on, a language it doesn't know, or (voice typing) before it has downloaded. Then the site says so, and the privacy policy names the service.
+- **The web chat has no microphone.** It used the browser's speech recognition, which in Chrome sends the audio to Google. That contradicts "the website doesn't listen" from Diego's 2026-10-16 decisions ("i would be down to just only allow the 'wispr' parts of build a bot to work in the app"). Phone keyboards dictate on their own, and the desktop app's voice typing types into the chat. The website now listens only when you call your bot from it.
+- **The privacy policy now covers:**
+  - the Library: where files are kept, what reads them, how long they stay;
+  - calls: numbers, transcripts kept in the chat, no recordings, who hears them;
+  - the voice server's Google Cloud machine (listed when it's set up);
+  - the speech-to-text service actually configured, if any, instead of a fixed Nebius/Together row.
+
+  Google News is gone from it: it's never called.
+- **Calls are priced as they're charged.** The pricing page showed only the $0.05 fallback. A call to your bot is now $0.0129 a minute on the voice server, with the fallback named. A call your bot makes to read you something is $0.02. Each started minute counts, and the thinking is extra. The page no longer says calls cost "exactly" what Twilio charges: the fallback rate is an estimate.
+- **Call speed:** "answers in about a second" became "usually about 3 seconds after you stop talking", which is what live calls measure. The call panel shows each answer's time.
+- **Telegram** lost "one tap" and "instant": on the live site the managed bot is on hold, and a Telegram bot comes from BotFather.
+- **The descriptions for search results, link previews and the app manifest** name only the channels that work on that deployment, as the hero does. They no longer list Discord as always there, or calls as coming soon.
+- **NVIDIA × Nebius above the fold:** the hero now says the bot's brain is NVIDIA Nemotron and other open models on Nebius, at cost.

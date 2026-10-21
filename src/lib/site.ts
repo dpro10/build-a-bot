@@ -12,13 +12,11 @@ export const SITE = {
   name: "Build-a-bot",
   domain: "build-a-bot.site",
   tagline: "Your own AI agent, in about a minute.",
-  description:
-    "Pick a face, name it, give it a brain and your apps, and talk to it on the web, Telegram, Discord or Slack. Calls, texts and email are coming soon. Safety rules enforced in code.",
   supportEmail,
   /** Where people manage their data, export it and reach us when no email is configured. */
   accountPath: "/app/account",
-  legalUpdated: "October 20, 2026",
-  legalUpdatedISO: "2026-10-20",
+  legalUpdated: "October 21, 2026",
+  legalUpdatedISO: "2026-10-21",
   year: 2026,
 } as const;
 

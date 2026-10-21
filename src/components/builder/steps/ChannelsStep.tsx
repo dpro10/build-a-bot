@@ -49,7 +49,7 @@ export function ChannelsStep({
     def.kind === "sms"
       ? `Texts are paid from your credit, at cost: ${formatMicros(UNIT_PRICES.textIn)} for each one you send it, ${formatMicros(UNIT_PRICES.textOut)} for each reply.`
       : def.kind === "voice"
-        ? `Calls are paid from your credit, at cost: ${formatMicros(UNIT_PRICES.callMinute)} a minute.`
+        ? "Calls are paid from your credit, at cost, by the minute."
         : null;
 
   // Outside demo mode, a channel whose service isn't set up here waits with the ones coming later.
@@ -84,7 +84,7 @@ export function ChannelsStep({
                 <span className="flex flex-wrap items-center gap-1.5">
                   <span className="font-display text-[17px] font-semibold">{def.name}</span>
                   {always ? <Badge tone="success">Always on</Badge> : null}
-                  {def.kind === "telegram" ? <Badge tone="primary">Free · instant</Badge> : null}
+                  {def.kind === "telegram" ? <Badge tone="primary">Free</Badge> : null}
                   {suggested.includes(def.kind) && !active ? <Badge tone="accent">Suggested</Badge> : null}
                   {simulated(def) && active ? <Badge tone="warning">Simulated in demo</Badge> : null}
                 </span>

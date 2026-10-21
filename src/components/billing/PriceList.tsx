@@ -6,6 +6,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { callsOnVoiceServer } from "@/lib/billing/call-rate";
 import { available, demoMode, live } from "@/lib/env";
 import { INCLUDED_MODELS } from "@/lib/models/catalog";
 import {
@@ -18,6 +19,7 @@ import {
   perMillionLabel,
   tokensMicros,
 } from "@/lib/billing/prices";
+import { audioStaysOnComputer } from "@/lib/transcribe";
 import { cn } from "@/lib/utils";
 
 type Row = { label: React.ReactNode; hint?: React.ReactNode; price: React.ReactNode; per?: string; soon?: boolean };
@@ -40,6 +42,9 @@ function groups(full: boolean): Group[] {
         (m, i, all) => m && all.indexOf(m) === i,
       );
   const phone = available("twilio");
+  const texts = available("twilioTexting");
+  const voiceServer = callsOnVoiceServer();
+  const audioStays = audioStaysOnComputer();
   const freeHere: Row[] = [
     {
       label: "Your own AI key",
@@ -48,7 +53,7 @@ function groups(full: boolean): Group[] {
     },
     {
       label: "Speech heard on your computer",
-      hint: "Voice typing and meeting notes in the desktop app: NVIDIA Parakeet hears you on your computer, so the audio never leaves it.",
+      hint: `Voice typing and meeting notes in the desktop app: NVIDIA Parakeet hears you on your computer${audioStays ? ", so the audio never leaves it" : ""}.`,
       price: "Free",
     },
     { label: "Web chat, Telegram, Discord and Slack", hint: "Talking to your bot there costs only the thinking.", price: "Free" },
@@ -96,7 +101,7 @@ function groups(full: boolean): Group[] {
         },
         {
           label: "An hour of meeting notes",
-          hint: `Hearing the call is free: it happens on your computer. Writing the notes is one long message on the bot's brain (priced here on ${dflt.label}).`,
+          hint: `Hearing the call on your computer is free. Writing the notes is one long message on the bot's brain (priced here on ${dflt.label}).`,
           price: `≈ ${formatMicros(tokensMicros(dflt, TYPICAL_MEETING_HOUR))}`,
           per: "an hour",
         },
@@ -111,11 +116,22 @@ function groups(full: boolean): Group[] {
     {
       id: "phone",
       title: "Texts and calls",
-      note: phone ? "Twilio's US prices, with carrier fees. A text is counted in segments of about 160 characters (70 with emoji)." : "Coming soon. These are the prices they'll have.",
+      note: phone
+        ? "Twilio's US prices, with carrier fees. Each minute a call has started counts, and what your bot thinks on a call is charged like any message. A text is counted in segments of about 160 characters (70 with emoji)."
+        : "Coming soon. These are the prices they'll have.",
       rows: [
-        { label: "A text someone sends your bot", price: formatMicros(UNIT_PRICES.textIn), per: "a segment", soon: !phone },
-        { label: "A text your bot sends", price: formatMicros(UNIT_PRICES.textOut), per: "a segment", soon: !phone },
-        { label: "A phone call", hint: "The line, plus hearing what's said.", price: formatMicros(UNIT_PRICES.callMinute), per: "a minute", soon: !phone },
+        { label: "A text someone sends your bot", price: formatMicros(UNIT_PRICES.textIn), per: "a segment", soon: !texts },
+        { label: "A text your bot sends", price: formatMicros(UNIT_PRICES.textOut), per: "a segment", soon: !texts },
+        {
+          label: "A call to your bot",
+          hint: voiceServer
+            ? `Our voice server hears and speaks with NVIDIA's open speech models, so it's just the line. When it can't take a call, Twilio's own speech does, at ${formatMicros(UNIT_PRICES.callMinute)} a minute.`
+            : "The line, plus Twilio hearing what's said and speaking the replies.",
+          price: formatMicros(voiceServer ? UNIT_PRICES.callMinuteStreamIn : UNIT_PRICES.callMinute),
+          per: "a minute",
+          soon: !phone,
+        },
+        { label: "A call your bot makes to you", hint: "To read you a reminder, or when you ask it to call.", price: formatMicros(UNIT_PRICES.callMinuteOut), per: "a minute", soon: !phone },
       ],
     },
     { id: "free", title: "Free here", rows: freeHere },

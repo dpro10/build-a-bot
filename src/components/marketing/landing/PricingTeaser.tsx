@@ -8,7 +8,7 @@ export function PricingTeaser() {
     <Section id="pricing" aria-labelledby="pricing-title" className="bg-background-2">
       <Container>
         <SectionHeader id="pricing-title" eyebrow="Pricing" title="Pay for what you use. At cost.">
-          No plans and no subscription. Your bot&apos;s thinking, lookups, texts and calls cost exactly what the services charge us, with nothing
+          No plans and no subscription. Your bot&apos;s thinking, lookups, texts and calls cost what the services charge us, with nothing
           added.
         </SectionHeader>
         <PayAsYouGo className="mt-12" />

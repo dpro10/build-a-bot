@@ -18,16 +18,18 @@ import { Container, Section, SectionHeader } from "@/components/marketing/ui";
 import { starterCreditMicros } from "@/lib/billing/credit";
 import { UNIT_PRICES, formatMicros, perMessageMicros } from "@/lib/billing/prices";
 import { INCLUDED_MODELS } from "@/lib/models/catalog";
-import { SITE } from "@/lib/site";
+import { siteDescription } from "@/lib/site-description";
+import { audioStaysOnComputer } from "@/lib/transcribe";
 
 export const metadata: Metadata = {
-  description: SITE.description,
+  description: siteDescription(),
   alternates: { canonical: "/" },
 };
 
-/** The desktop app can be had (signed downloads, or the repo in demo mode); otherwise it's coming soon. */
 const DEFAULT_MODEL = INCLUDED_MODELS.find((m) => m.default) ?? INCLUDED_MODELS[0];
 const STARTER = starterCreditMicros();
+/** Without speech-to-text on this server, the desktop app never sends audio (see audioStaysOnComputer). */
+const AUDIO_STAYS = audioStaysOnComputer();
 
 const FAQ: { q: string; text: string }[] = [
   {
@@ -48,11 +50,11 @@ const FAQ: { q: string; text: string }[] = [
   },
   {
     q: "Can it take notes in my meetings?",
-    text: `Yes, when you say yes, with the desktop app. It notices when a call starts in Zoom, Meet, Teams and others, and your bot asks before it listens; for a meeting in the room, start it from the app's menu. While it listens, it stays on your screen with a red dot. NVIDIA Parakeet turns the call into text on your computer, so the audio never leaves it, and you get a summary, decisions and action items. The website never listens. Recording laws differ by place, so let everyone on the call know.`,
+    text: `Yes, when you say yes, with the desktop app. It notices when a call starts in Zoom, Meet, Teams and others, and your bot asks before it listens; for a meeting in the room, start it from the app's menu. While it listens, it's on your screen with a red dot; hide it for a screen share and the Build-a-bot icon shows it's recording. NVIDIA Parakeet turns the call into text on your computer${AUDIO_STAYS ? ", so the audio never leaves it" : " (where it can't run, our server does, without keeping the audio)"}, and you get a summary, decisions and action items. The website never records a meeting. Recording laws differ by place, so let everyone on the call know.`,
   },
   {
     q: "What is voice typing?",
-    text: "Hold a key in any app and talk. What you meant is typed where your cursor is: no ums, the right punctuation, your corrections kept, and the names your bot knows spelled right. Start with “Hey” and your bot's name to ask it instead. The desktop app hears you on your own computer, with NVIDIA's Parakeet speech model, so in English and 24 European languages your voice never leaves it; we keep a word count, never your words. There's no word limit: hearing you is free, and the AI cleanup costs a fraction of a cent.",
+    text: `Hold a key in any app and talk. What you meant is typed where your cursor is: no ums, the right punctuation, your corrections kept, and the names your bot knows spelled right. Start with “Hey” and your bot's name to ask it instead. The desktop app hears you on your own computer, with NVIDIA's Parakeet speech model, in English and 24 European languages${AUDIO_STAYS ? ", so your voice never leaves it" : " (until it has downloaded, or in another language, our server hears you instead)"}; we keep a word count, never your words. There's no word limit: hearing you on your computer is free, and the AI cleanup costs a fraction of a cent.`,
   },
   {
     q: "What if it makes a mistake?",
