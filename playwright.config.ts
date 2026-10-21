@@ -25,8 +25,9 @@ export default defineConfig({
         port: PORT,
         reuseExistingServer: true,
         timeout: 120_000,
-        // As on build-a-bot.site: demo mode with no speech-to-text and no scripted speech. Meetings and
-        // voice typing come in as the lines the desktop app heard (a paired computer's token stands in).
+        // Demo mode, so apps and channels can be simulated without real accounts; as on build-a-bot.site,
+        // no speech-to-text and no scripted speech. Meetings and voice typing come in as the lines the
+        // desktop app heard (a paired computer's token stands in).
         env: { DATA_DIR: ".data/e2e", DEMO_MODE: "1", DEMO_SPEECH: "0" },
       },
 });

@@ -125,8 +125,12 @@ test("a recipe brings its apps, its jobs' tools and its routines along", async (
   }
   await footer(page).getByRole("button", { name: /Continue/ }).click();
   await footer(page).getByRole("button", { name: /Continue/ }).click();
-  // The recipe talks by email, and an email address is the one thing a recipe can't bring.
-  await page.getByLabel("Your email").fill("owner@example.com");
+  // The recipe's channels are suggested, not picked: the bot starts in the web chat, with nothing to fill in.
+  await expect(page.getByRole("heading", { name: "How do you want to talk?" })).toBeVisible();
+  const email = page.getByRole("button", { name: /^Email/ });
+  await expect(email).toHaveAttribute("aria-pressed", "false");
+  await expect(email.getByText("Suggested")).toBeVisible();
+  await expect(page.getByLabel("Your email")).toHaveCount(0);
   await footer(page).getByRole("button", { name: /Continue/ }).click();
   await expect(page.getByRole("heading", { name: "Ready to meet Otto?" })).toBeVisible();
   await expect(page.getByText("Routines from the recipe")).toBeVisible();
@@ -145,9 +149,12 @@ test("a recipe brings its apps, its jobs' tools and its routines along", async (
 
 test("steps skipped with the step bar are still checked before the bot is made", async ({ page, isMobile }) => {
   test.skip(isMobile, "phones have no step bar to jump with");
-  // Study buddy talks by text, so it needs a phone number, which a recipe can't bring.
+  // A recipe opens every step. Texts picked on the Talk step need a phone number; jump past it without one.
   await page.goto("/build?recipe=study-buddy");
-  await page.getByRole("navigation", { name: "Builder steps" }).getByRole("button", { name: /Go/ }).click();
+  const steps = page.getByRole("navigation", { name: "Builder steps" });
+  await steps.getByRole("button", { name: /Talk/ }).click();
+  await page.getByRole("button", { name: /Text messages/ }).click();
+  await steps.getByRole("button", { name: /Go/ }).click();
   await expect(page.getByRole("heading", { name: "Ready to meet Sprout?" })).toBeVisible();
   await page.getByText("I'm 18 or older").click();
   await footer(page).getByRole("button", { name: /to life/ }).click();
