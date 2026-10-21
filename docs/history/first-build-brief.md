@@ -1,3 +1,5 @@
+> **Historical.** The brief for the first build slice, from the start of the project; the slice was built long ago, and what's current is in `README.md` and `docs/DECISIONS.md`. Its "Rules from day one" still apply.
+
 # Build brief: first slice
 
 For whoever picks this up (a cloud session, a teammate, another agent). Read `README.md` and `docs/DECISIONS.md` first. Where this brief guesses at something Diego hasn't decided, it says so; ask him before going far down that path.

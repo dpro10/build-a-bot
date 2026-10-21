@@ -8,4 +8,4 @@ Work in this folder. It is a git repository, so each terminal pane can take a br
 
 ## Working without Cookbook (cloud sessions)
 
-If the Cookbook MCP tools aren't connected (for example in a Claude Code cloud session), carry on from the repo: `README.md` is the overview, `docs/DECISIONS.md` holds the workspace's decisions, gotchas and open questions, `docs/research-2026-10-13.md` is the research, and `BUILD.md` is the first build slice. Record new decisions in `docs/DECISIONS.md` (dated, quoting Diego where he decided) so they can be copied back into Cookbook.
+If the Cookbook MCP tools aren't connected (for example in a Claude Code cloud session), carry on from the repo: `README.md` is the overview, `docs/DECISIONS.md` holds the workspace's decisions, gotchas and open questions, `docs/research-2026-10-13.md` is the research, and `docs/history/first-build-brief.md` is the first build slice (historical). Record new decisions in `docs/DECISIONS.md` (dated, quoting Diego where he decided) so they can be copied back into Cookbook.
