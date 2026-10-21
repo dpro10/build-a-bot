@@ -11,9 +11,13 @@ export function redact(text) {
   return String(text).replace(TOKEN, "bab_dev_[hidden]").replace(/(authorization["']?\s*[:=]\s*["']?bearer\s+)[^\s"',}]+/gi, "$1[hidden]");
 }
 
-/** @param {{ file?: string | null, echo?: boolean }} [opts] */
+/**
+ * Each line is on disk when `log` returns (written straight to the file, not buffered), so the
+ * last thing the app did before a crash or a hang is in the log.
+ * @param {{ file?: string | null, echo?: boolean }} [opts]
+ */
 export function createLogger(opts = {}) {
-  let stream = null;
+  let fd = null;
   if (opts.file) {
     try {
       fs.mkdirSync(path.dirname(opts.file), { recursive: true, mode: 0o700 });
@@ -23,15 +27,20 @@ export function createLogger(opts = {}) {
       } catch {
         /* no log yet */
       }
-      stream = fs.createWriteStream(opts.file, { flags: "a", mode: 0o600 });
+      fd = fs.openSync(opts.file, "a", 0o600);
     } catch {
-      stream = null;
+      fd = null;
     }
   }
   return function log(msg, extra) {
     const line = redact(`[${new Date().toISOString()}] ${msg}${extra !== undefined ? ` ${safeJson(extra)}` : ""}`);
     if (opts.echo !== false) console.log(line);
-    stream?.write(`${line}\n`);
+    if (fd === null) return;
+    try {
+      fs.writeSync(fd, `${line}\n`);
+    } catch {
+      /* a full disk mustn't stop the app */
+    }
   };
 }
 

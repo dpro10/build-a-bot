@@ -739,6 +739,11 @@ A code review of the server and the desktop app. Each fix has a test that fails 
 
 ## Gotchas found while building
 
+- **The Windows app could stay running after quitting** (2026-10-20). It happened about one time in three in CI: the Windows e2e's dictation passed, then the app never exited. The log stopped in the middle of shutting down voice typing, and the app's own 40 s timer never ran, so it was stuck in native code. Leftover processes then held the test open for 15 minutes.
+  - **The fix:** voice typing's pieces (the speech engine, the PowerShell readers, the pill) are now stopped and waited for (up to 6 s) before the app quits. Before the Bridge was removed, its shutdown gave them that time.
+  - **Backstops:** the app's own timer now runs at 30 s. On Windows, a watchdog outside the app (`desktop/src/main/quit-watchdog.mjs`) ends it after 40 s. The watchdog holds the app's process while it waits, so its id can't go to another program.
+  - **Diagnosis:** the log is written straight to disk, with `shutdown: started` and `shutdown: quitting`, so the last step reached before a stall shows. The e2e prints the app log whenever quitting takes over 10 s.
+
 - Nemotron and other reasoning models: thinking eats `max_tokens`. Included models get 8–16K, and thinking is off on "Quick".
 - Avatars and the logo use per-instance SVG gradient ids. A duplicate id inside a hidden copy (the desktop sidebar on phones) blanks every later copy.
 - Custom OpenAI-compatible endpoints are checked against private and metadata addresses and may not redirect (SSRF).
