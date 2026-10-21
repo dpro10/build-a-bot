@@ -21,6 +21,7 @@ export function ChannelsStep({
   onEmail,
   demo,
   live,
+  suggested = [],
 }: {
   botName: string;
   channels: ChannelKind[];
@@ -31,6 +32,8 @@ export function ChannelsStep({
   onEmail: (v: string) => void;
   demo: boolean;
   live: LiveFlags;
+  /** What the recipe or role talks on: a hint, not picked for the owner. */
+  suggested?: ChannelKind[];
 }) {
   const name = botName.trim() || "your bot";
   const needsPhone = channels.includes("sms") || channels.includes("voice");
@@ -82,6 +85,7 @@ export function ChannelsStep({
                   <span className="font-display text-[17px] font-semibold">{def.name}</span>
                   {always ? <Badge tone="success">Always on</Badge> : null}
                   {def.kind === "telegram" ? <Badge tone="primary">Free · instant</Badge> : null}
+                  {suggested.includes(def.kind) && !active ? <Badge tone="accent">Suggested</Badge> : null}
                   {simulated(def) && active ? <Badge tone="warning">Simulated in demo</Badge> : null}
                 </span>
                 <span className="block text-sm font-medium text-foreground/80">{def.tagline}</span>

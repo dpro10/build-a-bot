@@ -4,7 +4,8 @@ import { ChevronDown, Gift, Sparkles, TriangleAlert } from "lucide-react";
 import { getDb } from "@/lib/db";
 import { isAnonymous, requireUser } from "@/lib/auth/session";
 import { creditHistory, getCredit } from "@/lib/billing/credit";
-import { about, creditTone, formatCents, formatMicros, perMessageMicros } from "@/lib/billing/prices";
+import { ANONYMOUS_INCLUDED_MESSAGES, about, creditTone, formatCents, formatMicros, perMessageMicros } from "@/lib/billing/prices";
+import { freeMessagesLeft } from "@/lib/billing/usage";
 import { demoMode, live } from "@/lib/env";
 import { PageContainer, PageHeader, SectionHeading } from "@/components/account/PageHeader";
 import { UsageSummary } from "@/components/account/UsageSummary";
@@ -28,7 +29,13 @@ const KIND_LABEL: Record<string, string> = {
 export default async function BillingPage({ searchParams }: { searchParams: Promise<{ checkout?: string | string[] }> }) {
   const user = await requireUser("/app/billing");
   const db = await getDb();
-  const [{ used, period }, credit, history, sp] = await Promise.all([usageNumbers(db, user.id), getCredit(db, user.id), creditHistory(db, user.id, 20), searchParams]);
+  const [{ used, period }, credit, history, sp, freeLeft] = await Promise.all([
+    usageNumbers(db, user.id),
+    getCredit(db, user.id),
+    creditHistory(db, user.id, 20),
+    searchParams,
+    freeMessagesLeft(db, user),
+  ]);
   const labels = periodLabels(period);
   const tz = safeTimeZone(user.timezone);
   const mode: CreditMode = live.stripe ? "stripe" : demoMode ? "demo" : "off";
@@ -64,7 +71,16 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
             >
               {formatMicros(balance)}
             </div>
-            {balance > 0 ? (
+            {freeLeft != null ? (
+              // Before signing in, a few messages are on us; the credit opens up with an email.
+              <p className="mt-1.5 text-sm text-muted-foreground">
+                Until you sign in, your bots answer {freeLeft} more message{freeLeft === 1 ? "" : "s"} on included models ({ANONYMOUS_INCLUDED_MESSAGES} in all).{" "}
+                <Link href="/login?next=/app/billing" className="font-medium text-primary underline-offset-2 hover:underline">
+                  Sign in with your email
+                </Link>{" "}
+                to use your credit; it&apos;s free.
+              </p>
+            ) : balance > 0 ? (
               <p className="mt-1.5 text-sm text-muted-foreground">
                 About {about(balance / Math.max(1, perMessageMicros(dflt)))} messages on {dflt.label}
                 {tone === "warning" ? ". Running low." : "."}

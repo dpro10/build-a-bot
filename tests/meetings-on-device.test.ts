@@ -34,7 +34,7 @@ vi.mock("next/server", async (importOriginal) => ({
 const { getDb, resetDbForTests, schema } = await import("@/lib/db");
 const { createBot } = await import("@/lib/bots/create");
 const { sha256 } = await import("@/lib/crypto");
-const { cleanHeard, HEARD_ON_DEVICE, meetingNotesAvailable, staleRecordings } = await import("@/lib/meetings");
+const { cleanHeard, HEARD_ON_DEVICE, staleRecordings } = await import("@/lib/meetings");
 const meetingsRoute = await import("@/app/api/bots/[botId]/meetings/route");
 const meetingRoute = await import("@/app/api/bots/[botId]/meetings/[meetingId]/route");
 const audioRoute = await import("@/app/api/bots/[botId]/meetings/[meetingId]/audio/route");
@@ -93,7 +93,6 @@ afterAll(async () => {
 
 describe("meeting notes heard on the computer (no speech-to-text here)", () => {
   it("are offered to the desktop app, from what it hears", async () => {
-    expect(meetingNotesAvailable()).toBe(true);
     const body = await (await sessionRoute.GET(new Request("http://localhost/api", { headers: device }))).json();
     // This server can't hear audio itself, but takes the lines the app heard.
     expect(body.meetings).toMatchObject({ available: false, local: true, chunkMs: 20_000 });

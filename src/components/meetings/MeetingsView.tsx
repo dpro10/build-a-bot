@@ -11,7 +11,6 @@ import { Segmented } from "@/components/ui/segmented";
 import { toast } from "@/components/ui/toaster";
 import { dayKey, dayLabel, timeLabel, useNow } from "@/components/bot/activity/time";
 import { api, ApiError } from "@/lib/client/api";
-import type { DesktopApp } from "@/lib/meetings";
 import { formatDuration, meetingAppIcon, STATUS, statusOf, type BotFace, type MeetingView } from "./shared";
 
 export type DesktopDevice = { id: string; name: string; online: boolean };
@@ -23,8 +22,6 @@ type Props = {
   serverNow: string;
   initialMeetings: MeetingView[];
   enabled: boolean;
-  /** Meeting notes are taken here (the desktop app can be had); otherwise they're coming soon. */
-  available: boolean;
   /** Minutes of meetings this month (all the owner's bots). */
   minutesThisMonth: number;
   /** What writing an hour's notes costs from credit ("about $0.0012 an hour on …"), or null when it's free here (their own AI). */
@@ -32,7 +29,6 @@ type Props = {
   /** The notes would cost credit and there's none left. */
   needsCredit: boolean;
   transcriptDays: number | null;
-  desktopApp: DesktopApp;
   desktopDevices: DesktopDevice[];
 };
 
@@ -170,7 +166,7 @@ export function MeetingsView(props: Props) {
                 In the desktop app, {bot.name} asks first and stays on your screen the whole time it listens. The website never listens.
               </p>
             </div>
-            <DesktopCard bot={bot} app={props.available ? props.desktopApp : { status: "soon" }} devices={props.desktopDevices} blocked={blocked} />
+            <DesktopCard bot={bot} devices={props.desktopDevices} blocked={blocked} />
           </section>
 
           <div className="grid gap-3 sm:grid-cols-2">
@@ -300,10 +296,9 @@ function TurnOnCard({ bot, onTurnOn, busy }: { bot: BotFace; onTurnOn: () => voi
 }
 
 /** Meeting notes happen in the desktop app: what it does, whether it's paired, and where to set it up. */
-function DesktopCard({ bot, app, devices, blocked }: { bot: BotFace; app: DesktopApp; devices: DesktopDevice[]; blocked: string | null }) {
+function DesktopCard({ bot, devices, blocked }: { bot: BotFace; devices: DesktopDevice[]; blocked: string | null }) {
   const apps = ["zoom", "meet", "teams", "webex", "slack"] as const;
   const online = devices.find((d) => d.online);
-  const soon = app.status === "soon";
   const points = [
     { icon: <Bell />, text: `When a call starts in Zoom, Google Meet, Teams, Webex, Slack or your browser, ${bot.name} pops up and asks. For a meeting in the room, choose Take notes in the room from the app's menu.` },
     { icon: <ShieldCheck />, text: "NVIDIA Parakeet turns the call into text right on your computer, so the audio never leaves it. Only the words come here, for your notes." },
@@ -317,11 +312,9 @@ function DesktopCard({ bot, app, devices, blocked }: { bot: BotFace; app: Deskto
         </span>
         <div className="min-w-0">
           <h3 className="flex flex-wrap items-center gap-2 font-display text-lg leading-tight font-semibold">
-            The desktop app {soon ? <Badge tone="neutral">Coming soon</Badge> : <Badge tone="primary">Beta</Badge>}
+            The desktop app <Badge tone="primary">Beta</Badge>
           </h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {soon ? "Meeting notes come with the desktop app for Mac and Windows, which is coming soon." : `For Mac and Windows. ${bot.name} sits at the bottom of your screen while it listens.`}
-          </p>
+          <p className="mt-1 text-sm text-muted-foreground">For Mac and Windows. {bot.name} sits at the bottom of your screen while it listens.</p>
         </div>
       </div>
       <ul className="flex flex-col gap-2.5">
@@ -334,7 +327,7 @@ function DesktopCard({ bot, app, devices, blocked }: { bot: BotFace; app: Deskto
           </li>
         ))}
       </ul>
-      {blocked && !soon ? <p className="rounded-2xl bg-warning-soft px-3 py-2 text-sm text-foreground">{blocked}</p> : null}
+      {blocked ? <p className="rounded-2xl bg-warning-soft px-3 py-2 text-sm text-foreground">{blocked}</p> : null}
       <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <div className="flex -space-x-2">
@@ -343,17 +336,14 @@ function DesktopCard({ bot, app, devices, blocked }: { bot: BotFace; app: Deskto
             ))}
           </div>
           <span className="text-xs text-muted-foreground">
-            {devices.length ? (online ? `Paired on ${online.name} · online` : `Paired on ${devices[0].name} · offline`) : soon ? "For Mac and Windows" : "Not paired with a computer yet"}
+            {devices.length ? (online ? `Paired on ${online.name} · online` : `Paired on ${devices[0].name} · offline`) : "Not paired with a computer yet"}
           </span>
         </div>
-        {/* Coming soon: nothing to set up yet. */}
-        {soon ? null : (
-          <Button asChild variant={devices.length ? "outline" : "primary"} className="shrink-0 self-start sm:self-auto">
-            <Link href="/app/desktop">
-              {devices.length ? "Manage the desktop app" : "Get the desktop app"} <ArrowRight />
-            </Link>
-          </Button>
-        )}
+        <Button asChild variant={devices.length ? "outline" : "primary"} className="shrink-0 self-start sm:self-auto">
+          <Link href="/app/desktop">
+            {devices.length ? "Manage the desktop app" : "Get the desktop app"} <ArrowRight />
+          </Link>
+        </Button>
       </div>
     </div>
   );

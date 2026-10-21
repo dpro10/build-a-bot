@@ -41,9 +41,11 @@ test("the Voice typing page gets you the desktop app; the website itself doesn't
   await newBot(page, "Otto");
   await page.goto("/app/voice");
   await expect(page.getByRole("heading", { name: "Voice typing", level: 1 })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Get the desktop app" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Pair this computer" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "In the desktop app" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "The key to hold" })).toBeVisible();
   await expect(page.getByText("Right Option (⌥)")).toBeVisible();
+  // The app has one home: getting it and pairing it are on the Desktop app page.
+  await expect(page.getByRole("link", { name: /Get the desktop app/ })).toHaveAttribute("href", "/app/desktop");
   // No microphone on the page, and nothing for it to listen with.
   await expect(page.getByRole("button", { name: /Hold to talk/ })).toHaveCount(0);
   await expect(page.getByText("Try it here")).toHaveCount(0);
@@ -100,13 +102,9 @@ test("the site tells people about it", async ({ page }) => {
   await expect(page.getByRole("region", { name: "Looking things up and getting things done" }).getByText("Voice typing's AI cleanup")).toBeVisible();
   await expect(page.getByRole("region", { name: "Free here" }).getByText("Speech heard on your computer")).toBeVisible();
 
-  // Signed out, "Get the desktop app" goes to sign-in, which then comes back to the Voice typing page.
+  // "Get the desktop app" goes to the download page, no account needed.
   await page.goto("/");
   await page.getByRole("link", { name: "Get the desktop app" }).click();
-  await expect(page).toHaveURL(/\/login\?next=%2Fapp%2Fvoice$/);
-  await page.getByLabel("Email").fill(`voice-${Date.now()}@example.com`);
-  await page.getByRole("button", { name: "Email me a magic link" }).click();
-  await page.getByRole("link", { name: "Open the sign-in link" }).click();
-  await expect(page).toHaveURL(/\/app\/voice$/);
-  await expect(page.getByRole("heading", { name: "Voice typing", level: 1 })).toBeVisible();
+  await expect(page).toHaveURL(/\/download$/);
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Build-a-bot for");
 });

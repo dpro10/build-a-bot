@@ -174,8 +174,25 @@ describe("built-ins whose service isn't set up are coming soon", () => {
   });
 });
 
+describe("Google's own MCP servers only let in apps Google has approved", () => {
+  it("without a client registered with Google (or Composio), Gmail, Calendar and Drive are coming soon instead of failing at sign-in", async () => {
+    expect(comingSoonConnectors()).toEqual(expect.arrayContaining(["gmail", "google_calendar", "google_drive"]));
+    const bot = await makeBot("Mailer zero");
+    const added = await addApp(bot.id, { connectorId: "gmail" });
+    expect(added.status).toBe(409);
+    expect(added.data.error).toBe("Gmail is coming soon.");
+  });
+});
+
 describe("connecting an app over MCP", () => {
   const GMAIL = "https://gmailmcp.googleapis.com/mcp/v1";
+  // A client registered with Google, so Gmail can go to Google's MCP server here.
+  beforeAll(() => {
+    process.env.MCP_OAUTH_CLIENTS = JSON.stringify({ "accounts.google.com": { client_id: "test-google-client" } });
+  });
+  afterAll(() => {
+    delete process.env.MCP_OAUTH_CLIENTS;
+  });
 
   it("a server that answers an unsigned initialize (like Google's) isn't marked connected without a sign-in", async () => {
     const bot = await makeBot("Mailer");

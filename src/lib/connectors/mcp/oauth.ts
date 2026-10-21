@@ -203,7 +203,7 @@ export async function startMcpOAuth(
   if (!clientId) {
     return {
       kind: "error",
-      message: "This app only works with pre-approved clients. Paste an access token instead, or ask us to add it.",
+      message: "This app only lets in apps it has approved, and it hasn't approved this one yet, so it can't be connected here for now.",
     };
   }
 

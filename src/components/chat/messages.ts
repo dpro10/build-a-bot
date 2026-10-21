@@ -73,7 +73,7 @@ export function toChatMessage(m: {
     | { type: "tool_call"; id: string; name: string; title?: string; summary?: string }
     | { type: "tool_result"; id: string; name: string; status: ToolView["state"]; summary?: string; approvalId?: string }
     | { type: "approval"; approvalId: string }
-    | { type: "notice"; tone: "info" | "warn" | "danger"; text: string }
+    | { type: "notice"; tone: "info" | "warn" | "danger"; text: string; href?: string }
     | { type: "study_set"; set: StudySetSummary }
   )[];
   const tools: ToolView[] = [];
@@ -91,7 +91,7 @@ export function toChatMessage(m: {
       }
     }
     if (p.type === "approval") approvals.push(p.approvalId);
-    if (p.type === "notice") notices.push({ tone: p.tone, text: p.text });
+    if (p.type === "notice") notices.push({ tone: p.tone, text: p.text, ...(p.href ? { href: p.href } : {}) });
   }
   return {
     id: m.id,

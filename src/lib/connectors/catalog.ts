@@ -33,6 +33,9 @@ const mcp = (url: string, auth: "oauth" | "none" = "oauth", verified = true): Co
   verified,
 });
 
+/** Google's MCP servers: they only let in apps Google has approved (a client registered for accounts.google.com). */
+const googleMcp = (url: string): ConnectorVia => ({ kind: "mcp", url, auth: "oauth", verified: true, approvedClientsOnly: "accounts.google.com" });
+
 /** An official remote MCP server the user connects by pasting a token. */
 const mcpToken = (url: string, tokenLabel: string, tokenUrl?: string): ConnectorVia => ({
   kind: "mcp",
@@ -62,7 +65,7 @@ export const CONNECTORS: ConnectorDef[] = [
     category: "email",
     description: "Read, search, draft and send email",
     icon: { simpleIcon: "gmail", color: "EA4335" },
-    via: [composio("gmail"), mcp(GMAIL_MCP)],
+    via: [composio("gmail"), googleMcp(GMAIL_MCP)],
     capabilities: [
       cap("read_email", "Read your email", "read", "low"),
       cap("search_email", "Search your inbox", "read", "low"),
@@ -135,7 +138,7 @@ export const CONNECTORS: ConnectorDef[] = [
     category: "calendar",
     description: "See your schedule, find free time and add events",
     icon: { simpleIcon: "googlecalendar", color: "4285F4" },
-    via: [composio("googlecalendar"), mcp(GOOGLE_CALENDAR_MCP)],
+    via: [composio("googlecalendar"), googleMcp(GOOGLE_CALENDAR_MCP)],
     capabilities: [
       cap("read_events", "See your events", "read", "low"),
       cap("find_free_time", "Find free time", "read", "low"),
@@ -361,7 +364,7 @@ export const CONNECTORS: ConnectorDef[] = [
     category: "files",
     description: "Find, read and organize your files",
     icon: { simpleIcon: "googledrive", color: "4285F4" },
-    via: [composio("googledrive"), mcp(GOOGLE_DRIVE_MCP)],
+    via: [composio("googledrive"), googleMcp(GOOGLE_DRIVE_MCP)],
     capabilities: [
       cap("read_files", "Find and read your files", "read", "low"),
       cap("upload_files", "Save new files", "write", "low"),

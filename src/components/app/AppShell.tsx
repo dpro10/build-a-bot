@@ -8,11 +8,13 @@ import { Avatar } from "@/components/avatar";
 import { Logo } from "@/components/brand/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Badge } from "@/components/ui/badge";
+import { ANONYMOUS_INCLUDED_MESSAGES } from "@/lib/billing/prices";
 import { cn } from "@/lib/utils";
 import type { AvatarId, ColorwayId } from "@/lib/avatars";
 
 export type ShellBot = { id: string; name: string; avatar: AvatarId; color: ColorwayId; status: string; pending: number; subtitle: string };
-export type ShellCredit = { label: string; tone: "primary" | "warning" | "danger" };
+/** What the Credit & usage badge shows: credit left ("$0.93"), or before signing in, free messages left ("3 free"). */
+export type ShellCredit = { label: string; tone: "primary" | "warning" | "danger"; freeLeft?: number | null };
 
 export function AppShell({
   bots,
@@ -177,7 +179,10 @@ function SidebarContent({
       <div className="border-t border-border p-3">
         {anonymous ? (
           <Link href="/login?next=/app" className="mb-2 block rounded-2xl bg-primary-soft px-3 py-2.5 text-sm font-semibold text-primary">
-            Save your account →<span className="block text-xs font-normal">Add your email so you never lose your bots.</span>
+            Save your account →
+            <span className="block text-xs font-normal">
+              {credit.freeLeft != null ? `${credit.freeLeft} of ${ANONYMOUS_INCLUDED_MESSAGES} free messages left. ` : ""}Add your email to keep going and never lose your bots.
+            </span>
           </Link>
         ) : null}
         <NavItem href="/app/approvals" icon={<Bell className="size-[18px]" />} label="Approvals" active={pathname === "/app/approvals"} badge={pendingTotal} />
@@ -190,7 +195,7 @@ function SidebarContent({
           active={pathname === "/app/billing"}
           trailing={
             <Badge tone={credit.tone} className="tabular-nums">
-              <span className="sr-only">{credit.tone === "danger" ? "Out of credit: " : "Credit left: "}</span>
+              <span className="sr-only">{credit.freeLeft != null ? "Free messages left before you sign in: " : credit.tone === "danger" ? "Out of credit: " : "Credit left: "}</span>
               {credit.label}
             </Badge>
           }

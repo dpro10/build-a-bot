@@ -4,18 +4,13 @@ import { schema } from "@/lib/db";
 import { ownerName } from "@/lib/agent/prompt";
 import { formatDuration, getSegments, searchSegments, transcriptLines, clock } from "@/lib/meetings";
 import { meetingAppName } from "@/lib/meetings/apps";
-import { available } from "@/lib/env";
 import { truncate } from "@/lib/utils";
 import { defineTool, type ToolContext } from "../types";
 
 const PART_CHARS = 24_000;
 
 /** Nothing recorded yet: how the owner starts (notes are taken in the desktop app). */
-const NO_MEETINGS = `No meetings yet. ${
-  available("desktopApp")
-    ? "The owner takes notes with the desktop app: it offers to when a call starts, and its menu starts notes for a meeting in the room."
-    : "Notes are taken with the desktop app, which is coming soon."
-}`;
+const NO_MEETINGS = "No meetings yet. The owner takes notes with the desktop app: it offers to when a call starts, and its menu starts notes for a meeting in the room.";
 
 function when(d: Date, ctx: ToolContext): string {
   try {

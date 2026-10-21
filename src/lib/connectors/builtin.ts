@@ -164,7 +164,6 @@ export const BUILTIN_CONNECTORS: ConnectorDef[] = [
     capabilities: [{ id: "read_meetings", label: "Read your meeting notes and transcripts", effect: "read", risk: "low" }],
     status: "beta",
     // Notes are taken in the desktop app, which hears the call on the owner's computer.
-    requires: "desktopApp",
     popular: true,
     jobs: ["meetings", "work", "calendar", "school"],
     keywords: ["meeting", "meetings", "zoom", "google meet", "teams", "webex", "call", "transcribe", "transcript", "record", "recording", "notetaker", "whisper", "parakeet", "minutes", "action items"],

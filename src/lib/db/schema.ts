@@ -277,7 +277,7 @@ export type MessagePart =
       approvalId?: string;
     }
   | { type: "approval"; approvalId: string }
-  | { type: "notice"; tone: "info" | "warn" | "danger"; text: string }
+  | { type: "notice"; tone: "info" | "warn" | "danger"; text: string; /** A page in the app it links to. */ href?: string }
   /** Flashcards or a quiz the bot made: shown as a card to study. */
   | { type: "study_set"; set: StudySetSummary };
 

@@ -486,6 +486,7 @@ export function Builder({ demo, live, comingSoon, recipe, botCount, signedIn, ow
               onEmail={(email) => update({ email })}
               demo={demo}
               live={live}
+              suggested={state.suggestedChannels}
             />
           ) : null}
           {step === "review" ? (

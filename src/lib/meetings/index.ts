@@ -35,22 +35,14 @@ export type MeetingTrack = "mic" | "system";
 export const TRACKS: MeetingTrack[] = ["mic", "system"];
 
 /**
- * The desktop app (desktop/) as the pages show it: its download once signed builds are published
- * (NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL), how to run it from the repo in demo mode, or "Coming soon".
+ * The desktop app (desktop/), where meeting notes and voice typing happen: where to get it (the
+ * site's own download page, which offers the newest signed builds, unless NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL
+ * points elsewhere).
  */
-export type DesktopApp = { status: "download"; url: string } | { status: "repo" } | { status: "soon" };
+export type DesktopApp = { url: string };
 
 export function desktopApp(): DesktopApp {
-  if (config.desktop.downloadUrl) return { status: "download", url: config.desktop.downloadUrl };
-  return demoMode ? { status: "repo" } : { status: "soon" };
-}
-
-/**
- * Meeting notes can be taken here: they happen in the desktop app (it hears the call on the
- * computer), so they're offered wherever the app can be had. Otherwise they're "Coming soon".
- */
-export function meetingNotesAvailable(): boolean {
-  return desktopApp().status !== "soon";
+  return { url: config.desktop.downloadUrl };
 }
 
 /**
@@ -211,7 +203,6 @@ export async function startMeeting(
 ): Promise<{ ok: true; meeting: Meeting; replaced: string[] } | MeetingFailure> {
   const { bot, owner } = input;
   if (bot.status === "paused") return { ok: false, status: 409, code: "paused", error: `${bot.name} is paused. Resume it to take notes.` };
-  if (!meetingNotesAvailable()) return { ok: false, status: 503, code: "unavailable", error: "Meeting notes are coming soon." };
   if (!(await meetingsEnabled(db, bot.id))) {
     return { ok: false, status: 409, code: "meetings_off", error: `Turn on Meeting notes for ${bot.name} first.` };
   }

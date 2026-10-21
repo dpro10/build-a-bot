@@ -7,7 +7,7 @@ import { hasCredit } from "@/lib/billing/credit";
 import { TYPICAL_MEETING_HOUR, formatMicros, tokensMicros } from "@/lib/billing/prices";
 import { getUsage } from "@/lib/billing/usage";
 import { DEVICE_ONLINE_MS } from "@/lib/bridge/devices";
-import { DEFAULT_TRANSCRIPT_DAYS, desktopApp, listMeetings, meetingNotesAvailable, meetingsEnabled, meetingView, notesCostCredit } from "@/lib/meetings";
+import { DEFAULT_TRANSCRIPT_DAYS, listMeetings, meetingsEnabled, meetingView, notesCostCredit } from "@/lib/meetings";
 import { INCLUDED_MODELS } from "@/lib/models/catalog";
 import { safeTimeZone } from "@/components/bot/activity/time";
 import { MeetingsView } from "@/components/meetings/MeetingsView";
@@ -46,8 +46,6 @@ export default async function MeetingsPage({ params }: { params: Promise<{ botId
           serverNow={now.toISOString()}
           initialMeetings={rows.map(meetingView)}
           enabled={enabled}
-          available={meetingNotesAvailable()}
-          desktopApp={desktopApp()}
           minutesThisMonth={Math.floor(usage.meetingSeconds / 60)}
           notesCost={notesCost}
           needsCredit={paid && !credit}

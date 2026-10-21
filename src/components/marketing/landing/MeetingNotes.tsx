@@ -14,14 +14,14 @@ const POINTS = [
 
 const APPS = ["zoom", "meet", "teams", "webex", "slack", "discord"] as const;
 
-/** Meeting notes are taken in the desktop app. `desktopApp`: it can be had (downloads, or the repo); otherwise it's coming soon. */
-export function MeetingNotes({ desktopApp }: { desktopApp: boolean }) {
+/** Meeting notes are taken in the desktop app. */
+export function MeetingNotes() {
   return (
     <Section id="meetings" aria-labelledby="meetings-title" className="overflow-hidden bg-gradient-to-b from-background via-primary-soft/30 to-background-2">
       <Container>
         <SectionHeader id="meetings-title" eyebrow="Meeting notes" icon={<AudioLines />} title="It takes notes in your calls. When you say yes.">
           When a call starts, your bot peeks up from the bottom of your screen and asks. Say yes, and it stays right there while it listens, then sends you the notes.
-          {desktopApp ? " It's in the desktop app." : " Coming soon in the desktop app."}
+          {" It's in the desktop app."}
         </SectionHeader>
 
         <div className="mt-14 grid gap-8 lg:grid-cols-2 lg:gap-10">
@@ -66,9 +66,7 @@ export function MeetingNotes({ desktopApp }: { desktopApp: boolean }) {
             ))}
           </div>
           <p className="max-w-xl text-sm text-muted-foreground">
-            {desktopApp
-              ? "Works with Zoom, Google Meet, Teams, Webex, Slack and calls in your browser, with the desktop app for Mac and Windows, and with a meeting in the room."
-              : "Works with Zoom, Google Meet, Teams, Webex, Slack and calls in your browser, with the desktop app for Mac and Windows, coming soon."}{" "}
+            Works with Zoom, Google Meet, Teams, Webex, Slack and calls in your browser, with the desktop app for Mac and Windows, and with a meeting in the room.{" "}
             <Link href="/safety#recording" className="inline-flex items-center gap-1 font-semibold text-primary hover:underline">
               How recording stays fair <ArrowRight className="size-3.5" aria-hidden="true" />
             </Link>

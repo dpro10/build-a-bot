@@ -969,3 +969,12 @@ Diego: "Let’s switch off demo mode yeah, I’ll do the rest when I get home". 
   1. In Vercel → build-a-bot → Settings → Environment Variables, delete `DEMO_MODE` for Production and Preview (or set it to `0`). Previews share the live database.
   2. Optionally delete `BRIDGE_CLI`; nothing reads it since the Bridge was removed.
   3. Then Claude redeploys and checks the live site.
+
+## Build choice (Claude; Diego to confirm): the first five minutes (2026-10-21)
+
+From Diego's "its time to start rounding this off into one cohesive product", the review before the hackathon looked at what a new visitor meets first.
+
+- **The free messages before signing in end in a way forward.** The reply that says they're used up has "Sign in with your email to keep going" under it, and the sign-in comes back to the same chat. Out of credit, the reply links to "Add credit" when credit can be added. The links are kept with the message, so they survive a reload, and they only appear in the web chat. Before signing in, the sidebar shows free messages left (not the "$1.00" starter credit, which only goes further once there's an email), and Credit & usage says how many are left and how to keep going.
+- **A recipe or role starts in the web chat.** Its channels are suggested in the Talk step, not picked, so a new bot never stops on a phone number or opens with "Finish setup: Telegram". Old drafts keep the channels they had.
+- **Gmail, Calendar and Drive through Google's own MCP servers need a client Google approved** (`MCP_OAUTH_CLIENTS`, keyed `accounts.google.com`). Google doesn't let apps register themselves there, so without one (and without Composio) they're "coming soon" instead of failing at sign-in. The message for any app that only lets in approved apps now reads for people.
+- **The desktop app has one home**, the Desktop app page: get it, then pair it. Voice typing and Meetings link there, and the landing page links to `/download`, which needs no account. The app is always offered (its download defaults to `/download`), so the "coming soon" and "run it from the repo" states are gone.

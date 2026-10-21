@@ -41,6 +41,11 @@ export type BuilderState = {
   customMcp: { url: string; name?: string }[];
   trust: TrustLevel;
   channels: ChannelKind[];
+  /**
+   * The channels a recipe or role talks on, shown as suggestions: a recipe starts in the web chat,
+   * so nothing stops on a phone number or waits for a setup the owner didn't pick.
+   */
+  suggestedChannels: ChannelKind[];
   phone: string;
   email: string;
   instructions: string;
@@ -105,6 +110,7 @@ export function initialState(recipe: (RecipeData & { slug?: string }) | null | u
     customMcp: [],
     trust: "ask",
     channels: [],
+    suggestedChannels: [],
     phone: "",
     email: ctx.ownerEmail ?? "",
     instructions: "",
@@ -125,7 +131,7 @@ export function initialState(recipe: (RecipeData & { slug?: string }) | null | u
     // Jobs bring their built-in tools (web search for research, and so on), just like picking them by hand.
     connectors: usableApps([...recipe.connectors, ...jobs.flatMap((j) => JOB_BY_ID[j].builtins).filter((b) => !ALWAYS_ON.has(b))], ctx),
     trust: recipe.trust,
-    channels: usableChannels(recipe.channels, ctx),
+    suggestedChannels: usableChannels(recipe.channels, ctx),
     instructions: recipe.instructions,
     recipeSlug: recipe.slug ?? null,
     role: isRoleId(recipe.role) ? recipe.role : null,
@@ -146,6 +152,7 @@ export function withDraft(base: BuilderState, draft: Partial<BuilderState>, ctx:
     role: isRoleId(draft.role) ? draft.role : base.role,
     ageConfirmed: false,
     channels: usableChannels(draft.channels ?? base.channels, ctx),
+    suggestedChannels: usableChannels(draft.suggestedChannels ?? base.suggestedChannels, ctx),
     connectors: usableApps(draft.connectors ?? base.connectors, ctx),
     // A draft saved before signing in takes the account's email.
     email: typeof draft.email === "string" && draft.email.trim() ? draft.email : base.email,
