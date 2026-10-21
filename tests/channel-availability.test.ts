@@ -82,21 +82,24 @@ describe("recipes and drafts in the builder", () => {
   const demo: BuilderContext = { demo: true, live: {}, comingSoon: [], ownerEmail: null };
   const noKey = { apiKey: "", keyStatus: "idle" as const };
 
-  it("outside demo mode, every featured recipe can be made: channels that aren't set up are left out", () => {
-    for (const recipe of FEATURED_RECIPES) {
-      const state = initialState(recipe, live);
-      expect(state.channels.filter((c) => c === "sms" || c === "voice" || c === "email"), recipe.slug).toEqual([]);
-      for (const step of STEPS) if (step.id !== "review") expect(stepError(step.id, state, noKey), `${recipe.slug}: ${step.id}`).toBeNull();
+  it("a recipe or role starts in the web chat: its channels are suggestions, so every one can be made with Continue", () => {
+    for (const ctx of [live, demo]) {
+      for (const recipe of FEATURED_RECIPES) {
+        const state = initialState(recipe, ctx);
+        expect(state.channels, recipe.slug).toEqual([]);
+        for (const step of STEPS) if (step.id !== "review") expect(stepError(step.id, state, noKey), `${recipe.slug}: ${step.id}`).toBeNull();
+      }
     }
-    expect(initialState(findFeatured("study-buddy"), live).channels).toEqual(["telegram"]);
-    expect(initialState(findFeatured("errand-runner"), live).channels).toEqual([]);
-    expect(initialState(findFeatured("pr-patrol"), live).channels).toEqual(["slack", "discord"]);
+    // Suggested: only channels that work here.
+    expect(initialState(findFeatured("study-buddy"), live).suggestedChannels).toEqual(["telegram"]);
+    expect(initialState(findFeatured("errand-runner"), live).suggestedChannels).toEqual([]);
+    expect(initialState(findFeatured("pr-patrol"), live).suggestedChannels).toEqual(["slack", "discord"]);
   });
 
-  it("demo mode keeps them, and still asks for the number a recipe can't bring", () => {
+  it("demo mode suggests them all, and a channel picked for texts still asks for the number", () => {
     const state = initialState(findFeatured("study-buddy"), demo);
-    expect(state.channels).toEqual(["telegram", "sms"]);
-    expect(stepError("channels", state, noKey)).toBe("Add your mobile number for texts and calls");
+    expect(state.suggestedChannels).toEqual(["telegram", "sms"]);
+    expect(stepError("channels", { ...state, channels: ["telegram", "sms"] }, noKey)).toBe("Add your mobile number for texts and calls");
   });
 
   it("the Inbox job brings its own inbox only when bots can have one", () => {
@@ -115,6 +118,9 @@ describe("recipes and drafts in the builder", () => {
     // Whatever was stored, the channels come back as a list of real ones.
     expect(withDraft(initialState(null, live), { channels: "sms" as never }, live).channels).toEqual([]);
     expect(withDraft(initialState(null, demo), { channels: ["sms", "web", "fax" as never] }, demo).channels).toEqual(["sms"]);
+    // Suggestions too (and a draft from before them has none).
+    expect(withDraft(initialState(null, live), { suggestedChannels: ["sms", "telegram"] }, live).suggestedChannels).toEqual(["telegram"]);
+    expect(withDraft(initialState(null, live), { name: "Old" }, live).suggestedChannels).toEqual([]);
   });
 
   it("texts and calls come along once they're set up here (they're paid from credit, not a plan)", () => {

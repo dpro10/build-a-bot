@@ -182,7 +182,6 @@ export const live = {
   discord: Boolean(config.discord.applicationId && config.discord.publicKey && config.discord.botToken),
   stripe: Boolean(config.stripe.secretKey),
   /** Signed downloads of the desktop app are published (demo mode shows how to run it from the repo instead). */
-  desktopApp: Boolean(config.desktop.downloadUrl),
   /** The Library: a private Vercel Blob store for the owner's files. */
   library: Boolean(config.library.blobToken),
   /** Voice calls with bots: the voice server's address and its shared secret (32+ characters). */

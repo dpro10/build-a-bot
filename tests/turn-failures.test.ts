@@ -21,8 +21,8 @@ import type { Bot, User } from "@/lib/db/schema";
 let db: Awaited<ReturnType<typeof getDb>>;
 let owner: User;
 
-async function makeBot(name: string, brain: Parameters<typeof createBot>[2]["brain"]): Promise<Bot> {
-  const res = await createBot(db, owner, {
+async function makeBot(name: string, brain: Parameters<typeof createBot>[2]["brain"], who: User = owner): Promise<Bot> {
+  const res = await createBot(db, who, {
     avatar: "ember",
     color: "grape",
     name,
@@ -85,13 +85,36 @@ describe("a turn that can't be answered", () => {
     expect(notices).toEqual([]);
   });
 
-  it("out of credit: one reply, no notice", async () => {
+  it("out of credit: one reply, and a link to add some under it (in the web chat, where credit can be added)", async () => {
     const bot = await makeBot("Chatty", { kind: "included", model: "nvidia/Nemotron-3_5-Lightning" });
     await recordUsage(db, owner.id, { costMicros: 1_000_001 }); // the starter dollar, and then some
     const { res, done, notices } = await say(bot);
     expect(res.status).toBe("limited");
     expect(done).toMatchObject({ status: "limited", text: res.text });
-    expect(notices).toEqual([]);
+    const link = { type: "notice", tone: "info", text: "Add credit", href: "/app/billing" };
+    expect(notices).toEqual([link]);
+    // Kept with the reply, so it's still there after a reload.
+    const [saved] = await db.select().from(schema.messages).where(eq(schema.messages.id, res.messageId!));
+    expect(saved.parts).toEqual([link]);
+  });
+
+  it("past the free messages before signing in: one reply, and a link to sign in that comes back to this chat", async () => {
+    const [guest] = await db.insert(schema.users).values({ id: "usr_guest", timezone: "UTC" }).returning();
+    const bot = await makeBot("Guesty", { kind: "included", model: "nvidia/Nemotron-3_5-Lightning" }, guest);
+    await recordUsage(db, guest.id, { messages: 5, includedMessages: 5 });
+    const events: AgentEvent[] = [];
+    const conversation = await ensureConversation(db, bot.id, "web", "owner");
+    const res = await runTurn({ db, bot, owner: guest, conversation, channelKind: "web", message: { text: "one more?", author: "owner" }, emit: (e) => events.push(e) });
+    expect(res.status).toBe("limited");
+    expect(res.text).toMatch(/free messages you get before signing in/);
+    expect(events.filter((e) => e.type === "notice")).toEqual([
+      { type: "notice", tone: "info", text: "Sign in with your email to keep going", href: `/login?next=${encodeURIComponent(`/app/bots/${bot.id}`)}` },
+    ]);
+    // Elsewhere (Telegram, texts) the reply says it in words: no link to show.
+    const tg = await ensureConversation(db, bot.id, "telegram", "owner");
+    const other: AgentEvent[] = [];
+    await runTurn({ db, bot, owner: guest, conversation: tg, channelKind: "telegram", message: { text: "hi", author: "owner" }, emit: (e) => other.push(e) });
+    expect(other.filter((e) => e.type === "notice")).toEqual([]);
   });
 
   it("out of credit, a routine says so once a day instead of every time it runs", async () => {

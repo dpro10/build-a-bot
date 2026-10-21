@@ -15,7 +15,6 @@ import { PricingTeaser } from "@/components/marketing/landing/PricingTeaser";
 import { FinalCta } from "@/components/marketing/landing/FinalCta";
 import { Faq, faqJsonLd, type FaqItem } from "@/components/marketing/Faq";
 import { Container, Section, SectionHeader } from "@/components/marketing/ui";
-import { available } from "@/lib/env";
 import { starterCreditMicros } from "@/lib/billing/credit";
 import { UNIT_PRICES, formatMicros, perMessageMicros } from "@/lib/billing/prices";
 import { INCLUDED_MODELS } from "@/lib/models/catalog";
@@ -27,7 +26,6 @@ export const metadata: Metadata = {
 };
 
 /** The desktop app can be had (signed downloads, or the repo in demo mode); otherwise it's coming soon. */
-const desktopApp = available("desktopApp");
 const DEFAULT_MODEL = INCLUDED_MODELS.find((m) => m.default) ?? INCLUDED_MODELS[0];
 const STARTER = starterCreditMicros();
 
@@ -50,13 +48,11 @@ const FAQ: { q: string; text: string }[] = [
   },
   {
     q: "Can it take notes in my meetings?",
-    text: `Yes, when you say yes, with the desktop app${desktopApp ? "" : " (coming soon)"}. It notices when a call starts in Zoom, Meet, Teams and others, and your bot asks before it listens; for a meeting in the room, start it from the app's menu. While it listens, it stays on your screen with a red dot. NVIDIA Parakeet turns the call into text on your computer, so the audio never leaves it, and you get a summary, decisions and action items. The website never listens. Recording laws differ by place, so let everyone on the call know.`,
+    text: `Yes, when you say yes, with the desktop app. It notices when a call starts in Zoom, Meet, Teams and others, and your bot asks before it listens; for a meeting in the room, start it from the app's menu. While it listens, it stays on your screen with a red dot. NVIDIA Parakeet turns the call into text on your computer, so the audio never leaves it, and you get a summary, decisions and action items. The website never listens. Recording laws differ by place, so let everyone on the call know.`,
   },
   {
     q: "What is voice typing?",
-    text: desktopApp
-      ? "Hold a key in any app and talk. What you meant is typed where your cursor is: no ums, the right punctuation, your corrections kept, and the names your bot knows spelled right. Start with “Hey” and your bot's name to ask it instead. The desktop app hears you on your own computer, with NVIDIA's Parakeet speech model, so in English and 24 European languages your voice never leaves it; we keep a word count, never your words. There's no word limit: hearing you is free, and the AI cleanup costs a fraction of a cent."
-      : "Hold a key in any app and talk. What you meant is typed where your cursor is: no ums, the right punctuation, your corrections kept, and the names your bot knows spelled right. It comes with the desktop app, which is coming soon. The app hears you on your own computer, with NVIDIA's Parakeet speech model, so your voice never leaves it; we keep a word count, never your words. There's no word limit: hearing you is free, and the AI cleanup costs a fraction of a cent.",
+    text: "Hold a key in any app and talk. What you meant is typed where your cursor is: no ums, the right punctuation, your corrections kept, and the names your bot knows spelled right. Start with “Hey” and your bot's name to ask it instead. The desktop app hears you on your own computer, with NVIDIA's Parakeet speech model, so in English and 24 European languages your voice never leaves it; we keep a word count, never your words. There's no word limit: hearing you is free, and the AI cleanup costs a fraction of a cent.",
   },
   {
     q: "What if it makes a mistake?",
@@ -122,8 +118,8 @@ export default function LandingPage() {
       <TrustSection />
       <InjectionSection />
       <Channels />
-      <MeetingNotes desktopApp={desktopApp} />
-      <VoiceTyping desktopApp={desktopApp} />
+      <MeetingNotes />
+      <VoiceTyping />
       <Recipes />
       <Promises />
       <PricingTeaser />

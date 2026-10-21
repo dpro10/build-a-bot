@@ -81,6 +81,11 @@ export type ConnectorVia =
       verified?: boolean;
       /** Regex (case-insensitive) over tool names, when several connectors share one server. */
       toolFilter?: string;
+      /**
+       * The server only lets in apps it has approved (Google's): its sign-in needs a client
+       * registered with this issuer, in MCP_OAUTH_CLIENTS, and without one it can't be used here.
+       */
+      approvedClientsOnly?: string;
     }
   | { kind: "composio"; toolkit: string; toolFilter?: string }
   | { kind: "custom_mcp" };

@@ -25,7 +25,7 @@ const { config, creditOpen } = await import("@/lib/env");
 const { createBot } = await import("@/lib/bots/create");
 const { outOfCreditMessage } = await import("@/lib/billing/credit");
 const checkoutRoute = await import("@/app/api/billing/checkout/route");
-const { desktopApp, meetingNotesAvailable, startMeeting } = await import("@/lib/meetings");
+const { desktopApp, startMeeting } = await import("@/lib/meetings");
 const { listMeetings } = await import("@/lib/tools/builtin/meetings");
 import type { User } from "@/lib/db/schema";
 
@@ -97,7 +97,7 @@ describe("adding credit before Stripe is set up", () => {
 
 describe("the desktop app", () => {
   it("is offered from the site's own download page, and the bot points people to it", async () => {
-    expect(desktopApp()).toEqual({ status: "download", url: "/download" });
+    expect(desktopApp()).toEqual({ url: "/download" });
     const owner = await freeOwner("usr_desk");
     const res = await createBot(db, owner, botInput("Desky", { connectors: ["meetings"] }));
     if (!res.ok) throw new Error(res.error);
@@ -112,7 +112,7 @@ describe("the desktop app", () => {
     const before = config.desktop.downloadUrl;
     config.desktop.downloadUrl = "https://downloads.example.com/build-a-bot";
     try {
-      expect(desktopApp()).toEqual({ status: "download", url: "https://downloads.example.com/build-a-bot" });
+      expect(desktopApp()).toEqual({ url: "https://downloads.example.com/build-a-bot" });
     } finally {
       config.desktop.downloadUrl = before;
     }
@@ -121,7 +121,6 @@ describe("the desktop app", () => {
 
 describe("meeting notes", () => {
   it("are taken with the desktop app, with no speech-to-text here", async () => {
-    expect(meetingNotesAvailable()).toBe(true);
     const owner = await freeOwner("usr_notes");
     const res = await createBot(db, owner, botInput("Scribe", { connectors: ["meetings"] }));
     if (!res.ok) throw new Error(res.error);

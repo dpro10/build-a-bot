@@ -1,25 +1,20 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AppWindow, AudioLines, BookA, BookCheck, Download, Keyboard, Laptop, Lock, MessageCircle, ShieldCheck, Sparkles, Trash2, Wand2 } from "lucide-react";
+import { ArrowRight, AudioLines, BookA, BookCheck, Keyboard, Laptop, Lock, MessageCircle, ShieldCheck, Sparkles, Trash2, Wand2 } from "lucide-react";
 import { getDb } from "@/lib/db";
 import { requireUser } from "@/lib/auth/session";
 import { listBridgeDevices } from "@/lib/data";
 import { DEVICE_ONLINE_MS } from "@/lib/bridge/devices";
-import { desktopApp } from "@/lib/meetings";
 import { dictationUsage, dictionaryView, loadVoiceContext } from "@/lib/dictation";
 import { transcriptionSetup } from "@/lib/transcribe";
 import { isDesktopApp } from "@/components/account/bridge-shared";
 import { PageContainer, PageHeader, SectionHeading } from "@/components/account/PageHeader";
-import { DesktopPairing } from "@/components/meetings/DesktopPairing";
 import { DictionaryEditor } from "@/components/voice/DictionaryEditor";
 import { VoicePillMock } from "@/components/voice/VoicePillMock";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CopyButton } from "@/components/ui/copy-button";
 
 export const metadata: Metadata = { title: "Voice typing" };
-
-const DEV_COMMAND = "cd desktop && npm install && npm start";
 
 const SHORTCUTS = [
   { os: "Mac", keys: "Right Option (⌥)" },
@@ -65,7 +60,6 @@ export default async function VoicePage() {
   const user = await requireUser("/app/voice");
   const db = await getDb();
   const [ctx, usage, devices] = await Promise.all([loadVoiceContext(db, user), dictationUsage(db, user), listBridgeDevices(db, user.id)]);
-  const app = desktopApp();
   const now = Date.now();
   const computers = devices
     .filter((d) => !d.revokedAt && isDesktopApp(d.platform))
@@ -76,7 +70,7 @@ export default async function VoicePage() {
       <PageHeader
         title="Voice typing"
         description="Hold a key in any app and talk. What you meant is typed where your cursor is: no ums, the right punctuation, your names spelled your way. It works in the desktop app."
-        actions={app.status === "soon" ? <Badge tone="outline">Desktop app coming soon</Badge> : <Badge tone="primary">Beta</Badge>}
+        actions={<Badge tone="primary">Beta</Badge>}
       />
 
       <section aria-label="What voice typing does" className="mb-10 overflow-hidden rounded-3xl border border-border bg-card shadow-soft">
@@ -116,37 +110,13 @@ export default async function VoicePage() {
       </section>
 
       <section id="desktop" aria-labelledby="desktop-title" className="mb-10 scroll-mt-6">
-        <SectionHeading id="desktop-title" title="Get the desktop app" description="Voice typing happens in the app: it listens for your key in any app, hears you on your computer with NVIDIA Parakeet, and types where your cursor is." />
+        <SectionHeading id="desktop-title" title="In the desktop app" description="Voice typing happens in the app: it listens for your key in any app, hears you on your computer with NVIDIA Parakeet, and types where your cursor is." />
         <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-soft">
           <div className="grid grid-cols-1 gap-px bg-border md:grid-cols-2">
             <div className="min-w-0 bg-card p-5 sm:p-6">
               <h3 className="flex items-center gap-2 font-semibold">
-                <AppWindow className="size-4 text-primary" aria-hidden="true" /> Install it
+                <Keyboard className="size-4 text-primary" aria-hidden="true" /> The key to hold
               </h3>
-              {app.status === "download" ? (
-                <>
-                  <p className="mt-2 text-sm text-muted-foreground">For Mac and Windows. Open it, pair it below, then turn on voice typing from its menu.</p>
-                  <Button asChild className="mt-3">
-                    <a href={app.url} target="_blank" rel="noopener noreferrer">
-                      <Download /> Download the desktop app
-                    </a>
-                  </Button>
-                </>
-              ) : app.status === "repo" ? (
-                <>
-                  <p className="mt-2 text-sm text-muted-foreground">Signed downloads are coming. Developers can run it today from the repo:</p>
-                  <div className="mt-3 flex items-start gap-2 rounded-2xl border border-border bg-background-2 py-1.5 pr-1.5 pl-4">
-                    <code className="min-w-0 flex-1 py-1.5 font-mono text-[13px] leading-relaxed break-words">
-                      <span className="text-muted-foreground select-none">$ </span>
-                      {DEV_COMMAND}
-                    </code>
-                    <CopyButton value={DEV_COMMAND} label="Copy" className="shrink-0" aria-label={`Copy: ${DEV_COMMAND}`} />
-                  </div>
-                </>
-              ) : (
-                <p className="mt-2 text-sm text-muted-foreground">Signed downloads for Mac and Windows are coming soon.</p>
-              )}
-              <h4 className="mt-5 text-sm font-semibold">The key to hold</h4>
               <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
                 {SHORTCUTS.map((s) => (
                   <div key={s.os} className="contents">
@@ -161,23 +131,21 @@ export default async function VoicePage() {
             </div>
             <div className="min-w-0 bg-card p-5 sm:p-6">
               <h3 className="flex items-center gap-2 font-semibold">
-                <Laptop className="size-4 text-primary" aria-hidden="true" /> Pair this computer
+                <Laptop className="size-4 text-primary" aria-hidden="true" /> {computers.length ? "Your computers" : "Get the app"}
               </h3>
-              {app.status === "soon" && !computers.length ? (
-                <p className="mt-2 text-sm text-muted-foreground">When the app is out, you'll pair it here with a one-time code.</p>
-              ) : (
-                <>
-                  <p className="mt-2 mb-3 text-sm text-muted-foreground">
-                    In the desktop app, choose <span className="font-medium text-foreground">Pair this computer</span> and enter the code you get here.
-                  </p>
-                  <DesktopPairing />
-                </>
-              )}
               {computers.length ? (
-                <p className="mt-4 text-sm">
-                  Paired: {computers.map((c) => `${c.name}${c.online ? " (online)" : ""}`).join(", ")}
+                <p className="mt-2 text-sm">
+                  Paired: {computers.map((c) => `${c.name}${c.online ? " (online)" : ""}`).join(", ")}. Turn on voice typing from the app&apos;s menu.
                 </p>
-              ) : null}
+              ) : (
+                <p className="mt-2 text-sm text-muted-foreground">For Mac and Windows. Download it and pair it with your account, then turn on voice typing from its menu.</p>
+              )}
+              {/* The app has one home: the Desktop app page has its download and pairing. */}
+              <Button asChild variant={computers.length ? "outline" : "primary"} className="mt-3">
+                <Link href="/app/desktop">
+                  {computers.length ? "Manage the desktop app" : "Get the desktop app"} <ArrowRight />
+                </Link>
+              </Button>
             </div>
           </div>
         </div>

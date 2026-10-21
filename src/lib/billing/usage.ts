@@ -101,6 +101,16 @@ export type SpendKind = "included" | "ownBrain" | "lookup" | "webTask" | "call";
 export type SpendCheck = { ok: true } | { ok: false; code: "no_credit" | "sign_in" | "fair_use"; message: string };
 
 /**
+ * Messages on an included model an account gets before it signs in (this month), or null once
+ * it has: then it's the credit that counts.
+ */
+export async function freeMessagesLeft(db: Db, owner: Pick<User, "id" | "emailVerifiedAt">): Promise<number | null> {
+  if (owner.emailVerifiedAt) return null;
+  const u = await getUsage(db, owner.id);
+  return Math.max(0, ANONYMOUS_INCLUDED_MESSAGES - u.includedMessages);
+}
+
+/**
  * Can this account do something that costs money? There are no plans: people pay for what they
  * use (prices.ts), so the answer is whether there's credit left. Two guard rails stay: an account
  * that hasn't confirmed an email gets a few messages on an included model, and messages on your own

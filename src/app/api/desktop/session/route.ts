@@ -4,7 +4,7 @@ import { apiError, json } from "@/lib/api";
 import { authDevice } from "@/lib/bridge/auth";
 import { getCredit } from "@/lib/billing/credit";
 import { appUrl, available, config, demoMode, demoSpeech } from "@/lib/env";
-import { CHUNK_MS, MEETINGS_CONNECTOR, meetingNotesAvailable } from "@/lib/meetings";
+import { CHUNK_MS, MEETINGS_CONNECTOR } from "@/lib/meetings";
 import { dictationUsage, speechToTextAvailable, voiceEditAvailable, voicePolishAvailable } from "@/lib/dictation";
 import { transcriptionAvailable, transcriptionSetup } from "@/lib/transcribe";
 
@@ -49,9 +49,9 @@ export async function GET(req: Request) {
        * This server turns a meeting's audio into text itself, for an app that can't hear it on the
        * computer. Without it, notes are taken only with what the app heard (and nothing is made up).
        */
-      available: meetingNotesAvailable() && transcriptionAvailable(),
+      available: transcriptionAvailable(),
       /** Meeting notes are taken here, from what the app heard on the computer (NVIDIA Parakeet): only the lines are sent. */
-      local: meetingNotesAvailable(),
+      local: true,
       /** Credit to take notes on an included model. */
       credit: hasCredit,
       /**

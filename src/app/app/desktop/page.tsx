@@ -27,11 +27,7 @@ export default async function DesktopPage() {
         description="Meeting notes and voice typing happen in the Build-a-bot app on your Mac or Windows PC, paired with your account here."
       />
       <div className="flex flex-col gap-12">
-        <DesktopAppSection
-          app={desktopApp()}
-          devices={devices}
-          bot={star ? { id: star.id, name: star.name, avatar: star.avatar as AvatarId, color: star.color as ColorwayId } : undefined}
-        />
+        <DesktopAppSection app={desktopApp()} bot={star ? { id: star.id, name: star.name, avatar: star.avatar as AvatarId, color: star.color as ColorwayId } : undefined} />
         <DesktopDevices initialDevices={devices} serverNow={now} />
       </div>
     </PageContainer>

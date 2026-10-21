@@ -17,11 +17,24 @@ import type { ConnectorDef, ConnectorVia } from "./types";
  */
 export function connectVia(def: Pick<ConnectorDef, "via">): ConnectorVia | undefined {
   const usable = def.via.filter(
-    (v) => v.kind === "mcp" || v.kind === "custom_mcp" || (v.kind === "composio" && live.composio && composioCanConnect(v.toolkit)),
+    (v) =>
+      (v.kind === "mcp" && (!v.approvedClientsOnly || hasApprovedClient(v.approvedClientsOnly))) ||
+      v.kind === "custom_mcp" ||
+      (v.kind === "composio" && live.composio && composioCanConnect(v.toolkit)),
   );
   const first = usable[0];
   if (first?.kind === "mcp" && first.auth === "bearer") return usable.find((v) => v.kind === "composio") ?? first;
   return first;
+}
+
+/** A client of ours that an approved-apps-only server's issuer knows (MCP_OAUTH_CLIENTS, keyed by issuer or host). */
+function hasApprovedClient(issuer: string): boolean {
+  try {
+    const map = JSON.parse(process.env.MCP_OAUTH_CLIENTS ?? "{}") as Record<string, { client_id?: string }>;
+    return Boolean(map[issuer]?.client_id ?? map[`https://${issuer}`]?.client_id);
+  } catch {
+    return false;
+  }
 }
 
 /** Can a bot be given this connector here? */
