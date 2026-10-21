@@ -190,7 +190,7 @@ axe finds no serious WCAG 2.2 AA problems on the main public and dashboard pages
   - `DECISIONS.md`: decisions, gotchas and open questions.
   - `research/`: integrations, MCP and brains, connectors, web actions, meetings (2026-10-14).
   - `research-2026-10-13.md`: market, channels, models and costs, safety, law, name, and sources.
-- `BUILD.md`: the first build brief. Its rules still apply.
+- `docs/history/first-build-brief.md`: the first build brief. Its rules from day one still apply.
 
 ## Decisions so far
 

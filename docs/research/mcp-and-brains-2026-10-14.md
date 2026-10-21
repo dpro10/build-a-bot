@@ -646,7 +646,7 @@ Every row supports tools and streaming via OpenAI-style `tools` and `stream:true
 1. Call `GET {base}/models` with the key: 200 means valid, 401 or 403 means invalid. For OpenRouter use `/key`.
 2. Do a 1-token `chat/completions` with `tools:[…]` to confirm tool support for the chosen model.
 
-Never echo keys back to the browser (BUILD.md rule).
+Never echo keys back to the browser (a rule from day one, `docs/history/first-build-brief.md`).
 
 ---
 

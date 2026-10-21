@@ -1017,3 +1017,19 @@ The third cohesion pass, from the review before the hackathon.
   - From one network (an IPv4 address, or an IPv6 /64) they get 50 turns a day.
 
   Shares have floors (50 turns, 10 lookups, 300 dictations), so a site run for a few people isn't split up. A turn that doesn't fit counts against nothing. When the shared-out allowance for accounts that haven't signed in runs out, the web chat says to sign in (free) and links to it.
+
+## The judges' guide, and the repository's front page (2026-10-21)
+
+The fourth cohesion pass before the hackathon.
+
+- **`docs/HACKATHON.md` is rewritten for the submission.**
+  - The qualification table is current: the repository is public under Apache 2.0, and the site runs in real mode.
+  - A new section, "What's real on build-a-bot.site", gives each feature as real or coming soon. Nothing on the live site is simulated; demo mode is for local copies and the tests.
+  - The judges' steps follow the product as it is now: five free messages, then sign in; the download page; hiding the bot for a screen share.
+  - The video script and Devpost write-up drop the claims the code doesn't back:
+    - "no speech API ever hears your voice": Twilio's speech is the fallback on calls;
+    - "about a second": live calls usually take about 3 s, against 1.3 s with a scripted talker;
+    - texts and email listed as live channels.
+  - A "Before submitting" list holds what only Diego can do.
+- **`BUILD.md` moved to `docs/history/first-build-brief.md`.** Its slice was built long ago, and its rules from day one still apply. `AGENTS.md` and the README point there.
+- **The research notes and reports were never in the repository.** `research_notes/` and `reports/` are excluded locally (`.git/info/exclude`), so the public repository doesn't have them. The dated research in `docs/research*` stays: it's cited from the code and the decisions.
