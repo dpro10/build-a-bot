@@ -16,6 +16,7 @@ const { createBot } = await import("@/lib/bots/create");
 const { runTurn } = await import("@/lib/agent/run");
 const { ensureConversation } = await import("@/lib/channels/outbound");
 const { checkSpend, getUsage, recordUsage, ANONYMOUS_INCLUDED_MESSAGES } = await import("@/lib/billing/usage");
+const { starterCreditMicros } = await import("@/lib/billing/credit");
 const { config } = await import("@/lib/env");
 const { underDailyCeiling } = await import("@/lib/billing/ceiling");
 import type { Bot, User } from "@/lib/db/schema";
@@ -84,7 +85,7 @@ describe("limits when anyone can sign up", () => {
   it("a web lookup is paid from credit at Tavily's price, and running out stops what costs money", async () => {
     const user = await person("usr_searcher", true);
     const bot = await botFor(user);
-    await recordUsage(db, user.id, { costMicros: 999_999 }); // a millionth of a dollar left
+    await recordUsage(db, user.id, { costMicros: starterCreditMicros() - 1 }); // a millionth of a dollar left
     config.tavily.apiKey = "tvly_test";
     vi.stubGlobal("fetch", async () =>
       Response.json({ answer: "Feed your starter twice a day.", results: [{ title: "Sourdough tips", url: "https://example.com/sourdough", content: "Feed it." }] }),
@@ -93,7 +94,7 @@ describe("limits when anyone can sign up", () => {
       expect((await say(bot, user, "search the web for sourdough tips")).text).toMatch(/Here's what I found/);
       const usage = await getUsage(db, user.id);
       expect(usage.searches).toBe(1);
-      expect(usage.costMicros).toBe(999_999 + 8_000); // the demo brain costs nothing; the lookup, $0.008
+      expect(usage.costMicros).toBe(starterCreditMicros() - 1 + 8_000); // the demo brain costs nothing; the lookup, $0.008
       // Now below zero: lookups and the included brain wait for credit.
       const spend = await checkSpend(db, user, "lookup");
       expect(spend).toEqual({ ok: false, code: "no_credit", message: "You're out of credit. Add credit in Credit & usage to keep going." });

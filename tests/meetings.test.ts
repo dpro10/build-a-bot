@@ -24,6 +24,7 @@ const { meetingAuth } = await import("@/lib/meetings/auth");
 const { readMeeting, searchMeetings, listMeetings } = await import("@/lib/tools/builtin/meetings");
 const { cleanSegments } = await import("@/lib/transcribe");
 const { recordUsage } = await import("@/lib/billing/usage");
+const { starterCreditMicros } = await import("@/lib/billing/credit");
 const { config } = await import("@/lib/env");
 const { sha256 } = await import("@/lib/crypto");
 const audioRoute = await import("@/app/api/bots/[botId]/meetings/[meetingId]/audio/route");
@@ -198,7 +199,7 @@ describe("meeting notes", () => {
     // Out of credit: notes written by a real included model wait for credit (the demo brain costs nothing).
     const broke = await newOwner("usr_broke");
     const brokeBot = await makeBot({ who: broke });
-    await recordUsage(db, broke.id, { costMicros: 1_000_001 }); // the starter dollar, and then some
+    await recordUsage(db, broke.id, { costMicros: starterCreditMicros() + 1 }); // the starter credit, and then some
     expect((await startMeeting(db, { bot: brokeBot, owner: broke, source: "desktop" })).ok).toBe(true); // demo brain: free
     await db.update(schema.meetings).set({ status: "ready" }).where(eq(schema.meetings.botId, brokeBot.id));
     config.tokenFactory.apiKey = "tf_test_key";

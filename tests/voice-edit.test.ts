@@ -25,6 +25,7 @@ const { editByVoice, voiceEditAvailable } = await import("@/lib/dictation");
 const { editPrompt, editText, needsSelection, parseEdit } = await import("@/lib/dictation/edit");
 const { demoEdit } = await import("@/lib/dictation/demo");
 const { getUsage } = await import("@/lib/billing/usage");
+const { starterCreditMicros } = await import("@/lib/billing/credit");
 import type { User } from "@/lib/db/schema";
 
 let db: Awaited<ReturnType<typeof getDb>>;
@@ -213,7 +214,7 @@ describe("editing by voice for an owner", () => {
 
   it("is paid from credit: with none left it doesn't run, and says how to add some", async () => {
     const before = await getUsage(db, owner.id);
-    await db.update(schema.usage).set({ costMicros: 1_000_001 }).where(eq(schema.usage.userId, owner.id)); // past the starter dollar
+    await db.update(schema.usage).set({ costMicros: starterCreditMicros() + 1 }).where(eq(schema.usage.userId, owner.id)); // past the starter credit
     fakeGroq([]);
     const out = await editByVoice(db, owner, { instruction: "make it friendlier", selection: "hello", category: "chat", styles: true });
     expect(out).toEqual({ ok: false, status: 402, code: "no_credit", error: "You're out of credit. Adding credit is coming soon." });

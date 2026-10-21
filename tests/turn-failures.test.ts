@@ -15,6 +15,7 @@ const { createBot } = await import("@/lib/bots/create");
 const { runTurn } = await import("@/lib/agent/run");
 const { ensureConversation } = await import("@/lib/channels/outbound");
 const { recordUsage } = await import("@/lib/billing/usage");
+const { starterCreditMicros } = await import("@/lib/billing/credit");
 import type { AgentEvent } from "@/lib/agent/run";
 import type { Bot, User } from "@/lib/db/schema";
 
@@ -87,7 +88,7 @@ describe("a turn that can't be answered", () => {
 
   it("out of credit: one reply, and a link to add some under it (in the web chat, where credit can be added)", async () => {
     const bot = await makeBot("Chatty", { kind: "included", model: "nvidia/Nemotron-3_5-Lightning" });
-    await recordUsage(db, owner.id, { costMicros: 1_000_001 }); // the starter dollar, and then some
+    await recordUsage(db, owner.id, { costMicros: starterCreditMicros() + 1 }); // the starter credit, and then some
     const { res, done, notices } = await say(bot);
     expect(res.status).toBe("limited");
     expect(done).toMatchObject({ status: "limited", text: res.text });

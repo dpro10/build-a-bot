@@ -30,6 +30,7 @@ const { createBot } = await import("@/lib/bots/create");
 const { routeInboundEmail } = await import("@/lib/channels/email-inbound");
 const { appUrl, live } = await import("@/lib/env");
 const { getUsage, recordUsage } = await import("@/lib/billing/usage");
+const { starterCreditMicros } = await import("@/lib/billing/credit");
 const callRoute = await import("@/app/api/webhooks/twilio/voice/route");
 const callStatusRoute = await import("@/app/api/webhooks/twilio/voice/status/route");
 const channelsRoute = await import("@/app/api/bots/[botId]/channels/route");
@@ -152,7 +153,7 @@ describe("channels with their services set up", () => {
     expect(after.smsSegments - before.smsSegments).toBe(1);
     expect(after.costMicros - before.costMicros).toBe(12_500);
 
-    await recordUsage(db, bot.ownerId, { costMicros: 1_000_001 }); // the starter dollar, and then some
+    await recordUsage(db, bot.ownerId, { costMicros: starterCreditMicros() + 1 }); // the starter credit, and then some
     sent.length = 0;
     const res = await post({ kind: "sms", action: "test" });
     expect(res.status).toBe(402);

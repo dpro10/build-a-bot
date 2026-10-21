@@ -42,7 +42,7 @@ export type BuilderProps = {
   signedIn: boolean;
   /** The signed-in account's email, so the Email channel doesn't ask for it again. */
   ownerEmail: string | null;
-  /** Credit every account starts with ("$1.00"), or null when there's none. */
+  /** Credit every account starts with ("$5.00"), or null when there's none. */
   starterCredit: string | null;
 };
 

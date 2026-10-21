@@ -133,7 +133,7 @@ An optional morning brief (on by default), routines and reminders, on any channe
 
 ### The business side
 
-- **No plans: people pay for what they use, at cost** (Diego, 2026-10-16). A message on an included model costs Token Factory's price for its tokens, a web lookup Tavily's $0.008, a text or a call Twilio's price, and a bot on your own AI key is free here. Every account starts with $1 of credit; adding $5, $10 or $20 goes through Stripe Checkout, with Stripe's card fee on top so the credit is all yours. Prices are in `src/lib/billing/prices.ts`, on `/pricing` and in `docs/DECISIONS.md`. In demo mode, credit is added without paying; on a real server without Stripe, adding credit says "Coming soon".
+- **No plans: people pay for what they use, at cost** (Diego, 2026-10-16). A message on an included model costs Token Factory's price for its tokens, a web lookup Tavily's $0.008, a text or a call Twilio's price, and a bot on your own AI key is free here. Every account starts with $5 of credit; adding $5, $10 or $20 goes through Stripe Checkout, with Stripe's card fee on top so the credit is all yours. Prices are in `src/lib/billing/prices.ts`, on `/pricing` and in `docs/DECISIONS.md`. In demo mode, credit is added without paying; on a real server without Stripe, adding credit says "Coming soon".
 - An operator dashboard (`/admin`, locked to `ADMIN_EMAILS`): credit sold against what was used (are we breaking even?), growth, usage and costs, as aggregates only.
 - Shareable recipes (`/r/[slug]`). Each bot is also an MCP server, usable from Claude Desktop or Claude Code.
 - A public site: landing, pricing, safety, legal drafts, explore.
@@ -231,7 +231,7 @@ The full notes, with Diego's own words, are in `docs/DECISIONS.md`.
 The current list is in `docs/DECISIONS.md`.
 
 1. **First users:** tinkerers or everyday iPhone users? A 3-week hand-built test with 5 non-developers could decide.
-2. **Pricing:** pay for usage at cost is decided (2026-10-16). Open: the starter credit ($1), refunding unused credit by hand when asked, and when, if ever, to add a margin.
+2. **Pricing:** pay for usage at cost is decided (2026-10-16). The starter credit is $5 (Diego, 2026-10-21). Open: refunding unused credit by hand when asked, and when, if ever, to add a margin.
 3. **Web actions:** confirm Browser Use Cloud, then test with a live key on about 10 real forms before turning it on for everyone.
 4. **Before launch:** a brand-free domain for bot inboxes, Twilio A2P 10DLC registration, and a Composio plan.
 5. **Trademark clearance** before spending on the brand.
