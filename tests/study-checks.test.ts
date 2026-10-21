@@ -15,7 +15,7 @@
  */
 import crypto from "node:crypto";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { and, eq } from "drizzle-orm";
+import { and, eq, like } from "drizzle-orm";
 
 process.env.DATA_DIR = "memory";
 process.env.DEMO_MODE = "0";
@@ -252,9 +252,9 @@ describe("checking facts", () => {
 
   it("counts every claim against the site's daily limit, and a check that would go past it doesn't run", async () => {
     stubTavily();
-    const [row] = await db.select().from(schema.rateLimits).where(eq(schema.rateLimits.key, "ceiling:search"));
-    const used = row?.count ?? 0;
-    process.env.SEARCH_DAILY_LIMIT = String(used + 5);
+    // A fresh day with room for five lookups (a ceiling too small to be shared out between accounts).
+    await db.delete(schema.rateLimits).where(like(schema.rateLimits.key, "ceiling:search%"));
+    process.env.SEARCH_DAILY_LIMIT = "5";
     expect((await use(tutor, "check_facts", { claims: ["Fact one", "Fact two"] })).isError).toBeFalsy();
     const before = await spent();
     const refused = await use(tutor, "check_facts", { claims: ["Fact three", "Fact four", "Fact five", "Fact six"] });

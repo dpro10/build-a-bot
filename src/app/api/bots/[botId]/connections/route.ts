@@ -7,6 +7,7 @@ import { connectVia, connectorUsable } from "@/lib/connectors/availability";
 import { FAIR_USE } from "@/lib/billing/prices";
 import { demoMode } from "@/lib/env";
 import { canonicalResource } from "@/lib/connectors/mcp/oauth";
+import { assertPublicUrl, UnsafeUrlError } from "@/lib/tools/net";
 import { newId } from "@/lib/utils";
 import { receipt } from "@/lib/agent/run";
 
@@ -22,6 +23,12 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string }>) {
   let config: Record<string, unknown> = {};
   if (connectorId === "custom_mcp") {
     if (!parsed.data.url || !/^https:\/\//.test(parsed.data.url)) return apiError(422, "Paste the server's https:// URL.");
+    // Your own server, but reached from ours: never an address on our network.
+    try {
+      await assertPublicUrl(parsed.data.url);
+    } catch (err) {
+      return apiError(422, err instanceof UnsafeUrlError ? err.message : "That URL isn't valid.");
+    }
     const resource = canonicalResource(parsed.data.url);
     connectorId = `custom_mcp:${new URL(resource).host}${new URL(resource).pathname}`.slice(0, 80);
     config = { url: parsed.data.url, auth: "unknown", name: parsed.data.name ?? new URL(resource).host };

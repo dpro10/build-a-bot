@@ -16,7 +16,13 @@ import {
 import { createAnthropicProvider } from "@/lib/llm/anthropic";
 import { createDemoProvider } from "@/lib/llm/demo";
 import { createOpenAiCompatibleProvider } from "@/lib/llm/openai-compatible";
-import { assertPublicUrl, fetchWithTimeout, UnsafeUrlError } from "@/lib/tools/net";
+import { assertPublicUrl, fetchWithTimeout, publicFetch, UnsafeUrlError } from "@/lib/tools/net";
+
+/**
+ * A custom endpoint is fetched like any address someone else chose: public only, checked again when
+ * connecting, and never redirected (model APIs don't redirect). Answers can take a while to start.
+ */
+const customEndpointFetch: typeof fetch = (input, init) => publicFetch(String(input), { ...init, maxRedirects: 0, timeoutMs: 120_000 });
 import type { Effort, LlmProvider } from "@/lib/llm/types";
 
 export type ResolvedBrain =
@@ -149,6 +155,7 @@ export async function resolveBrain(db: Db, bot: Bot): Promise<ResolvedBrain> {
       headers: def.headers,
       extraBody: Object.keys(knobs).length ? () => knobs : undefined,
       defaultMaxTokens: 8192,
+      ...(providerId === "custom" ? { fetchImpl: customEndpointFetch } : {}),
     }),
     model: brain.model,
     providerId,
@@ -180,7 +187,9 @@ export async function validateApiKey(providerId: ProviderId, apiKey: string, bas
         return { ok: false, message: err instanceof UnsafeUrlError ? err.message : "That URL isn't valid." };
       }
     }
-    const res = await fetchWithTimeout(`${root.replace(/\/$/, "")}/models`, { headers: { authorization: `Bearer ${apiKey}`, ...def.headers }, redirect: "error", timeoutMs: 10000 });
+    const models = `${root.replace(/\/$/, "")}/models`;
+    const ask = { headers: { authorization: `Bearer ${apiKey}`, ...def.headers }, timeoutMs: 10000 };
+    const res = providerId === "custom" ? await publicFetch(models, { ...ask, maxRedirects: 0 }) : await fetchWithTimeout(models, { ...ask, redirect: "error" });
     if (res.ok) return { ok: true };
     // Some providers (Gemini) reject a bad key with 400 rather than 401: read what they said.
     const said = res.status === 400 ? (await res.text().catch(() => "")).slice(0, 2000) : "";

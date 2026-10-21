@@ -14,7 +14,8 @@ import { appUrl } from "@/lib/env";
 import { pkcePair, randomToken } from "@/lib/crypto";
 import { readCredential, replaceCredential, storeCredential } from "@/lib/channels/secrets";
 import { getConnector } from "@/lib/connectors";
-import { fetchWithTimeout } from "@/lib/tools/net";
+// Every address here comes from the server or its metadata, so it's someone else's choice: public only.
+import { publicFetch, UnsafeUrlError } from "@/lib/tools/net";
 import { McpAuthRequired, MCP_CLIENT_VERSION, parseWwwAuthenticate } from "./client";
 
 export const OAUTH_CALLBACK_PATH = "/api/connectors/oauth/callback";
@@ -63,7 +64,7 @@ type AsMeta = {
 
 async function getJson<T>(url: string): Promise<T | null> {
   try {
-    const res = await fetchWithTimeout(url, { headers: { accept: "application/json" }, timeoutMs: 10000 });
+    const res = await publicFetch(url, { headers: { accept: "application/json" }, timeoutMs: 10000 });
     if (!res.ok) return null;
     return (await res.json()) as T;
   } catch {
@@ -77,7 +78,7 @@ async function getJson<T>(url: string): Promise<T | null> {
  */
 async function probe(url: string): Promise<{ needsAuth: boolean; challenge: ReturnType<typeof parseWwwAuthenticate> }> {
   try {
-    const res = await fetchWithTimeout(url, {
+    const res = await publicFetch(url, {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": MCP_CLIENT_VERSION },
       body: JSON.stringify({
@@ -178,7 +179,7 @@ export async function startMcpOAuth(
     clientId = clientMetadataUrl();
   } else if (as.registration_endpoint) {
     try {
-      const res = await fetchWithTimeout(as.registration_endpoint, {
+      const res = await publicFetch(as.registration_endpoint, {
         method: "POST",
         headers: { "content-type": "application/json", accept: "application/json" },
         body: JSON.stringify({
@@ -281,12 +282,16 @@ export async function finishMcpOAuth(
     resource: d.resource,
   });
   if (d.clientSecret) form.set("client_secret", d.clientSecret);
-  const res = await fetchWithTimeout(d.tokenEndpoint, {
+  const res = await publicFetch(d.tokenEndpoint, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
     body: form.toString(),
     timeoutMs: 15000,
+  }).catch((err) => {
+    if (err instanceof UnsafeUrlError) return null;
+    throw err;
   });
+  if (!res) return { ok: false, message: "The app's sign-in points somewhere it can't go.", redirectTo: row.redirectTo ?? undefined };
   if (!res.ok) return { ok: false, message: `The app refused the sign-in (${res.status}).`, redirectTo: row.redirectTo ?? undefined };
   const tok = (await res.json()) as { access_token?: string; refresh_token?: string; expires_in?: number; scope?: string; token_type?: string };
   if (!tok.access_token) return { ok: false, message: "No access token came back.", redirectTo: row.redirectTo ?? undefined };
@@ -343,7 +348,7 @@ export async function connectionAuth(db: Db, conn: Connection): Promise<{ token:
     if (meta.resource) form.set("resource", meta.resource);
     if (meta.clientSecret) form.set("client_secret", meta.clientSecret);
     try {
-      const res = await fetchWithTimeout(meta.tokenEndpoint, {
+      const res = await publicFetch(meta.tokenEndpoint, {
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
         body: form.toString(),

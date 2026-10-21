@@ -29,7 +29,7 @@ Build-a-bot is one Next.js 16 app (App Router, TypeScript) with Postgres behind 
 | `src/lib/agent` | The agent loop, prompts, brain resolution, approvals |
 | `src/lib/policy` | The policy engine (pure function + tests) |
 | `src/lib/llm` | Provider-neutral LLM layer: OpenAI-compatible (Token Factory and most BYOK), Anthropic, and a scripted demo brain |
-| `src/lib/tools` | Tool specs, built-in tools, the per-bot toolset, SSRF-safe networking |
+| `src/lib/tools` | Tool specs, built-in tools, the per-bot toolset, SSRF-safe networking (`publicFetch`: private addresses refused in any spelling, at every redirect and when connecting) |
 | `src/lib/connectors` | The app catalog (data), MCP client + OAuth 2.1, Composio, demo tools |
 | `src/lib/channels` | Inbound/outbound for every channel, setup flows, webhook verification |
 | `src/lib/bridge` | Pairing the desktop app: one-time codes and device tokens (named after the Bridge, gone since 2026-10-20) |

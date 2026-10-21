@@ -3,7 +3,7 @@
  * dual-era server accepts). Stateless use: initialize → initialized → one request.
  * Handles JSON and SSE responses and surfaces 401 challenges for OAuth.
  */
-import { fetchWithTimeout } from "@/lib/tools/net";
+import { publicFetch, UnsafeUrlError } from "@/lib/tools/net";
 
 export const MCP_CLIENT_VERSION = "2025-11-25";
 const CLIENT_INFO = { name: "build-a-bot", title: "Build-a-bot", version: "1.0.0" };
@@ -81,7 +81,10 @@ async function post(conn: Conn, payload: Record<string, unknown>, sessionId: str
   if (conn.token) headers.authorization = `Bearer ${conn.token}`;
   if (sessionId) headers["mcp-session-id"] = sessionId;
   if (protocol) headers["mcp-protocol-version"] = protocol;
-  const res = await fetchWithTimeout(conn.url, { method: "POST", headers, body: JSON.stringify(payload), timeoutMs: 25000 });
+  // The server's address is someone's choice (your own MCP server): public addresses only, every redirect checked.
+  const res = await publicFetch(conn.url, { method: "POST", headers, body: JSON.stringify(payload), timeoutMs: 25000 }).catch((err) => {
+    throw err instanceof UnsafeUrlError ? new McpError(`Can't reach that server: ${err.message}`) : err;
+  });
   if (res.status === 401 || res.status === 403) {
     throw new McpAuthRequired(res.headers.get("www-authenticate"), res.status);
   }

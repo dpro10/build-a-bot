@@ -19,7 +19,7 @@
  * before the send button; the submit is a follow-up task in the same session. Sessions
  * close after about 15 idle minutes, so an approval for a live fill expires with it.
  */
-import { assertPublicUrl, fetchWithTimeout } from "@/lib/tools/net";
+import { assertPublicUrl, fetchWithTimeout, publicFetch } from "@/lib/tools/net";
 import { truncate } from "@/lib/utils";
 import {
   FILL_OUTPUT_SCHEMA,
@@ -217,7 +217,7 @@ export function createBrowserUseProvider(cfg: BrowserUseConfig): WebActionsProvi
       if (!withShot?.screenshotUrl) return { lastUrl };
       const url = await assertPublicUrl(withShot.screenshotUrl);
       if (url.protocol !== "https:") return { lastUrl };
-      const res = await fetchWithTimeout(url.toString(), { signal, timeoutMs: 15_000 });
+      const res = await publicFetch(url.toString(), { signal, timeoutMs: 15_000 });
       if (!res.ok) return { lastUrl };
       const declared = Number(res.headers.get("content-length") ?? 0);
       if (declared > BROWSER_USE_LIMITS.maxScreenshotBytes) return { lastUrl };
