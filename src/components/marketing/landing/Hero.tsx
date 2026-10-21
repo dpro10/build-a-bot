@@ -45,7 +45,7 @@ export function Hero() {
             Your own AI agent, <span className="mk-gradient-text">in about a minute.</span>
           </h1>
           <p className="mt-6 max-w-xl text-lg text-pretty text-muted-foreground sm:text-xl sm:leading-relaxed">
-            Pick a face, name it, give it a brain and your apps, and {talk}
+            Pick a face, name it, and give it your apps and a brain: NVIDIA Nemotron and other open models on Nebius, at cost. Then {talk}
           </p>
 
           <div className="mt-8 flex w-full flex-col gap-3 sm:w-auto sm:flex-row">

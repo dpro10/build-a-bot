@@ -164,7 +164,7 @@ The routes keep the Bridge's old names: until 2026-10-20 the same pairing let a 
 
 ## Meeting notes
 
-The bot takes notes in calls, only after the owner says yes, and stays visible the whole time it listens. Notes are taken in the desktop app (like voice typing); the website shows them and never records.
+The bot takes notes in calls, only after the owner says yes, and only while the owner can see it's listening: on screen, or (hidden for a screen share) as the tray icon's recording badge. Notes are taken in the desktop app (like voice typing); the website shows them and never records.
 
 ```
 desktop app (Electron, desktop/)
@@ -174,7 +174,7 @@ desktop app (Electron, desktop/)
             ▼  ~20-second standalone webm/opus pieces, each ending at a pause when there's one near
             │  (6 s with scripted speech, in tests)
   each piece → 16 kHz WAV (hidden decoder page) → NVIDIA Parakeet on the computer, with word times
-            │  → transcript lines (at pauses and sentence ends); the audio never leaves the computer
+            │  → transcript lines (at pauses and sentence ends); the audio stays on the computer
             ▼  (a piece waits on disk while Parakeet downloads; voice typing goes first)
 POST /api/bots/[botId]/meetings/[id]/audio  { heard: [{ startMs, endMs, text }] }  →  stored lines
             │  (or a piece's audio, from an app that can't run Parakeet, to a server with speech-to-text)
@@ -193,7 +193,7 @@ POST …/finish  →  the bot writes notes  →  web chat + the owner's best cha
 
 ## Voice typing
 
-Hold a key in any app and talk; what the owner meant is typed at the cursor. Starting with "Hey" and a bot's name asks that bot instead. It happens in the desktop app, like Wispr Flow: the website doesn't listen, and the voice endpoints (dictate, edit, ask) answer only the app's device token. `/app/voice` gets the owner the app, pairs it, and keeps their words.
+Hold a key in any app and talk; what the owner meant is typed at the cursor. Starting with "Hey" and a bot's name asks that bot instead. It happens in the desktop app, like Wispr Flow: the website has no voice typing (and its chat no microphone), and the voice endpoints (dictate, edit, ask) answer only the app's device token. `/app/voice` gets the owner the app, pairs it, and keeps their words.
 
 ```
 desktop app (desktop/src/main/voice)

@@ -610,7 +610,7 @@ function planFromUser(text: string, tools: Set<string>, p: Persona, system: stri
   // Meetings the bot took notes in.
   if (tools.has("read_meeting") && /\b(take notes|record|transcribe)\b.*\b(call|meeting|zoom|meet|teams)\b|\bnote-?taker\b/.test(t)) {
     return {
-      text: `Happy to! Get the desktop app: it notices when a call starts and asks first. I stay at the bottom of your screen the whole time I listen, your call is turned into text on your own computer, and I send you the notes when it ends.`,
+      text: `Happy to! Get the desktop app: it notices when a call starts and asks first. You can always see I'm listening (hide me for a screen share and the Build-a-bot icon shows it), your call is turned into text on your own computer, and I send you the notes when it ends.`,
     };
   }
   if (tools.has("read_meeting")) {

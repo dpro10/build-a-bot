@@ -49,7 +49,7 @@ export default async function PricingPage() {
             Pay for what you use. <span className="mk-gradient-text">At cost.</span>
           </h1>
           <p className="mx-auto mt-5 max-w-2xl text-lg text-pretty text-muted-foreground sm:text-xl">
-            No plans and no subscription. Your bot&apos;s thinking, web lookups, texts and calls cost exactly what the services charge us, with nothing
+            No plans and no subscription. Your bot&apos;s thinking, web lookups, texts and calls cost what the services charge us, with nothing
             added. On your own AI, it&apos;s free here.
           </p>
           <ul className="mx-auto mt-6 flex max-w-2xl flex-wrap justify-center gap-x-5 gap-y-2 text-sm text-muted-foreground">

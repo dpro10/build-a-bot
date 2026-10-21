@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { AvatarId, ColorwayId } from "@/lib/avatars";
 import type { DesktopApp } from "@/lib/meetings";
+import { audioStaysOnComputer } from "@/lib/transcribe";
 import { BuddyMock } from "./BuddyMock";
 import { DesktopPairing } from "./DesktopPairing";
 
@@ -14,7 +15,7 @@ const POINTS = [
   {
     icon: <Hand />,
     title: "Takes notes, only after a yes",
-    body: "When a call starts in Zoom, Meet, Teams or another app, your bot peeks up and asks first. While it listens, it stays at the bottom of your screen.",
+    body: "When a call starts in Zoom, Meet, Teams or another app, your bot peeks up and asks first. While it listens, it stays at the bottom of your screen, unless you hide it for a screen share.",
   },
   { icon: <Keyboard />, title: "Types what you say", body: "Hold a key in any app and talk. What you meant is typed where your cursor is." },
   {
@@ -25,7 +26,7 @@ const POINTS = [
   {
     icon: <ShieldCheck />,
     title: "Heard on your computer",
-    body: "NVIDIA Parakeet turns calls and dictation into text right on your computer, so your audio never leaves it. Only the words come to Build-a-bot.",
+    body: `NVIDIA Parakeet turns calls and dictation into text right on your computer${audioStaysOnComputer() ? ", so your audio never leaves it. Only the words come to Build-a-bot." : ". Where it can't, our server does, without keeping the audio."}`,
   },
 ];
 

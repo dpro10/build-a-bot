@@ -9,6 +9,7 @@ import { getUsage } from "@/lib/billing/usage";
 import { DEVICE_ONLINE_MS } from "@/lib/bridge/devices";
 import { DEFAULT_TRANSCRIPT_DAYS, listMeetings, meetingsEnabled, meetingView, notesCostCredit } from "@/lib/meetings";
 import { INCLUDED_MODELS } from "@/lib/models/catalog";
+import { audioStaysOnComputer } from "@/lib/transcribe";
 import { safeTimeZone } from "@/components/bot/activity/time";
 import { MeetingsView } from "@/components/meetings/MeetingsView";
 import type { AvatarId, ColorwayId } from "@/lib/avatars";
@@ -50,6 +51,7 @@ export default async function MeetingsPage({ params }: { params: Promise<{ botId
           notesCost={notesCost}
           needsCredit={paid && !credit}
           transcriptDays={transcriptDays}
+          audioStays={audioStaysOnComputer()}
           desktopDevices={devices
             .filter((d) => !d.revokedAt && d.platform?.startsWith("desktop-"))
             .map((d) => ({ id: d.id, name: d.name, online: Boolean(d.lastSeenAt && now.getTime() - d.lastSeenAt.getTime() < DEVICE_ONLINE_MS) }))}

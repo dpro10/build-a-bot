@@ -5,6 +5,7 @@ import { Container } from "@/components/marketing/ui";
 import { Button } from "@/components/ui/button";
 import { PLATFORMS, desktopReleases, formatSize, isPhoneUserAgent, latestDownload, platformFromUserAgent, type DesktopPlatform } from "@/lib/desktop/releases";
 import { pageMetadata } from "@/lib/site";
+import { audioStaysOnComputer } from "@/lib/transcribe";
 
 export const metadata = pageMetadata({
   title: "Download",
@@ -29,6 +30,7 @@ export default async function DownloadPage() {
   const order: DesktopPlatform[] = here === "windows" ? ["windows", "mac"] : ["mac", "windows"];
   const primary = here && builds[here] ? here : null;
   const any = Boolean(builds.mac || builds.windows);
+  const audioStays = audioStaysOnComputer();
 
   return (
     <section className="relative overflow-hidden">
@@ -39,8 +41,8 @@ export default async function DownloadPage() {
             Build-a-bot for <span className="mk-gradient-text">your computer</span>
           </h1>
           <p className="mx-auto mt-5 max-w-2xl text-lg text-pretty text-muted-foreground sm:text-xl">
-            Your bot takes notes in your calls and types what you say, in any app. NVIDIA Parakeet hears it right on your computer, so your audio never
-            leaves it.
+            Your bot takes notes in your calls and types what you say, in any app. NVIDIA Parakeet hears it right on your computer
+            {audioStays ? ", so your audio never leaves it." : "."}
           </p>
         </div>
 
@@ -79,9 +81,11 @@ export default async function DownloadPage() {
         ) : null}
 
         <ul className="mx-auto mt-12 grid max-w-4xl gap-x-8 gap-y-4 text-sm text-muted-foreground sm:grid-cols-2">
-          <Point icon={<NotebookPen />}>Notes from Zoom, Google Meet, Teams and more. It asks first, and stays on screen the whole time it listens.</Point>
+          <Point icon={<NotebookPen />}>Notes from Zoom, Google Meet, Teams and more. It asks first, and you can always see it&apos;s listening.</Point>
           <Point icon={<Keyboard />}>Voice typing in any app: hold the shortcut, talk, let go. Your words appear where your cursor is.</Point>
-          <Point icon={<ShieldCheck />}>Signed by its developer, and heard on your computer: only the words reach Build-a-bot, never the audio.</Point>
+          <Point icon={<ShieldCheck />}>
+            Signed by its developer, and heard on your computer{audioStays ? ": only the words reach Build-a-bot, never the audio." : " by NVIDIA Parakeet."}
+          </Point>
           <Point icon={<RefreshCw />}>It keeps itself up to date, and never restarts in the middle of a call.</Point>
         </ul>
       </Container>

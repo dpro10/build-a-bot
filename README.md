@@ -9,7 +9,7 @@ Anyone makes their own AI agent in about a minute: pick a face, give it a name, 
 ## Built on NVIDIA and Nebius
 
 - **The brains:** NVIDIA Nemotron on **Nebius Token Factory**. Nemotron 3.5 Lightning is every new bot's default: fast, and cheap (about $0.0004 for a typical message, at Token Factory's price). Nemotron 3 Super and Nemotron 3 Ultra take the harder jobs. Token Factory also runs the other included open models, and the AI cleanup for voice typing.
-- **The ears:** NVIDIA **Parakeet TDT 0.6B v3** turns speech into text on the user's own computer, for voice typing and meeting notes. The desktop app runs it on NVIDIA's NeMo-Speech.cpp, so the audio never leaves the computer. Our own speech server (`speech/`: Parakeet and **Nemotron 3.5 ASR** on NeMo-Speech.cpp, built to deploy as a **Nebius Serverless AI** endpoint) is optional, for computers where Parakeet can't run.
+- **The ears:** NVIDIA **Parakeet TDT 0.6B v3** turns speech into text on the user's own computer, for voice typing and meeting notes. The desktop app runs it on NVIDIA's NeMo-Speech.cpp, so the audio stays on the computer. Our own speech server (`speech/`: Parakeet and **Nemotron 3.5 ASR** on NeMo-Speech.cpp, built to deploy as a **Nebius Serverless AI** endpoint) is optional, for computers where Parakeet can't run; only a site that has one (or another speech-to-text service) ever gets audio, and the site's copy says which it is.
 - **The voice:** on calls, NVIDIA **Magpie TTS Multilingual** speaks and Parakeet hears, on NeMo-Speech.cpp on our own server (`voice/`), while Nemotron 3.5 Lightning holds the conversation and hands the work to the bot. No speech API hears anyone.
 - **Web search and fact checks:** Tavily. Bots search and read the web with it, and the tutor checks its flashcards and quizzes against the student's course: the course's own pages first, then open textbooks (`src/lib/tools/builtin/check.ts`).
 - Our entry in the Nebius × NVIDIA Global AI Hackathon (due October 30): [`docs/HACKATHON.md`](docs/HACKATHON.md).
@@ -71,16 +71,16 @@ Recipes prefill it (`/build?recipe=inbox-zero`, or any shared `/r/[slug]`). The 
   - bulk deletes and sensitive apps (money, health, identity) ask;
   - quiet hours;
   - it says it's an AI when it writes to other people;
-  - it only listens to a meeting after you say yes, and stays on your screen the whole time.
+  - it only listens to a meeting after you say yes, and only while you can see it's listening: on screen, or as the app icon's recording badge when you hide it for a screen share.
 - STOP works from any channel, and every action gets an append-only receipt.
 
 ### Channels, several at once
 
-Web chat, phone calls and texts (Twilio), email (its own brand-free address), Telegram (a one-tap managed bot), Discord (`/ask`) and Slack (one click, or the bot's own app). WhatsApp and iMessage are on a waitlist.
+Web chat, phone calls and texts (Twilio), email (its own brand-free address), Telegram (a managed bot, or your own from BotFather), Discord (`/ask`) and Slack (one click, or the bot's own app). On build-a-bot.site, texts wait for carrier registration (A2P) and email for a mail domain; there, a Telegram bot comes from BotFather. WhatsApp and iMessage are on a waitlist.
 
 ### Calls
 
-- **Call your bot:** the **Call** button in its header, or its phone number. It answers in its own voice in about a second, and you talk like you would to a person: cut in whenever you like and it stops mid-word.
+- **Call your bot:** the **Call** button in its header, or its phone number. It answers in its own voice, usually about 3 seconds after you stop talking (the call panel shows each answer's time), and you talk like you would to a person: cut in whenever you like and it stops mid-word.
 - **It does the work while you talk:** "what's on my calendar tomorrow?", "move the three o'clock to Friday and tell Sam". The bot's own agent does it, with your apps, its memory and the same approvals as the chat: anything risky waits for your tap in the app, and the bot says so. Slow jobs keep going after the bot says "one sec", and it tells you when they're done.
 - **It knows who's calling:** you on the app, or on your own phone when your carrier vouches for the number. Otherwise it asks for your phone PIN (Account → Phone PIN), which the AI never sees. Anyone else can leave a message, and the bot does nothing for them.
 - **Heard and spoken by NVIDIA's open models on our own server:** Parakeet hears, Magpie speaks, Nemotron 3.5 Lightning talks (`voice/`). The audio isn't kept; the transcript lands in the chat. Calls cost what they cost us: the talker's tokens, plus Twilio's minute on a phone.
@@ -89,11 +89,11 @@ Web chat, phone calls and texts (Twilio), email (its own brand-free address), Te
 
 - **In the desktop app** (`desktop/`), like Granola: no bot joins the call. It notices when a call starts in Zoom, Meet, Teams, Webex, Slack, Discord and more. The bot peeks up from the very bottom of the screen: "Want me to take notes?" For a meeting in the room, *Take notes in the room* is in the app's menu.
 - While it listens it stays there with a red dot, a timer, a level meter and live captions. Pause, Stop and "Stop and delete" are one click away.
-- **Heard on your computer:** NVIDIA Parakeet turns the call into text on the computer, about 20 seconds at a time, and only the lines are sent. The audio never leaves the computer.
+- **Heard on your computer:** NVIDIA Parakeet turns the call into text on the computer, about 20 seconds at a time, and only the lines are sent. The audio goes to the server only where Parakeet can't run (or with Private speech off), and only if the server has speech-to-text of its own.
 - Afterwards it writes a summary, decisions and action items, sends them to you, and answers questions about past meetings ("What did we decide?").
 - The **Meetings** tab on the website has the meetings and their notes (search, action items to tick off, export), and gets you the app. The website itself never records.
 - The site offers the app from its own `/download` page, which lists the latest signed builds (`NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL` can point elsewhere).
-- It never records without a yes, only listens while it's on screen, and throws each piece of audio away once it's text. Transcripts are kept 90 days by default; notes stay until deleted.
+- It never records without a yes, only listens while you can see it's listening, and throws each piece of audio away once it's text. Transcripts are kept 90 days by default; notes stay until deleted.
 
 ### Voice typing (beta)
 
@@ -102,8 +102,8 @@ Web chat, phone calls and texts (Twilio), email (its own brand-free address), Te
 - **Your words:** names and terms spelled your way, what speech-to-text writes instead, snippets ("my booking link" types the link), and the names your bots already remember. Fix a dictation and it learns.
 - **Edit by voice:** select text, hold Shift with your key, and say what to change ("make it friendlier", "turn it into a list", "translate it to Spanish"). With nothing selected, it writes what you ask for. "Hey Otto, add this to my calendar" sends your bot what you selected, treated as outside content so it asks before sending anything to someone new.
 - **"Hey Otto, …"** asks your bot instead of typing; it answers in a small bubble with Paste, Copy, Reply and Open chat.
-- **Private:** the mic is on only while you hold the key, with a pill on screen the whole time. NVIDIA Parakeet hears you on your own computer, so the audio never leaves it; the server gets the words to clean up and keeps a word count, not the words. History stays on your computer, encrypted.
-- **In the desktop app**, like Wispr Flow: the website doesn't listen. The **Voice typing** page (`/app/voice`) gets you the app, pairs it, and holds your words and snippets. No word limit: hearing you is free on your computer, and the AI cleanup is paid from credit (a fraction of a cent).
+- **Private:** the mic is on only while you hold the key, with a pill on screen the whole time. NVIDIA Parakeet hears you on your own computer; the server gets the words to clean up and keeps a word count, not the words. (Audio reaches the server only if it has speech-to-text of its own, before Parakeet has downloaded or in a language it doesn't know.) History stays on your computer, encrypted.
+- **In the desktop app**, like Wispr Flow: the website has no voice typing, and its chat has no microphone. The **Voice typing** page (`/app/voice`) gets you the app, pairs it, and holds your words and snippets. No word limit: hearing you is free on your computer, and the AI cleanup is paid from credit (a fraction of a cent).
 
 ### Your files, and studying from them
 
@@ -209,7 +209,7 @@ The full notes, with Diego's own words, are in `docs/DECISIONS.md`.
 
 - **Build the whole product now, end to end:** five cute avatars, a name, a brain (their subscription or an open-weight model on Nebius), apps from an extensive list, how much to trust it (including full faith), and several ways to talk to it.
 - **Meeting notes** (an idea from his mom): the bot notices a meeting, pops up to ask, and stays visible at the very bottom of the screen while it transcribes.
-- **Consent:** "It's one party consent. So as long as one person hits record, we're good." It still asks first and stays visible.
+- **Consent:** "It's one party consent. So as long as one person hits record, we're good." It still asks first and shows it's listening.
 - **Apple:** he already has an Apple Developer account, for signing the Mac app.
 
 **Diego, 2026-10-20**
@@ -274,7 +274,7 @@ These hold whatever gets built next.
 
 **Law:**
 - Say it's an AI, publish a crisis protocol, and launch 18+ only.
-- Meeting notes ask first and stay visible. The caveats to one-party consent are in `docs/research/meetings-2026-10-14.md` §5.
+- Meeting notes ask first and show they're listening. The caveats to one-party consent are in `docs/research/meetings-2026-10-14.md` §5.
 
 ## Prior work
 

@@ -30,6 +30,8 @@ type Props = {
   needsCredit: boolean;
   transcriptDays: number | null;
   desktopDevices: DesktopDevice[];
+  /** This server can't turn recordings into text, so the audio never leaves the computer (audioStaysOnComputer). */
+  audioStays: boolean;
 };
 
 const KEEP_OPTIONS = [
@@ -125,7 +127,7 @@ export function MeetingsView(props: Props) {
       </div>
 
       {!enabled ? (
-        <TurnOnCard bot={bot} onTurnOn={turnOn} busy={turningOn} />
+        <TurnOnCard bot={bot} onTurnOn={turnOn} busy={turningOn} audioStays={props.audioStays} />
       ) : (
         <>
           {active ? (
@@ -163,14 +165,14 @@ export function MeetingsView(props: Props) {
                 Take notes in a call
               </h3>
               <p className="text-sm text-muted-foreground">
-                In the desktop app, {bot.name} asks first and stays on your screen the whole time it listens. The website never listens.
+                In the desktop app, {bot.name} asks first, and you can always see it&apos;s listening. The website never records a meeting.
               </p>
             </div>
-            <DesktopCard bot={bot} devices={props.desktopDevices} blocked={blocked} />
+            <DesktopCard bot={bot} devices={props.desktopDevices} blocked={blocked} audioStays={props.audioStays} />
           </section>
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <UsageCard minutes={props.minutesThisMonth} notesCost={props.notesCost} needsCredit={props.needsCredit} />
+            <UsageCard minutes={props.minutesThisMonth} notesCost={props.notesCost} needsCredit={props.needsCredit} audioStays={props.audioStays} />
             <KeepCard botId={botId} initial={props.transcriptDays} />
           </div>
         </>
@@ -260,7 +262,7 @@ function MeetingRow({ botId, meeting: m, timezone }: { botId: string; meeting: M
   );
 }
 
-function TurnOnCard({ bot, onTurnOn, busy }: { bot: BotFace; onTurnOn: () => void; busy: boolean }) {
+function TurnOnCard({ bot, onTurnOn, busy, audioStays }: { bot: BotFace; onTurnOn: () => void; busy: boolean; audioStays: boolean }) {
   return (
     <div className="relative overflow-hidden rounded-3xl border border-primary/15 bg-gradient-to-br from-primary-soft via-card to-card p-6 shadow-soft sm:p-8">
       <div className="dot-grid pointer-events-none absolute inset-0 opacity-40 [mask-image:radial-gradient(60%_80%_at_15%_50%,#000,transparent)]" aria-hidden />
@@ -276,7 +278,7 @@ function TurnOnCard({ bot, onTurnOn, busy }: { bot: BotFace; onTurnOn: () => voi
             any meeting later.
           </p>
           <ul className="mx-auto mt-4 flex w-fit flex-col items-start gap-1.5 text-left text-sm sm:mx-0">
-            {["It asks first, every time", "It stays on your screen while it listens", "Your call is heard on your computer, never kept"].map((t) => (
+            {["It asks first, every time", "You can always see it's listening", audioStays ? "Your call is heard on your computer, never kept" : "Your call's audio is never kept"].map((t) => (
               <li key={t} className="flex items-center gap-2">
                 <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-success-soft text-success" aria-hidden>
                   <Check className="size-3" strokeWidth={3} />
@@ -296,12 +298,17 @@ function TurnOnCard({ bot, onTurnOn, busy }: { bot: BotFace; onTurnOn: () => voi
 }
 
 /** Meeting notes happen in the desktop app: what it does, whether it's paired, and where to set it up. */
-function DesktopCard({ bot, devices, blocked }: { bot: BotFace; devices: DesktopDevice[]; blocked: string | null }) {
+function DesktopCard({ bot, devices, blocked, audioStays }: { bot: BotFace; devices: DesktopDevice[]; blocked: string | null; audioStays: boolean }) {
   const apps = ["zoom", "meet", "teams", "webex", "slack"] as const;
   const online = devices.find((d) => d.online);
   const points = [
     { icon: <Bell />, text: `When a call starts in Zoom, Google Meet, Teams, Webex, Slack or your browser, ${bot.name} pops up and asks. For a meeting in the room, choose Take notes in the room from the app's menu.` },
-    { icon: <ShieldCheck />, text: "NVIDIA Parakeet turns the call into text right on your computer, so the audio never leaves it. Only the words come here, for your notes." },
+    {
+      icon: <ShieldCheck />,
+      text: audioStays
+        ? "NVIDIA Parakeet turns the call into text right on your computer, so the audio never leaves it. Only the words come here, for your notes."
+        : "NVIDIA Parakeet turns the call into text right on your computer, and only the words come here, for your notes. Where it can't run, the audio comes here to be turned into text, and isn't kept.",
+    },
     { icon: <Users />, text: "What you say and what the others on the call say are kept apart in the transcript. The notes, action items and transcript land here." },
   ];
   return (
@@ -349,7 +356,7 @@ function DesktopCard({ bot, devices, blocked }: { bot: BotFace; devices: Desktop
   );
 }
 
-function UsageCard({ minutes, notesCost, needsCredit }: { minutes: number; notesCost: string | null; needsCredit: boolean }) {
+function UsageCard({ minutes, notesCost, needsCredit, audioStays }: { minutes: number; notesCost: string | null; needsCredit: boolean; audioStays: boolean }) {
   return (
     <div className="flex flex-col justify-center gap-2 rounded-3xl border border-border bg-card p-4 shadow-soft sm:p-5">
       <div className="flex items-center justify-between gap-3 text-sm">
@@ -361,7 +368,7 @@ function UsageCard({ minutes, notesCost, needsCredit }: { minutes: number; notes
         </Link>
       </div>
       <div className={needsCredit ? "text-xs font-medium text-danger" : "text-xs text-muted-foreground"}>
-        Hearing the call is free: it happens on your computer.{" "}
+        {audioStays ? "Hearing the call is free: it happens on your computer." : "Hearing the call on your computer is free."}{" "}
         {notesCost ? `Writing the notes costs ${notesCost}, from your credit.` : "Writing the notes is free here, on your own AI."}
         {needsCredit ? " You're out of credit." : ""}
       </div>

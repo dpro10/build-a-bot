@@ -26,7 +26,7 @@ Open http://localhost:3000.
 | Sign-in emails | The magic link appears on screen | An email provider |
 | Credit | Every account starts with $1 of credit; adding more is free in demo mode (nothing is charged) | Stripe keys |
 | Meeting notes | Real, in the desktop app: NVIDIA Parakeet hears the call on your computer (the same download as voice typing), and the bot's brain writes the notes (the demo brain's are simple). The website doesn't record | Nothing for speech; the real notes run on `TOKEN_FACTORY_API_KEY` |
-| Voice typing | Real, in the desktop app: NVIDIA Parakeet hears you on your computer (it downloads once, about 0.7 GB). The website doesn't listen | Nothing for speech; the AI cleanup runs on `TOKEN_FACTORY_API_KEY` (without it, the plain cleanup) |
+| Voice typing | Real, in the desktop app: NVIDIA Parakeet hears you on your computer (it downloads once, about 0.7 GB). The website has no voice typing | Nothing for speech; the AI cleanup runs on `TOKEN_FACTORY_API_KEY` (without it, the plain cleanup) |
 | Web actions | Simulated sites | `BROWSER_USE_API_KEY` |
 
 Weather, Wikipedia and exchange rates are live when your computer can reach them; otherwise you get labeled placeholders.
@@ -146,7 +146,7 @@ Then ask in chat:
 
 Hold a key in any app and talk; what you meant is typed at your cursor, cleaned up. Saying "Hey" and your bot's name asks the bot instead.
 
-It happens in the desktop app, like Wispr Flow; the website doesn't listen.
+It happens in the desktop app, like Wispr Flow; the website has no voice typing, and its chat has no microphone.
 
 **On the website:** open **Voice typing** in the left sidebar. It shows what it does, gets you the desktop app and pairs it, and keeps your words: under **Your words**, add a name it should spell your way, and what it writes instead if you've seen it get it wrong (try `Friday`, instead of `Thursday`). Add a snippet ("my booking link" → a URL) the same way. The desktop app uses the same list.
 
@@ -198,7 +198,7 @@ Without Accessibility on a Mac it still works: press **⌘ Shift Space** to star
 - On Windows, detection uses the privacy registry; a small audio-session helper would be sturdier.
 
 **Voice typing:**
-- It's in the desktop app only; the website doesn't listen. NVIDIA Parakeet hears you on your computer, so no speech-to-text key is needed.
+- It's in the desktop app only; the website has no voice typing. NVIDIA Parakeet hears you on your computer, so no speech-to-text key is needed.
 - Tested end to end on Linux, and in CI on real Windows (the installer, Ctrl + Windows, Parakeet, pasting into another app). Not yet on a real Mac.
 - Later: the Fn (Globe) key on a Mac.
 

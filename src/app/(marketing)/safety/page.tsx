@@ -9,6 +9,7 @@ import { ALL_CONNECTORS } from "@/lib/connectors";
 import { BULK_DELETE_THRESHOLD } from "@/lib/policy/engine";
 import { CRISIS_FOOTER, disclosureLine } from "@/lib/safety";
 import { contactLink, pageMetadata } from "@/lib/site";
+import { audioStaysOnComputer } from "@/lib/transcribe";
 import { HARD_LIMITS, TRUST, TRUST_LEVELS } from "@/lib/trust";
 
 export const metadata = pageMetadata({
@@ -64,6 +65,8 @@ function Callout({ icon, title, children, tone = "primary" }: { icon: React.Reac
 export default function SafetyPage() {
   const contact = contactLink("Security report");
   const sensitive = ALL_CONNECTORS.filter((c) => c.sensitive && c.status !== "soon").slice(0, 8);
+  // Without speech-to-text on this server, the desktop app never sends audio: Parakeet hears it, or nothing does.
+  const audioStays = audioStaysOnComputer();
 
   return (
     <>
@@ -221,18 +224,23 @@ export default function SafetyPage() {
         <DocSection id="recording" title="Meeting notes: only when you say yes" icon={<AudioLines />}>
           <p>
             Your bot can take notes in your calls and meetings, with the desktop app. It never records on its own: it asks, and it only listens after
-            you say yes. There is no setting that makes it record automatically, and the website never listens.
+            you say yes. There is no setting that makes it record automatically, and the website never records a meeting.
           </p>
           <ul>
             <li>
-              <strong>It&apos;s always on your screen while it listens.</strong> It sits at the bottom of your screen with a red dot and a timer. If it
-              can&apos;t stay on screen, or your screen locks, it stops. It never records without showing itself.
+              <strong>You can always see it&apos;s listening.</strong> It sits at the bottom of your screen with a red dot and a timer. To share your
+              screen without it, you can hide it: it keeps taking notes, and the Build-a-bot icon in your menu bar (on Windows, the system tray) shows
+              that it&apos;s recording until you stop. Unless you hid it, it stops if something keeps it off your screen, and it always stops when your
+              screen locks or the computer goes to sleep.
             </li>
             <li>
-              <strong>The audio stays on your computer.</strong> NVIDIA Parakeet turns the call into text right there, and only the words come to
-              Build-a-bot for your notes. Each piece of audio is deleted from your computer once it&apos;s been heard. Your meetings are never used to
-              train AI, and we don&apos;t make voiceprints: lines are labeled by which microphone they came from, not by recognizing anyone&apos;s
-              voice.
+              <strong>{audioStays ? "The audio stays on your computer." : "The audio is heard on your computer."}</strong> NVIDIA Parakeet turns the
+              call into text right there, and only the words come to Build-a-bot for your notes.{" "}
+              {audioStays
+                ? "If Parakeet can't run on your computer, nothing is sent instead: the app tells you why it can't take notes."
+                : "If Parakeet can't run on your computer, or you turn Private speech off, the audio goes to our server to be turned into text instead, and isn't kept."}{" "}
+              Each piece of audio is deleted from your computer once it&apos;s been heard. Your meetings are never used to train AI, and we don&apos;t
+              make voiceprints: lines are labeled by which microphone they came from, not by recognizing anyone&apos;s voice.
             </li>
             <li>
               <strong>You can delete any meeting,</strong> or just its transcript and keep the notes. Transcripts are deleted after 90 days unless you
@@ -257,10 +265,13 @@ export default function SafetyPage() {
           </p>
           <ul>
             <li>
-              <strong>Your voice stays on your computer.</strong> The desktop app turns it into text right there, with NVIDIA&apos;s Parakeet
-              speech model, and sends only the words, to be cleaned up. Until that model has downloaded, in a language it doesn&apos;t know, or
-              if you turn it off, the audio is turned into text on our servers and thrown away. Either way, nothing you say is kept: the text goes back to your computer without
-              being stored, and we keep a count of the words for Credit &amp; usage, that&apos;s all.
+              <strong>{audioStays ? "Your voice stays on your computer." : "Your voice is heard on your computer."}</strong> The desktop app turns it
+              into text right there, with NVIDIA&apos;s Parakeet speech model, and sends only the words, to be cleaned up.{" "}
+              {audioStays
+                ? "Until that model has downloaded, or in a language it doesn't know, voice typing waits and says why; it never sends the audio instead."
+                : "Until that model has downloaded, in a language it doesn't know, or if you turn it off, the audio is turned into text on our server and thrown away."}{" "}
+              Either way, nothing you say is kept: the text goes back to your computer without being stored, and we keep a count of the words for
+              Credit &amp; usage, that&apos;s all.
             </li>
             <li>
               <strong>It doesn&apos;t send what&apos;s on your screen.</strong> To match the app&apos;s style, it sends the kind of app you&apos;re typing in

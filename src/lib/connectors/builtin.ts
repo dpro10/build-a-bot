@@ -167,7 +167,7 @@ export const BUILTIN_CONNECTORS: ConnectorDef[] = [
     popular: true,
     jobs: ["meetings", "work", "calendar", "school"],
     keywords: ["meeting", "meetings", "zoom", "google meet", "teams", "webex", "call", "transcribe", "transcript", "record", "recording", "notetaker", "whisper", "parakeet", "minutes", "action items"],
-    note: "Comes with the desktop app, which notices when a call starts and asks first. It stays visible at the bottom of your screen while it listens. NVIDIA Parakeet turns the call into text on your computer, so the audio never leaves it.",
+    note: "Comes with the desktop app, which notices when a call starts and asks first. You can always see it's listening: at the bottom of your screen, or as the Build-a-bot icon's recording badge if you hide it for a screen share. NVIDIA Parakeet turns the call into text on your computer.",
   },
   {
     id: "browser",

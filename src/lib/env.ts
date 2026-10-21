@@ -181,7 +181,6 @@ export const live = {
   slackOAuth: Boolean(config.slack.clientId && config.slack.clientSecret && config.slack.signingSecret),
   discord: Boolean(config.discord.applicationId && config.discord.publicKey && config.discord.botToken),
   stripe: Boolean(config.stripe.secretKey),
-  /** Signed downloads of the desktop app are published (demo mode shows how to run it from the repo instead). */
   /** The Library: a private Vercel Blob store for the owner's files. */
   library: Boolean(config.library.blobToken),
   /** Voice calls with bots: the voice server's address and its shared secret (32+ characters). */

@@ -3,12 +3,17 @@ import { ArrowRight, AudioLines, MessageCircle, NotebookPen, ShieldCheck, UserX 
 import { BrandTile } from "@/components/brand/icons";
 import { BuddyMock } from "@/components/meetings/BuddyMock";
 import { meetingAppIcon } from "@/components/meetings/shared";
+import { audioStaysOnComputer } from "@/lib/transcribe";
 import { Container, Section, SectionHeader } from "../ui";
 
 const POINTS = [
   { icon: <UserX />, title: "No bot joins the call", body: "It listens on your computer, so nobody has to let a stranger into the meeting." },
   { icon: <NotebookPen />, title: "Notes, sent to you", body: "A summary, the decisions and who's doing what, in your chat, Telegram or email." },
-  { icon: <ShieldCheck />, title: "Heard on your computer", body: "NVIDIA Parakeet turns the call into text on your computer, so the audio never leaves it. Your meetings never train AI." },
+  {
+    icon: <ShieldCheck />,
+    title: "Heard on your computer",
+    body: `NVIDIA Parakeet turns the call into text on your computer${audioStaysOnComputer() ? ", so the audio never leaves it" : "; where it can't run, our server does, without keeping the audio"}. Your meetings never train AI.`,
+  },
   { icon: <MessageCircle />, title: "Ask about any meeting", body: "“What did Priya say about pricing?” Your bot searches what was said." },
 ];
 
@@ -20,14 +25,14 @@ export function MeetingNotes() {
     <Section id="meetings" aria-labelledby="meetings-title" className="overflow-hidden bg-gradient-to-b from-background via-primary-soft/30 to-background-2">
       <Container>
         <SectionHeader id="meetings-title" eyebrow="Meeting notes" icon={<AudioLines />} title="It takes notes in your calls. When you say yes.">
-          When a call starts, your bot peeks up from the bottom of your screen and asks. Say yes, and it stays right there while it listens, then sends you the notes.
+          When a call starts, your bot peeks up from the bottom of your screen and asks. Say yes, and it stays right there while it listens (or hides for a screen share), then sends you the notes.
           {" It's in the desktop app."}
         </SectionHeader>
 
         <div className="mt-14 grid gap-8 lg:grid-cols-2 lg:gap-10">
           {[
             { phase: "asking" as const, step: "1", title: "It asks first", body: "“Want me to take notes?” Nothing is recorded until you tap yes, and you can copy a heads-up for everyone on the call." },
-            { phase: "listening" as const, step: "2", title: "It stays where you can see it", body: "A red dot and a timer at the bottom of your screen, the whole time it listens. Pause or stop with one tap." },
+            { phase: "listening" as const, step: "2", title: "You can see it's listening", body: "A red dot and a timer at the bottom of your screen. Sharing your screen? Hide it, and the Build-a-bot icon shows it's recording. Pause or stop with one tap." },
           ].map((s) => (
             <figure key={s.phase} className="flex flex-col gap-5">
               <div className="relative">

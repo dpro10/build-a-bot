@@ -6,6 +6,7 @@ import "@/components/avatar/avatar.css";
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeSync } from "@/components/ThemeSync";
 import { appUrl } from "@/lib/env";
+import { siteDescription } from "@/lib/site-description";
 
 export const metadata: Metadata = {
   metadataBase: new URL(appUrl()),
@@ -13,8 +14,7 @@ export const metadata: Metadata = {
     default: "Build-a-bot — your own AI agent, in about a minute",
     template: "%s · Build-a-bot",
   },
-  description:
-    "Pick a face, name it, choose its brain (open models at cost, or your own API key), connect your apps, and talk to it on the web, Telegram, Discord or Slack.",
+  description: siteDescription(),
   applicationName: "Build-a-bot",
   openGraph: {
     title: "Build-a-bot — your own AI agent, in about a minute",
