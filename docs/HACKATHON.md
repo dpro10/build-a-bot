@@ -15,7 +15,7 @@ Diego (2026-10-15): "im in the nvidia x nebius hackathon and the more we create 
 | New, or "significantly updated" during the submission period (from August 26) | New: the first commit is 2026-10-13. |
 | More than one entry | Not needed: Build-a-bot is Diego's only entry (Diego, 2026-10-16: "we're only going to enter build a bot. Not chef."). |
 | Public repository with an open-source license shown on the repo page | Yes: `dpro10/build-a-bot` is public under Apache 2.0 since 2026-10-17, its history scanned for keys first. |
-| A working demo URL, free to use for judges until judging ends | [build-a-bot.site](https://build-a-bot.site), in real mode (nothing simulated). Every account starts with $1 of credit, about 2,400 messages on Nemotron 3.5 Lightning, and no card is needed. |
+| A working demo URL, free to use for judges until judging ends | [build-a-bot.site](https://build-a-bot.site), in real mode (nothing simulated). Every account starts with $5 of credit, about 12,000 messages on Nemotron 3.5 Lightning, and no card is needed. |
 | A public YouTube video under 3 minutes, no copyrighted music | To record (script below). The one-minute promo in `video/` (Otto's own Magpie voice, an original score) can open it. |
 | README with setup steps and how NVIDIA models, Token Factory and Nebius were used | Done: README → *Built on NVIDIA and Nebius*. |
 | Feedback on Token Factory, AI Cloud and NVIDIA tools | Below. |
@@ -56,7 +56,7 @@ Nothing on the live site is simulated. Each service that isn't set up says "Comi
 | Texts | **Coming soon**: the number waits for carrier registration (A2P). Phone codes come by call meanwhile. |
 | The email channel, and the bot's own inbox | **Coming soon**: they need a brand-free mail domain. |
 | Web actions (filling in forms in a cloud browser) | **Coming soon**: Browser Use isn't set up. |
-| Adding credit | **Coming soon**, until Stripe is set up. Every account has its $1 of starter credit. |
+| Adding credit | **Coming soon**, until Stripe is set up. Every account has its $5 of starter credit. |
 | The desktop app (Mac and Windows): voice typing and meeting notes | **Real**: signed, self-updating, from [build-a-bot.site/download](https://build-a-bot.site/download). NVIDIA Parakeet hears everything on the user's computer. build-a-bot.site has no speech-to-text of its own, so the audio never leaves the computer. |
 
 ## For the judges (testing instructions)
@@ -68,7 +68,7 @@ Nothing on the live site is simulated. Each service that isn't set up says "Comi
    - Add a couple of apps, and choose **Ask me first**.
    - Finish, and the bot greets you.
 
-   Your first five messages are free. After that, sign in with your email (the link comes back to the same chat), and your $1 of credit takes over. **Credit & usage** shows what each message cost, at Token Factory's price.
+   Your first five messages are free. After that, sign in with your email (the link comes back to the same chat), and your $5 of credit takes over. **Credit & usage** shows what each message cost, at Token Factory's price.
 3. **Try it:** ask something that needs the web ("what's the weather in Austin this weekend and anything fun to do?"). Then ask something that needs a yes from you ("email Sam that I'm running late"): it asks first.
 4. **Call it:** click **Call** in the bot's header and allow the microphone.
    - NVIDIA Parakeet hears you and NVIDIA Magpie answers, both on our own server.
@@ -113,7 +113,7 @@ Nothing on the live site is simulated. Each service that isn't set up says "Comi
 **How we built it:**
 - **NVIDIA Nemotron on Nebius Token Factory** runs the included brains.
   - Nemotron 3.5 Lightning is the default, chosen because it's fast and cheap: about $0.0004 for a typical message.
-  - There are no plans: people pay for what they use at Token Factory's price, with nothing added, and every account starts with $1 of credit.
+  - There are no plans: people pay for what they use at Token Factory's price, with nothing added, and every account starts with $5 of credit.
   - Nemotron 3 Super and Ultra take the harder jobs.
 - **NVIDIA Parakeet TDT 0.6B v3 on the user's own computer** turns speech into text for voice typing and meeting notes.
   - **Setup:** the desktop app downloads NVIDIA's NeMo-Speech.cpp runtime and the model once (about 0.7 GB, each checked against NVIDIA's published hash). It runs them on 127.0.0.1 behind a random key, on the GPU with Metal on Apple silicon and on the CPU elsewhere.
@@ -189,5 +189,5 @@ Nothing on the live site is simulated. Each service that isn't set up says "Comi
 
 **What worked well:**
 - Token Factory's OpenAI-compatible API meant one client for every included model.
-- Nemotron 3.5 Lightning's price made pay-as-you-go at cost possible: $1 of starter credit is about 2,400 messages.
+- Nemotron 3.5 Lightning's price made pay-as-you-go at cost possible: $5 of starter credit is about 12,000 messages.
 - Parakeet was word-perfect on our test clips, about 5× faster than real time on four CPU cores, and never invented words in silence.

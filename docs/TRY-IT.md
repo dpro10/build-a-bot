@@ -24,7 +24,7 @@ Open http://localhost:3000.
 | Apps (Gmail, Calendar, GitHub, Drive…) | Sample data: a small inbox, a week of calendar, a few PRs. Nothing really changes. | Composio, or each app's sign-in (`docs/DEPLOY.md`) |
 | Channels (Telegram, texts, email, Slack, Discord) | Simulated: nothing really goes out | Each provider's keys (`docs/DEPLOY.md`) |
 | Sign-in emails | The magic link appears on screen | An email provider |
-| Credit | Every account starts with $1 of credit; adding more is free in demo mode (nothing is charged) | Stripe keys |
+| Credit | Every account starts with $5 of credit; adding more is free in demo mode (nothing is charged) | Stripe keys |
 | Meeting notes | Real, in the desktop app: NVIDIA Parakeet hears the call on your computer (the same download as voice typing), and the bot's brain writes the notes (the demo brain's are simple). The website doesn't record | Nothing for speech; the real notes run on `TOKEN_FACTORY_API_KEY` |
 | Voice typing | Real, in the desktop app: NVIDIA Parakeet hears you on your computer (it downloads once, about 0.7 GB). The website has no voice typing | Nothing for speech; the AI cleanup runs on `TOKEN_FACTORY_API_KEY` (without it, the plain cleanup) |
 | Web actions | Simulated sites | `BROWSER_USE_API_KEY` |
@@ -36,7 +36,7 @@ To start over, stop the server and delete the `.data/` folder (the local databas
 ## 1. The public site (5 min)
 
 - **`/`, the landing page:** the five characters, how it works, the brains, apps, trust levels, channels, meeting notes, voice typing and safety. Try the light/dark toggle, and a phone-width window.
-- **`/pricing`:** no plans. What everything costs, at cost (a message on Nemotron 3.5 Lightning is about $0.0004), what's free (your own AI, speech heard on your computer), the $1 of starter credit and how adding credit works.
+- **`/pricing`:** no plans. What everything costs, at cost (a message on Nemotron 3.5 Lightning is about $0.0004), what's free (your own AI, speech heard on your computer), the $5 of starter credit and how adding credit works.
 - **`/safety`:** the trust levels and the hard limits, including the meeting-notes rule.
 - **`/explore`:** recipes, which are ready-made bots. "Make this bot" opens the builder prefilled.
 - **`/legal/...`:** drafts, not reviewed by a lawyer yet.
@@ -175,7 +175,7 @@ Without Accessibility on a Mac it still works: press **⌘ Shift Space** to star
   - its brain;
   - **Share as a recipe** (a public `/r/…` link, never with your data);
   - **Other AI apps** (use the bot's apps from Claude Desktop or Claude Code, under the same rules).
-- **Credit & usage:** the balance (it starts at $1), Add $5, $10 or $20 (free in demo mode), what you used this month and what it cost, the credit you added, and every price.
+- **Credit & usage:** the balance (it starts at $5), Add $5, $10 or $20 (free in demo mode), what you used this month and what it cost, the credit you added, and every price.
 - **Desktop app:** where to get it, a pairing code, and your paired computers (unpair one there).
 - **Account:**
   - **Add your email** saves the account (in demo mode the magic link appears on screen instead of in your inbox);

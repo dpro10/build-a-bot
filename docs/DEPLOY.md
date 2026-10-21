@@ -52,7 +52,7 @@ Own-key (BYOK) brains need nothing from you.
 
 ## 6. Credit (Stripe)
 
-There are no plans: people pay for what they use, at cost, from prepaid credit (`docs/DECISIONS.md`). Every account starts with `STARTER_CREDIT_USD` of credit (default 1; 0 turns it off). Adding credit is a one-time Stripe Checkout payment of $5, $10 or $20, with Stripe's fee on top: no products, prices or customer portal to set up.
+There are no plans: people pay for what they use, at cost, from prepaid credit (`docs/DECISIONS.md`). Every account starts with `STARTER_CREDIT_USD` of credit (default 5; 0 turns it off). Adding credit is a one-time Stripe Checkout payment of $5, $10 or $20, with Stripe's fee on top: no products, prices or customer portal to set up.
 
 1. Set `STRIPE_SECRET_KEY` (a restricted key needs write access to Checkout Sessions and Customers).
 2. Add a webhook endpoint → `{APP_URL}/api/webhooks/stripe` with the events `checkout.session.completed` and `checkout.session.async_payment_succeeded`; set `STRIPE_WEBHOOK_SECRET` to its signing secret.

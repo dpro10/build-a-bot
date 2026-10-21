@@ -26,6 +26,7 @@ const { dictate, loadVoiceContext, speechToTextAvailable, voicePolishAvailable }
 const { addEntry } = await import("@/lib/dictation/dictionary");
 const { polishPrompt } = await import("@/lib/dictation/polish");
 const { getUsage } = await import("@/lib/billing/usage");
+const { starterCreditMicros } = await import("@/lib/billing/credit");
 import type { User } from "@/lib/db/schema";
 
 let db: Awaited<ReturnType<typeof getDb>>;
@@ -213,7 +214,7 @@ describe("voice typing, end to end", () => {
     const usage = await getUsage(db, owner.id);
     expect(usage.dictationWords).toBeGreaterThan(20);
     expect(usage.costMicros).toBeGreaterThan(0); // speech-to-text and cleanups were paid from credit
-    await db.update(schema.usage).set({ costMicros: 1_000_001 }).where(eq(schema.usage.userId, owner.id)); // past the starter dollar
+    await db.update(schema.usage).set({ costMicros: starterCreditMicros() + 1 }).where(eq(schema.usage.userId, owner.id)); // past the starter credit
     fakeGroq([], []);
     const out = await dictate(db, owner, { ...base, audio: audio() });
     expect(out).toEqual({ ok: false, status: 402, code: "no_credit", error: "You're out of credit. Adding credit is coming soon." });

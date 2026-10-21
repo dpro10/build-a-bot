@@ -550,7 +550,7 @@ Diego: "since I'm submitting this in a hackathon, I don't want to make plans bec
 | A recording heard on our server instead | what the speech service charges |
 | A bot on your own AI key, or your Claude or ChatGPT subscription | free here (fair use: 100,000 messages a month) |
 
-- **Starter credit:** $1 for every account (`STARTER_CREDIT_USD`; 0 turns it off), about 2,400 messages on Nemotron 3.5 Lightning, so testers and hackathon judges can try everything without a card. An account without a confirmed email still gets only 5 messages on an included model. Bot creation (which makes anonymous accounts) is rate-limited, so the starter credit is what one person can cost us.
+- **Starter credit:** $1 for every account (`STARTER_CREDIT_USD`; 0 turns it off), about 2,400 messages on Nemotron 3.5 Lightning, so testers and hackathon judges can try everything without a card. (Raised to $5 on 2026-10-21: see "Decision: $5 of starter credit".) An account without a confirmed email still gets only 5 messages on an included model. Bot creation (which makes anonymous accounts) is rate-limited, so the starter credit is what one person can cost us.
 - **Adding credit:** $5, $10 or $20 through Stripe Checkout, as one-time payments (no products or prices to set up in Stripe). Stripe's fee (2.9% + 30¢) goes on top, so the credit is all theirs: $5.46, $10.61 or $20.91 on the card. The webhook adds it once per Checkout session, however often it arrives. Credit never expires. Without Stripe, adding credit says "Coming soon"; in demo mode it's added without paying, up to $20 an account (the live site runs in demo mode with the real models' keys, so this bounds what one account can cost us).
 - **Refunds (Claude's default, Diego to confirm):** unused credit someone added is refunded to their card when they ask, less Stripe's fee (Stripe doesn't return it). Starter credit isn't cashable. The terms, the privacy policy and Credit & usage say so, and deleting an account says to ask first.
 - **Running out:** nothing is charged on its own. Whatever costs money checks for credit first: a turn on an included model, a lookup, a text or a call, a cloud-browser task, a recording heard on our server, voice typing's AI cleanup, editing by voice, meeting notes written by an included model. The owner hears "You're out of credit…" with how to add some or switch the bot to their own AI; people who message the bot hear "I can't answer right now". A balance can dip a fraction of a cent below zero, because a message's cost is known only once it's answered; the next credit added covers it.
@@ -652,7 +652,7 @@ Diego: "I want the app, on both mac and windows to be a 1 click install. can we 
 Outside demo mode nothing is simulated. Anything without its service set up says **"Coming soon"** and can't be picked or set up:
 
 - **Channels:** texts and calls until Twilio is set up; the email channel and the bot's own inbox until there's a brand-free mail domain (`BOT_EMAIL_DOMAIN`) with an inbound provider. The Resend key for sign-in no longer turns bot email on. The working channels are web, Telegram, Discord and Slack.
-- **Adding credit:** until Stripe is set up, Credit & usage says "Coming soon", and the $1 of starter credit is what there is (there are no plans since 2026-10-16). Old `plan:plus` and `plan:pro` waitlist sign-ups show on `/admin` as "(from before)".
+- **Adding credit:** until Stripe is set up, Credit & usage says "Coming soon", and the starter credit ($5 since 2026-10-21) is what there is (there are no plans since 2026-10-16). Old `plan:plus` and `plan:pro` waitlist sign-ups show on `/admin` as "(from before)".
 - **The desktop app, and with it meeting notes and voice typing:** offered from the site's own `/download` page, which lists the latest signed builds (since 2026-10-20; `NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL` can point elsewhere).
 - **Web actions:** until Browser Use is set up. The same goes for web search and news without their keys.
 - **Copy and recipes:** the home page, metadata and recipes only promise what works. Recipes drop channels that aren't available, so all ten featured ones can be made.
@@ -813,7 +813,7 @@ Diego: "I really like that front desk for businesses idea. Lets hold on to it." 
 ## Open questions (updated 2026-10-17)
 
 1. First users: tinkerers or everyday iPhone users? (unchanged)
-2. Pricing: decided on 2026-10-16, pay for what you use at cost (see that decision). Still Diego's call: the starter credit ($1), refunding unused credit when someone asks, and when, if ever, to add a margin.
+2. Pricing: decided on 2026-10-16, pay for what you use at cost (see that decision). Still Diego's call: refunding unused credit when someone asks, and when, if ever, to add a margin. (The starter credit was decided on 2026-10-21: $5.)
 3. Web actions: confirm Browser Use Cloud (see above), then test with a live key on about 10 real forms before turning it on for everyone.
 4. Buy a brand-free domain for bot inboxes; Twilio A2P registration; Composio plan. (The Bridge no longer needs npm: since 2026-10-14 the site serves its own copy and the app shows `npx -y {APP_URL}/downloads/build-a-bot-bridge-<version>.tgz`. The bare npm name stays unclaimed, and nothing points at it.)
 5. Trademark clearance before brand spend (unchanged).
@@ -956,7 +956,7 @@ Diego: "Let’s switch off demo mode yeah, I’ll do the rest when I get home". 
 - **What changes on the live site:** nothing is simulated any more. Anything whose service isn't set up says "Coming soon" (see "what real testers see"):
   - texts, until the number is registered (A2P);
   - the email channel and the bot's own inbox, until there's a mail domain;
-  - adding credit, until Stripe is set up (everyone has the $1 starter credit);
+  - adding credit, until Stripe is set up (everyone has the starter credit, $5 since 2026-10-21);
   - web actions, until Browser Use is set up.
 
   Demo mode's free credit ends: up to $20 per account, paid by the real Token Factory key. So do its 10× looser rate limits.
@@ -1033,3 +1033,17 @@ The fourth cohesion pass before the hackathon.
   - A "Before submitting" list holds what only Diego can do.
 - **`BUILD.md` moved to `docs/history/first-build-brief.md`.** Its slice was built long ago, and its rules from day one still apply. `AGENTS.md` and the README point there.
 - **The research notes and reports were never in the repository.** `research_notes/` and `reports/` are excluded locally (`.git/info/exclude`), so the public repository doesn't have them. The dated research in `docs/research*` stays: it's cited from the code and the decisions.
+
+## Decision: $5 of starter credit (Diego, 2026-10-21)
+
+Diego: "give people like $5 free credit to start. I still have $50 in free credit on nebius so no need to be stingy."
+
+- **Every account starts with $5 of credit** (it was $1): about 12,000 messages on Nemotron 3.5 Lightning. It's the default in the code (`src/lib/billing/credit.ts`), so nothing changes in Vercel; `STARTER_CREDIT_USD` still overrides it (0 for none).
+- **Accounts that already exist get it too.** A balance is worked out from the starter credit each time (starter + added − used), so every balance went up by $4, including accounts that had used up their $1.
+- **Before signing in, it's still 5 free messages** on an included model, then sign in with an email.
+- **What it can cost:** the daily ceilings still bound the included brain, web lookups and voice typing across the whole site, and the share any one account, or the accounts that haven't signed in, can take. Those bounds don't depend on the starter credit. The ceilings don't cover a few paid things, but those cost little per use and have their own limits:
+  - scanned pages read in the Library (up to a set number per file);
+  - meeting notes;
+  - calls from the app (Nemotron's tokens; 15 minutes at most, 20 calls an hour).
+
+  Phone calls reach a bot only from its owner's linked phone. The minutes they cost are paid to Twilio, not from the Nebius credit.

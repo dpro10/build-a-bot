@@ -10,11 +10,14 @@ import { schema, type Db } from "@/lib/db";
 import { newId } from "@/lib/utils";
 import { DEMO_CREDIT_CAP_USD } from "./prices";
 
+/** Diego, 2026-10-21: "give people like $5 free credit to start". */
+const STARTER_CREDIT_DEFAULT_USD = 5;
+
 /** Credit every account starts with, so it can be tried without a card. STARTER_CREDIT_USD changes it (0: none). */
 export function starterCreditMicros(): number {
   const raw = process.env.STARTER_CREDIT_USD?.trim();
-  const usd = raw ? Number(raw) : 1;
-  return Number.isFinite(usd) && usd >= 0 ? Math.round(usd * 1_000_000) : 1_000_000;
+  const usd = raw ? Number(raw) : STARTER_CREDIT_DEFAULT_USD;
+  return Math.round((Number.isFinite(usd) && usd >= 0 ? usd : STARTER_CREDIT_DEFAULT_USD) * 1_000_000);
 }
 
 export type Credit = {

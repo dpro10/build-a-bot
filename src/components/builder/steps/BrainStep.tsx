@@ -42,7 +42,7 @@ export function BrainStep({
   keyMessage: string | null;
   onValidate: () => void;
   demo: boolean;
-  /** Credit every account starts with ("$1.00"), or null when there's none. */
+  /** Credit every account starts with ("$5.00"), or null when there's none. */
   starterCredit: string | null;
   botName: string;
 }) {

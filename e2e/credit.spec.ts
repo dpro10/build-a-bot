@@ -7,7 +7,7 @@ import { expect, test, type Locator } from "@playwright/test";
 test("the pricing page shows what things cost, with no plans to pick", async ({ page }) => {
   await page.goto("/pricing");
   await expect(page.getByRole("heading", { name: "Pay for what you use. At cost." })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "$1.00 to start" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "$5.00 to start" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "What things cost." })).toBeVisible();
   // A typical message on the default model: 5,000 tokens in at $0.06/M and 500 out at $0.24/M.
   const thinking = page.getByRole("region", { name: "Thinking, on the open models we run" });
@@ -37,13 +37,13 @@ test("Credit & usage: the balance, adding credit (free in demo mode) and its his
 
   await page.goto("/app/billing");
   await expect(page.getByRole("heading", { name: "Credit & usage" })).toBeVisible();
-  await expect(page.locator("#credit-balance")).toHaveText("$1.00");
+  await expect(page.locator("#credit-balance")).toHaveText("$5.00");
   await expect(page.getByText("Starter credit, to try everything")).toBeVisible();
   await expect(page.getByText("Demo mode: credit is added instantly and nothing is charged (up to $20 an account).")).toBeVisible();
 
   await page.getByRole("button", { name: /Add \$10 of credit/ }).click();
   await expect(page.getByText("Added $10 of credit.")).toBeVisible();
-  await expect(page.locator("#credit-balance")).toHaveText("$11.00");
+  await expect(page.locator("#credit-balance")).toHaveText("$15.00");
   await expect(page.getByText("Demo credit (nothing charged)")).toBeVisible();
 
   // What things cost, and where the rest of the prices are.
@@ -51,7 +51,7 @@ test("Credit & usage: the balance, adding credit (free in demo mode) and its his
   await expect(page.getByRole("link", { name: "Every model and price" })).toHaveAttribute("href", "/pricing");
 
   await page.goto("/app/account");
-  await expect(page.getByText("$11.00 left")).toBeVisible();
+  await expect(page.getByText("$15.00 left")).toBeVisible();
 });
 
 test("before signing in: a few messages on us, then a link to sign in that comes back to the chat", async ({ page, isMobile }) => {

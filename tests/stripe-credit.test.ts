@@ -151,7 +151,7 @@ describe("Stripe's webhook", () => {
   it("credits a paid session once, however often it arrives", async () => {
     expect((await webhook(paidSession("cs_test_paid"))).status).toBe(200);
     expect((await webhook(paidSession("cs_test_paid"))).status).toBe(200);
-    expect(await getCredit(db, owner.id)).toMatchObject({ addedMicros: 10_000_000, balanceMicros: 11_000_000 });
+    expect(await getCredit(db, owner.id)).toMatchObject({ addedMicros: 10_000_000, balanceMicros: 15_000_000 });
     const [row] = await db.select().from(schema.credits);
     expect(row).toMatchObject({ userId: owner.id, kind: "topup", amountMicros: 10_000_000, paidCents: 1061, stripeSessionId: "cs_test_paid" });
   });

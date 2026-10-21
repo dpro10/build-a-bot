@@ -101,13 +101,13 @@ describe("prices", () => {
 
 describe("the balance", () => {
   it("is the starter credit, plus what was added, minus what everything cost", async () => {
-    expect(starterCreditMicros()).toBe(1_000_000);
+    expect(starterCreditMicros()).toBe(5_000_000);
     const u = await person("usr_balance");
-    expect(await getCredit(db, u.id)).toEqual({ balanceMicros: 1_000_000, starterMicros: 1_000_000, addedMicros: 0, spentMicros: 0 });
+    expect(await getCredit(db, u.id)).toEqual({ balanceMicros: 5_000_000, starterMicros: 5_000_000, addedMicros: 0, spentMicros: 0 });
     await recordUsage(db, u.id, { includedMessages: 1, messages: 1, costMicros: 420 });
     await recordUsage(db, u.id, { searches: 1, costMicros: prices.UNIT_PRICES.lookup }, new Date("2026-09-15T12:00:00Z")); // last month counts too
     await addCredit(db, { userId: u.id, kind: "topup", amountMicros: 10_000_000, paidCents: 1061, stripeSessionId: "cs_test_balance" });
-    expect(await getCredit(db, u.id)).toEqual({ balanceMicros: 1_000_000 + 10_000_000 - 8_420, starterMicros: 1_000_000, addedMicros: 10_000_000, spentMicros: 8_420 });
+    expect(await getCredit(db, u.id)).toEqual({ balanceMicros: 5_000_000 + 10_000_000 - 8_420, starterMicros: 5_000_000, addedMicros: 10_000_000, spentMicros: 8_420 });
     expect(await creditHistory(db, u.id)).toMatchObject([{ kind: "topup", amountMicros: 10_000_000, paidCents: 1061 }]);
   });
 
@@ -124,7 +124,7 @@ describe("the balance", () => {
     process.env.STARTER_CREDIT_USD = "2.5";
     expect(starterCreditMicros()).toBe(2_500_000);
     process.env.STARTER_CREDIT_USD = "lots";
-    expect(starterCreditMicros()).toBe(1_000_000);
+    expect(starterCreditMicros()).toBe(5_000_000);
     delete process.env.STARTER_CREDIT_USD;
   });
 });
@@ -133,7 +133,7 @@ describe("what costs money checks for credit first", () => {
   it("an included model, a lookup and a cloud-browser task need credit; out of it, it says how to get more", async () => {
     const u = await person("usr_spender");
     for (const kind of ["included", "lookup", "webTask"] as const) expect(await checkSpend(db, u, kind), kind).toEqual({ ok: true });
-    await recordUsage(db, u.id, { costMicros: 1_000_000 }); // exactly the starter dollar: nothing left
+    await recordUsage(db, u.id, { costMicros: 5_000_000 }); // exactly the starter credit: nothing left
     expect(await hasCredit(db, u.id)).toBe(false);
     expect(await checkSpend(db, u, "included")).toEqual({
       ok: false,
@@ -174,7 +174,7 @@ describe("demo mode", () => {
     const res = await demoRoute.POST(post("http://localhost/api/billing/demo", { usd: 10 }));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ added: 10, demo: true });
-    expect(await getCredit(db, u.id)).toMatchObject({ addedMicros: 10_000_000, balanceMicros: 11_000_000 });
+    expect(await getCredit(db, u.id)).toMatchObject({ addedMicros: 10_000_000, balanceMicros: 15_000_000 });
     expect(await creditHistory(db, u.id)).toMatchObject([{ kind: "demo", amountMicros: 10_000_000, paidCents: null }]);
     // Up to $20 an account: a demo site with real keys still pays for what's used.
     const tooMuch = await demoRoute.POST(post("http://localhost/api/billing/demo", { usd: 20 }));
@@ -193,14 +193,14 @@ describe("signing in to an account you already had", () => {
     const existing = await person("usr_existing");
     const anon = await person("usr_built_first", false);
     await addCredit(db, { userId: anon.id, kind: "demo", amountMicros: 5_000_000 });
-    await recordUsage(db, anon.id, { costMicros: 3_000_000 }); // $1 of starter credit, then $2 of the $5
+    await recordUsage(db, anon.id, { costMicros: 7_000_000 }); // $5 of starter credit, then $2 of the $5 added
     // Opened in the browser that asked for it (its sign-in cookie), so the account comes along.
     const browser = "b".repeat(43);
     const link = await createLoginLink(db, { email: existing.email!, anonymousUserId: anon.id, browser });
     const signedIn = await consumeLoginLink(db, new URL(link).searchParams.get("token")!, browser);
     expect(signedIn?.user.id).toBe(existing.id);
     expect((await db.select().from(schema.users).where(eq(schema.users.id, anon.id))).length).toBe(0);
-    expect(await getCredit(db, existing.id)).toMatchObject({ addedMicros: 3_000_000, balanceMicros: 4_000_000 });
+    expect(await getCredit(db, existing.id)).toMatchObject({ addedMicros: 3_000_000, balanceMicros: 8_000_000 });
     // It was demo credit (a card needs an email first), and it stays demo credit.
     expect(await creditHistory(db, existing.id)).toMatchObject([{ kind: "demo", amountMicros: 3_000_000 }]);
   });
