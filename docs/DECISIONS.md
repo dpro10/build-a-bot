@@ -642,7 +642,7 @@ Diego: "I want the app, on both mac and windows to be a 1 click install. can we 
   - the Windows installer with Azure Artifact Signing ($9.99 a month; individuals in the US and Canada).
   - **Diego to do:** enroll in both (each checks his ID, which takes days), then put their keys in GitHub (`docs/DEPLOY.md` §9).
 - **Where downloads come from:** each signed build is a GitHub release (`desktop-v0.1.<run>`). The download page and the apps' update checks go through build-a-bot.site, which sends them on to the files, so the files can move without a new app. The repository has to be public for anyone to download them (the hackathon needs it public anyway). **Diego to decide.**
-- **Last step:** set `NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL=https://build-a-bot.site/download` in Vercel. That turns on the desktop app, and with it meeting notes and voice typing, across the site.
+- **Last step:** ~~set `NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL=https://build-a-bot.site/download` in Vercel~~. Not needed since 2026-10-20: the site's own `/download` page is the default (see "Decision: demo mode off on the live site").
 - Until signing is set up, every push to main still publishes both apps, unsigned, as the **Desktop app (test build)** pre-release, for testing.
 - **Mac: signed and notarized** (2026-10-17). Diego already had a Developer ID Application certificate and an App Store Connect team key on his Mac; he ran `desktop/scripts/set-mac-signing-secrets.sh`, which saved the five secrets in GitHub without the key passing through Claude. Two CI fixes followed: electron-builder's own temporary keychain won't unlock on the macOS 26 runners, so the workflow imports the certificate into its own keychain; and the .dmg is now signed, notarized and stapled as well as the app. First signed release: `desktop-v0.1.28`. Checked on Diego's Mac as a downloaded file: Gatekeeper accepts the disk image and the app (`source=Notarized Developer ID`, Diego Prozzi, GT5MPW83L7), both stapled, universal.
 - **Windows: signed** (2026-10-17). Diego made an Azure account with his personal email (not his university one, so it stays his), upgraded it to pay-as-you-go (Artifact Signing refuses free trials) and passed the individual identity validation (valid until 2027-10-17). Azure: resource group `build-a-bot-signing` (East US), signing account `buildabot-signing` (Basic, about $10 a month), certificate profile `buildabot-public` (Public Trust; subject CN=Diego Prozzi, without his street address or postal code), app registration `build-a-bot-desktop-signing` with the Certificate Profile Signer role. GitHub: its tenant ID, client ID and secret as secrets; `AZURE_SIGNING_ENDPOINT`, `AZURE_SIGNING_ACCOUNT`, `AZURE_SIGNING_PROFILE` and `AZURE_SIGNING_PUBLISHER` ("Diego Prozzi") as variables. The first signed installer checked Valid on a Windows runner, then installed and ran.
@@ -653,7 +653,7 @@ Outside demo mode nothing is simulated. Anything without its service set up says
 
 - **Channels:** texts and calls until Twilio is set up; the email channel and the bot's own inbox until there's a brand-free mail domain (`BOT_EMAIL_DOMAIN`) with an inbound provider. The Resend key for sign-in no longer turns bot email on. The working channels are web, Telegram, Discord and Slack.
 - **Adding credit:** until Stripe is set up, Credit & usage says "Coming soon", and the $1 of starter credit is what there is (there are no plans since 2026-10-16). Old `plan:plus` and `plan:pro` waitlist sign-ups show on `/admin` as "(from before)".
-- **The desktop app, and with it meeting notes and voice typing:** until there's a signed download (`NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL`). In demo mode the pages say how to run it from the repo.
+- **The desktop app, and with it meeting notes and voice typing:** offered from the site's own `/download` page, which lists the latest signed builds (since 2026-10-20; `NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL` can point elsewhere).
 - **Web actions:** until Browser Use is set up. The same goes for web search and news without their keys.
 - **Copy and recipes:** the home page, metadata and recipes only promise what works. Recipes drop channels that aren't available, so all ten featured ones can be made.
 
@@ -949,3 +949,23 @@ Found in the review before the hackathon. Opening a sign-in link used to sign in
 - **Opened anywhere else** (another device, or a mail scanner checking the link), nothing is used up. `/auth/confirm` shows the email, and its button (a POST from this site) signs in to that email's own account only. Bots made in the other browser stay there; opening the link in that browser brings them along.
 - **Rate limits:** one network can ask for 30 sign-in links an hour, on top of the 5 per address per 15 minutes.
 
+## Decision: demo mode off on the live site (Diego, 2026-10-20)
+
+Diego: "Let’s switch off demo mode yeah, I’ll do the rest when I get home". It was decided on 2026-10-14 and left for him since the 2026-10-16 sign-in fix.
+
+- **What changes on the live site:** nothing is simulated any more. Anything whose service isn't set up says "Coming soon" (see "what real testers see"):
+  - texts, until the number is registered (A2P);
+  - the email channel and the bot's own inbox, until there's a mail domain;
+  - adding credit, until Stripe is set up (everyone has the $1 starter credit);
+  - web actions, until Browser Use is set up.
+
+  Demo mode's free credit ends: up to $20 per account, paid by the real Token Factory key. So do its 10× looser rate limits.
+- **What stays on:** the desktop app, and with it meeting notes and voice typing. Its download now defaults to the site's own `/download` page, which lists the latest signed builds, so `NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL` is no longer needed. Before this, turning demo mode off would have made all three "Coming soon".
+- **Leftovers from demo mode**, put right by housekeeping within a minute of the switch (`src/lib/bots/demo-leftovers.ts`):
+  - Apps connected with sample data stop serving it and ask for a real sign-in, or say "coming soon" when there's no way to sign in to them here. The tool registry stops serving sample data the moment demo mode is off.
+  - Channels that ran simulated go back to "set up", with their stand-in addresses cleared.
+  - The runtime log says how many: `[demo] out of demo mode: …`.
+- **The switch (Diego's login):**
+  1. In Vercel → build-a-bot → Settings → Environment Variables, delete `DEMO_MODE` for Production and Preview (or set it to `0`). Previews share the live database.
+  2. Optionally delete `BRIDGE_CLI`; nothing reads it since the Bridge was removed.
+  3. Then Claude redeploys and checks the live site.

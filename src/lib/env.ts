@@ -135,8 +135,11 @@ export const config = {
     secretKey: v("STRIPE_SECRET_KEY"),
     webhookSecret: v("STRIPE_WEBHOOK_SECRET"),
   },
-  /** The desktop app for meeting notes (desktop/): where its signed downloads are. Unset = "Coming soon". */
-  desktop: { downloadUrl: v("NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL") },
+  /**
+   * The desktop app (desktop/: meeting notes and voice typing): where to get it. The site's own
+   * download page, which offers the latest signed builds, unless another address is set.
+   */
+  desktop: { downloadUrl: v("NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL") ?? "/download" },
   /**
    * The voice server (voice/): calls with a bot, by phone or in the browser, heard and spoken by
    * NVIDIA's open speech models. VOICE_SERVER_URL is its https:// address; the secret is shared

@@ -10,6 +10,7 @@ import { DEFAULT_BUILTINS } from "@/lib/connectors/builtin";
 import { getConnector, isBuiltinConnector } from "@/lib/connectors";
 import { connectorUsable } from "@/lib/connectors/availability";
 import { demoToolsFor } from "@/lib/connectors/demo-tools";
+import { demoMode } from "@/lib/env";
 import { evaluate } from "@/lib/policy/engine";
 import { isTrustLevel, type TrustLevel } from "@/lib/trust";
 import { BUILTIN_TOOLS } from "./builtin";
@@ -28,7 +29,8 @@ export const MAX_TOOLS = 48;
 async function connectionTools(conn: Connection, ctx: ToolContext): Promise<AnyToolSpec[]> {
   const def = getConnector(conn.connectorId);
   if (!def) return [];
-  if (conn.status === "demo" || conn.mode === "demo") return demoToolsFor(def);
+  // Sample data only while this server is in demo mode: out of it, the app needs a real sign-in.
+  if (conn.status === "demo" || conn.mode === "demo") return demoMode ? demoToolsFor(def) : [];
   if (conn.status !== "connected") return [];
   if (conn.mode === "mcp") {
     const { mcpToolsForConnection } = await import("@/lib/connectors/mcp/tools");
