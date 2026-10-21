@@ -746,7 +746,7 @@ A code review of the server and the desktop app. Each fix has a test that fails 
 
 - Nemotron and other reasoning models: thinking eats `max_tokens`. Included models get 8–16K, and thinking is off on "Quick".
 - Avatars and the logo use per-instance SVG gradient ids. A duplicate id inside a hidden copy (the desktop sidebar on phones) blanks every later copy.
-- Custom OpenAI-compatible endpoints are checked against private and metadata addresses and may not redirect (SSRF).
+- Custom OpenAI-compatible endpoints are checked against private and metadata addresses and may not redirect (SSRF). Since 2026-10-21 every address someone else chose goes through `publicFetch` (see "Security: addresses someone else chose, and a day's ceilings shared out").
 - `ENCRYPTION_KEY` must be shared by every server instance. Production refuses to start with `DATABASE_URL` but no key.
 - `next dev` appends Next.js agent rules to AGENTS.md unless `agentRules: false` (set in `next.config.ts`).
 - Per-minute Vercel Cron needs a paid plan; otherwise an external pinger calls `/api/cron/tick`.
@@ -1000,3 +1000,20 @@ The second cohesion pass after Diego's "its time to start rounding this off into
 - **Telegram** lost "one tap" and "instant": on the live site the managed bot is on hold, and a Telegram bot comes from BotFather.
 - **The descriptions for search results, link previews and the app manifest** name only the channels that work on that deployment, as the hero does. They no longer list Discord as always there, or calls as coming soon.
 - **NVIDIA × Nebius above the fold:** the hero now says the bot's brain is NVIDIA Nemotron and other open models on Nebius, at cost.
+
+## Security: addresses someone else chose, and a day's ceilings shared out (2026-10-21)
+
+The third cohesion pass, from the review before the hackathon.
+
+- **Addresses someone else chose never reach our network** (`publicFetch` in `src/lib/tools/net.ts`). This covers a page a bot reads, your own MCP server, the OAuth endpoints an MCP server names, a custom AI endpoint, and a cloud browser's screenshot. Before, there were three holes:
+  - **Redirects.** The web reader followed them unchecked: a public page could bounce it to the cloud metadata address. Now every redirect is checked like the first, and credentials don't follow a redirect to another site.
+  - **MCP servers and their sign-in endpoints** weren't checked at all. Now a private address is refused when the server is added, and again on every request.
+  - **IPv6 spellings.** "::ffff:169.254.169.254" passed the check, because URLs write it as "::ffff:a9fe:a9fe". Now the IPv4 address inside any IPv6 one is judged (mapped, NAT64, 6to4, Teredo), and more reserved ranges are refused.
+
+  Names are checked again when the connection is made (DNS rebinding): `undici`'s connection lookup refuses any private answer, so a name that resolved somewhere public a moment earlier gets nowhere. `undici` 6.29.1 was already installed through `@vercel/blob`; it's now listed directly.
+- **No one can use up a day's ceiling for everyone** (`roomToday` in `src/lib/billing/ceiling.ts`). Accounts are cheap to make: a cookie each, five free messages each, 20 an hour from one network. So a handful of networks could have used the whole day's turns on the open models (3,000), or its web lookups (300), and stopped everyone. Now each ceiling is shared out:
+  - Each account gets a share: a tenth of turns and lookups, a twentieth of dictations.
+  - Accounts that haven't signed in get, all together, a quarter of turns and a tenth of lookups and dictations.
+  - From one network (an IPv4 address, or an IPv6 /64) they get 50 turns a day.
+
+  Shares have floors (50 turns, 10 lookups, 300 dictations), so a site run for a few people isn't split up. A turn that doesn't fit counts against nothing. When the shared-out allowance for accounts that haven't signed in runs out, the web chat says to sign in (free) and links to it.

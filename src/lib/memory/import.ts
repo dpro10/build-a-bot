@@ -10,7 +10,7 @@
 import { schema, type Db } from "@/lib/db";
 import type { Bot, User } from "@/lib/db/schema";
 import { containsSecret } from "@/lib/policy/engine";
-import { underDailyCeiling } from "@/lib/billing/ceiling";
+import { spenderOf, underDailyCeiling } from "@/lib/billing/ceiling";
 import { ownerName } from "@/lib/agent/prompt";
 import { newId } from "@/lib/utils";
 import { MAX_MEMORIES, MAX_PINNED, compareFacts, findSameFact, loadMemories, terms } from "./index";
@@ -175,7 +175,7 @@ async function tidy(db: Db, bot: Bot, owner: User, text: string): Promise<{ text
   const { resolveBrain } = await import("@/lib/agent/brain");
   const brain = await resolveBrain(db, { ...bot, brain: { kind: "included", provider: "nebius", model: TIDY_MODEL, effort: "low" } });
   if (brain.kind !== "llm" || brain.providerId === "demo") return null;
-  if (!(await underDailyCeiling(db, "included"))) return null;
+  if (!(await underDailyCeiling(db, "included", 1, spenderOf(owner)))) return null;
   let out = "";
   try {
     for await (const ev of brain.provider.stream({

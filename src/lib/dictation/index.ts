@@ -21,7 +21,7 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { schema, type Db } from "@/lib/db";
 import type { DictionaryEntry, User } from "@/lib/db/schema";
-import { underDailyCeiling } from "@/lib/billing/ceiling";
+import { roomToday, spenderOf, type Room } from "@/lib/billing/ceiling";
 import { getUsage, recordUsage } from "@/lib/billing/usage";
 import { hasCredit, outOfCreditMessage } from "@/lib/billing/credit";
 import { creditOpen, demoMode, demoSpeech } from "@/lib/env";
@@ -56,6 +56,14 @@ export const MAX_HEARD_CHARS = 20_000;
 export const MIN_SPEECH_MS = 250;
 /** A guard for "unlimited" plans: about 8 hours of nonstop talking a day. */
 export const DAILY_DICTATIONS = 3000;
+
+/** Why voice typing can't take more today, by what ran out (billing/ceiling.ts). */
+const DICTATION_CEILING: Record<Exclude<Room, "ok">, string> = {
+  site: "Voice typing is very busy today. Try again in a little while.",
+  account: "That's a lot of voice typing for one day. It resets tomorrow.",
+  guests: "Voice typing is very busy today for accounts that haven't signed in. Sign in with your email to keep going.",
+  network: "Voice typing is very busy today for accounts that haven't signed in. Sign in with your email to keep going.",
+};
 
 export const MAX_WORDS = 500;
 export const MAX_SNIPPETS = 100;
@@ -215,7 +223,8 @@ export async function dictate(db: Db, owner: User, input: DictateInput): Promise
   // Voice typing is for people, not scripts: a daily cap per account, and one for the whole site.
   const today = await rateLimit(db, `dictate-day:${owner.id}`, DAILY_DICTATIONS, 86_400);
   if (!today.ok) return { ok: false, status: 429, code: "daily", error: "That's a lot of voice typing for one day. It resets tomorrow." };
-  if (!(await underDailyCeiling(db, "dictation"))) return { ok: false, status: 503, code: "busy", error: "Voice typing is very busy today. Try again in a little while." };
+  const room = await roomToday(db, "dictation", spenderOf(owner));
+  if (room !== "ok") return { ok: false, status: 503, code: "busy", error: DICTATION_CEILING[room] };
 
   const ctx = await loadVoiceContext(db, owner);
   const prompt = whisperPrompt(ctx.vocabulary);
@@ -352,7 +361,8 @@ export async function editByVoice(db: Db, owner: User, input: EditByVoiceInput):
   if (setup && !(await hasCredit(db, owner.id))) return { ok: false, status: 402, code: "no_credit", error: outOfCreditMessage({ canAdd: creditOpen }) };
   const today = await rateLimit(db, `dictate-day:${owner.id}`, DAILY_DICTATIONS, 86_400);
   if (!today.ok) return { ok: false, status: 429, code: "daily", error: "That's a lot of voice typing for one day. It resets tomorrow." };
-  if (!(await underDailyCeiling(db, "dictation"))) return { ok: false, status: 503, code: "busy", error: "Voice typing is very busy today. Try again in a little while." };
+  const room = await roomToday(db, "dictation", spenderOf(owner));
+  if (room !== "ok") return { ok: false, status: 503, code: "busy", error: DICTATION_CEILING[room] };
 
   const t0 = Date.now();
   let result: { kind: "replace" | "answer"; text: string };

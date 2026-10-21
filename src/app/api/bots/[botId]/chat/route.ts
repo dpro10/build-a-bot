@@ -3,7 +3,8 @@ import { and, eq, inArray } from "drizzle-orm";
 import { schema } from "@/lib/db";
 import { MAX_ATTACHMENTS } from "@/lib/library/limits";
 import type { AttachedFile } from "@/lib/library/attachments";
-import { apiError, authedBot, limitOr429, parseJson, sameOrigin, type RouteCtx } from "@/lib/api";
+import { apiError, authedBot, clientIp, limitOr429, parseJson, sameOrigin, type RouteCtx } from "@/lib/api";
+import { networkOf } from "@/lib/tools/net";
 import { runTurn } from "@/lib/agent/run";
 import { ensureConversation } from "@/lib/channels/outbound";
 import { sseResponse } from "@/lib/sse";
@@ -49,6 +50,7 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string }>) {
       conversation,
       channelKind: "web",
       message: { text: parsed.data.text, author: "owner", ...(files.length ? { meta: { files } } : {}) },
+      network: networkOf(clientIp(req)),
       emit: send,
       signal,
     });

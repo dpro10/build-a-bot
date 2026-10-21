@@ -2,7 +2,7 @@ import { z } from "zod";
 import { config } from "@/lib/env";
 import { truncate } from "@/lib/utils";
 import { defineTool, type ToolOutput, type ToolSource } from "../types";
-import { assertPublicUrl, fetchWithTimeout, htmlToText, UnsafeUrlError, USER_AGENT } from "../net";
+import { assertPublicUrl, fetchWithTimeout, htmlToText, publicFetch, UnsafeUrlError, USER_AGENT } from "../net";
 
 export type TavilyResult = { title: string; url: string; content: string; published_date?: string };
 
@@ -158,9 +158,9 @@ export const readWebpage = defineTool({
       }
     }
     try {
-      const res = await fetchWithTimeout(url.toString(), {
+      // Redirects are followed one by one, each checked like the first (a public page can't bounce us inward).
+      const res = await publicFetch(url.toString(), {
         headers: { "user-agent": USER_AGENT, accept: "text/html,text/plain;q=0.9,*/*;q=0.5" },
-        redirect: "follow",
         signal: ctx.signal,
         timeoutMs: 15000,
       });
@@ -174,7 +174,8 @@ export const readWebpage = defineTool({
         summary: "Read the page",
         sources: [{ title: title || url.hostname, url: url.toString() }],
       };
-    } catch {
+    } catch (err) {
+      if (err instanceof UnsafeUrlError) return { ok: false, error: err.message };
       if (ctx.demo) {
         return {
           ok: true,
