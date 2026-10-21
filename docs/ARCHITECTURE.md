@@ -293,6 +293,8 @@ There are no plans: people pay for what they use, at cost (`docs/DECISIONS.md`).
 
 Every flow in the product can be tried with zero keys when you run it yourself, and nothing real is sent or charged. `docs/TRY-IT.md` walks through it.
 
+Turned off on a server that ran with it, nothing simulated carries on: the tool registry stops serving sample data, and housekeeping (`src/lib/bots/demo-leftovers.ts`) has simulated apps ask for a real sign-in and simulated channels go back to "set up", their stand-in addresses cleared.
+
 ## Testing
 
 - `npm test`: the policy engine, scheduler math, the receipts trigger, and the full agent pipeline on in-memory Postgres (greeting, STOP/START, reminders, phishing detection, the injection guard under Full faith, approvals, Look only, strangers can't drive the bot, append-only receipts), and meeting notes end to end (chunks → transcript → notes → tools, device tokens, out of credit, stale recordings, notes on the owner's computer, a transcript that tries to make the bot email a stranger), and memory (which memories each brain size gets in a real turn, Bring my memories against a stand-in model and line by line, remember/recall/forget, the pin cap), and voice typing (the text rules on real-world transcripts, the pipeline against a fake Groq: prompts, guards, the AI cleanup's checks and timeouts, snippets, commands, limits; the routes and the dictionary).

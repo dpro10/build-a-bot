@@ -126,4 +126,7 @@ export async function housekeeping(db: Db, now = new Date()) {
   // Telegram's manager webhook and Discord's commands follow their keys (and the domain).
   const { selfSetup } = await import("@/lib/channels/self-setup");
   await selfSetup(db).catch((err) => console.warn("[setup]", (err as Error).message));
+  // Out of demo mode, apps and channels simulated in it need a real setup.
+  const { leaveDemoMode } = await import("@/lib/bots/demo-leftovers");
+  await leaveDemoMode(db).catch((err) => console.warn("[demo]", (err as Error).message));
 }

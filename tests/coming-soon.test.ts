@@ -2,8 +2,8 @@
  * What a real (not demo) server shows as "coming soon" instead of a dead end:
  *  - without Stripe, adding credit is coming soon (there are no plans: people pay for what they
  *    use, and every account has its starter credit), and nothing anywhere says "upgrade";
- *  - without signed downloads, the desktop app is coming soon and the bot doesn't offer it;
- *  - so are meeting notes, which are taken in the desktop app.
+ *  - the desktop app is offered from the site's own download page (the latest signed builds),
+ *    and with it meeting notes, which are taken in the app.
  */
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -95,41 +95,36 @@ describe("adding credit before Stripe is set up", () => {
   });
 });
 
-describe("the desktop app before signed downloads", () => {
-  it("is coming soon, and the bot doesn't send people to it", async () => {
-    expect(desktopApp()).toEqual({ status: "soon" });
+describe("the desktop app", () => {
+  it("is offered from the site's own download page, and the bot points people to it", async () => {
+    expect(desktopApp()).toEqual({ status: "download", url: "/download" });
     const owner = await freeOwner("usr_desk");
     const res = await createBot(db, owner, botInput("Desky", { connectors: ["meetings"] }));
     if (!res.ok) throw new Error(res.error);
     const out = await listMeetings.run({}, { db, bot: res.bot, owner, conversationId: null, channelKind: "web", demo: false, now: new Date() });
-    expect(out).toMatchObject({ ok: true, content: "No meetings yet. Notes are taken with the desktop app, which is coming soon." });
+    expect(out).toMatchObject({
+      ok: true,
+      content: "No meetings yet. The owner takes notes with the desktop app: it offers to when a call starts, and its menu starts notes for a meeting in the room.",
+    });
   });
 
-  it("offers the download once its address is set", () => {
+  it("is offered from another address when one is set", () => {
+    const before = config.desktop.downloadUrl;
     config.desktop.downloadUrl = "https://downloads.example.com/build-a-bot";
     try {
       expect(desktopApp()).toEqual({ status: "download", url: "https://downloads.example.com/build-a-bot" });
     } finally {
-      config.desktop.downloadUrl = undefined;
+      config.desktop.downloadUrl = before;
     }
   });
 });
 
-describe("meeting notes without the desktop app", () => {
-  it("are coming soon", async () => {
+describe("meeting notes", () => {
+  it("are taken with the desktop app, with no speech-to-text here", async () => {
+    expect(meetingNotesAvailable()).toBe(true);
     const owner = await freeOwner("usr_notes");
     const res = await createBot(db, owner, botInput("Scribe", { connectors: ["meetings"] }));
     if (!res.ok) throw new Error(res.error);
-    expect(meetingNotesAvailable()).toBe(false);
-    expect(await startMeeting(db, { bot: res.bot, owner, source: "desktop" })).toMatchObject({ ok: false, status: 503, code: "unavailable", error: "Meeting notes are coming soon." });
-  });
-
-  it("are offered once the app can be downloaded, with no speech-to-text here", () => {
-    config.desktop.downloadUrl = "https://downloads.example.com/build-a-bot";
-    try {
-      expect(meetingNotesAvailable()).toBe(true);
-    } finally {
-      config.desktop.downloadUrl = undefined;
-    }
+    expect(await startMeeting(db, { bot: res.bot, owner, source: "desktop" })).toMatchObject({ ok: true, meeting: { status: "recording" } });
   });
 });

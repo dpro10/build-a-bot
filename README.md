@@ -92,7 +92,7 @@ Web chat, phone calls and texts (Twilio), email (its own brand-free address), Te
 - **Heard on your computer:** NVIDIA Parakeet turns the call into text on the computer, about 20 seconds at a time, and only the lines are sent. The audio never leaves the computer.
 - Afterwards it writes a summary, decisions and action items, sends them to you, and answers questions about past meetings ("What did we decide?").
 - The **Meetings** tab on the website has the meetings and their notes (search, action items to tick off, export), and gets you the app. The website itself never records.
-- Without `NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL` (set on build-a-bot.site since 2026-10-17), a real server shows the desktop app as "Coming soon"; demo mode shows how to run it from this repo.
+- The site offers the app from its own `/download` page, which lists the latest signed builds (`NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL` can point elsewhere).
 - It never records without a yes, only listens while it's on screen, and throws each piece of audio away once it's text. Transcripts are kept 90 days by default; notes stay until deleted.
 
 ### Voice typing (beta)

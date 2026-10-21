@@ -138,8 +138,10 @@ afterAll(async () => {
 describe("built-ins whose service isn't set up are coming soon", () => {
   it("lists them, and not the ones that need no key", () => {
     const soon = comingSoonConnectors();
-    expect(soon).toEqual(expect.arrayContaining(["browser", "web_search", "news", "meetings"]));
+    expect(soon).toEqual(expect.arrayContaining(["browser", "web_search", "news"]));
     for (const id of ["memory", "reminders", "weather", "currency", "notes", "web_reader", "wikipedia"]) expect(soon).not.toContain(id);
+    // Meeting notes come with the desktop app, which the site's own download page offers.
+    expect(soon).not.toContain("meetings");
   });
 
   it("web actions can't be added in Apps & trust", async () => {
