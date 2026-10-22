@@ -30,7 +30,7 @@ Diego (2026-10-15): "im in the nvidia x nebius hackathon and the more we create 
 
 ## Before submitting (Diego)
 
-1. **Demo mode off** on the live site: in Vercel, delete `DEMO_MODE` (Production and Preview). Claude redeploys and checks that nothing simulated is left (`docs/DECISIONS.md`, "demo mode off on the live site").
+1. **Demo mode off** on the live site: **done** on 2026-10-22. `DEMO_MODE` is deleted in Vercel, the site was redeployed, and nothing simulated is left (`docs/DECISIONS.md`, "demo mode off on the live site").
 2. **The support email** (`NEXT_PUBLIC_SUPPORT_EMAIL`), shown on the legal, safety and contact pages.
 3. **Zero data retention** for the included models, in the Token Factory console.
 4. **The repository page:** the website (build-a-bot.site), a description and topics. Delete the old "Desktop app (test build)" pre-release: the signed builds replaced it.

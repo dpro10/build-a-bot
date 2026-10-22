@@ -969,6 +969,13 @@ Diego: "Let’s switch off demo mode yeah, I’ll do the rest when I get home". 
   1. In Vercel → build-a-bot → Settings → Environment Variables, delete `DEMO_MODE` for Production and Preview (or set it to `0`). Previews share the live database.
   2. Optionally delete `BRIDGE_CLI`; nothing reads it since the Bridge was removed.
   3. Then Claude redeploys and checks the live site.
+- **Done on 2026-10-22.** Diego: "done, deleted it. redeploy". Claude redeployed production and checked build-a-bot.site:
+  - free demo credit is refused (`/api/billing/demo` answers 404);
+  - there's no demo note on `/build` and no demo strip in the app;
+  - adding credit says "Coming soon", and a new account has $5.00;
+  - `/app/desktop` offers the download, and `/download/mac` and `/download/windows` lead to the signed 0.1.60 builds;
+  - housekeeping logged `[demo] out of demo mode: 2 simulated apps now need a real sign-in, 0 simulated channels a real setup`;
+  - no runtime errors.
 
 ## Build choice (Claude; Diego to confirm): the first five minutes (2026-10-21)
 
