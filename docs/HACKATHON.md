@@ -54,7 +54,7 @@ Nothing on the live site is simulated. Each service that isn't set up says "Comi
 | - | - |
 | Building a bot, and chatting with it on the web | **Real.** The included brains are NVIDIA Nemotron and other open models on Token Factory. Five free messages come before signing in. Then you sign in with your email (a real link, sent by Resend), and the chat picks up where it was. |
 | Your own AI key (Anthropic, OpenAI, Google Gemini, OpenRouter, any OpenAI-compatible endpoint) | **Real**, and free here: the provider bills you. |
-| Web search, reading pages, the tutor's fact checks | **Real**, on Tavily, paid from credit at Tavily's price. |
+| Web search, reading pages, the tutor's fact checks | **Real**, on Tavily, paid from credit at Tavily's price. Every bot can search. |
 | Apps | **Real** wherever there's a way to sign in: about 100 apps, Gmail, Google Calendar and Drive among them: about 60 through Composio's one-click sign-in and about 40 through the app's own MCP sign-in. The rest say "Coming soon". |
 | Your own MCP server | **Real.** Private addresses are refused. |
 | Memory, reminders, routines, approvals, receipts, STOP | **Real.** |

@@ -59,7 +59,7 @@ Recipes prefill it (`/build?recipe=inbox-zero`, or any shared `/r/[slug]`). The 
 
 - A searchable catalog of ~190 apps (110+ connectable today): Gmail, Outlook, Google Calendar/Drive/Docs/Sheets, GitHub, GitLab, Notion, Slack, Linear, Jira, Todoist, Spotify, Stripe and more.
 - Connected through official MCP servers (OAuth 2.1), Composio, or any MCP URL.
-- Built-ins need no sign-in: web search, reader, weather, reminders, notes, memory, its own inbox, meeting notes.
+- Built-ins need no sign-in. Every bot has web search, the page reader, memory, reminders, weather, math and its Library; notes, its own inbox and meeting notes can be added.
 
 ### Trust
 

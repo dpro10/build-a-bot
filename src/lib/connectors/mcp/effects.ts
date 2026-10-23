@@ -1,31 +1,108 @@
 /**
  * Classify third-party tools (MCP / Composio) into effects + risk for the policy
- * engine. Annotations are hints from the server; names are a second signal. When
- * unsure, we pick the more careful classification.
+ * engine. A name's verb says what a tool does: get_, list_, search_, fetch_… only
+ * read, whatever they read (emails, messages, comments, orders). Annotations are
+ * hints from the server: they count where the name has no verb, and when they say a
+ * tool changes things. When unsure, we pick the more careful classification.
  */
 import type { Effect, Risk } from "../types";
 
-const READ = /^(get|list|search|find|read|fetch|query|lookup|look_up|view|show|describe|check|count|retrieve|download|export|summarize|browse|preview)(_|$)|_(get|list|search|find|read|fetch|retrieve)(_|$)/i;
 const SEND = /(^|_)(send|post|reply|comment|message|email|invite|share|publish|tweet|notify|forward|dm|broadcast|mention)(_|s?$)/i;
-const DELETE = /(^|_)(delete|remove|archive|trash|destroy|purge|cancel|unsubscribe|revoke|close)(_|$)/i;
+const DELETE = /(^|_)(deletes?|removes?|archive|trash|destroy|purge|cancel|unsubscribe|revoke|close)(_|$)/i;
 const SPEND = /(^|_)(pay|charge|purchase|buy|order|refund|transfer|payout|checkout|subscribe)(_|$)/i;
 const ADMIN = /(^|_)(permission|permissions|admin|role|roles|member|members|settings|configure|config|grant|sharing|collaborator|webhook)(_|$)/i;
+
+/** Verbs that only read (and "who", as in who_am_i). */
+const READS = new Set(
+  "get gets list lists search searches find finds read reads fetch fetches query queries lookup look view show describe check count retrieve retrieves download export summarize browse preview who".split(" "),
+);
+/** Verbs that change something (the rules below say how carefully to treat it). Plurals only where they can't be nouns. */
+const CHANGES = new Set(
+  (
+    "send sends post reply forward share publish tweet notify broadcast invite delete deletes remove removes archive trash destroy purge cancel " +
+    "unsubscribe revoke close clear reset pay charge purchase buy order refund transfer payout checkout subscribe create creates add adds insert " +
+    "update patch edit modify set put write upload move copy rename duplicate star unstar mark assign unassign schedule reschedule book reserve " +
+    "start stop run execute perform trigger invoke call approve merge accept decline reject enable disable grant configure import sync restore " +
+    "untrash apply save submit upsert replace append link unlink attach detach pin unpin follow unfollow like react vote join leave kick ban mute " +
+    "unmute unblock lock unlock push watch generate convert translate rerequest"
+  ).split(" "),
+);
+
+function words(name: string): string[] {
+  return name.replace(/([a-z])([A-Z])/g, "$1_$2").replace(/[-.\s]/g, "_").toLowerCase().split("_").filter(Boolean);
+}
+
+/** Read words that are often nouns ("free_busy_query", "invitee_no_show"): they count only as a name's first word. */
+const NOUNISH = new Set(["query", "queries", "export", "show", "view", "check", "count", "preview", "lookup", "look"]);
+
+/**
+ * A name's verb: its first word if that's a verb ("send_email", "query_database"). Otherwise (an
+ * app's name or a noun first), a change anywhere in it wins ("sharepoint_create_list",
+ * "calendar_list_insert"), then a read ("events_list", "outlook_list_messages").
+ */
+function verbOf(w: string[]): string | undefined {
+  // "list_or_delete_persons", "get_or_create_contact": the second verb counts too, so the change wins.
+  const joined = w.find((x, i) => ["and", "or", "then"].includes(w[i - 1] ?? "") && CHANGES.has(x));
+  if (joined) return joined;
+  if (w[0] !== undefined && (READS.has(w[0]) || CHANGES.has(w[0]))) return w[0];
+  return w.find((x) => CHANGES.has(x)) ?? w.find((x) => READS.has(x) && !NOUNISH.has(x));
+}
 
 export function classifyTool(
   name: string,
   annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean },
 ): { effect: Effect; risk: Risk } {
-  const n = name.replace(/([a-z])([A-Z])/g, "$1_$2").replace(/[-.\s]/g, "_").toLowerCase();
+  const w = words(name);
+  const n = w.join("_");
+  const verb = verbOf(w);
+  // A server that says a tool changes things is believed over a name that says it reads.
+  const changes = annotations?.readOnlyHint === false || annotations?.destructiveHint === true;
+  if (!changes && (verb ? READS.has(verb) : annotations?.readOnlyHint === true)) return { effect: "read", risk: "low" };
   if (SPEND.test(n)) return { effect: "spend", risk: "high" };
   if (DELETE.test(n)) return { effect: "delete", risk: "high" };
-  if (ADMIN.test(n) && !READ.test(n)) return { effect: "admin", risk: "high" };
+  if (ADMIN.test(n)) return { effect: "admin", risk: "high" };
   if (SEND.test(n)) return { effect: "send", risk: /email|mail|message|dm/.test(n) ? "high" : "medium" };
-  if (annotations?.readOnlyHint === true || READ.test(n)) return { effect: "read", risk: "low" };
   if (annotations?.destructiveHint === true) return { effect: "write", risk: "high" };
   return { effect: "write", risk: "medium" };
 }
 
-const RECIPIENT_KEYS = /^(to|cc|bcc|recipient|recipients|email|emails|attendees|invitees|participants|user_email|share_with|emailaddress|email_address)$/i;
+/** Tools that tune the app itself rather than do the work: settings, access lists, keys, filters, watches. */
+const PLUMBING = /(^|_)(settings?|acl|cse|smime|keypairs?|identities|vacation|imap|pop|forwarding|filters?|send_as|delegates?|webhooks?|watch|colors|quota|language|calendar_list|buildings)(_|$)/;
+/** The verbs of everyday work, by how soon a bot needs them: finding and sending first, then other reads and making things, then changing them. */
+const EVERYDAY = new Map<string, number>();
+for (const v of [...READS, "create", "creates", "add", "adds", "schedule"]) EVERYDAY.set(v, 1);
+for (const v of ["update", "patch", "edit"]) EVERYDAY.set(v, 2);
+for (const v of ["fetch", "fetches", "list", "lists", "search", "searches", "find", "finds", "send", "sends", "reply", "forward", "post"]) EVERYDAY.set(v, 0);
+
+/**
+ * Which of an app's tools a bot gets when it can't have them all (Gmail has 61): half that read
+ * and half that act, where there are enough of each; everyday work first (fetch, search, send,
+ * reply, then create, then update), then the rest, then tools that tune the app itself. Ties
+ * keep the app's own order (Composio lists the most important first). The list comes back best
+ * first, so a shorter share of it is still a good mix. A Look only bot (`readsOnly`) gets reads alone.
+ */
+export function pickTools<T>(tools: T[], max: number, about: (t: T) => { name: string; effect: Effect }, readsOnly = false): T[] {
+  const ranked = tools
+    .map((t, i) => {
+      const { name, effect } = about(t);
+      const w = words(name);
+      const tier = PLUMBING.test(w.join("_")) ? 9 : (EVERYDAY.get(verbOf(w) ?? "") ?? 5);
+      return { t, i, tier, read: effect === "read" };
+    })
+    .sort((a, b) => a.tier - b.tier || a.i - b.i);
+  const reads = ranked.filter((x) => x.read);
+  const acts = readsOnly ? [] : ranked.filter((x) => !x.read);
+  const out: T[] = [];
+  while (out.length < max) {
+    const next = out.length % 2 ? (acts.shift() ?? reads.shift()) : (reads.shift() ?? acts.shift());
+    if (!next) break;
+    out.push(next.t);
+  }
+  return out;
+}
+
+// recipient_email and extra_recipients are how Composio's Gmail tools take theirs.
+const RECIPIENT_KEYS = /^(to|cc|bcc|recipient|recipients|recipient_email|extra_recipients|email|emails|attendees|invitees|participants|user_email|share_with|emailaddress|email_address)$/i;
 
 /** Pull email-like recipients out of arbitrary tool arguments. */
 export function extractEmails(args: Record<string, unknown>): string[] {

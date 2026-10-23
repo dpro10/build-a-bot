@@ -63,6 +63,16 @@ describe("today's shares of a ceiling", () => {
     expect(late?.count ?? 0).toBe(0);
   });
 
+  it("web lookups: every bot can search, so guests share a quarter of the day's 300 (an account 30)", async () => {
+    delete process.env.SEARCH_DAILY_LIMIT;
+    expect(await roomToday(db, "search", guest("usr_judge1"), 30)).toBe("ok");
+    expect(await roomToday(db, "search", guest("usr_judge1"))).toBe("account");
+    expect(await roomToday(db, "search", guest("usr_judge2"), 30)).toBe("ok");
+    expect(await roomToday(db, "search", guest("usr_judge3"), 15)).toBe("ok");
+    expect(await roomToday(db, "search", guest("usr_judge4"))).toBe("guests");
+    expect(await roomToday(db, "search", signedIn("usr_member"))).toBe("ok");
+  });
+
   it("a small ceiling isn't split up: the site's limit is the only one", async () => {
     process.env.INCLUDED_DAILY_LIMIT = "20";
     expect(await roomToday(db, "included", guest("usr_small", "203.0.113.50"), 20)).toBe("ok");

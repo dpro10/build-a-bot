@@ -9,7 +9,7 @@ import type { ConnectorDef } from "../types";
 import { safeToolName, type AnyToolSpec, type ToolContext } from "@/lib/tools/types";
 import type { Recipient } from "@/lib/policy/engine";
 import { callTool, listTools, McpAuthRequired, resultText, type McpTool } from "./client";
-import { classifyTool, extractEmails } from "./effects";
+import { classifyTool, extractEmails, pickTools } from "./effects";
 import { connectionAuth } from "./oauth";
 
 const TOOLS_TTL_MS = 60 * 60 * 1000;
@@ -64,9 +64,8 @@ export async function mcpToolsForConnection(conn: Connection, def: ConnectorDef,
   const via = def.via.find((v) => v.kind === "mcp" && v.url === url);
   const filter = via && via.kind === "mcp" && via.toolFilter ? new RegExp(via.toolFilter, "i") : null;
   if (filter) tools = tools.filter((t) => filter.test(t.name));
-  // Prefer read tools first so the cap keeps the most useful mix.
-  const sorted = [...tools].sort((a, b) => Number(classifyTool(a.name, a.annotations).effect !== "read") - Number(classifyTool(b.name, b.annotations).effect !== "read"));
-  return sorted.slice(0, MAX_TOOLS_PER_CONNECTION).map((tool) => {
+  const about = (tool: McpTool) => ({ name: tool.name, effect: classifyTool(tool.name, tool.annotations).effect });
+  return pickTools(tools, MAX_TOOLS_PER_CONNECTION, about, ctx.bot.trust === "look").map((tool) => {
     const { effect, risk } = classifyTool(tool.name, tool.annotations);
     const name = safeToolName(`${prefix}__${tool.name}`);
     const schemaJson = tool.inputSchema && (tool.inputSchema as { type?: string }).type === "object" ? tool.inputSchema : { type: "object", properties: {} };
@@ -81,7 +80,8 @@ export async function mcpToolsForConnection(conn: Connection, def: ConnectorDef,
       effect,
       risk,
       sensitive: def.sensitive,
-      taints: effect === "read",
+      // Whatever an app sends back can carry other people's words (an email, a comment, an invite).
+      taints: true,
       recipients: effect === "send" || effect === "admin" ? (args, c) => recipientsFor(args, c, def) : undefined,
       outboundText: (args) => JSON.stringify(args).slice(0, 20000),
       summarize: (args) => `${def.name}: ${tool.title ?? tool.name.replace(/[_-]/g, " ")}${summarizeArgs(args)}`,

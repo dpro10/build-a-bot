@@ -171,6 +171,9 @@ describe("built-ins whose service isn't set up are coming soon", () => {
     expect(names).not.toContain("web_browse");
     expect(names).not.toContain("web_form_fill");
     expect(names).toContain("remember"); // the always-on built-ins are still there
+    // Web search is always on only where Tavily is set up: here the bot gets the page reader and no search.
+    expect(names).toContain("read_webpage");
+    for (const name of ["web_search", "check_facts", "find_course_sources"]) expect(names).not.toContain(name);
   });
 });
 

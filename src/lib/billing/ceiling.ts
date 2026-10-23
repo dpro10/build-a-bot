@@ -27,7 +27,8 @@ export function dailyCeiling(kind: Ceiling): number {
  */
 const SHARES: Record<Ceiling, { account: number; guests: number; atLeast: number; guestNetwork: number }> = {
   included: { account: 0.1, guests: 0.25, atLeast: 50, guestNetwork: 50 },
-  search: { account: 0.1, guests: 0.1, atLeast: 10, guestNetwork: 10 },
+  // Every bot can search now, judges included before they sign in: a quarter of the day is theirs.
+  search: { account: 0.1, guests: 0.25, atLeast: 10, guestNetwork: 10 },
   dictation: { account: 0.05, guests: 0.05, atLeast: 300, guestNetwork: 300 },
 };
 
