@@ -271,6 +271,8 @@ describe("agent pipeline (demo brain)", () => {
     const decided = await decideApproval(db, { approvalId: res.approvals[0].id, ownerId: owner.id, decision: "approve", via: "web" });
     expect(decided.ok).toBe(true);
     if (decided.ok) expect(decided.approval.status).toBe("executed");
+    // The follow-up says it went, and nothing contradicts it: the approved send counts as done.
+    if (decided.ok) expect(decided.followUp).not.toMatch(/nothing has been sent/i);
     const followUp = await db.select().from(schema.messages).where(eq(schema.messages.botId, bot.id));
     expect(followUp.filter((m) => m.role === "assistant").length).toBeGreaterThanOrEqual(2);
     // Double-approve is refused.
