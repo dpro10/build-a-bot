@@ -23,7 +23,7 @@ import { assertPublicUrl, fetchWithTimeout, publicFetch, UnsafeUrlError } from "
  * connecting, and never redirected (model APIs don't redirect). Answers can take a while to start.
  */
 const customEndpointFetch: typeof fetch = (input, init) => publicFetch(String(input), { ...init, maxRedirects: 0, timeoutMs: 120_000 });
-import type { Effort, LlmProvider } from "@/lib/llm/types";
+import type { Effort, LlmProvider, LlmRequest } from "@/lib/llm/types";
 
 export type ResolvedBrain =
   | {
@@ -49,16 +49,16 @@ export function includedModelDef(id: string): ModelDef {
 
 /** Retries a provider stream once without model-specific knobs if the server rejects them. */
 function withKnobFallback(
-  make: (extra: Record<string, unknown> | undefined) => LlmProvider,
-  extra: Record<string, unknown>,
+  make: (knobs: ((req: LlmRequest) => Record<string, unknown>) | undefined) => LlmProvider,
+  knobs: (req: LlmRequest) => Record<string, unknown>,
 ): LlmProvider {
-  let knobsOk = Object.keys(extra).length > 0;
-  const primary = make(extra);
+  let knobsOk = true;
+  const primary = make(knobs);
   const plain = make(undefined);
   return {
     id: primary.id,
     async *stream(req) {
-      if (!knobsOk) {
+      if (!knobsOk || !Object.keys(knobs(req)).length) {
         yield* plain.stream(req);
         return;
       }
@@ -84,7 +84,10 @@ export async function resolveBrain(db: Db, bot: Bot): Promise<ResolvedBrain> {
   if (brain.kind !== "byok" || brain.provider === "demo") {
     const def = includedModelDef(brain.model);
     if (config.tokenFactory.apiKey && brain.provider !== "demo") {
-      const { extra, maxTokens } = includedRequestOptions(def, effort);
+      // A request that offers tools thinks first, whatever the effort (includedRequestOptions).
+      const plain = includedRequestOptions(def, effort);
+      const withTools = includedRequestOptions(def, effort, { tools: true });
+      const maxTokens = Math.max(plain.maxTokens, withTools.maxTokens);
       const model = resolveIncludedModelId(def);
       const provider = withKnobFallback(
         (knobs) =>
@@ -92,10 +95,10 @@ export async function resolveBrain(db: Db, bot: Bot): Promise<ResolvedBrain> {
             id: "nebius",
             baseUrl: config.tokenFactory.baseUrl,
             apiKey: config.tokenFactory.apiKey!,
-            extraBody: knobs ? () => knobs : undefined,
+            extraBody: knobs,
             defaultMaxTokens: maxTokens,
           }),
-        extra,
+        (req) => (req.tools.length ? withTools.extra : plain.extra),
       );
       return { kind: "llm", provider, model, providerId: "nebius", included: true, maxTokens, effort, label: def.label };
     }

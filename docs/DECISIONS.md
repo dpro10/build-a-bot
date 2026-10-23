@@ -1061,3 +1061,17 @@ Diego: "For the support email, let's just put diegoprozzi@gmail.com."
 
 - It's the site's default (`src/lib/site.ts`), because the Vercel connector can't add environment variables. `NEXT_PUBLIC_SUPPORT_EMAIL` still changes it.
 - It's on the legal, safety and pricing pages, the billing FAQ and the site footer, which linked to the Account page before.
+
+## Decision: the bot does what it says, or says it didn't (Diego, 2026-10-23)
+
+Diego, after "Hey BotTest. Remind me to call my mom at 6:00 PM" showed nothing in his reminders: "Go ahead and build those two fixes."
+
+- **The cause:** on the default effort (Quick), the included brains ran with thinking off, and Nemotron 3.5 Lightning often answered without calling the tool and said it was done. Asked by voice, it set 1 reminder in 5; with thinking on, 5 in 5, a second or two slower.
+- **Thinking whenever tools are offered** (`includedRequestOptions(…, { tools: true })`, chosen per request in `src/lib/agent/brain.ts`). Quick still answers without thinking when there are no tools (the greeting, the step-limit wrap-up). Lightning has one thinking level, so on it Quick and Thoughtful now think the same way; Deep gets more room. The settings hint for Quick says it thinks briefly before using a tool.
+- **Claims are checked against what ran** (`src/lib/agent/claims.ts`, wired into `runTurn`):
+  - what counts: setting a reminder or routine, cancelling one, saving to memory or notes, adding to a calendar, sending a message; said outright ("I'll remind you at 6"), or less directly ("your reminder is set", "Noted!") unless a tool of that kind ran and it may be describing what's there; or the owner plainly asked for a reminder or a note and the answer, not a question back or a "can't", went without one;
+  - once per turn the model hears what it said and what really ran, and either does it or says it can't; that answer replaces the first in the chat and every channel;
+  - if the final answer still claims it, a plain line is added ("To be clear: no reminder was set.");
+  - what the bot quotes (a meeting's transcript, a drafted email, a blockquote) isn't its claim.
+- **What it costs:** the check needs no model call when the answer is honest. A caught claim costs one more model call (about a second or two). Thinking adds output tokens, a fraction of a cent a message on Lightning.
+- **Not in this change:** "Hey {name}" misses bot names written together ("BotTest", heard "bot test") or misheard. Moved to "What's next" for after the submission.

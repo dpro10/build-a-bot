@@ -160,6 +160,7 @@ The sections below fill in **About the project**.
   - Then turn-taking: starting the answer at the first pause, knowing when someone has really finished, and remembering exactly what the caller heard before they cut in, so the bot never claims to have said what it didn't.
 
 **What's next:**
+- Asking your bot by name in voice typing ("Hey Otto, …") for every name: names written as one word ("BotTest") and names the speech model mishears.
 - The bot calls you back when a long job is done.
 - A call can start your other agents: your own coding agent on your computer, research, the cloud browser.
 - Calls heard and spoken on your own computer's GPU when it's on, with the server as the fallback.

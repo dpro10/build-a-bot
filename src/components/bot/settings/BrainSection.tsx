@@ -33,7 +33,7 @@ const TIERS: { id: Tier; label: string; blurb: string }[] = [
 ];
 
 const EFFORT_HINT = {
-  low: "Answers right away.",
+  low: "Fastest. Thinks briefly before it uses a tool.",
   medium: "Thinks a little first. A bit slower.",
   high: "Takes its time on hard problems. Slowest.",
 };
