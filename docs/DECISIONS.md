@@ -1098,10 +1098,14 @@ Diego, on the audit's first two items: "Okay, fix the web search one and the Gma
   - Google Calendar kept no way to create or change events, and Notion and Linear lost their create tools.
   - This is from Composio's published tool lists (composio.dev, 2026-10-23) and the code; it wasn't seen on a real connection.
 - **Now** (`src/lib/connectors/mcp/effects.ts`):
-  - **A tool's verb decides.** get, list, search and fetch read, whatever they read. Names in Google's style (`EVENTS_LIST`) go by their last word. A read word later in a name no longer makes a change a read: `CALENDAR_LIST_INSERT` and `MARK_NOTIFICATIONS_AS_READ` were reads before.
+  - **A tool's verb decides.** get, list, search and fetch read, whatever they read.
+    - When a name starts with an app's name or a noun (`EVENTS_LIST`, `notion-create-view`), a change anywhere in it wins over a read. Words that are often nouns there (query, view, show, check, export) don't count as its verb, so `GRAPH_QL_QUERY` and `INVITEE_NO_SHOW` aren't reads.
+    - Two verbs joined by "and" or "or" (`LIST_OR_DELETE_PERSONS`, `get_or_create_contact`) count as the change.
+    - A read word later in a name no longer makes a change a read: `CALENDAR_LIST_INSERT` and `MARK_NOTIFICATIONS_AS_READ` were reads before.
+    - Checked against 15,255 tool names (123 Composio toolkits and public MCP servers), with a separate review. The 409 that became reads are reads. The 136 that now ask are mostly changes that had been taken for reads (creating lists, marking things read), plus a few reads whose names look like changes (`ACTOR_RUN_GET`, `RUN_READ_ONLY_QUERY`), which now ask first.
   - **The server's hints:** `readOnlyHint` counts where the name has no verb, and a hint that a tool changes things wins over a name that reads. Unlike the audit's suggestion ("readOnlyHint first"), a server that says `send_message` only reads isn't believed.
   - **Whatever a third-party app sends back is outside content,** whatever the tool did.
-  - **Which tools a bot gets** (`pickTools`): half that read and half that act, everyday work first (fetch, search, send and reply, then create, then update), deletes after, the app's own settings last. Ties keep Composio's order, which its docs say puts the most important first.
+  - **Which tools a bot gets** (`pickTools`): half that read and half that act, everyday work first (fetch, search, send and reply, then create, then update), deletes after, the app's own settings last. Ties keep Composio's order, which its docs say puts the most important first. A Look only bot gets reads alone, as many as before.
   - **Apps share the room the built-ins leave** (48 tools in all; the built-ins now take 21). With Gmail and Calendar, they get 14 and 13. Before, the second app got whatever was left.
   - Composio's Gmail recipients (`recipient_email`, `extra_recipients`) are recognized, so a send to a known contact or to yourself isn't treated as someone new.
 - **Unchanged:** a Gmail reply is medium risk, because its name doesn't say "email" (a new email is high). On Trusted helper, the bot can reply to a known contact without asking. Deleting an event may not make Calendar's cut.

@@ -132,7 +132,7 @@ export async function composioToolsForConnection(conn: Connection, def: Connecto
   const pinned = process.env[`COMPOSIO_TOOLKIT_VERSION_${toolkit.toUpperCase()}`];
   const prefix = safeToolName(def.id).slice(0, 20);
   const bare = (tool: ComposioTool) => tool.slug.replace(new RegExp(`^${toolkit}_`, "i"), "");
-  return pickTools(tools, MAX_TOOLS, (tool) => ({ name: bare(tool), effect: classifyTool(bare(tool)).effect })).map((tool) => {
+  return pickTools(tools, MAX_TOOLS, (tool) => ({ name: bare(tool), effect: classifyTool(bare(tool)).effect }), ctx.bot.trust === "look").map((tool) => {
     const { effect, risk } = classifyTool(bare(tool));
     const params = tool.input_parameters && (tool.input_parameters as { type?: string }).type === "object" ? tool.input_parameters : { type: "object", properties: {} };
     const spec: AnyToolSpec = {

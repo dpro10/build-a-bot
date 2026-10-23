@@ -92,8 +92,8 @@ describe("what an app's tool does", () => {
 
   it("names in Google's style read by their last word, and a read word later in a name doesn't make a change a read", () => {
     expect(effectOf("EVENTS_LIST")).toBe("read");
-    expect(effectOf("FREE_BUSY_QUERY")).toBe("read");
     expect(effectOf("CALENDAR_LIST_DELETE")).toBe("delete");
+    expect(effectOf("pull_request_read")).toBe("read"); // GitHub's MCP server: "request" is a noun here
     // These were reads before ("list" or "read" anywhere in the name).
     expect(effectOf("CALENDAR_LIST_INSERT")).toBe("write");
     expect(effectOf("CREATE_SLACK_LIST")).toBe("write");
@@ -101,10 +101,35 @@ describe("what an app's tool does", () => {
     expect(effectOf("REREQUEST_A_CHECK_SUITE")).toBe("write");
   });
 
+  it("after an app's name or a noun, a change anywhere wins, and words like query, view and show aren't taken for the verb", () => {
+    for (const name of [
+      "BETA_RUN_SQL_QUERY", // Supabase: runs any SQL
+      "GRAPH_QL_QUERY", // Shopify: runs mutations too
+      "ANSWER_CALLBACK_QUERY", // Telegram
+      "PAUSE_BATCH_EXPORT", // PostHog
+      "INVITEE_NO_SHOW", // Calendly
+      "SHAREPOINT_CHECK_OUT_FILE", // locks the file
+      "SHAREPOINT_CREATE_LIST",
+      "notion-create-view", // Notion's MCP server
+      "notion-update-view",
+    ]) {
+      expect(effectOf(name), name).not.toBe("read");
+    }
+    // A query word first is still a read; after a noun it isn't trusted (careful, so it asks).
+    expect(effectOf("QUERY_DATABASE")).toBe("read");
+    expect(effectOf("FREE_BUSY_QUERY")).toBe("write");
+  });
+
+  it("two verbs joined by and/or: the change counts", () => {
+    expect(effectOf("LIST_OR_DELETE_PERSONS_WITH_OPTIONAL_FILTERS")).toBe("delete");
+    expect(effectOf("RETRIEVE_PERSON_ACTIVITY_AND_DELETE_OPTIONS")).toBe("delete");
+    expect(effectOf("get_or_create_contact")).toBe("write");
+  });
+
   it("the server's hints: read-only counts where the name has no verb; saying a tool changes things beats a name that reads; never makes a send a read", () => {
     expect(effectOf("inbox_messages")).toBe("send");
     expect(effectOf("inbox_messages", { readOnlyHint: true })).toBe("read");
-    expect(effectOf("get_or_create_contact", { readOnlyHint: false })).toBe("write");
+    expect(effectOf("get_new_token", { readOnlyHint: false })).toBe("write");
     expect(classifyTool("fetch_and_clear_queue", { destructiveHint: true })).toEqual({ effect: "write", risk: "high" });
     expect(effectOf("send_message", { readOnlyHint: true })).toBe("send");
   });
@@ -135,6 +160,13 @@ describe("which tools a bot gets from a big app", () => {
       for (const name of ["EVENTS_LIST", "FIND_EVENT", "FIND_FREE_SLOTS", "CREATE_EVENT", "QUICK_ADD", "PATCH_EVENT"]) expect(kept).toContain(name);
       for (const name of ["ACL_INSERT", "ACL_WATCH", "SETTINGS_WATCH", "CALENDAR_LIST_WATCH"]) expect(kept).not.toContain(name);
     }
+  });
+
+  it("a Look only bot gets reads alone, and as many of them", () => {
+    const kept = pickTools(GMAIL, 20, (n) => ({ name: n, effect: effectOf(n) }), true);
+    expect(kept).toHaveLength(20);
+    expect(kept.every((n) => effectOf(n) === "read")).toBe(true);
+    expect(kept).toEqual(expect.arrayContaining(["FETCH_EMAILS", "FETCH_MESSAGE_BY_THREAD_ID", "LIST_THREADS"]));
   });
 
   it("the list comes best first, so a shorter share of it still reads and sends", () => {
@@ -251,6 +283,15 @@ describe("in a bot", () => {
     }
     expect(byName.get("gmail__fetch_emails")).toMatchObject({ effect: "read", taints: true });
     expect(byName.get("gmail__send_email")).toMatchObject({ effect: "send", risk: "high", taints: true });
+  });
+
+  it("on Look only, an app keeps a full set of read tools", async () => {
+    const bot = await botWithApps("Looker", "look", [{ connectorId: "gmail", toolkit: "gmail", names: GMAIL }]);
+    const { tools, byName } = await buildToolset(ctxFor(bot));
+    const gmail = tools.filter((t) => t.connectorId === "gmail");
+    expect(gmail).toHaveLength(20);
+    expect(gmail.every((t) => t.effect === "read")).toBe(true);
+    expect(byName.has("gmail__fetch_emails")).toBe(true);
   });
 
   it("on Ask me first, reading the inbox needs no tap, and what comes back is marked as outside content", async () => {

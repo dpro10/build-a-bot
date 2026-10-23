@@ -64,7 +64,8 @@ export async function mcpToolsForConnection(conn: Connection, def: ConnectorDef,
   const via = def.via.find((v) => v.kind === "mcp" && v.url === url);
   const filter = via && via.kind === "mcp" && via.toolFilter ? new RegExp(via.toolFilter, "i") : null;
   if (filter) tools = tools.filter((t) => filter.test(t.name));
-  return pickTools(tools, MAX_TOOLS_PER_CONNECTION, (tool) => ({ name: tool.name, effect: classifyTool(tool.name, tool.annotations).effect })).map((tool) => {
+  const about = (tool: McpTool) => ({ name: tool.name, effect: classifyTool(tool.name, tool.annotations).effect });
+  return pickTools(tools, MAX_TOOLS_PER_CONNECTION, about, ctx.bot.trust === "look").map((tool) => {
     const { effect, risk } = classifyTool(tool.name, tool.annotations);
     const name = safeToolName(`${prefix}__${tool.name}`);
     const schemaJson = tool.inputSchema && (tool.inputSchema as { type?: string }).type === "object" ? tool.inputSchema : { type: "object", properties: {} };

@@ -24,7 +24,7 @@ const CHANGES = new Set(
     "update patch edit modify set put write upload move copy rename duplicate star unstar mark assign unassign schedule reschedule book reserve " +
     "start stop run execute perform trigger invoke call approve merge accept decline reject enable disable grant configure import sync restore " +
     "untrash apply save submit upsert replace append link unlink attach detach pin unpin follow unfollow like react vote join leave kick ban mute " +
-    "unmute unblock lock unlock push watch generate convert translate request rerequest"
+    "unmute unblock lock unlock push watch generate convert translate rerequest"
   ).split(" "),
 );
 
@@ -32,15 +32,20 @@ function words(name: string): string[] {
   return name.replace(/([a-z])([A-Z])/g, "$1_$2").replace(/[-.\s]/g, "_").toLowerCase().split("_").filter(Boolean);
 }
 
+/** Read words that are often nouns ("free_busy_query", "invitee_no_show"): they count only as a name's first word. */
+const NOUNISH = new Set(["query", "queries", "export", "show", "view", "check", "count", "preview", "lookup", "look"]);
+
 /**
- * A name's verb: its first word if that's a verb ("send_email"), else its last ("events_list",
- * Google's style), else the first verb in it ("outlook_list_messages", after an app's name).
+ * A name's verb: its first word if that's a verb ("send_email", "query_database"). Otherwise (an
+ * app's name or a noun first), a change anywhere in it wins ("sharepoint_create_list",
+ * "calendar_list_insert"), then a read ("events_list", "outlook_list_messages").
  */
 function verbOf(w: string[]): string | undefined {
-  const isVerb = (x: string | undefined) => x !== undefined && (READS.has(x) || CHANGES.has(x));
-  if (isVerb(w[0])) return w[0];
-  if (isVerb(w[w.length - 1])) return w[w.length - 1];
-  return w.find(isVerb);
+  // "list_or_delete_persons", "get_or_create_contact": the second verb counts too, so the change wins.
+  const joined = w.find((x, i) => ["and", "or", "then"].includes(w[i - 1] ?? "") && CHANGES.has(x));
+  if (joined) return joined;
+  if (w[0] !== undefined && (READS.has(w[0]) || CHANGES.has(w[0]))) return w[0];
+  return w.find((x) => CHANGES.has(x)) ?? w.find((x) => READS.has(x) && !NOUNISH.has(x));
 }
 
 export function classifyTool(
@@ -74,9 +79,9 @@ for (const v of ["fetch", "fetches", "list", "lists", "search", "searches", "fin
  * and half that act, where there are enough of each; everyday work first (fetch, search, send,
  * reply, then create, then update), then the rest, then tools that tune the app itself. Ties
  * keep the app's own order (Composio lists the most important first). The list comes back best
- * first, so a shorter share of it is still a good mix.
+ * first, so a shorter share of it is still a good mix. A Look only bot (`readsOnly`) gets reads alone.
  */
-export function pickTools<T>(tools: T[], max: number, about: (t: T) => { name: string; effect: Effect }): T[] {
+export function pickTools<T>(tools: T[], max: number, about: (t: T) => { name: string; effect: Effect }, readsOnly = false): T[] {
   const ranked = tools
     .map((t, i) => {
       const { name, effect } = about(t);
@@ -86,7 +91,7 @@ export function pickTools<T>(tools: T[], max: number, about: (t: T) => { name: s
     })
     .sort((a, b) => a.tier - b.tier || a.i - b.i);
   const reads = ranked.filter((x) => x.read);
-  const acts = ranked.filter((x) => !x.read);
+  const acts = readsOnly ? [] : ranked.filter((x) => !x.read);
   const out: T[] = [];
   while (out.length < max) {
     const next = out.length % 2 ? (acts.shift() ?? reads.shift()) : (reads.shift() ?? acts.shift());
