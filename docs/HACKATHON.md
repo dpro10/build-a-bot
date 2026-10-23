@@ -32,7 +32,11 @@ Diego (2026-10-15): "im in the nvidia x nebius hackathon and the more we create 
 
 1. **Demo mode off** on the live site: **done** on 2026-10-22. `DEMO_MODE` is deleted in Vercel, the site was redeployed, and nothing simulated is left (`docs/DECISIONS.md`, "demo mode off on the live site").
 2. **The support email:** **done** on 2026-10-23. diegoprozzi@gmail.com is the site's default (`src/lib/site.ts`), shown on the legal, safety, pricing and contact pages.
-3. **Zero data retention** for the included models, in the Token Factory console.
+3. **Zero data retention** for the included models: sign in at [tokenfactory.nebius.com](https://tokenfactory.nebius.com), open your account's profile page, and turn on **Zero Data Retention**. Nebius's guide says that's where it is; Claude can't see the console, so the label may differ a little.
+   - It applies to the whole organization (every project and key). Prompts and replies are no longer kept: by default Token Factory keeps them in Finland to speed up answers.
+   - It may make answers a little slower, and Data Lab stops collecting logs.
+   - Nebius support can confirm it in writing.
+   - The promo's "zero data retention" line is true only once this is on.
 4. **The repository page** (the gear next to **About** on github.com/dpro10/build-a-bot):
    - **Website:** `https://build-a-bot.site`
    - **Description:** `Your own AI agent in about a minute: pick a face, give it a brain (NVIDIA Nemotron and other open models on Nebius, at cost, or your own API key) and your apps, and talk to it on the web, Telegram, Discord or Slack, or call it.`
@@ -96,7 +100,14 @@ The cut, beat by beat, with where each claim is true and what Diego records: [`v
 
 ## Devpost write-up draft
 
-**Tagline:** Your own AI agent in a minute, under your control: call it and it gets things done with your apps, asking before it acts. It also lives in your chats, takes your meeting notes and types for you by voice, with NVIDIA's open speech models hearing you on your own computer or our own server.
+**For the form:**
+- **Elevator pitch** (192 of Devpost's 200 characters): `Your own AI agent in a minute: NVIDIA Nemotron on Nebius, your apps, approvals enforced in code. Chat with it or call it; it takes meeting notes and types by voice, heard on your own computer.`
+- **Try it out:** https://build-a-bot.site, https://github.com/dpro10/build-a-bot and https://build-a-bot.site/download
+- **Video:** the YouTube link, once it's up.
+- **Track:** Personal AI. Also enter **Best Use of Tavily**.
+- **Built with:** `nvidia-nemotron`, `nvidia-parakeet`, `nvidia-magpie`, `nemo-speech.cpp`, `nebius-token-factory`, `tavily`, `composio`, `mcp`, `next.js`, `react`, `typescript`, `postgresql`, `vercel`, `electron`, `twilio`, `google-cloud`
+
+The sections below fill in **About the project**.
 
 **What it does:** Build-a-bot lets anyone make a personal AI agent in about a minute.
 - **Make it:** pick one of five characters, name it, choose a brain and give it apps. Then decide how much it can do on its own.
