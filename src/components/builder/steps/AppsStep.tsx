@@ -59,7 +59,7 @@ export function AppsStep({
     onConnectors(connectors.includes(def.id) ? connectors.filter((c) => c !== def.id) : [...connectors, def.id]);
   };
 
-  const alwaysOn = ALL_CONNECTORS.filter((c) => ALWAYS_ON.has(c.id));
+  const alwaysOn = ALL_CONNECTORS.filter((c) => ALWAYS_ON.has(c.id) && !comingSoon.includes(c.id));
 
   return (
     <div className="flex flex-col gap-7">

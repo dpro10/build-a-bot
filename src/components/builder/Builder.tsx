@@ -500,6 +500,7 @@ export function Builder({ demo, live, comingSoon, recipe, botCount, signedIn, ow
               timezone={timezone}
               atBotLimit={atBotLimit}
               routines={recipe && state.recipeSlug === recipe.slug ? (recipe.routines ?? []) : []}
+              comingSoon={comingSoon}
             />
           ) : null}
           {!signedIn && step === "review" ? (

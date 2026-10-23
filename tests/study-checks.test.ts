@@ -316,13 +316,12 @@ describe("where each answer came from", () => {
 });
 
 describe("who gets these tools", () => {
-  it("they come with web search, so they're only offered where Tavily is set up and the owner picked it", async () => {
+  it("they come with web search, which every bot has where Tavily is set up (real-mode.test.ts: not where it isn't)", async () => {
     expect(BUILTIN_TOOLS.web_search.map((t) => t.name)).toEqual(expect.arrayContaining(["web_search", "check_facts", "find_course_sources"]));
-    // (The School job brings web search along, so this bot has no job.)
-    const noWeb = await makeBot("Quiet", ["notes"], []);
-    const toolset = await buildToolset(ctxFor(noWeb));
-    expect(toolset.byName.has("check_facts")).toBe(false);
-    expect(toolset.byName.has("find_course_sources")).toBe(false);
+    // No job and no web search picked: a bot made with nothing but notes still looks things up.
+    const plain = await makeBot("Quiet", ["notes"], []);
+    const toolset = await buildToolset(ctxFor(plain));
+    for (const name of ["web_search", "check_facts", "find_course_sources", "read_webpage"]) expect(toolset.byName.has(name)).toBe(true);
   });
 
   it("the tutor is told to find the course, check what it makes, and go with the class for exams", () => {

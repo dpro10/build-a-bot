@@ -63,13 +63,15 @@ describe("the builder", () => {
 
   it("the review step says what the bot will cost, at cost", () => {
     // The default model: about $0.00042 a message (5,000 tokens in at $0.06/M, 500 out at $0.24/M).
-    expect(costLine(fresh())).toBe("About $0.00042 a message on Nemotron 3.5 Lightning, paid from your credit at cost.");
-    const searching = { ...fresh(), connectors: ["web_search"], channels: ["sms" as const] };
-    expect(costLine(searching)).toBe(
+    // Every bot can look things up where this server has web search; without Tavily it can't.
+    expect(costLine(fresh())).toBe("About $0.00042 a message on Nemotron 3.5 Lightning, paid from your credit at cost. Each web lookup is $0.008.");
+    expect(costLine(fresh(), ["web_search", "news"])).toBe("About $0.00042 a message on Nemotron 3.5 Lightning, paid from your credit at cost.");
+    const texting = { ...fresh(), channels: ["sms" as const] };
+    expect(costLine(texting)).toBe(
       "About $0.00042 a message on Nemotron 3.5 Lightning, paid from your credit at cost. Each web lookup is $0.008. Texts and calls are paid from credit too.",
     );
     const ownKey = { ...fresh(), brain: { kind: "byok" as const, provider: "anthropic" as const, model: "claude-sonnet-5-5", baseUrl: "" } };
-    expect(costLine(ownKey)).toBe("Free here: Anthropic (Claude) bills you for the thinking.");
+    expect(costLine(ownKey, ["web_search"])).toBe("Free here: Anthropic (Claude) bills you for the thinking.");
     // Only the fair-use limit on apps is ever adjusted, and never in demo mode.
     const many = { ...fresh(), customMcp: Array.from({ length: 201 }, (_, i) => ({ url: `https://mcp.example.com/${i}` })) };
     expect(adjustmentsFor(many, false)).toEqual(["A bot can connect up to 200 apps. The first 200 are added now."]);

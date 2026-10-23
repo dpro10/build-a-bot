@@ -214,5 +214,8 @@ export const BUILTIN_CONNECTORS: ConnectorDef[] = [
   },
 ];
 
-/** Always on for every bot, regardless of picks (cheap, safe, useful). */
-export const DEFAULT_BUILTINS = ["memory", "reminders", "weather", "currency", "library"] as const;
+/**
+ * Always on for every bot, regardless of picks (cheap, safe, useful), where this server can run them
+ * (web search needs Tavily): a bot without web search made up "what's fun to do this weekend".
+ */
+export const DEFAULT_BUILTINS = ["memory", "reminders", "weather", "currency", "library", "web_search", "web_reader"] as const;

@@ -330,7 +330,9 @@ export function AppsTrustView({ bot, connections: initial, composioLive, comingS
 
   const simulated = apps.filter((c) => c.status === "demo").length;
   const attention = apps.filter((c) => c.status === "needs_auth" || c.status === "error").length;
-  const alwaysOn = DEFAULT_BUILTINS.map((id) => getConnector(id)).filter((d): d is ConnectorDef => Boolean(d));
+  const alwaysOn = DEFAULT_BUILTINS.filter((id) => !soon.has(id))
+    .map((id) => getConnector(id))
+    .filter((d): d is ConnectorDef => Boolean(d));
   const removingName = removing ? displayName(removing, connectorFor(removing)) : "";
 
   return (

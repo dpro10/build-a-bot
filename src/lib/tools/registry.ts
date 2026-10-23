@@ -65,7 +65,13 @@ export async function buildToolset(ctx: ToolContext): Promise<Toolset> {
   const trust: TrustLevel = isTrustLevel(ctx.bot.trust) ? ctx.bot.trust : "ask";
   const connections = await ctx.db.select().from(schema.connections).where(eq(schema.connections.botId, ctx.bot.id));
 
-  const enabledBuiltins = new Set<string>(DEFAULT_BUILTINS);
+  // Always on where this server can run them (web search needs Tavily), plus the built-ins the owner added.
+  const enabledBuiltins = new Set<string>(
+    DEFAULT_BUILTINS.filter((id) => {
+      const def = getConnector(id);
+      return def ? connectorUsable(def) : false;
+    }),
+  );
   for (const c of connections) {
     const def = getConnector(c.connectorId);
     // A built-in whose service isn't set up here ("Coming soon") gives the model no tools to promise with.

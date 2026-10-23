@@ -25,8 +25,11 @@ import { brainSummary, colorwayTint } from "../BotPreview";
 import { countedApps, type BuilderState, type StepId } from "../state";
 import { StepHeading } from "./StepHeading";
 
-/** What running it costs, in a sentence or two: there are no plans, so this is the whole story (prices.ts). */
-export function costLine(s: BuilderState): string {
+/**
+ * What running it costs, in a sentence or two: there are no plans, so this is the whole story (prices.ts).
+ * Every bot can look things up where this server has web search (`comingSoon` says where it doesn't).
+ */
+export function costLine(s: BuilderState, comingSoon: readonly string[] = []): string {
   const parts: string[] = [];
   const brain = s.brain;
   if (brain.kind === "included") {
@@ -35,7 +38,7 @@ export function costLine(s: BuilderState): string {
   } else {
     parts.push(`Free here: ${PROVIDER_BY_ID[brain.provider]?.name ?? "your provider"} bills you for the thinking.`);
   }
-  if (s.connectors.includes("web_search") || s.connectors.includes("news") || s.connectors.includes("web_reader")) parts.push(`Each web lookup is ${formatMicros(UNIT_PRICES.lookup)}.`);
+  if (!comingSoon.includes("web_search")) parts.push(`Each web lookup is ${formatMicros(UNIT_PRICES.lookup)}.`);
   if (s.channels.includes("sms") || s.channels.includes("voice")) parts.push("Texts and calls are paid from credit too.");
   return parts.join(" ");
 }
@@ -82,6 +85,7 @@ export function ReviewStep({
   timezone,
   atBotLimit,
   routines = [],
+  comingSoon = [],
 }: {
   state: BuilderState;
   onInstructions: (v: string) => void;
@@ -93,6 +97,8 @@ export function ReviewStep({
   atBotLimit: boolean;
   /** Routines the recipe brings along (made with the bot). */
   routines?: NonNullable<RecipeData["routines"]>;
+  /** Built-ins this server can't run yet. */
+  comingSoon?: string[];
 }) {
   const name = s.name.trim() || "Your bot";
   const a = AVATARS[s.avatar];
@@ -144,7 +150,9 @@ export function ReviewStep({
                 ))}
               </span>
             ) : (
-              <span className="text-muted-foreground">Built-in tools only (memory, reminders, weather, math)</span>
+              <span className="text-muted-foreground">
+                Built-in tools only (memory, reminders, weather, math{comingSoon.includes("web_search") ? "" : ", web search"})
+              </span>
             )}
           </Row>
           <Row icon={<ShieldCheck className="size-4" />} label="Trust" onEdit={() => goTo("trust")}>
@@ -169,7 +177,7 @@ export function ReviewStep({
           </Row>
           <Row icon={<Wallet className="size-4" />} label="Cost" onEdit={null}>
             <span className="text-muted-foreground">
-              {costLine(s)}{" "}
+              {costLine(s, comingSoon)}{" "}
               <Link href="/pricing" target="_blank" className="font-semibold text-primary hover:underline">
                 Prices
               </Link>
