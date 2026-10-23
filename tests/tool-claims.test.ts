@@ -269,6 +269,32 @@ describe("a turn, with the included brain", () => {
     expect(out.text).not.toMatch(/I've added/);
   });
 
+  it("after the owner approves, the follow-up's “it's sent” and “it's on your calendar” stand", async () => {
+    const res = await createBot(db, owner, {
+      avatar: "otto", color: "mint", name: "Asker", jobs: [], brain: { kind: "included", model: "nvidia/Nemotron-3_5-Lightning" },
+      connectors: ["gmail", "google_calendar"], trust: "ask", channels: [], contact: {}, ageConfirmed: true, timezone: "America/Chicago",
+    });
+    if (!res.ok) throw new Error(res.error);
+    const { decideApproval } = await import("@/lib/agent/approvals");
+    const cases = [
+      { ask: "Email sam@example.com that I'm running late.", tool: { name: "gmail__send_email", args: { to: ["sam@example.com"], subject: "Running late", body: "Hi Sam, I'm running about 10 minutes late." } }, done: "Done — your email to Sam has been sent.", untrue: /nothing has been sent/ },
+      { ask: "Add the dentist on Friday at 3pm to my calendar.", tool: { name: "google_calendar__create_event", args: { title: "Dentist", start: tomorrowAt6(), attendees: ["dr.lee@example.com"] } }, done: "It's on your calendar: the dentist, Friday at 3 PM.", untrue: /nothing was added/ },
+    ];
+    for (const c of cases) {
+      stubModel((body) => {
+        if (/The owner approved/.test(lastUser(body))) return { text: c.done };
+        if (body.messages.at(-1)?.role === "tool") return { text: "It's ready; it needs your OK first." };
+        return { tool: c.tool };
+      });
+      const asked = await say(res.bot, c.ask);
+      expect(asked.approvals, c.ask).toHaveLength(1);
+      const decided = await decideApproval(db, { approvalId: asked.approvals[0].id, ownerId: owner.id, decision: "approve", via: "web" });
+      expect(decided.ok && decided.approval.status).toBe("executed");
+      expect(decided.ok && decided.followUp).toBe(c.done);
+      expect(decided.ok && decided.followUp).not.toMatch(c.untrue);
+    }
+  });
+
   it("left alone when the tool ran, or when it asks a question back", async () => {
     const bot = await makeBot("Fine");
     const at = tomorrowAt6();

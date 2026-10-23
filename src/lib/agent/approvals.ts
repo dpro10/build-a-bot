@@ -16,7 +16,7 @@ import type { ToolContext } from "@/lib/tools/types";
 import { deliver, ensureConversation } from "@/lib/channels/outbound";
 import type { ChannelKind } from "@/lib/channels/catalog";
 import { errorMessage, newId, truncate } from "@/lib/utils";
-import { receipt, runTurn } from "./run";
+import { receipt, runTurn, type RunInput } from "./run";
 
 export type ApprovalDecision = "approve" | "deny";
 
@@ -128,11 +128,13 @@ export async function decideApproval(
     ok
       ? `The owner approved: ${approval.title}. It ran. Result: ${truncate(resultText, 1500)}. Tell them it's done in one or two sentences.`
       : `The owner approved: ${approval.title}, but it failed: ${truncate(resultText, 500)}. Tell them briefly and suggest a next step.`,
+    // What it says about the approved action is checked against what really happened to it.
+    [{ name: approval.tool, effect: spec?.effect ?? "write", connectorId: approval.connectorId ?? "", ok }],
   );
   return { ok: true, approval: final, followUp };
 }
 
-async function followUpTurn(db: Db, bot: Bot, owner: User, approval: Approval, directive: string): Promise<string | undefined> {
+async function followUpTurn(db: Db, bot: Bot, owner: User, approval: Approval, directive: string, ran?: RunInput["ran"]): Promise<string | undefined> {
   if (!approval.conversationId) return undefined;
   const [conversation] = await db.select().from(schema.conversations).where(eq(schema.conversations.id, approval.conversationId)).limit(1);
   if (!conversation) return undefined;
@@ -146,6 +148,7 @@ async function followUpTurn(db: Db, bot: Bot, owner: User, approval: Approval, d
     directive,
     trigger: "approval",
     noTools: true,
+    ran,
   });
   if (conversation.channelKind !== "web" && result.text) {
     await deliver(db, bot, conversation.channelKind as ChannelKind, { to: conversation.externalId, text: result.text, toOwner: true }, { owner });

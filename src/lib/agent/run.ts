@@ -140,6 +140,8 @@ export type RunInput = {
   messageId?: string;
   /** The owner's network, for a message typed in the web chat (net.ts networkOf): accounts that haven't signed in share a day's turns per network. */
   network?: string | null;
+  /** Actions that ran just before this turn (the one the owner approved): what it says about them is true. */
+  ran?: (Pick<AnyToolSpec, "name" | "effect" | "connectorId"> & { ok: boolean })[];
 };
 
 export type RunResult = {
@@ -320,6 +322,12 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
   /** Said it did something no tool did, and was asked once to do it or say it can't (claims.ts). */
   let claimChecked = false;
   const ownerText = input.message?.author === "owner" ? input.message.text : null;
+  // What the claim checks count as done: this turn's tools, and an action approved just before it.
+  const ranBefore = (input.ran ?? []).flatMap((r, i): MessagePart[] => [
+    { type: "tool_call", id: `ran_${i}`, name: r.name, args: {} },
+    { type: "tool_result", id: `ran_${i}`, name: r.name, status: r.ok ? "ok" : "error" },
+  ]);
+  const claimTools = { byName: new Map<string, Pick<AnyToolSpec, "name" | "effect" | "connectorId">>([...toolset.byName, ...(input.ran ?? []).map((r) => [r.name, r] as const)]) };
 
   for (let step = 0; step < MAX_STEPS; step++) {
     if (input.signal?.aborted) break;
@@ -386,7 +394,7 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
       }
       // It says it did something (set a reminder, saved it, added an event, sent it) that no tool
       // did this turn: asked once to do it or say it can't, and that answer replaces this one.
-      const unbacked = claimChecked || !toolset.tools.length ? [] : unbackedClaims(said, ownerText, state.parts, toolset);
+      const unbacked = claimChecked || !toolset.tools.length ? [] : unbackedClaims(said, ownerText, [...state.parts, ...ranBefore], claimTools);
       if (unbacked.length) {
         claimChecked = true;
         finalText = saidBefore;
@@ -447,9 +455,9 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
   }
 
   // 7. Safety post-processing (in code, every time).
-  finalText = honestAboutSends(finalText, state.parts, toolset);
+  finalText = honestAboutSends(finalText, [...state.parts, ...ranBefore], claimTools);
   // Still says it did what no tool did: the plain truth goes with it.
-  finalText = withClaimTruth(finalText, unbackedClaims(finalText, ownerText, state.parts, toolset));
+  finalText = withClaimTruth(finalText, unbackedClaims(finalText, ownerText, [...state.parts, ...ranBefore], claimTools));
   if (crisis && !finalText.includes("988")) finalText = `${finalText}\n\n${CRISIS_FOOTER}`;
 
   // 8. Usage, cost, receipts.
@@ -919,7 +927,7 @@ const SEND_CLAIM =
   /\bI(?:'ve| have| just)?\s+(?:emailed|e-mailed|texted|messaged)\b|\bI(?:'ve| have| just)?\s+sent\s+(?:(?:the|your|an?|that|this|her|him|them|it)\s+)?(?:email|e-mail|message|text|reply|invite|invitation|note to)\b|\b(?:email|e-mail|message|text|reply|invitation)\b[^.!?\n]{0,60}\b(?:has been|was|is now)\s+sent\b/i;
 export { NOTHING_SENT };
 
-export function honestAboutSends(text: string, parts: MessagePart[], toolset: Pick<Toolset, "byName">): string {
+export function honestAboutSends(text: string, parts: MessagePart[], toolset: { byName: Map<string, Pick<AnyToolSpec, "effect">> }): string {
   const sendRan = parts.some((p) => p.type === "tool_call" && toolset.byName.get(p.name)?.effect === "send");
   if (sendRan) return text;
   const stripped = text.replace(MADE_UP_SEND, "").replace(/\n{3,}/g, "\n\n").trim();

@@ -1073,5 +1073,6 @@ Diego, after "Hey BotTest. Remind me to call my mom at 6:00 PM" showed nothing i
   - once per turn the model hears what it said and what really ran, and either does it or says it can't; that answer replaces the first in the chat and every channel;
   - if the final answer still claims it, a plain line is added ("To be clear: no reminder was set.");
   - what the bot quotes (a meeting's transcript, a drafted email, a blockquote) isn't its claim.
+  - after the owner approves an action, the follow-up message counts it as done if it ran. Before, a follow-up saying an approved email was sent got "To be clear: nothing has been sent." added (the audit found it; the calendar check would have done the same).
 - **What it costs:** the check needs no model call when the answer is honest. A caught claim costs one more model call (about a second or two). Thinking adds output tokens, a fraction of a cent a message on Lightning.
 - **Not in this change:** "Hey {name}" misses bot names written together ("BotTest", heard "bot test") or misheard. Moved to "What's next" for after the submission.
