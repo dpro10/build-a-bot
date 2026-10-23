@@ -258,11 +258,15 @@ export function contextLabel(tokens?: number): string | null {
 
 /**
  * Request knobs for an included (Token Factory) model at a given effort.
- * low → thinking off (fast chat); medium/high → thinking on with more room.
+ * low → thinking off (fast chat), unless the request offers tools; medium/high → thinking on with more room.
+ *
+ * With tools, a reasoning model always thinks. With thinking off, Nemotron 3.5 Lightning, asked by
+ * voice to "remind me to call my mom at 6 PM", said it was set without calling the reminder tool 4
+ * times in 5 (live, October 2026); with thinking on it set all 5, a second or two slower.
  */
-export function includedRequestOptions(model: ModelDef, effort: "low" | "medium" | "high" = "low") {
+export function includedRequestOptions(model: ModelDef, effort: "low" | "medium" | "high" = "low", { tools = false }: { tools?: boolean } = {}) {
   const t = model.thinking ?? { style: "none" as const };
-  const thinkingOn = effort !== "low";
+  const thinkingOn = effort !== "low" || (tools && Boolean(model.reasoning));
   let extra: Record<string, unknown> = {};
   if (t.style === "reasoning_effort") {
     if (!thinkingOn && t.off) extra = { reasoning_effort: t.off };

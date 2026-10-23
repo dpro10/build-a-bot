@@ -37,6 +37,7 @@ import { errorMessage, newId, sortableId, truncate } from "@/lib/utils";
 import { buildDynamicContext, buildStablePrompt, ownerName } from "./prompt";
 import { memoriesForTurn } from "@/lib/memory";
 import { resolveBrain } from "./brain";
+import { claimCheck, NOTHING_SENT, unbackedClaims, withClaimTruth } from "./claims";
 import { selectionOf, withSelection } from "./selection";
 import { LIBRARY_GUIDANCE, libraryPrompt } from "@/lib/library";
 import { withFiles } from "@/lib/library/attachments";
@@ -316,6 +317,9 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
   let brainFailed = false;
   /** Asked for flashcards or a quiz and told once to actually make it (studyNudge). */
   let nudged = false;
+  /** Said it did something no tool did, and was asked once to do it or say it can't (claims.ts). */
+  let claimChecked = false;
+  const ownerText = input.message?.author === "owner" ? input.message.text : null;
 
   for (let step = 0; step < MAX_STEPS; step++) {
     if (input.signal?.aborted) break;
@@ -360,6 +364,7 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
     }
 
     const said = withoutAppNotes(stepText);
+    const saidBefore = finalText;
     if (said) finalText = finalText ? `${finalText}\n\n${said}` : said;
 
     if (stopReason === "refusal") {
@@ -372,11 +377,21 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
       // Not when it's asking them something (which file? how many?): that's theirs to answer first.
       // Not on a call either: there, a quiz is asked out loud, one question at a time.
       const asking = /\?\s*(\**\s*)?$/.test(withoutAppNotes(stepText));
-      const nudge = nudged || asking || input.channelKind === "voice" ? null : studyNudge(input.message?.author === "owner" ? input.message.text : null, toolset, state);
+      const nudge = nudged || asking || input.channelKind === "voice" ? null : studyNudge(ownerText, toolset, state);
       if (nudge) {
         nudged = true;
         transcript.push({ role: "assistant", content: stepText || "…" });
         transcript.push({ role: "user", content: `<system_directive>\n${nudge}\n</system_directive>` });
+        continue;
+      }
+      // It says it did something (set a reminder, saved it, added an event, sent it) that no tool
+      // did this turn: asked once to do it or say it can't, and that answer replaces this one.
+      const unbacked = claimChecked || !toolset.tools.length ? [] : unbackedClaims(said, ownerText, state.parts, toolset);
+      if (unbacked.length) {
+        claimChecked = true;
+        finalText = saidBefore;
+        transcript.push({ role: "assistant", content: stepText || "…" });
+        transcript.push({ role: "user", content: `<system_directive>\n${claimCheck(unbacked)}\n</system_directive>` });
         continue;
       }
       lastStepHadTools = false;
@@ -433,6 +448,8 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
 
   // 7. Safety post-processing (in code, every time).
   finalText = honestAboutSends(finalText, state.parts, toolset);
+  // Still says it did what no tool did: the plain truth goes with it.
+  finalText = withClaimTruth(finalText, unbackedClaims(finalText, ownerText, state.parts, toolset));
   if (crisis && !finalText.includes("988")) finalText = `${finalText}\n\n${CRISIS_FOOTER}`;
 
   // 8. Usage, cost, receipts.
@@ -900,7 +917,7 @@ export function withoutStudySetsOnCalls(toolset: Toolset, request: string): Tool
 const MADE_UP_SEND = /^[ \t]*\[(?:message|email|e-mail|text|sms|dm|reply)s?\s+(?:was\s+)?sent\b[^\]\n]*\][ \t]*/gim;
 const SEND_CLAIM =
   /\bI(?:'ve| have| just)?\s+(?:emailed|e-mailed|texted|messaged)\b|\bI(?:'ve| have| just)?\s+sent\s+(?:(?:the|your|an?|that|this|her|him|them|it)\s+)?(?:email|e-mail|message|text|reply|invite|invitation|note to)\b|\b(?:email|e-mail|message|text|reply|invitation)\b[^.!?\n]{0,60}\b(?:has been|was|is now)\s+sent\b/i;
-export const NOTHING_SENT = "To be clear: nothing has been sent.";
+export { NOTHING_SENT };
 
 export function honestAboutSends(text: string, parts: MessagePart[], toolset: Pick<Toolset, "byName">): string {
   const sendRan = parts.some((p) => p.type === "tool_call" && toolset.byName.get(p.name)?.effect === "send");
