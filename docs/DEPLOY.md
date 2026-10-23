@@ -75,7 +75,7 @@ A paid Checkout for an account deleted before Stripe confirmed it adds no credit
 - [ ] Legal pages reviewed by a lawyer (they're drafts); trademark clearance (see `docs/DECISIONS.md`).
 - [ ] Twilio A2P/toll-free registration done; email domain verified (SPF/DKIM/DMARC).
 - [ ] Google: Gmail/Drive through Composio's verified app, or your own app with Google's verification (restricted Gmail scopes need a yearly CASA assessment).
-- [ ] Support email set (`NEXT_PUBLIC_SUPPORT_EMAIL`); crisis protocol page live (`/safety`).
+- [x] Support email: diegoprozzi@gmail.com by default (`src/lib/site.ts`; `NEXT_PUBLIC_SUPPORT_EMAIL` changes it); crisis protocol page live (`/safety`).
 - [ ] Re-render avatar pictures if characters change: `npm run avatars`.
 - [ ] Meeting notes and voice typing:
   - a lawyer reviews the consent flow and transcript retention;
