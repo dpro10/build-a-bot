@@ -1054,3 +1054,10 @@ Diego: "give people like $5 free credit to start. I still have $50 in free credi
   - calls from the app (Nemotron's tokens; 15 minutes at most, 20 calls an hour).
 
   Phone calls reach a bot only from its owner's linked phone. The minutes they cost are paid to Twilio, not from the Nebius credit.
+
+## Decision: the support email is diegoprozzi@gmail.com (Diego, 2026-10-23)
+
+Diego: "For the support email, let's just put diegoprozzi@gmail.com."
+
+- It's the site's default (`src/lib/site.ts`), because the Vercel connector can't add environment variables. `NEXT_PUBLIC_SUPPORT_EMAIL` still changes it.
+- It's on the legal, safety and pricing pages, the billing FAQ and the site footer, which linked to the Account page before.

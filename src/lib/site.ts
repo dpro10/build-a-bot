@@ -1,12 +1,12 @@
 /**
  * Site-wide constants for the public pages (landing, pricing, safety, legal, recipes).
  *
- * The support address comes from NEXT_PUBLIC_SUPPORT_EMAIL. We never invent one:
- * without it, contact links point to the in-app Account page instead.
+ * The support address is Diego's (2026-10-23: "For the support email, let's just put
+ * diegoprozzi@gmail.com"); NEXT_PUBLIC_SUPPORT_EMAIL changes it.
  */
 import type { Metadata } from "next";
 
-const supportEmail = (process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? "").trim() || null;
+const supportEmail: string | null = (process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? "").trim() || "diegoprozzi@gmail.com";
 
 export const SITE = {
   name: "Build-a-bot",
