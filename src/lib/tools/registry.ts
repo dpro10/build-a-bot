@@ -43,6 +43,23 @@ async function connectionTools(conn: Connection, ctx: ToolContext): Promise<AnyT
   return [];
 }
 
+/** Splits `room` between lists of these lengths as evenly as they can use it (one that needs less leaves the rest to the others). */
+export function shareRoom(lengths: number[], room: number): number[] {
+  const take = lengths.map(() => 0);
+  let left = Math.max(0, room);
+  let open = lengths.map((_, i) => i).filter((i) => lengths[i] > 0);
+  while (left > 0 && open.length) {
+    const each = Math.max(1, Math.floor(left / open.length));
+    for (const i of open) {
+      const add = Math.min(each, lengths[i] - take[i], left);
+      take[i] += add;
+      left -= add;
+    }
+    open = open.filter((i) => take[i] < lengths[i]);
+  }
+  return take;
+}
+
 function describeAccess(capabilities: { label: string; effect: string; risk: string }[], trust: TrustLevel, sensitive?: boolean) {
   return capabilities
     .map((cap) => {
@@ -78,10 +95,12 @@ export async function buildToolset(ctx: ToolContext): Promise<Toolset> {
     if (def && isBuiltinConnector(def) && c.status !== "disabled" && connectorUsable(def)) enabledBuiltins.add(def.id);
   }
 
-  const tools: AnyToolSpec[] = [];
-  for (const id of enabledBuiltins) tools.push(...(BUILTIN_TOOLS[id] ?? []));
+  // Look only: drop tools that act on the world (owner-only helpers stay).
+  const allowed = (list: AnyToolSpec[]) => (trust === "look" ? list.filter((t) => t.effect === "read" || t.ownerOnly) : list);
+  const builtins = allowed([...enabledBuiltins].flatMap((id) => BUILTIN_TOOLS[id] ?? []));
 
   const apps: Toolset["apps"] = [];
+  const appTools: AnyToolSpec[][] = [];
   for (const conn of connections) {
     const def = getConnector(conn.connectorId);
     if (!def || isBuiltinConnector(def) || conn.status === "disabled") continue;
@@ -92,7 +111,7 @@ export async function buildToolset(ctx: ToolContext): Promise<Toolset> {
       connTools = [];
     }
     if (connTools.length) {
-      tools.push(...connTools);
+      appTools.push(allowed(connTools));
       apps.push({
         id: def.id,
         name: `${def.name}${conn.status === "demo" || conn.mode === "demo" ? " (demo data)" : ""}`,
@@ -101,12 +120,14 @@ export async function buildToolset(ctx: ToolContext): Promise<Toolset> {
     }
   }
 
-  // Look only: drop tools that act on the world (owner-only helpers stay).
-  let filtered = trust === "look" ? tools.filter((t) => t.effect === "read" || t.ownerOnly) : tools;
+  // Apps share the room the built-ins leave, so a second app isn't cut to a handful of tools. Each
+  // app's list comes best first (pickTools), so its share is the start of it.
+  const shares = shareRoom(appTools.map((list) => list.length), MAX_TOOLS - builtins.length);
+  const tools = [...builtins, ...appTools.flatMap((list, i) => list.slice(0, shares[i]))];
 
   // De-duplicate names and cap the count (built-ins first, then connections in order).
   const seen = new Set<string>();
-  filtered = filtered.filter((t) => (seen.has(t.name) ? false : (seen.add(t.name), true))).slice(0, MAX_TOOLS);
+  const filtered = tools.filter((t) => (seen.has(t.name) ? false : (seen.add(t.name), true))).slice(0, MAX_TOOLS);
 
   return { tools: filtered, byName: new Map(filtered.map((t) => [t.name, t])), apps, connections };
 }

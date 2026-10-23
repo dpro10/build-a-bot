@@ -12,7 +12,7 @@ import type { Connection } from "@/lib/db/schema";
 import { config } from "@/lib/env";
 import type { ConnectorDef } from "./types";
 import { safeToolName, type AnyToolSpec, type ToolContext } from "@/lib/tools/types";
-import { classifyTool, extractEmails } from "./mcp/effects";
+import { classifyTool, extractEmails, pickTools } from "./mcp/effects";
 import { fetchWithTimeout } from "@/lib/tools/net";
 import { truncate } from "@/lib/utils";
 
@@ -131,12 +131,12 @@ export async function composioToolsForConnection(conn: Connection, def: Connecto
   if (filter) tools = tools.filter((t) => filter.test(t.slug));
   const pinned = process.env[`COMPOSIO_TOOLKIT_VERSION_${toolkit.toUpperCase()}`];
   const prefix = safeToolName(def.id).slice(0, 20);
-  const ranked = [...tools].sort((a, b) => Number(classifyTool(a.slug).effect !== "read") - Number(classifyTool(b.slug).effect !== "read"));
-  return ranked.slice(0, MAX_TOOLS).map((tool) => {
-    const { effect, risk } = classifyTool(tool.slug.replace(new RegExp(`^${toolkit}_`, "i"), ""));
+  const bare = (tool: ComposioTool) => tool.slug.replace(new RegExp(`^${toolkit}_`, "i"), "");
+  return pickTools(tools, MAX_TOOLS, (tool) => ({ name: bare(tool), effect: classifyTool(bare(tool)).effect })).map((tool) => {
+    const { effect, risk } = classifyTool(bare(tool));
     const params = tool.input_parameters && (tool.input_parameters as { type?: string }).type === "object" ? tool.input_parameters : { type: "object", properties: {} };
     const spec: AnyToolSpec = {
-      name: safeToolName(`${prefix}__${tool.slug.toLowerCase().replace(new RegExp(`^${toolkit}_`, "i"), "")}`),
+      name: safeToolName(`${prefix}__${bare(tool).toLowerCase()}`),
       title: tool.name ?? tool.slug,
       description: `${def.name} — ${(tool.description ?? tool.slug).slice(0, 1500)}`,
       input: z.record(z.string(), z.unknown()),
@@ -146,7 +146,8 @@ export async function composioToolsForConnection(conn: Connection, def: Connecto
       effect,
       risk,
       sensitive: def.sensitive,
-      taints: effect === "read",
+      // Whatever an app sends back can carry other people's words (an email, a comment, an invite).
+      taints: true,
       recipients:
         effect === "send" || effect === "admin"
           ? async (args, c) => {
