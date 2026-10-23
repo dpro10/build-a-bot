@@ -16,7 +16,7 @@ Diego (2026-10-15): "im in the nvidia x nebius hackathon and the more we create 
 | More than one entry | Not needed: Build-a-bot is Diego's only entry (Diego, 2026-10-16: "we're only going to enter build a bot. Not chef."). |
 | Public repository with an open-source license shown on the repo page | Yes: `dpro10/build-a-bot` is public under Apache 2.0 since 2026-10-17, its history scanned for keys first. |
 | A working demo URL, free to use for judges until judging ends | [build-a-bot.site](https://build-a-bot.site), in real mode (nothing simulated). Every account starts with $5 of credit, about 12,000 messages on Nemotron 3.5 Lightning, and no card is needed. |
-| A public YouTube video under 3 minutes, no copyrighted music | To record (script below). The one-minute promo in `video/` (Otto's own Magpie voice, an original score) can open it. |
+| A public YouTube video under 3 minutes, no copyrighted music | Cut: `video/demo`, 2:48 of the real product, narrated by Otto in its own Magpie voice over an original score (`video/demo/SCRIPT.md`). To upload. The one-minute promo in `video/` can go alongside it. |
 | README with setup steps and how NVIDIA models, Token Factory and Nebius were used | Done: README → *Built on NVIDIA and Nebius*. |
 | Feedback on Token Factory, AI Cloud and NVIDIA tools | Below. |
 
@@ -32,9 +32,18 @@ Diego (2026-10-15): "im in the nvidia x nebius hackathon and the more we create 
 
 1. **Demo mode off** on the live site: **done** on 2026-10-22. `DEMO_MODE` is deleted in Vercel, the site was redeployed, and nothing simulated is left (`docs/DECISIONS.md`, "demo mode off on the live site").
 2. **The support email:** **done** on 2026-10-23. diegoprozzi@gmail.com is the site's default (`src/lib/site.ts`), shown on the legal, safety, pricing and contact pages.
-3. **Zero data retention** for the included models, in the Token Factory console.
-4. **The repository page:** the website (build-a-bot.site), a description and topics. Delete the old "Desktop app (test build)" pre-release: the signed builds replaced it.
-5. **The video:** record it from the script below and put it on YouTube.
+3. **Zero data retention** for the included models: sign in at [tokenfactory.nebius.com](https://tokenfactory.nebius.com), open your account's profile page, and turn on **Zero Data Retention**. Nebius's guide says that's where it is; Claude can't see the console, so the label may differ a little.
+   - It applies to the whole organization (every project and key). Prompts and replies are no longer kept: by default Token Factory keeps them in Finland to speed up answers.
+   - It may make answers a little slower, and Data Lab stops collecting logs.
+   - Nebius support can confirm it in writing.
+   - The promo's "zero data retention" line is true only once this is on.
+4. **The repository page** (the gear next to **About** on github.com/dpro10/build-a-bot):
+   - **Website:** `https://build-a-bot.site`
+   - **Description:** `Your own AI agent in about a minute: pick a face, give it a brain (NVIDIA Nemotron and other open models on Nebius, at cost, or your own API key) and your apps, and talk to it on the web, Telegram, Discord or Slack, or call it.`
+   - **Topics:** `ai-agent` `personal-assistant` `nvidia` `nemotron` `nebius` `parakeet` `voice-assistant` `mcp` `tavily` `nextjs` `electron` `hackathon`
+
+   The old "Desktop app (test build)" pre-release goes on its own: the desktop workflow removes it now that both apps are signed.
+5. **The video:** the 2:48 cut is ready (`video/demo`, rendered on Diego's Mac to `video/out/demo/build-a-bot-demo.mp4`). Optionally record your half of the call and the two screen recordings first (`video/demo/SCRIPT.md`, "What Diego records", about 20 minutes), and Claude re-cuts it. Then put it on YouTube as a public video and paste the link into Devpost.
 6. **Submit on Devpost** by October 30, 10:00 am Pacific.
 
 ## What's real on build-a-bot.site
@@ -46,7 +55,7 @@ Nothing on the live site is simulated. Each service that isn't set up says "Comi
 | Building a bot, and chatting with it on the web | **Real.** The included brains are NVIDIA Nemotron and other open models on Token Factory. Five free messages come before signing in. Then you sign in with your email (a real link, sent by Resend), and the chat picks up where it was. |
 | Your own AI key (Anthropic, OpenAI, Google Gemini, OpenRouter, any OpenAI-compatible endpoint) | **Real**, and free here: the provider bills you. |
 | Web search, reading pages, the tutor's fact checks | **Real**, on Tavily, paid from credit at Tavily's price. |
-| Apps | **Real** wherever there's a way to sign in: about 70 apps through Composio's one-click sign-in, and about 35 through the app's own MCP sign-in. The rest say "Coming soon". So do Gmail, Calendar and Drive through Google's own MCP servers, until Google approves a client. |
+| Apps | **Real** wherever there's a way to sign in: about 100 apps, Gmail, Google Calendar and Drive among them: about 60 through Composio's one-click sign-in and about 40 through the app's own MCP sign-in. The rest say "Coming soon". |
 | Your own MCP server | **Real.** Private addresses are refused. |
 | Memory, reminders, routines, approvals, receipts, STOP | **Real.** |
 | The Library (your files, for your bot) | **Real.** Files are stored privately and read into passages. Photos and scanned pages are read by a vision model on Token Factory. |
@@ -65,14 +74,14 @@ Nothing on the live site is simulated. Each service that isn't set up says "Comi
 2. **Build it:**
    - Pick a face and a name.
    - Keep **Nemotron 3.5 Lightning** as the brain.
-   - Add a couple of apps, and choose **Ask me first**.
+   - Add a couple of apps (Gmail and Google Calendar sign in with one click), and choose **Ask me first**.
    - Finish, and the bot greets you.
 
    Your first five messages are free. After that, sign in with your email (the link comes back to the same chat), and your $5 of credit takes over. **Credit & usage** shows what each message cost, at Token Factory's price.
-3. **Try it:** ask something that needs the web ("what's the weather in Austin this weekend and anything fun to do?"). Then ask something that needs a yes from you ("email Sam that I'm running late"): it asks first.
+3. **Try it:** ask something that needs the web ("what's the weather in Austin this weekend and anything fun to do?"). Then, with Gmail added, ask for something that needs a yes from you ("email Sam that I'm running late"): it shows you the email and asks first.
 4. **Call it:** click **Call** in the bot's header and allow the microphone.
    - NVIDIA Parakeet hears you and NVIDIA Magpie answers, both on our own server.
-   - Nemotron 3.5 Lightning holds the conversation and hands real work to the bot ("what's on my calendar tomorrow?", "remind me at five to call Sam").
+   - Nemotron 3.5 Lightning holds the conversation and hands real work to the bot ("what's on my calendar tomorrow?" with Google Calendar added, "remind me at five to call Sam").
    - Cut in whenever you like: it stops mid-word and listens.
    - When you hang up, the transcript is in the chat.
 5. **Voice typing**, in the desktop app:
@@ -85,23 +94,20 @@ Nothing on the live site is simulated. Each service that isn't set up says "Comi
    - **The bot asks first.** While it listens, it sits at the bottom of the screen with live captions. Hide it to share your screen; the Build-a-bot icon then shows it's recording.
    - **When you stop**, the notes (a summary, decisions, action items) are in the **Meetings** tab and in the chat. Ask the bot "what did we decide?".
 
-## Demo video script (about 2 minutes 55 seconds)
+## Demo video
 
-| Time | On screen | Said |
-| - | - | - |
-| 0:00 | The landing page | "Everyone wants their own AI assistant. Most people can't build one, and the ones you can buy can't do much, or can do too much. This is Build-a-bot." |
-| 0:12 | The builder: face, name, brain, apps, trust | "Pick a face, a name and a brain: by default NVIDIA Nemotron 3.5 Lightning on Nebius Token Factory, so cheap that a message costs a twenty-fifth of a cent, and you pay only what the models cost. Give it your apps, then decide how much it does on its own. A policy engine enforces that in code, not in the prompt." |
-| 0:35 | Chat: a web question, then an email that needs approval | "It searches the web with Tavily, and when it wants to send something, it asks first. Every action leaves a receipt." |
-| 0:50 | Diego, away from his desk, calls his bot; the call view on screen: the bot's face talking, live transcript | "But the best part is you don't need a screen. Call it." *(On the call:)* "Hey Otto, what's on my calendar tomorrow?" … "Move the three o'clock to Friday and let Sam know." *(He cuts in mid-sentence; it stops and listens.)* |
-| 1:20 | One slide: Parakeet, Magpie, Nemotron, the bot's agent | "NVIDIA Parakeet hears you and NVIDIA Magpie answers, both on our own server with NVIDIA's NeMo-Speech.cpp. Nemotron 3.5 Lightning holds the conversation and hands the real work to your bot, with the same approvals as the chat. Cut in whenever you like." |
-| 1:40 | Voice typing in Slack (the pill says *private*) | "On your computer, it types for you by voice in any app, with Parakeet running right on your laptop. Start with its name, and you're asking your bot instead." |
-| 2:00 | A Zoom call; the bot peeks up and asks; then the notes in the Meetings tab | "It takes your meeting notes too, asking first, and the audio stays on your computer; Nemotron writes the summary, decisions and action items." |
-| 2:20 | Memory: "Bring my memories" | "It remembers what matters, on any brain, and you can bring your memories from ChatGPT, Claude or Gemini." |
-| 2:32 | One slide: Nemotron on Token Factory, Parakeet and Magpie on our server and your computer, Tavily | "Everything that thinks runs on NVIDIA's open models on Nebius. What hears and speaks runs on NVIDIA's open models too: on our own server for calls, and on your own computer for voice typing and meetings. Build-a-bot: your own AI, built in a minute, that you can just call." |
+The cut, beat by beat, with where each claim is true and what Diego records: [`video/demo/SCRIPT.md`](../video/demo/SCRIPT.md). How it's built and rebuilt: [`video/demo/README.md`](../video/demo/README.md).
 
 ## Devpost write-up draft
 
-**Tagline:** Your own AI agent in a minute, under your control: call it and it gets things done with your apps, asking before it acts. It also lives in your chats, takes your meeting notes and types for you by voice, with NVIDIA's open speech models hearing you on your own computer or our own server.
+**For the form:**
+- **Elevator pitch** (192 of Devpost's 200 characters): `Your own AI agent in a minute: NVIDIA Nemotron on Nebius, your apps, approvals enforced in code. Chat with it or call it; it takes meeting notes and types by voice, heard on your own computer.`
+- **Try it out:** https://build-a-bot.site, https://github.com/dpro10/build-a-bot and https://build-a-bot.site/download
+- **Video:** the YouTube link, once it's up.
+- **Track:** Personal AI. Also enter **Best Use of Tavily**.
+- **Built with:** `nvidia-nemotron`, `nvidia-parakeet`, `nvidia-magpie`, `nemo-speech.cpp`, `nebius-token-factory`, `tavily`, `composio`, `mcp`, `next.js`, `react`, `typescript`, `postgresql`, `vercel`, `electron`, `twilio`, `google-cloud`
+
+The sections below fill in **About the project**.
 
 **What it does:** Build-a-bot lets anyone make a personal AI agent in about a minute.
 - **Make it:** pick one of five characters, name it, choose a brain and give it apps. Then decide how much it can do on its own.

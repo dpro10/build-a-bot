@@ -233,8 +233,12 @@ test("an Electron app's text box: the text in it, and where the caret is", { ski
   await startTarget();
   await targetFront();
   await targetDo({ cmd: "set", value: "Dear team,\nMeet pro zee at the lab." });
-  // While the owner talks, the app in front is asked to get its accessibility tree ready.
-  assert.equal((await reader.warm()).ok, true);
+  // While the owner talks, the app in front is asked to get its accessibility tree ready. For an
+  // app that has just started, on a cold runner, that can take longer than the reader waits; the
+  // app copes (the reader restarts, and the next answer gets longer), so one retry is allowed.
+  let warm = await reader.warm();
+  if (!warm.ok && warm.error === "timeout") warm = await reader.warm();
+  assert.equal(warm.ok, true, JSON.stringify(warm));
   let r;
   await until("the text box to be read", async () => {
     r = await reader.focus();
