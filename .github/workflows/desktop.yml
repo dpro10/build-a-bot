@@ -8,9 +8,9 @@
 # Signing: with the repository's signing secrets (desktop/README.md › Packaging and signing), the
 # Windows installer is signed with Azure Artifact Signing and the Mac app with Apple's Developer ID,
 # then notarized. Without them, the builds are unsigned, for testing.
-# On main: every build becomes the "Desktop app (test build)" pre-release; signed builds are also
-# published as a release (desktop-v<version>), which build-a-bot.site/download offers and the
-# installed apps update to.
+# On main: signed builds are published as a release (desktop-v<version>), which
+# build-a-bot.site/download offers and the installed apps update to. Until both apps are signed,
+# the build is also the "Desktop app (test build)" pre-release; once they are, there's none.
 name: Desktop app
 
 on:
@@ -456,8 +456,9 @@ jobs:
             desktop/dist/latest-mac.yml
           if-no-files-found: error
 
-  # On main: every build replaces the "Desktop app (test build)" pre-release; signed builds also
-  # become a release, which build-a-bot.site/download offers and the installed apps update to.
+  # On main: signed builds become a release, which build-a-bot.site/download offers and the
+  # installed apps update to. The "Desktop app (test build)" pre-release is for builds that
+  # aren't signed on both computers: it's replaced each time, and removed once both are.
   publish:
     name: Publish
     # A push to main, or a build started by hand on main (gh workflow run desktop.yml --ref main).
@@ -483,6 +484,8 @@ jobs:
       - name: Replace the test build
         run: |
           gh release delete desktop-test --yes --cleanup-tag || true
+          # Both apps signed: the release below is the one to get, so there's no test build.
+          if [ "$WIN_SIGNED" = "true" ] && [ "$MAC_SIGNED" = "true" ]; then exit 0; fi
           {
             echo "The desktop app, built from main by GitHub Actions after it checked itself on a real Mac and installed itself and typed a sentence on a real Windows computer."
             echo
