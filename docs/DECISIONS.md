@@ -1076,3 +1076,32 @@ Diego, after "Hey BotTest. Remind me to call my mom at 6:00 PM" showed nothing i
   - after the owner approves an action, the follow-up message counts it as done if it ran. Before, a follow-up saying an approved email was sent got "To be clear: nothing has been sent." added (the audit found it; the calendar check would have done the same).
 - **What it costs:** the check needs no model call when the answer is honest. A caught claim costs one more model call (about a second or two). Thinking adds output tokens, a fraction of a cent a message on Lightning.
 - **Not in this change:** "Hey {name}" misses bot names written together ("BotTest", heard "bot test") or misheard. Moved to "What's next" for after the submission.
+
+## Decision: every bot can look things up, and reading mail is reading (Diego, 2026-10-23)
+
+Diego, on the audit's first two items: "Okay, fix the web search one and the Gmail one first, numbers 1 and 2."
+
+**Web search for every bot**
+- **The cause:** a bot built the way the judges' guide says had no web search. The always-on tools were memory, reminders, weather, math and the Library. Asked "anything fun to do in Austin this weekend?", it answered from memory, with a made-up place in the answer.
+- **Now:** web search and the page reader are always on, like memory and reminders, wherever this server can run them (`DEFAULT_BUILTINS` in `src/lib/connectors/builtin.ts`). Web search needs Tavily; without it, a bot gets only the page reader.
+  - Apps & trust and the builder list them under "Always included". Like the other always-on tools, they can't be turned off; an owner who had removed web search gets it back.
+  - The builder's cost line always says a lookup is $0.008 where lookups exist.
+- **Guests:** accounts that haven't signed in now share a quarter of the day's 300 lookups (75) instead of a tenth (30), so a few judges don't use them up. Each account still gets 30. Lookups aren't counted per network.
+- **What it costs:** about 600 more prompt tokens a message (four more tool descriptions), about $0.00004 on Lightning. A lookup is charged only when the bot searches.
+
+**Reading mail is reading**
+- **The cause (from the audit):** tool names were sorted by their nouns before their verbs. Anything with "email", "message" or "comment" in it was a send: Gmail's `GMAIL_FETCH_EMAILS`, Outlook's message readers, Slack's `SEARCH_MESSAGES`, and the comment readers in GitHub, Notion and Linear.
+  - On Ask me first, reading the inbox popped up an approval card.
+  - On Full faith, reading mail didn't mark the turn as having read outside content, so a planted email could get mail sent to a stranger without a tap.
+- **Found while fixing it:** each app keeps at most 20 tools (Composio) or 24 (MCP), and reads were ranked first.
+  - Composio's Gmail has 61 tools, 22 of which counted as reads, so a bot's 20 Gmail tools were all reads like S/MIME info and language settings: no way to fetch mail or send it.
+  - Google Calendar kept no way to create or change events, and Notion and Linear lost their create tools.
+  - This is from Composio's published tool lists (composio.dev, 2026-10-23) and the code; it wasn't seen on a real connection.
+- **Now** (`src/lib/connectors/mcp/effects.ts`):
+  - **A tool's verb decides.** get, list, search and fetch read, whatever they read. Names in Google's style (`EVENTS_LIST`) go by their last word. A read word later in a name no longer makes a change a read: `CALENDAR_LIST_INSERT` and `MARK_NOTIFICATIONS_AS_READ` were reads before.
+  - **The server's hints:** `readOnlyHint` counts where the name has no verb, and a hint that a tool changes things wins over a name that reads. Unlike the audit's suggestion ("readOnlyHint first"), a server that says `send_message` only reads isn't believed.
+  - **Whatever a third-party app sends back is outside content,** whatever the tool did.
+  - **Which tools a bot gets** (`pickTools`): half that read and half that act, everyday work first (fetch, search, send and reply, then create, then update), deletes after, the app's own settings last. Ties keep Composio's order, which its docs say puts the most important first.
+  - **Apps share the room the built-ins leave** (48 tools in all; the built-ins now take 21). With Gmail and Calendar, they get 14 and 13. Before, the second app got whatever was left.
+  - Composio's Gmail recipients (`recipient_email`, `extra_recipients`) are recognized, so a send to a known contact or to yourself isn't treated as someone new.
+- **Unchanged:** a Gmail reply is medium risk, because its name doesn't say "email" (a new email is high). On Trusted helper, the bot can reply to a known contact without asking. Deleting an event may not make Calendar's cut.
