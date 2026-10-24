@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CallSession, sanitizeHistory, type SessionConfig } from "../src/call/session.ts";
+import { CallSession, callLimitMs, sanitizeHistory, type SessionConfig } from "../src/call/session.ts";
 import { ENGINE_TROUBLE, PhraseCache } from "../src/call/phrases.ts";
 import { EnergyVad } from "../src/vad/vad.ts";
 import { maskPin, pinFromSpeech } from "../src/call/pin.ts";
@@ -295,6 +295,13 @@ test("while a PIN is wanted, digits that could be one are taken out; times, amou
   assert.equal(maskPin("call me at 4:30 about the $44.81"), "call me at 4:30 about the $44.81");
   assert.equal(maskPin("my number is 555 123 4567"), "my number is 555 123 4567");
   assert.equal(maskPin("Oh, one more thing: someone called"), "Oh, one more thing: someone called");
+});
+
+test("phone calls last 15 minutes at most; in-app calls take the app's limit", () => {
+  assert.equal(callLimitMs({ kind: "phone", maxMinutes: 20 }), 15 * 60_000);
+  assert.equal(callLimitMs({ kind: "phone", maxMinutes: 10 }), 10 * 60_000);
+  assert.equal(callLimitMs({ kind: "web", maxMinutes: 15 }), 15 * 60_000);
+  assert.equal(callLimitMs({ kind: "web", maxMinutes: Number.NaN }), 15 * 60_000);
 });
 
 // ---- the talker failing ------------------------------------------------------------------------

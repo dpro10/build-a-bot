@@ -8,6 +8,8 @@
 # and optionally:
 #   GCP_ZONE (us-central1-a)  VOICE_MACHINE_TYPE (c3-highcpu-4)  APP_URL (https://build-a-bot.site)
 #   VOICE_HOST (default: <ip>.sslip.io, a hostname that needs no DNS setup)
+#   VOICE_MAX_CALLS (1: calls at once)  TALKER_MODEL (the server's default, Nemotron 3.5 Lightning)
+#   TTS_CFG (0 turns Magpie's classifier-free guidance off)
 #   IMAGE_TAG (the git commit)  SOURCE_IMAGE (an already-built local image to push; else it builds)
 # `gce.sh --cpu-level` only prints the build the machine type needs (v3 or v4).
 #
@@ -46,6 +48,22 @@ if [ "${#VOICE_SERVER_SECRET}" -lt 32 ]; then
   echo "VOICE_SERVER_SECRET must be at least 32 characters" >&2
   exit 1
 fi
+MAX_CALLS="${VOICE_MAX_CALLS:-1}"
+case "$MAX_CALLS" in
+  "" | *[!0-9]* | 0 | 0*)
+    echo "VOICE_MAX_CALLS must be a whole number, 1 or more (it's '$MAX_CALLS')" >&2
+    exit 1
+    ;;
+esac
+# Each setting is one line of the server's env file.
+for setting in TALKER_MODEL TTS_CFG; do
+  case "${!setting:-}" in
+    *$'\n'* | *$'\r'*)
+      echo "$setting must be on one line" >&2
+      exit 1
+      ;;
+  esac
+done
 
 echo "== APIs"
 gc services enable compute.googleapis.com artifactregistry.googleapis.com
@@ -93,9 +111,11 @@ CODEC=$(( CORES - TTS > 0 ? CORES - TTS : 1 ))
   echo "APP_URL=$APP_URL"
   echo "VOICE_SERVER_SECRET=$VOICE_SERVER_SECRET"
   echo "TOKEN_FACTORY_API_KEY=$TOKEN_FACTORY_API_KEY"
-  echo "MAX_CALLS=${VOICE_MAX_CALLS:-1}"
+  echo "MAX_CALLS=$MAX_CALLS"
   echo "TTS_THREADS=$TTS"
   echo "CODEC_THREADS=$CODEC"
+  if [ -n "${TALKER_MODEL:-}" ]; then echo "TALKER_MODEL=$TALKER_MODEL"; fi
+  if [ -n "${TTS_CFG:-}" ]; then echo "TTS_CFG=$TTS_CFG"; fi
 } > "$ENV_FILE"
 
 echo "== VM ($MACHINE in $ZONE)"

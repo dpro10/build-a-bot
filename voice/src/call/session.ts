@@ -75,6 +75,15 @@ export const DEFAULT_SESSION: SessionConfig = {
   maxHistory: 30,
 };
 
+/** Phone calls last at most this long, whatever the app asks; in-app calls take the app's limit. */
+export const PHONE_MAX_MINUTES = 15;
+
+/** How long this call may last. */
+export function callLimitMs(info: Pick<SessionInfo, "kind" | "maxMinutes">): number {
+  const asked = Number.isFinite(info.maxMinutes) && info.maxMinutes > 0 ? info.maxMinutes : PHONE_MAX_MINUTES;
+  return Math.max(1, info.kind === "phone" ? Math.min(asked, PHONE_MAX_MINUTES) : asked) * 60_000;
+}
+
 export type SessionDeps = {
   engine: SpeechEngine;
   vad: Vad;
@@ -247,11 +256,10 @@ export class CallSession {
     }
     this.history = [];
     this.say(this.info.greeting, "bot");
-    const maxMs = Math.max(1, this.info.maxMinutes) * 60_000;
     this.limitTimer = setTimeout(() => {
       this.limitTimer = null;
       void this.end("limit", "I have to wrap up this call now. Talk soon!");
-    }, maxMs);
+    }, callLimitMs(this.info));
 
     // Fillers in this call's voice and rate, made while the greeting plays.
     void this.phrases.warm(["Mm-hm.", "One sec.", "Let me check."], this.voice, this.transport.outputRate);

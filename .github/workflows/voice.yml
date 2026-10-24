@@ -123,7 +123,8 @@ jobs:
 
   # Google Compute Engine, once these are set in the repository's settings: secrets GCP_SA_KEY,
   # VOICE_SERVER_SECRET and TOKEN_FACTORY_API_KEY; variable GCP_PROJECT (and optionally GCP_ZONE,
-  # VOICE_MACHINE_TYPE, VOICE_HOST, APP_URL). Until then this job says what's missing and stops.
+  # VOICE_MACHINE_TYPE, VOICE_HOST, APP_URL, and the server's VOICE_MAX_CALLS, TALKER_MODEL and
+  # TTS_CFG). Until then this job says what's missing and stops.
   # The image is the one the image job built (from its cache), pushed to the project's own registry.
   deploy:
     needs: [image, real-models]
@@ -187,6 +188,9 @@ jobs:
           VOICE_MACHINE_TYPE: ${{ vars.VOICE_MACHINE_TYPE }}
           VOICE_HOST: ${{ vars.VOICE_HOST }}
           APP_URL: ${{ vars.APP_URL }}
+          VOICE_MAX_CALLS: ${{ vars.VOICE_MAX_CALLS }}
+          TALKER_MODEL: ${{ vars.TALKER_MODEL }}
+          TTS_CFG: ${{ vars.TTS_CFG }}
           VOICE_SERVER_SECRET: ${{ secrets.VOICE_SERVER_SECRET }}
           TOKEN_FACTORY_API_KEY: ${{ secrets.TOKEN_FACTORY_API_KEY }}
           IMAGE_TAG: ${{ github.sha }}

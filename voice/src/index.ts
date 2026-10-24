@@ -19,6 +19,7 @@ function log(event: string, fields: Record<string, unknown> = {}): void {
 }
 
 const config = loadConfig();
+for (const warning of config.warnings) log("setting_ignored", { warning });
 let ready = false;
 
 let engine: SpeechEngine;
