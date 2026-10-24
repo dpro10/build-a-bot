@@ -1122,6 +1122,8 @@ Diego, on the rest of the October 23 bug report: "ok, go ahead an just do the re
 - **Purchases always ask first.** No app says a price up front, so with a spending cap set, a purchase now asks instead of being refused, and the Limits card says so.
 - **A phone belongs to one account.** Linking it unlinks it from any other account's bots.
 - **Phone calls last up to 15 minutes**, on every line, and a phone can call 20 times an hour.
+- **The live call check signs in as its own account** (`usr_live_call_check`), since calls need one: `POST /api/calls/check`, signed with the voice server's secret like its other requests, which the check's workflow already has. Its credit is topped up to $5 whenever it's under $1.
+- **The download page doesn't depend on GitHub's API:** when the API says no (60 calls an hour without a token, shared across Vercel), the newest release is read from its updater files (`latest-mac.yml`, `latest.yml`) on github.com.
 - **Only the chat's Stop button stops an answer.** It asks the server to stop (`/chat/stop`), and the turn checks for that every second. A dropped connection (a phone locked mid-answer, a Wi-Fi blip) lets the answer finish, and the chat shows it when it's back. Stopping on any closed connection, as first built, cut those answers off.
 
 **Set in Vercel when convenient:** `GITHUB_TOKEN` (any read-only token) makes the download page's release check count against it instead of GitHub's 60 calls an hour. Without it, the page now keeps the last good list through GitHub's refusals.

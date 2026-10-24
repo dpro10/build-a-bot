@@ -49,6 +49,8 @@ jobs:
       - name: Call
         env:
           APP_URL: ${{ inputs.app_url || vars.APP_URL || 'https://build-a-bot.site' }}
+          # Calls need a signed-in account: the check signs in as its own with the voice server's secret.
+          VOICE_SERVER_SECRET: ${{ secrets.VOICE_SERVER_SECRET }}
         run: node scripts/live-call.mjs "$APP_URL" live-call
       - name: Screenshots and events
         if: always()
