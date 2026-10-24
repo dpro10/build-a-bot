@@ -135,7 +135,7 @@ Then ask in chat:
 - Call detection is best with the small helper: `npm run build:mac-helper` (needs Xcode 15.4 or newer).
   - Without it, only Zoom's desktop app is noticed, plus Google Meet tabs if you turn on "Recognize Meet and Teams in browser tabs".
   - **Take notes now** in the menu bar always works.
-- The app isn't signed yet (see "What's not done"), so this only works as a dev run for now.
+- To use it without building it, download the signed app from [build-a-bot.site/download](https://build-a-bot.site/download).
 
 ### On Windows or Linux
 
@@ -185,15 +185,15 @@ Without Accessibility on a Mac it still works: press **⌘ Shift Space** to star
 
 ## 7. What's simulated or not done yet
 
-**Not live yet:**
-- build-a-bot.site is live, but in demo mode until the last keys are in.
-- **Real channels** need accounts: a Telegram manager bot, a Twilio number (plus A2P registration for texts), a brand-free email domain, and Slack and Discord apps.
+**Not live yet** (build-a-bot.site runs for real, without demo mode; [`HACKATHON.md`](HACKATHON.md#whats-real-on-build-a-botsite) lists what's real there):
+- **Texts** wait for the number's carrier registration (A2P); phone codes come by call meanwhile.
+- **The email channel** needs a brand-free mail domain, and the one-tap Telegram bot is on hold (Telegram works with a bot you make in BotFather).
+- **Web actions** need Browser Use, and **adding credit** needs Stripe.
 - **The demo brain** only knows everyday requests. Anything else gets an honest "I'm on the demo brain" answer. With a Token Factory key, the real models answer.
 
 **Meeting notes:**
 - They're in the desktop app only; the website doesn't record. NVIDIA Parakeet hears the call on your computer, so no speech-to-text key is needed.
 - Parakeet knows English and 24 European languages. Speakers on the call's side aren't told apart yet (they're "Others").
-- The Mac app isn't signed or notarized yet. That needs a Developer ID certificate and notarization credentials in CI secrets, built on a Mac.
 - FaceTime and phone calls aren't detected.
 - On Windows, detection uses the privacy registry; a small audio-session helper would be sturdier.
 

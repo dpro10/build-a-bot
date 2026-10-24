@@ -1,6 +1,7 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowUp, Brain, FileUp, Paperclip, Sparkles, Square } from "lucide-react";
 import { Avatar } from "@/components/avatar";
 import { useBotLive } from "@/components/app/live-state";
@@ -106,6 +107,7 @@ export function ChatView({
   canAttach?: boolean;
 }) {
   const live = useBotLive();
+  const router = useRouter();
   const [messages, setMessages] = React.useState<ChatMessage[]>(initialMessages);
   const [approvals, setApprovals] = React.useState<Record<string, ApprovalView>>(() => Object.fromEntries(initialApprovals.map((a) => [a.id, a])));
   const [input, setInput] = React.useState(initialInput ?? "");
@@ -252,9 +254,11 @@ export function ChatView({
         if (!failed) setTimeout(() => live.setMood("idle"), 2400);
         // STOP / START typed in the chat: show the new state in the header right away.
         if (finalStatus === "command" || finalStatus === "paused") setTimeout(() => void syncRef.current(true), 0);
+        // The sidebar's free messages, credit and approvals badges count this turn too.
+        router.refresh();
       }
     },
-    [live, patchLast],
+    [live, patchLast, router],
   );
 
   // The bot talks first.

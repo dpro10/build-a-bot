@@ -248,6 +248,8 @@ export function Builder({ demo, live, comingSoon, recipe, botCount, signedIn, ow
   };
 
   const create = async () => {
+    // Once: a second Ctrl+Enter (or click) while the first is on its way makes no second bot.
+    if (creatingRef.current) return;
     const err = stepError("review", state, { apiKey, keyStatus });
     if (err) {
       setShowError(true);
@@ -269,6 +271,7 @@ export function Builder({ demo, live, comingSoon, recipe, botCount, signedIn, ow
       return;
     }
     toast.dismiss();
+    creatingRef.current = "working";
     setCreating("working");
     const started = Date.now();
     try {
@@ -312,6 +315,7 @@ export function Builder({ demo, live, comingSoon, recipe, botCount, signedIn, ow
       router.push(`/app/bots/${res.id}`);
       router.refresh();
     } catch (err) {
+      creatingRef.current = null;
       setCreating(null);
       const e = err as ApiError;
       toast.error(e.message || "Couldn't create your bot. Try again.");

@@ -107,7 +107,10 @@ async function createPostgres(rawUrl: string): Promise<DbState> {
     const passThrough = serializers[type];
     serializers[type] = (x) => (x instanceof Date ? x.toISOString() : passThrough ? passThrough(x) : x);
   }
-  const ready = process.env.AUTO_MIGRATE === "0" ? Promise.resolve() : migratePostgres(client);
+  // A Preview deployment shares production's database (docs/DECISIONS.md): it never migrates it, so
+  // a pull request's migration can't change the live database before it's merged.
+  const migrate = process.env.AUTO_MIGRATE !== "0" && process.env.VERCEL_ENV !== "preview";
+  const ready = migrate ? migratePostgres(client) : Promise.resolve();
   return { db, ready, kind: "postgres", close: () => client.end() };
 }
 

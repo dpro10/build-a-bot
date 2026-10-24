@@ -54,5 +54,6 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string }>) {
       emit: send,
       signal,
     });
-  }, req.signal);
+    // The chat's Stop button lets go of the stream: the answer stops there, and isn't written (or billed) in full.
+  }, req.signal, { stopWhenClosed: true });
 }

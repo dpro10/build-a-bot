@@ -45,14 +45,27 @@ export function parseReleases(list: unknown): DesktopRelease[] {
 }
 
 let cached: { at: number; releases: DesktopRelease[] } | null = null;
+/** The last list GitHub gave, kept through its hiccups (and its limit on calls without a token). */
+let lastGood: DesktopRelease[] | null = null;
 
-/** The releases, from GitHub, kept for five minutes. A failure gives none (the page says "coming soon"). */
+/**
+ * The releases, from GitHub, kept for five minutes. With GITHUB_TOKEN set the calls count against
+ * that token (5,000 an hour) instead of the 60 an hour GitHub allows calls without one, shared
+ * across Vercel. A failure keeps the last list it gave (and tries again in a minute); only with
+ * none yet is it empty (the page then says "coming soon").
+ */
 export async function desktopReleases(fetchImpl: typeof fetch = fetch, now = Date.now()): Promise<DesktopRelease[]> {
   if (cached && now - cached.at < CACHE_MS) return cached.releases;
-  let releases: DesktopRelease[] = [];
+  const token = process.env.GITHUB_TOKEN?.trim();
+  let releases: DesktopRelease[] | null = null;
   try {
     const res = await fetchImpl(`${API}/repos/${REPO}/releases?per_page=30`, {
-      headers: { accept: "application/vnd.github+json", "user-agent": "build-a-bot.site", "x-github-api-version": "2022-11-28" },
+      headers: {
+        accept: "application/vnd.github+json",
+        "user-agent": "build-a-bot.site",
+        "x-github-api-version": "2022-11-28",
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+      },
       cache: "no-store",
       signal: AbortSignal.timeout(8000),
     });
@@ -61,13 +74,20 @@ export async function desktopReleases(fetchImpl: typeof fetch = fetch, now = Dat
   } catch (err) {
     console.error(`[desktop] GitHub releases: ${err instanceof Error ? err.message : err}`);
   }
-  cached = { at: now, releases };
-  return releases;
+  if (releases) {
+    lastGood = releases;
+    cached = { at: now, releases };
+    return releases;
+  }
+  const fallback = lastGood ?? [];
+  cached = { at: now - CACHE_MS + 60_000, releases: fallback };
+  return fallback;
 }
 
 /** For tests. */
 export function resetDesktopReleasesCache() {
   cached = null;
+  lastGood = null;
 }
 
 /** The newest signed build for a platform (one release may hold only the Mac app or only Windows'). */

@@ -183,8 +183,9 @@ export default function TermsPage() {
               <Link href="/pricing">pricing page</Link>, which are what our providers charge us. Prices are in US dollars, and taxes may apply.
             </li>
             <li>
-              Every account starts with a little free credit. You can add more by card. Payments are handled by Stripe; we don&apos;t see or store
-              your full card number. Stripe&apos;s card fee is added to what you pay, so the credit you add is all yours to use.
+              Every account starts with a little free credit once it signs in with an email. Adding more by card is coming; when it&apos;s here,
+              payments are handled by Stripe, we don&apos;t see or store your full card number, and Stripe&apos;s card fee is added to what you pay,
+              so the credit you add is all yours to use.
             </li>
             <li>
               Nothing is charged on its own. When your credit runs out, the parts of your bot that cost money pause until you add more. A cost is

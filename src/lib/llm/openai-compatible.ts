@@ -73,6 +73,8 @@ function parseArgs(text: string): Record<string, unknown> | null {
   }
 }
 
+const INLINE_TAG = "<tool_call>";
+
 /**
  * Some open models (when the server's tool parser misses) write tool calls into
  * the text as <tool_call>{"name": ..., "arguments": {...}}</tool_call>. Recover them.
@@ -168,6 +170,8 @@ export function createOpenAiCompatibleProvider(opts: OpenAiCompatibleOptions): L
       const toolNames = new Set(req.tools.map((t) => t.name));
       const partial = new Map<number, { id: string; name: string; args: string }>();
       let text = "";
+      /** How much of `text` has gone out as text events. */
+      let emitted = 0;
       let finish: string | null = null;
       let usage = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 };
       let sawUsage = false;
@@ -212,8 +216,15 @@ export function createOpenAiCompatibleProvider(opts: OpenAiCompatibleOptions): L
         if (reasoning) yield { type: "reasoning", delta: reasoning };
         if (delta.content) {
           text += delta.content;
-          // Hold back text while an inline <tool_call> block may be forming.
-          if (!text.includes("<tool_call>")) yield { type: "text", delta: delta.content };
+          // Hold back text from where an inline <tool_call> block may be forming (a tag, or the start of one).
+          if (!text.includes(INLINE_TAG)) {
+            const lt = text.lastIndexOf("<");
+            const safe = lt >= 0 && INLINE_TAG.startsWith(text.slice(lt)) ? lt : text.length;
+            if (safe > emitted) {
+              yield { type: "text", delta: text.slice(emitted, safe) };
+              emitted = safe;
+            }
+          }
         }
         for (const tc of delta.tool_calls ?? []) {
           const index = tc.index ?? 0;
@@ -236,10 +247,15 @@ export function createOpenAiCompatibleProvider(opts: OpenAiCompatibleOptions): L
         }))
         .filter((c) => c.name);
 
-      if (text.includes("<tool_call>")) {
-        const { calls: inline, cleaned } = extractInlineToolCalls(text, toolNames);
-        calls.push(...inline);
-        if (cleaned) yield { type: "text", delta: cleaned };
+      // What was held back: the inline calls come out of it, and only the words not sent yet follow
+      // (the ones before the tag already went out).
+      if (emitted < text.length) {
+        const rest = text.slice(emitted);
+        if (rest.includes(INLINE_TAG)) {
+          const { calls: inline, cleaned } = extractInlineToolCalls(rest, toolNames);
+          calls.push(...inline);
+          if (cleaned) yield { type: "text", delta: cleaned };
+        } else yield { type: "text", delta: rest };
       }
 
       for (const call of calls) yield { type: "tool_call", call };

@@ -211,6 +211,11 @@ function ByokPanel({
   const provider = PROVIDER_BY_ID[brain.provider];
   const [show, setShow] = React.useState(false);
   const known = provider.models.some((m) => m.id === brain.model);
+  // A key that didn't work: its message comes into view, clear of the footer bar on a phone.
+  const statusRef = React.useRef<HTMLSpanElement>(null);
+  React.useEffect(() => {
+    if (keyStatus === "error") statusRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [keyStatus, keyMessage]);
   const [custom, setCustom] = React.useState(!known && Boolean(brain.model));
 
   const setProvider = (id: ProviderId) => {
@@ -318,7 +323,11 @@ function ByokPanel({
         <Button type="button" variant="outline" size="sm" onClick={onValidate} disabled={apiKey.trim().length < 8 || keyStatus === "checking"}>
           {keyStatus === "checking" ? <Spinner /> : <KeyRound />} Check key
         </Button>
-        <span className={cn("flex items-center gap-1.5 text-sm", keyStatus === "ok" && "text-success", keyStatus === "error" && "text-danger", keyStatus === "idle" && "text-muted-foreground")} aria-live="polite">
+        <span
+          ref={statusRef}
+          className={cn("flex items-center gap-1.5 text-sm", keyStatus === "ok" && "text-success", keyStatus === "error" && "text-danger", keyStatus === "idle" && "text-muted-foreground")}
+          aria-live="polite"
+        >
           {keyStatus === "ok" ? <Check className="size-4" strokeWidth={3} /> : keyStatus === "error" ? <CircleAlert className="size-4" /> : null}
           {keyStatus === "checking" ? "Checking with the provider…" : (keyMessage ?? (keyStatus === "idle" ? "We'll check it works before saving." : ""))}
         </span>

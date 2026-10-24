@@ -23,6 +23,39 @@ function demoForecast(location: string, days: number, unit: "fahrenheit" | "cels
   return `Weather for ${location} (demo data — live forecasts come from Open-Meteo in production):\nNow: ${base}° and ${sky[seed % sky.length]}\n${lines.join("\n")}`;
 }
 
+/** US states by their two letters, so "Paris, TX" finds Texas and not France. */
+const US_STATES: Record<string, string> = Object.fromEntries(
+  (
+    "AL Alabama,AK Alaska,AZ Arizona,AR Arkansas,CA California,CO Colorado,CT Connecticut,DE Delaware,FL Florida,GA Georgia,HI Hawaii,ID Idaho," +
+    "IL Illinois,IN Indiana,IA Iowa,KS Kansas,KY Kentucky,LA Louisiana,ME Maine,MD Maryland,MA Massachusetts,MI Michigan,MN Minnesota," +
+    "MS Mississippi,MO Missouri,MT Montana,NE Nebraska,NV Nevada,NH New Hampshire,NJ New Jersey,NM New Mexico,NY New York,NC North Carolina," +
+    "ND North Dakota,OH Ohio,OK Oklahoma,OR Oregon,PA Pennsylvania,RI Rhode Island,SC South Carolina,SD South Dakota,TN Tennessee,TX Texas," +
+    "UT Utah,VT Vermont,VA Virginia,WA Washington,WV West Virginia,WI Wisconsin,WY Wyoming,DC District of Columbia"
+  )
+    .split(",")
+    .map((x) => [x.slice(0, 2), x.slice(3)]),
+);
+
+type Place = { name: string; latitude: number; longitude: number; country?: string; country_code?: string; admin1?: string };
+
+/** The place the words after the comma point to ("Paris, TX", "Portland, Maine", "Cambridge, UK"), else the best known one. */
+function pickPlace(results: Place[], location: string): Place | undefined {
+  const hint = location.split(",").slice(1).join(",").trim().toLowerCase();
+  if (!hint) return results[0];
+  const state = US_STATES[hint.toUpperCase()]?.toLowerCase();
+  const matches = (p: Place) =>
+    [p.admin1, p.country, p.country_code, p.country_code === "GB" ? "uk" : undefined, p.country_code === "US" ? "usa" : undefined]
+      .filter(Boolean)
+      .some((x) => x!.toLowerCase() === hint || x!.toLowerCase() === state);
+  return results.find(matches) ?? results[0];
+}
+
+/** "2026-10-24" → "Sat Oct 24": a forecast with weekdays, so "this weekend" is read right. */
+function dayLabel(date: string): string {
+  const d = new Date(`${date}T12:00:00Z`);
+  return Number.isNaN(d.getTime()) ? date : d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+}
+
 export const getWeather = defineTool({
   name: "get_weather",
   title: "Check the weather",
@@ -40,15 +73,16 @@ export const getWeather = defineTool({
   summarize: (a) => `Weather in ${a.location}`,
   async run(args, ctx) {
     const days = args.days ?? 3;
-    const unit = args.unit ?? "fahrenheit";
     try {
       const geo = await fetchWithTimeout(
-        `https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&format=json&name=${encodeURIComponent(args.location.split(",")[0])}`,
+        `https://geocoding-api.open-meteo.com/v1/search?count=10&language=en&format=json&name=${encodeURIComponent(args.location.split(",")[0].trim())}`,
         { headers: { "user-agent": USER_AGENT }, signal: ctx.signal, timeoutMs: 8000 },
       );
-      const g = (await geo.json()) as { results?: { name: string; latitude: number; longitude: number; country?: string; admin1?: string }[] };
-      const place = g.results?.[0];
+      const g = (await geo.json()) as { results?: Place[] };
+      const place = pickPlace(g.results ?? [], args.location);
       if (!place) return { ok: true, content: `I couldn't find a place called “${args.location}”.`, summary: "Place not found" };
+      // Fahrenheit where people use it (the US and a few others), Celsius everywhere else.
+      const unit = args.unit ?? (["US", "LR", "MM", "BS", "BZ", "KY", "PW", "FM", "MH"].includes(place.country_code ?? "") ? "fahrenheit" : "celsius");
       const fc = await fetchWithTimeout(
         `https://api.open-meteo.com/v1/forecast?latitude=${place.latitude}&longitude=${place.longitude}&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=${days}&temperature_unit=${unit}&wind_speed_unit=${unit === "fahrenheit" ? "mph" : "kmh"}`,
         { headers: { "user-agent": USER_AGENT }, signal: ctx.signal, timeoutMs: 8000 },
@@ -64,12 +98,12 @@ export const getWeather = defineTool({
         : "";
       const daily = (f.daily?.time ?? []).map(
         (d, i) =>
-          `${d}: ${CODES[f.daily!.weather_code[i]] ?? "—"}, high ${Math.round(f.daily!.temperature_2m_max[i])}${u}, low ${Math.round(f.daily!.temperature_2m_min[i])}${u}, ${f.daily!.precipitation_probability_max[i] ?? 0}% rain`,
+          `${dayLabel(d)}: ${CODES[f.daily!.weather_code[i]] ?? "—"}, high ${Math.round(f.daily!.temperature_2m_max[i])}${u}, low ${Math.round(f.daily!.temperature_2m_min[i])}${u}, ${f.daily!.precipitation_probability_max[i] ?? 0}% rain`,
       );
       return { ok: true, content: `Weather for ${name}\n${now}\n${daily.join("\n")}`, summary: name };
     } catch {
       if (!ctx.demo) return { ok: false, error: "The weather service didn't answer." };
-      return { ok: true, content: demoForecast(args.location, days, unit), summary: `${args.location} (demo)` };
+      return { ok: true, content: demoForecast(args.location, days, args.unit ?? "fahrenheit"), summary: `${args.location} (demo)` };
     }
   },
 });

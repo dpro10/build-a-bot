@@ -441,11 +441,14 @@ export async function renameMeeting(db: Db, meeting: Meeting, title: string): Pr
 }
 
 export async function setActionItemDone(db: Db, meeting: Meeting, index: number, done: boolean): Promise<Meeting> {
-  const items = [...(meeting.actionItems ?? [])];
-  if (!items[index]) return meeting;
-  items[index] = { ...items[index], done };
-  const [updated] = await db.update(schema.meetings).set({ actionItems: items, updatedAt: new Date() }).where(eq(schema.meetings.id, meeting.id)).returning();
-  return updated;
+  if (!meeting.actionItems?.[index]) return meeting;
+  // Set in the database itself, so quick ticks on two items don't undo each other.
+  const [updated] = await db
+    .update(schema.meetings)
+    .set({ actionItems: sql`jsonb_set(${schema.meetings.actionItems}, ${`{${index},done}`}::text[], ${JSON.stringify(done)}::jsonb)`, updatedAt: new Date() })
+    .where(eq(schema.meetings.id, meeting.id))
+    .returning();
+  return updated ?? meeting;
 }
 
 export async function markNoticeCopied(db: Db, meeting: Meeting): Promise<Meeting> {

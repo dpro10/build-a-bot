@@ -28,6 +28,8 @@ type Props = {
   notesCost: string | null;
   /** The notes would cost credit and there's none left. */
   needsCredit: boolean;
+  /** Why the notes can't be paid for now (sign in, out of credit, today's budget), when they can't. */
+  creditMessage?: string | null;
   transcriptDays: number | null;
   desktopDevices: DesktopDevice[];
   /** This server can't turn recordings into text, so the audio never leaves the computer (audioStaysOnComputer). */
@@ -103,7 +105,7 @@ export function MeetingsView(props: Props) {
   const blocked = bot.paused
     ? `${bot.name} is paused. Resume it at the top of the page to take notes.`
     : props.needsCredit
-      ? `You're out of credit, and ${bot.name} writes its notes on an included model. Add credit in Credit & usage, or switch it to your own AI in Settings → Brain.`
+      ? `${bot.name} writes its notes on an included model. ${props.creditMessage ?? "You're out of credit."}`
       : null;
 
   const groups = React.useMemo(() => {
@@ -370,7 +372,7 @@ function UsageCard({ minutes, notesCost, needsCredit, audioStays }: { minutes: n
       <div className={needsCredit ? "text-xs font-medium text-danger" : "text-xs text-muted-foreground"}>
         {audioStays ? "Hearing the call is free: it happens on your computer." : "Hearing the call on your computer is free."}{" "}
         {notesCost ? `Writing the notes costs ${notesCost}, from your credit.` : "Writing the notes is free here, on your own AI."}
-        {needsCredit ? " You're out of credit." : ""}
+        {needsCredit ? " Notes are on hold for now." : ""}
       </div>
     </div>
   );
