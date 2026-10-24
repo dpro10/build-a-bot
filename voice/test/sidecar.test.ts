@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { encodeFrame, FrameDecoder, hearPayload, SidecarEngine, speakPayload } from "../src/speech/sidecar.ts";
 import { concatPcm } from "../src/audio/pcm.ts";
+import { normalizeForSpeech } from "../src/speech/text.ts";
 
 const FAKE = fileURLToPath(new URL("./fixtures/fake-sidecar.ts", import.meta.url));
 
@@ -115,7 +116,8 @@ test("the real NVIDIA engine: Magpie speaks, Parakeet hears it back", { skip: !B
   const heard = await engine.hear(concatPcm(parts), 16000, { phrases: ["Austin"] });
   const words = (s: string) => s.toLowerCase().replace(/[^a-z ]/g, "").split(/\s+/).filter(Boolean);
   const said = words(text);
-  const got = new Set(words(heard.text));
+  // Parakeet sometimes writes the numbers it hears as digits ("7 40"): compare them said out loud.
+  const got = new Set(words(normalizeForSpeech(heard.text)));
   const missing = said.filter((w) => !got.has(w));
   assert.ok(missing.length <= 1, `heard "${heard.text}"`);
 });
