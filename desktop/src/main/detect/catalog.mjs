@@ -150,6 +150,15 @@ export const MEETING_TITLES = [
   [/\bwebex\b.*\bmeeting\b|\bmeeting\b.*\bwebex\b/i, "webex"],
 ];
 
+/**
+ * A Build-a-bot page (every one is titled "… · Build-a-bot"): a browser on the mic with it in front
+ * is most likely the owner calling their own bot, not a meeting to take notes in.
+ * @param {string | null | undefined} title
+ */
+export function isOwnPage(title) {
+  return /\bbuild-a-bot\b/i.test(String(title ?? ""));
+}
+
 /** @param {string | null | undefined} url */
 export function appFromUrl(url) {
   if (!url) return null;

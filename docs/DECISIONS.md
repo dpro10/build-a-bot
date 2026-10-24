@@ -523,7 +523,7 @@ What this settles (built by Claude; Diego to confirm the details):
   - then installed again over itself (the data stays), and uninstalled with an engine still running (it's stopped, and everything is removed).
 - **Found and fixed on the way:**
   - A user name with letters from outside English (`C:\Users\José\…`) could break the engine's command line. It now gets paths relative to its folder; CI runs it in a folder named "José Muñoz".
-  - On GitHub's Macs (virtual machines), NVIDIA's Metal engine crashes while loading. If that ever happens on a real Mac, the app now switches to the CPU at once and stays there; so a Mac whose GPU doesn't cooperate still hears its owner on the computer.
+  - On GitHub's Macs (virtual machines), NVIDIA's Metal engine crashes while loading. If that ever happens on a real Mac, the app now switches to the CPU at once and stays there; so a Mac whose GPU doesn't cooperate still hears its owner on the computer. *(Since 2026-10-24 it stays there only once the GPU has failed to load in two runs, until the app, NVIDIA's runtime or macOS is updated; a crash once the engine is running changes nothing. See `desktop/README.md`.)*
   - Cleaning up an engine left by a force-quit couldn't recognize it in such a folder on macOS and Linux (`ps` garbles the name); it now matches the engine's own arguments.
   - An install for one user goes to `%LOCALAPPDATA%\Programs\build-a-bot-desktop`.
   - An engine the app didn't get to stop (a force-quit, or an update closing the app) is now stopped when the app starts, not at the first dictation.

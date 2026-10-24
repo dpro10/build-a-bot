@@ -223,6 +223,26 @@ test("screen lock and sleep stop the notes", async () => {
   }
 });
 
+test("the computer shutting down mid-meeting: the notes stop, and what was recorded (its end too) goes to disk at once", async () => {
+  const env = setup();
+  await listening(env);
+  env.uploads.persist = () => (env.calls.push("uploads.persist"), 1);
+  env.c.onSessionEnding();
+  assert.equal(env.calls.at(-1), "uploads.persist", "what's in memory now, without waiting");
+  await flush();
+  const at = (x) => env.calls.indexOf(x);
+  // The capture page hands over the piece it was on (the end of the meeting), which goes to disk before any wait on the network.
+  assert.ok(at("capture.stop") >= 0);
+  assert.ok(env.calls.lastIndexOf("uploads.persist") > at("capture.stop"), env.calls.join("\n"));
+  assert.ok(env.calls.lastIndexOf("uploads.persist") < at("uploads.drain"), env.calls.join("\n"));
+  assert.ok(env.notes.some((n) => /because your computer is shutting down/.test(n)));
+  // Windows' last word: anything still only in memory goes to disk.
+  const before = env.calls.filter((x) => x === "uploads.persist").length;
+  env.c.onSessionEnd();
+  assert.equal(env.calls.filter((x) => x === "uploads.persist").length, before + 1);
+  env.c.dispose();
+});
+
 test("Stop → saving → done with a 'notes are ready' notification that opens the meeting", async () => {
   const env = setup();
   await listening(env);
@@ -570,6 +590,21 @@ test("a call before NVIDIA Parakeet is here: it listens, says so, and makes sure
   assert.ok(calls.includes("hearing.ensure"));
   assert.match(env.buddy.states.at(-1).caption?.text ?? "", /Getting NVIDIA Parakeet \(45%\)/);
   assert.equal(env.c.statusText(), "Taking notes (getting NVIDIA Parakeet…)");
+  env.c.dispose();
+});
+
+test("NVIDIA Parakeet turning out unable to run here (and a server that doesn't hear audio): the notes stop and say why, instead of piling up", async () => {
+  let way = "local";
+  const env = setup({ hearing: { way: () => way, waitNote: () => null, ensure() {}, warm() {} } });
+  await listening(env);
+  env.c.tick();
+  assert.equal(env.c.state.phase, "listening", "it can hear: the notes go on");
+  way = "none";
+  env.c.tick();
+  await flush();
+  assert.ok(env.calls.includes("capture.stop"));
+  assert.ok(env.calls.includes("api.finish"), "the meeting is finished with what was heard");
+  assert.ok(env.notes.some((n) => /stopped taking notes: NVIDIA Parakeet can't run on this computer/.test(n)), env.notes.join("\n"));
   env.c.dispose();
 });
 

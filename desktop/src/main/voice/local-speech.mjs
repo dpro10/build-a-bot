@@ -20,6 +20,7 @@ import { EventEmitter } from "node:events";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import net from "node:net";
+import os from "node:os";
 import path from "node:path";
 
 export const LOCAL_MODEL = Object.freeze({
@@ -58,6 +59,28 @@ const SPARE_BYTES = 300 * 1024 * 1024;
 /** An engine that stops on its own this many times within the window isn't started again until it passes. */
 const MAX_CRASHES = 3;
 const CRASH_WINDOW_MS = 10 * 60_000;
+
+/**
+ * The GPU failing while loading moves that run to the CPU; only once it has failed in this many
+ * runs (of the same app, NVIDIA runtime and system) does the CPU stick.
+ */
+const GPU_TRIES = 2;
+
+/**
+ * Starts in a row that end before it's ready (it can't be run, or it stops while loading) before
+ * it's taken as unable to run on this computer: then it isn't started again until the app, NVIDIA's
+ * runtime or the system changes, or the owner taps Try again.
+ */
+const MAX_FAILED_STARTS = 3;
+
+/** macOS older than 13.3 (Darwin 22.4), which NVIDIA's runtime needs. */
+function macTooOld(release) {
+  const [major, minor] = String(release ?? "")
+    .split(".")
+    .map(Number);
+  if (!Number.isFinite(major) || !Number.isFinite(minor)) return false;
+  return major < 22 || (major === 22 && minor < 4);
+}
 
 /**
  * The engine's own lines worth keeping in the app's log: which model and device, that it's
@@ -204,10 +227,14 @@ export class LocalSpeech extends EventEmitter {
    * @param {(dir: string) => Promise<number | null>} [o.freeSpace]
    * @param {{ runtimeUrl?: string, itnUrl?: string, modelUrl?: string, runtimeSha256?: string, itnSha256?: string, modelSha256?: string, modelBytes?: number }} [o.sources]
    *   other places to download from (tests, a mirror); the hashes still have to match
+   * @param {string | null} [o.appVersion]  what engine.json learned holds for this version of the app only
+   * @param {string} [o.osRelease]  …and this version of the system (os.release())
    */
   constructor(o) {
     super();
     this.dir = o.dir;
+    this.appVersion = o.appVersion ?? null;
+    this.osRelease = o.osRelease ?? os.release();
     this.platform = o.platform ?? process.platform;
     this.runtime = RUNTIMES[`${this.platform}-${o.arch ?? process.arch}`] ?? null;
     this.fetch = o.fetchImpl ?? fetch;
@@ -243,6 +270,11 @@ export class LocalSpeech extends EventEmitter {
     this.stopping = false;
     /** When the engine stopped on its own lately. */
     this.crashes = [];
+    /** Starts in a row that ended before it was ready. */
+    this.failedStarts = 0;
+    const learned = this.runtime ? this.engineRecord() : null;
+    /** Why it can't run on this computer (it never starts), or null. Kept in engine.json. @type {string | null} */
+    this.cantRun = typeof learned?.cantRun === "string" && learned.cantRun ? learned.cantRun : null;
     this.idleTimer = null;
     this.abort = null;
     this.lastEmit = 0;
@@ -250,8 +282,8 @@ export class LocalSpeech extends EventEmitter {
     this.reaping = null;
     /**
      * Where it runs the model, with a runtime that has a GPU (Metal on Apple silicon): "auto" (the
-     * GPU) until that fails on this computer, then "cpu" from then on. Read from engine.json at
-     * the first start. The other runtimes are CPU-only.
+     * GPU) until that fails to load on this computer, then "cpu" for the rest of the run, and in
+     * later runs once it failed in two (engine.json). The other runtimes are CPU-only.
      * @type {'auto'|'cpu'|null}
      */
     this.device = null;
@@ -297,13 +329,21 @@ export class LocalSpeech extends EventEmitter {
       marker: path.join(this.dir, "installed.json"),
       /** The running engine's process id, so a run of the app that was force-quit can be cleaned up after. */
       pid: path.join(this.dir, "engine.pid"),
-      /** The GPU didn't work here: run on the CPU (kept until NVIDIA's runtime changes). */
+      /**
+       * What running it here taught: in how many runs the GPU failed to load. It holds only for the
+       * app, NVIDIA runtime and system it was learned with (an update of any gets another try).
+       */
       device: path.join(this.dir, "engine.json"),
     };
   }
 
   supported() {
     return Boolean(this.runtime);
+  }
+
+  /** Why it can't run on this computer, when it has never managed to start (or null). */
+  unavailable() {
+    return this.cantRun;
   }
 
   /** It stopped on its own three times in the last 10 minutes, so it isn't started again for now. */
@@ -332,7 +372,7 @@ export class LocalSpeech extends EventEmitter {
       received += f.received;
       total += f.total;
     }
-    return { state: this.state, supported: this.supported(), blocked: this.blocked(), received, total, error: this.error, model: LOCAL_MODEL.label, bytes: this.src.modelBytes };
+    return { state: this.state, supported: this.supported(), blocked: this.blocked(), unavailable: this.cantRun, received, total, error: this.error, model: LOCAL_MODEL.label, bytes: this.src.modelBytes };
   }
 
   /** @param {LocalState} state */
@@ -522,6 +562,9 @@ export class LocalSpeech extends EventEmitter {
     await fsp.rm(this.dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
     this.files.clear();
     this.error = null;
+    // What it learned about running here went with the folder.
+    this.cantRun = null;
+    this.failedStarts = 0;
     this.set(this.runtime ? "absent" : "unsupported");
   }
 
@@ -531,7 +574,7 @@ export class LocalSpeech extends EventEmitter {
 
   /** Start the engine ahead of a dictation (the shortcut was just pressed). */
   warm() {
-    if (this.isInstalled() && !this.child) void this.ensureRunning().catch(() => {});
+    if (this.isInstalled() && !this.child && !this.cantRun) void this.ensureRunning().catch(() => {});
   }
 
   ensureRunning() {
@@ -594,28 +637,87 @@ export class LocalSpeech extends EventEmitter {
     this.log("local speech: stopped an engine left running by an earlier run");
   }
 
-  /** It failed on the GPU on this computer (it crashed or hung): the CPU from now on. */
-  useCpu(why) {
-    if (this.device === "cpu") return;
-    this.device = "cpu";
-    this.log(`local speech: it didn't start on the GPU (${why}); using the CPU from now on`);
-    // Written at once (it's tiny), so it can't land in a folder that's being deleted.
+  /**
+   * What engine.json says, if it was learned with this app, this NVIDIA runtime and this system
+   * (a new one of any of them gets another try), else null.
+   * @returns {{ gpuFailures?: number, [k: string]: unknown } | null}
+   */
+  engineRecord() {
     try {
-      fs.writeFileSync(this.paths.device, JSON.stringify({ device: "cpu", runtime: this.src.runtimeSha256, why: String(why), at: new Date().toISOString() }));
+      const d = JSON.parse(fs.readFileSync(this.paths.device, "utf8"));
+      if (!d || d.runtime !== this.src.runtimeSha256 || d.app !== this.appVersion || d.os !== this.osRelease) return null;
+      return d;
     } catch {
-      /* it tries the GPU again next time */
+      return null;
     }
   }
 
-  loadDevice() {
+  /** @param {Record<string, unknown>} patch */
+  writeEngine(patch) {
+    // Written at once (it's tiny), so it can't land in a folder that's being deleted.
     try {
-      const d = JSON.parse(fs.readFileSync(this.paths.device, "utf8"));
-      // A new runtime from NVIDIA gets another try on the GPU.
-      if (d.device === "cpu" && d.runtime === this.src.runtimeSha256) return "cpu";
+      const next = { ...(this.engineRecord() ?? {}), ...patch, runtime: this.src.runtimeSha256, app: this.appVersion, os: this.osRelease, at: new Date().toISOString() };
+      fs.writeFileSync(this.paths.device, JSON.stringify(next));
     } catch {
-      /* not decided yet */
+      /* it's learned again next time */
     }
-    return "auto";
+  }
+
+  /**
+   * It failed to load on the GPU (it crashed or hung while loading): the CPU for the rest of this
+   * run. Only when that has happened in two runs does the next run start on the CPU too, until the
+   * app, NVIDIA's runtime or the system changes. A crash once it's running isn't the GPU failing.
+   */
+  gpuFailed(why) {
+    if (this.device === "cpu") return;
+    this.device = "cpu";
+    const failures = (Number(this.engineRecord()?.gpuFailures) || 0) + 1;
+    this.log(`local speech: it didn't start on the GPU (${why}); using the CPU ${failures >= GPU_TRIES ? "from now on" : "for now"}`);
+    this.writeEngine({ gpuFailures: failures, why: String(why) });
+  }
+
+  /** It loaded on the GPU: a failure before is forgotten. */
+  gpuWorked() {
+    if (Number(this.engineRecord()?.gpuFailures) > 0) this.writeEngine({ gpuFailures: 0, why: null });
+  }
+
+  loadDevice() {
+    return (Number(this.engineRecord()?.gpuFailures) || 0) >= GPU_TRIES ? "cpu" : "auto";
+  }
+
+  /**
+   * A start ended before the engine was ready: it couldn't be run (`spawnFailed`), or it stopped
+   * while loading. A few in a row and it's taken as unable to run on this computer, with why as
+   * far as can be told: not tried again on every dictation and meeting piece, and the owner told.
+   */
+  startFailed(spawnFailed) {
+    this.failedStarts++;
+    if (this.cantRun || this.failedStarts < MAX_FAILED_STARTS) return;
+    this.cantRun = this.whyCantRun(spawnFailed);
+    this.log(`local speech: it can't run on this computer (${this.cantRun}); not starting it again until the app, NVIDIA's runtime or the system changes`);
+    this.writeEngine({ cantRun: this.cantRun });
+    this.emit("unavailable", this.cantRun);
+    this.emit("change", this.status());
+  }
+
+  /** Why it can't run here, as far as can be told, in words for the owner ("NVIDIA Parakeet can't run on this computer (…)"). */
+  whyCantRun(spawnFailed) {
+    if (this.platform === "darwin" && macTooOld(this.osRelease)) return "it needs macOS 13.3 or later";
+    if (spawnFailed && this.platform === "win32") return "Windows won't let it run, perhaps because of Smart App Control or an antivirus";
+    if (spawnFailed) return "this computer won't let it run";
+    return "it stops every time it starts";
+  }
+
+  /** Settings' Try again: start it once more (failing again marks it again at once). */
+  tryAgain() {
+    if (!this.cantRun) return;
+    this.cantRun = null;
+    this.failedStarts = MAX_FAILED_STARTS - 1;
+    this.crashes = [];
+    this.writeEngine({ cantRun: null });
+    this.log("local speech: trying it again on this computer");
+    this.emit("change", this.status());
+    this.warm();
   }
 
   async start() {
@@ -632,6 +734,7 @@ export class LocalSpeech extends EventEmitter {
     if (!this.isInstalled()) throw new LocalSpeechError("absent", "It isn't downloaded yet.");
     const root = await this.place();
     if (!root) throw new LocalSpeechError("folder", FOLDER_PROBLEM);
+    if (this.cantRun) throw new LocalSpeechError("unavailable", `It can't run on this computer: ${this.cantRun}.`);
     await this.reap();
     const now = Date.now();
     this.crashes = this.crashes.filter((t) => now - t < CRASH_WINDOW_MS);
@@ -668,6 +771,10 @@ export class LocalSpeech extends EventEmitter {
     };
     child.stdout?.on("data", lines);
     child.stderr?.on("data", lines);
+    /** It got ready: a crash after that is the engine's, not the GPU failing to load. */
+    let loaded = false;
+    /** It couldn't be run at all (no process). */
+    let spawnFailed = false;
     const ended = (why) => {
       if (this.child !== child) return;
       this.child = null;
@@ -676,7 +783,7 @@ export class LocalSpeech extends EventEmitter {
       if (!this.stopping) {
         this.crashes.push(Date.now());
         this.log(`local speech: stopped on its own (${why})`);
-        if (device !== "cpu" && child.pid !== undefined) this.useCpu(`it stopped: ${why}`);
+        if (!loaded && device !== "cpu" && child.pid !== undefined) this.gpuFailed(`it stopped: ${why}`);
       }
       this.set(this.isInstalled() ? "installed" : "absent");
     };
@@ -684,14 +791,24 @@ export class LocalSpeech extends EventEmitter {
     // It couldn't be run at all (no process, so no "exit" either).
     child.on("error", (err) => {
       this.log(`local speech: couldn't run it (${/** @type {any} */ (err).code ?? err.message})`);
-      if (child.pid === undefined) ended("not started");
+      if (child.pid === undefined) {
+        spawnFailed = true;
+        ended("not started");
+      }
     });
     const deadline = Date.now() + this.readyTimeoutMs;
     while (Date.now() < deadline) {
-      if (this.child !== child) throw new LocalSpeechError("crashed", "It stopped while starting.");
+      if (this.child !== child) {
+        // It ended before it was ready (not stopped on purpose): one more start that failed.
+        if (!this.stopping) this.startFailed(spawnFailed);
+        throw new LocalSpeechError("crashed", "It stopped while starting.");
+      }
       try {
         const r = await this.localFetch(`http://127.0.0.1:${this.port}/ready`, { signal: AbortSignal.timeout(1500) });
-        if (r.ok) {
+        if (r.ok && this.child === child) {
+          loaded = true;
+          this.failedStarts = 0;
+          if (device !== "cpu") this.gpuWorked();
           this.set("ready");
           this.touch();
           return;
@@ -702,7 +819,7 @@ export class LocalSpeech extends EventEmitter {
       await sleep(250);
     }
     await this.stop();
-    if (device !== "cpu") this.useCpu("it took too long to start");
+    if (device !== "cpu") this.gpuFailed("it took too long to start");
     throw new LocalSpeechError("slow", "It took too long to start.");
   }
 
@@ -823,7 +940,10 @@ export class LocalSpeech extends EventEmitter {
  * the server. If it can't (not ready, failed), the recording goes to the server, when the server
  * turns recordings into text; `noServer` says when it doesn't, and why (that's thrown, for the
  * pill). Errors from the server itself (out of words, unpaired…) are the server's answer either way.
- * @param {{ local: { transcribe(wav: Uint8Array, o?: { durationMs?: number }): Promise<string> }, api: { dictate: Function, dictateText: Function }, use: () => boolean, noServer?: () => ({ code: string, message?: string, actions?: string[] } | null), log?: (m: string) => void }} o
+ * Without the session (`session`: it's still loading, or the app started offline), what the server
+ * takes isn't known: it gets a moment to load (`waitForSession`), and without it nothing is sent,
+ * neither the audio nor the words; Try again sends the same recording once it's there.
+ * @param {{ local: { transcribe(wav: Uint8Array, o?: { durationMs?: number }): Promise<string> }, api: { dictate: Function, dictateText: Function }, use: () => boolean, noServer?: () => ({ code: string, message?: string, actions?: string[] } | null), session?: () => boolean, waitForSession?: () => Promise<unknown>, log?: (m: string) => void }} o
  */
 export function localFirst(o) {
   const log = o.log ?? (() => {});
@@ -834,6 +954,13 @@ export function localFirst(o) {
     return o.api.dictate(audio, p);
   };
   return async function dictate(audio, p) {
+    if (o.session && !o.session()) {
+      await Promise.resolve(o.waitForSession?.()).catch(() => {});
+      if (!o.session()) {
+        log("voice: no session yet (Build-a-bot can't be reached); nothing sent");
+        throw Object.assign(new Error("Can't reach Build-a-bot"), { code: "network", actions: ["retry"] });
+      }
+    }
     if (audio?.wav && o.use()) {
       const t = Date.now();
       let heard = null;

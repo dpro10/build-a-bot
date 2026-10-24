@@ -1,6 +1,7 @@
 /**
  * Listens for the voice typing shortcut anywhere on the computer and turns key presses into
- * "start", "stop", "cancel" and "handsfree" (hotkey-machine.mjs decides which).
+ * "start", "stop", "cancel" and "handsfree" (hotkey-machine.mjs decides which). "start" comes once
+ * the shortcut has been held a moment with no other key, so a key combination never opens the mic.
  *
  * Shift held with the shortcut (before it, or while it's held) asks to edit the selected text by
  * voice instead of typing: "start" says so, and "edit" when Shift comes later. Shift never counts as
@@ -57,6 +58,8 @@ export class Hotkey extends EventEmitter {
     this.timer = null;
     /** Key taps this app sends (paste, the Start-menu guard) aren't the owner's. */
     this.synthetic = new Map();
+    /** When Enter was last pressed (a new line, a command run, a message sent), or 0. Only the time. */
+    this.enterAt = 0;
     /** @type {null | { keys: Set<number>, held: Set<number>, resolve: (keys: number[] | null) => void, timer: any }} */
     this.recordingShortcut = null;
   }
@@ -118,7 +121,7 @@ export class Hotkey extends EventEmitter {
   startHandsfree() {
     clearTimeout(this.timer);
     this.timer = null;
-    this.state = { mode: "handsfree", since: this.now(), deadline: null, down: shortcutDown(this.shortcut, this.pressed), latched: false };
+    this.state = { mode: "handsfree", since: this.now(), deadline: null, down: shortcutDown(this.shortcut, this.pressed), latched: false, live: true };
   }
 
   /** The pill's Done button, or the longest dictation: stop as if the shortcut was pressed. */
@@ -194,6 +197,8 @@ export class Hotkey extends EventEmitter {
       }
       this.synthetic.delete(code);
     }
+    // Enter starts a new line: the next dictation doesn't follow the last one's words (spacing).
+    if (isDown && (code === KEY.Enter || code === KEY.NumpadEnter)) this.enterAt = this.now();
     // A key let go while the hook wasn't looking (the screen locked mid-press) would stay "down":
     // the modifier flags on each press say what's really held.
     if (isDown) {
@@ -216,6 +221,8 @@ export class Hotkey extends EventEmitter {
     }
 
     const at = this.now();
+    // The hold's moment passed while this key was on its way (the tick hadn't run yet): it counts first.
+    if (this.state.deadline !== null && at >= this.state.deadline) this.dispatch({ type: "tick", at });
     if (isDown) {
       const repeat = this.pressed.has(code);
       const wasDown = shortcutDown(this.shortcut, this.pressed);
@@ -250,8 +257,9 @@ export class Hotkey extends EventEmitter {
     }
     for (const fx of effects) this.emit(fx, fx === "start" ? { edit: this.editHeld() } : undefined);
     // Windows opens the Start menu when the Windows key is let go with nothing pressed in between.
-    // A tap of an unused key (F24) while it's down tells Windows it was part of a combination.
-    if (ev.type === "down" && effects.length && this.platform === "win32" && [KEY.Meta, KEY.MetaRight].some((k) => this.pressed.has(k))) {
+    // A tap of an unused key (F24) while it's down tells Windows it was part of a combination. On
+    // every press of the shortcut: the recording starts a moment later, or not at all.
+    if (ev.type === "down" && this.platform === "win32" && [KEY.Meta, KEY.MetaRight].some((k) => this.pressed.has(k))) {
       this.expectSynthetic(KEY.F24);
       try {
         this.hook?.keyTap(KEY.F24);

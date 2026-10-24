@@ -115,6 +115,17 @@ test("Parakeet can't run here and the server hears audio: the piece's audio goes
   assert.deepEqual(sent, [["audio", "system", 3]]);
 });
 
+test("nothing can ever hear it (Parakeet can't run here, the server doesn't hear audio): only its time goes, never the audio", async () => {
+  const { s, sent, decoded, heard } = sender({ way: "none" });
+  assert.equal(s.ready(piece()), true, "it doesn't wait for what will never come");
+  const res = await s.send(piece());
+  assert.equal(res.status, 200);
+  assert.deepEqual(sent, [["text", "system", 3, []]]);
+  assert.deepEqual(decoded, []);
+  assert.deepEqual(heard, []);
+  assert.equal(s.stats.unheard, 1);
+});
+
 test("a server that doesn't take lines gets a silent piece's audio, as before", async () => {
   const { s, sent } = sender({ way: "server", takesText: false });
   await s.send(piece({ silent: true }));

@@ -34,7 +34,7 @@
  *   BAB_LIBRARY_FOLDER=<path>           sync this folder to the first bot once paired (tests; no folder dialog)
  */
 import * as electron from "electron";
-import { Notification, app, clipboard, dialog, ipcMain, powerMonitor, protocol, safeStorage, screen, session, shell, systemPreferences } from "electron";
+import { Notification, app, clipboard, dialog, ipcMain, net, powerMonitor, protocol, safeStorage, screen, session, shell, systemPreferences } from "electron";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -140,7 +140,8 @@ async function boot() {
   const apiSession = session.fromPartition("bab-api");
   apiSession.setPermissionRequestHandler((_wc, _p, cb) => cb(false));
   api = createApi({ fetch: (url, init) => apiSession.fetch(url, init), server: () => account?.server() ?? null, token: () => account?.token() ?? null });
-  account = new Account({ api, tokens, settings, log });
+  // A session that didn't load (started before the Wi-Fi was up) is tried again, at once when the computer is back online.
+  account = new Account({ api, tokens, settings, log, isOnline: () => net.isOnline() });
   spool = new Spool(path.join(userData, "spool"));
   decoder = new Decoder({ log });
   uploads = new UploadQueue({
@@ -289,6 +290,39 @@ async function boot() {
     controller.onPower("suspend");
     void voice.interrupt();
   });
+  // Awake again: a session that never loaded (it went to sleep offline) is tried now.
+  powerMonitor.on("resume", () => account.reconnect());
+  // Shutting down, restarting or signing out. Windows sends no "before-quit" then: its windows hear
+  // it instead (every one of them; the first counts), and the app may be closed any moment after
+  // "session-end". macOS and Linux say so before they quit the app (which runs "before-quit").
+  // Never held up: what's recorded is kept on disk for the next start (controller.onSessionEnding).
+  let sessionEndingAt = 0;
+  const sessionEnding = (/** @type {string} */ why) => {
+    if (Date.now() - sessionEndingAt < 60_000) return;
+    sessionEndingAt = Date.now();
+    log(`shutdown: the computer is ending the session (${why}); keeping what's recorded for the next start`);
+    try {
+      controller.onSessionEnding();
+      void Promise.resolve(voice.interrupt()).catch(() => {});
+    } catch (err) {
+      log(`shutdown: ${err}`);
+    }
+  };
+  if (process.platform === "win32") {
+    app.on("browser-window-created", (_e, win) => {
+      win.on("query-session-end", () => sessionEnding("query-session-end"));
+      win.on("session-end", () => {
+        sessionEnding("session-end");
+        try {
+          controller.onSessionEnd();
+        } catch (err) {
+          log(`shutdown: ${err}`);
+        }
+      });
+    });
+  } else {
+    powerMonitor.on("shutdown", () => sessionEnding("shutdown"));
+  }
   for (const ev of ["display-metrics-changed", "display-added", "display-removed"]) screen.on(/** @type {any} */ (ev), () => buddy.reassert());
 
   let readyToQuit = false;

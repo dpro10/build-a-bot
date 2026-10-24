@@ -9,6 +9,8 @@
  *           ─ it can't run here, and the server hears audio ──▶ the audio, as before
  *           ─ it's on its way (downloading) ──▶ wait: the upload queue keeps the piece (on disk)
  *             and tries again; the controller keeps the meeting alive on the server meanwhile
+ *           ─ nothing ever can (Parakeet can't run here, and the server doesn't hear audio) ──▶ just
+ *             its time, so the meeting moves on (the controller stops the notes and says why)
  *
  * No Electron here, so it can be tested with fakes.
  */
@@ -58,8 +60,10 @@ export function linesFromWords(words, o) {
  * How the next piece of a meeting is heard:
  *  - "local": NVIDIA Parakeet, on this computer (only the lines are sent);
  *  - "server": the server's speech-to-text (the audio is sent), when Parakeet can't run here;
- *  - "wait": Parakeet is on its way, or nothing can hear it right now: the piece waits.
- * @typedef {'local'|'server'|'wait'} HearingWay
+ *  - "wait": Parakeet is on its way, or nothing can hear it right now: the piece waits;
+ *  - "none": nothing ever will (Parakeet can't run on this computer, and the server doesn't hear
+ *    audio): only the piece's time is sent, never its audio, so the pieces don't pile up.
+ * @typedef {'local'|'server'|'wait'|'none'} HearingWay
  */
 
 /**
@@ -76,8 +80,8 @@ export function linesFromWords(words, o) {
 export function meetingSender(o) {
   const log = o.log ?? (() => {});
   const maxEngineTries = o.maxEngineTries ?? 4;
-  /** How pieces went (no words, ever): as the lines heard here, as audio, or as just their time. */
-  const stats = { lines: 0, audio: 0, silent: 0, waited: 0 };
+  /** How pieces went (no words, ever): as the lines heard here, as audio, as just their time, or unheard. */
+  const stats = { lines: 0, audio: 0, silent: 0, waited: 0, unheard: 0 };
 
   /** Can this piece be sent now? (A piece waiting for Parakeet stays on disk; its audio isn't read.) */
   function ready(item) {
@@ -96,6 +100,11 @@ export function meetingSender(o) {
     if (way === "server") {
       stats.audio++;
       return o.api.uploadChunk(item);
+    }
+    // Nothing can ever hear it: only its time goes (never the audio), and it's off the computer's disk.
+    if (way === "none" && o.takesText()) {
+      stats.unheard++;
+      return o.api.uploadChunkText(item, []);
     }
     if (way !== "local") {
       stats.waited++;
