@@ -18,7 +18,7 @@ import { minutesSaved, VoiceHistory, wordsPerMinute, wordsThisWeek } from "./his
 import { Hotkey, ToggleHotkey } from "./hotkey.mjs";
 import { checkCustom, keyName, presetsFor, resolveShortcut } from "./keys.mjs";
 import { stillToLearn, suggestWords } from "./learn.mjs";
-import { LOCAL_LANGUAGES, LocalSpeech, localFirst } from "./local-speech.mjs";
+import { LOCAL_LANGUAGES, LocalSpeech, bundledRuntime, localFirst } from "./local-speech.mjs";
 import { Paster, passingTypes, pressCopy, pressPaste } from "./paste.mjs";
 import { PillWindow } from "./pill-window.mjs";
 import { VoiceSettingsWindow } from "./settings-window.mjs";
@@ -61,10 +61,12 @@ export function setupVoice(o) {
   // NVIDIA Parakeet on this computer. It downloads through the app's own network stack (the
   // system's proxy and certificates). BAB_SPEECH_*_URL: other places to download it from (tests, a
   // mirror); the files still have to match the pinned hashes. BAB_PRIVATE_SPEECH=off: not at all.
+  // On Windows NVIDIA's runtime comes inside the installer, signed with the app's certificate.
   const localOff = process.env.BAB_PRIVATE_SPEECH === "off";
   const local = new LocalSpeech({
     dir: path.join(o.userData, "speech"),
     fetchImpl: (url, init) => o.apiSession.fetch(url, init),
+    bundled: platform === "win32" && !process.env.BAB_SPEECH_RUNTIME_URL ? bundledRuntime(process.resourcesPath) : null,
     // What it learns about running here (the GPU failing to load) holds until the app updates.
     appVersion: safely(() => electron.app?.getVersion?.() ?? null, null),
     log,
@@ -843,7 +845,12 @@ export function setupVoice(o) {
         const a = await frontApp.detect(8000);
         return a ? `ok (${a.category}${a.name ? `: ${a.name}` : ""})` : "ok (nothing in front)";
       });
-      await step("private speech", async () => (local.supported() ? `ok (${process.platform}-${process.arch})` : `ok (not on ${process.platform}-${process.arch}: the server hears)`));
+      await step("private speech", async () => {
+        if (!local.supported()) return `ok (not on ${process.platform}-${process.arch}: the server hears)`;
+        // The Windows app brings NVIDIA's runtime with it, signed (a build without it has a packaging problem).
+        if (platform === "win32" && electron.app?.isPackaged && !local.bundled) throw new Error("NVIDIA's runtime isn't in the app");
+        return `ok (${process.platform}-${process.arch}${local.bundled ? ", NVIDIA's runtime in the app" : ""})`;
+      });
       await step("text reader", async () => {
         if (!reader.supported) {
           if (platform === "darwin") throw new Error("the helper isn't in the app");

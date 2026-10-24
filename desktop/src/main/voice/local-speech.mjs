@@ -5,7 +5,9 @@
  *
  *  - The first time, it downloads NVIDIA's runtime for this platform (about 5 MB) and the model
  *    (714 MB) into the app's folder. Each is pinned to one version and checked against its SHA-256
- *    before it's used, and a cut-off download picks up where it stopped.
+ *    before it's used, and a cut-off download picks up where it stopped. On Windows the runtime
+ *    comes inside the installer instead, signed with the app's own certificate (Smart App Control
+ *    runs no unsigned program it doesn't know, and NVIDIA's aren't signed): it's copied from there.
  *  - The runtime runs as `nemo-speech serve` on 127.0.0.1, on a random port, behind a random key
  *    (so other programs on the computer can't use it). It starts when it's needed and stops after
  *    a while unused, so the model isn't in memory all day.
@@ -32,7 +34,7 @@ export const LOCAL_MODEL = Object.freeze({
   sha256: "e3880d0aaaaf2c308ea2c35016b2b895c423eb3fda924c1b463d1c19b7f4d32e",
 });
 
-const RELEASE = "https://github.com/NVIDIA/NeMo-Speech.cpp/releases/download/v0.2.0";
+export const RELEASE = "https://github.com/NVIDIA/NeMo-Speech.cpp/releases/download/v0.2.0";
 
 /** NeMo-Speech.cpp 0.2.0 for each platform (the hashes NVIDIA publishes with the release). */
 export const RUNTIMES = Object.freeze({
@@ -41,6 +43,16 @@ export const RUNTIMES = Object.freeze({
   "win32-x64": { file: "nemo-speech-0.2.0-windows-x86_64-cpu.zip", sha256: "82c80451086e86194aba9af19f800da77cd66d1c28d993d0efceffd6cdb49bb8", itn: false },
   "linux-x64": { file: "nemo-speech-0.2.0-linux-x86_64-cpu.tar.gz", sha256: "f396057150f1b774935c7414fd32ebc04195a795a34120d78d8c9ecefa1b7507", itn: true },
 });
+
+/**
+ * NVIDIA's runtime as the installer brought it (Windows: `resources/speech-runtime`, put there by
+ * scripts/bundle-speech-runtime.mjs and signed with the app), or null when the app has none.
+ */
+export function bundledRuntime(resourcesPath, exe = "nemo-speech.exe") {
+  if (!resourcesPath) return null;
+  const dir = path.join(resourcesPath, "speech-runtime");
+  return fs.existsSync(path.join(dir, "bin", exe)) ? dir : null;
+}
 
 /** Its number rules ("three thirty" → 3:30), for macOS and Linux (the Windows build has none). */
 export const ITN = Object.freeze({ file: "itn_configs.tar.bz2", sha256: "880c9365d1d52c17450bd930950b0e58eca294421b7be62eb71666fb21b8997f" });
@@ -127,6 +139,15 @@ async function sha256File(file) {
   const hash = createHash("sha256");
   for await (const chunk of fs.createReadStream(file)) hash.update(chunk);
   return hash.digest("hex");
+}
+
+/** A small file's SHA-256, read at once (empty if it can't be read). */
+function sha256Of(file) {
+  try {
+    return createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+  } catch {
+    return "";
+  }
 }
 
 function freePort() {
@@ -227,6 +248,8 @@ export class LocalSpeech extends EventEmitter {
    * @param {(dir: string) => Promise<number | null>} [o.freeSpace]
    * @param {{ runtimeUrl?: string, itnUrl?: string, modelUrl?: string, runtimeSha256?: string, itnSha256?: string, modelSha256?: string, modelBytes?: number }} [o.sources]
    *   other places to download from (tests, a mirror); the hashes still have to match
+   * @param {string | null} [o.bundled]  NVIDIA's runtime as the installer brought it (bundledRuntime()):
+   *   copied from there instead of downloaded
    * @param {string | null} [o.appVersion]  what engine.json learned holds for this version of the app only
    * @param {string} [o.osRelease]  …and this version of the system (os.release())
    */
@@ -245,17 +268,19 @@ export class LocalSpeech extends EventEmitter {
     this.readyTimeoutMs = o.readyTimeoutMs ?? 120_000;
     this.retryMs = o.retryMs ?? 800;
     this.freeSpace = o.freeSpace ?? freeSpace;
+    this.exe = this.platform === "win32" ? "nemo-speech.exe" : "nemo-speech";
+    this.bundled = this.runtime ? (o.bundled ?? null) : null;
     const s = o.sources ?? {};
     this.src = {
       runtimeUrl: s.runtimeUrl ?? (this.runtime ? `${RELEASE}/${this.runtime.file}` : ""),
-      runtimeSha256: s.runtimeSha256 ?? this.runtime?.sha256 ?? "",
+      // What came with the installer is told apart by its program (signed anew with each build).
+      runtimeSha256: this.bundled ? `bundled:${sha256Of(path.join(this.bundled, "bin", this.exe))}` : (s.runtimeSha256 ?? this.runtime?.sha256 ?? ""),
       itnUrl: s.itnUrl ?? `${RELEASE}/${ITN.file}`,
       itnSha256: s.itnSha256 ?? ITN.sha256,
       modelUrl: s.modelUrl ?? LOCAL_MODEL.url,
       modelSha256: s.modelSha256 ?? LOCAL_MODEL.sha256,
       modelBytes: s.modelBytes ?? LOCAL_MODEL.bytes,
     };
-    this.exe = this.platform === "win32" ? "nemo-speech.exe" : "nemo-speech";
     /** @type {LocalState} */
     this.state = !this.runtime ? "unsupported" : this.isInstalled() ? "installed" : "absent";
     this.error = null;
@@ -352,6 +377,16 @@ export class LocalSpeech extends EventEmitter {
     return this.crashes.filter((t) => now - t < CRASH_WINDOW_MS).length >= MAX_CRASHES;
   }
 
+  /** The model this app expects was installed (and checked) before, and it's still here. */
+  modelHere() {
+    try {
+      const m = JSON.parse(fs.readFileSync(this.paths.marker, "utf8"));
+      return m.model === this.src.modelSha256 && fs.statSync(this.paths.model).size === this.src.modelBytes;
+    } catch {
+      return false;
+    }
+  }
+
   /** Both pieces are here, and they're the versions this app expects. */
   isInstalled() {
     if (!this.runtime) return false;
@@ -419,30 +454,41 @@ export class LocalSpeech extends EventEmitter {
     const p = this.paths;
     this.error = null;
     if (!(await this.place())) throw new LocalSpeechError("folder", FOLDER_PROBLEM);
+    // The model checked last time, still here: only the runtime changed (an update brought another).
+    const keepModel = this.modelHere();
     this.abort = new AbortController();
-    this.files = new Map([["model", { received: 0, total: this.src.modelBytes }]]);
+    this.files = new Map([["model", { received: keepModel ? this.src.modelBytes : 0, total: this.src.modelBytes }]]);
     this.set("downloading");
     await fsp.mkdir(p.downloads, { recursive: true });
-    const free = await this.freeSpace(this.dir);
+    const free = keepModel ? null : await this.freeSpace(this.dir);
     if (free !== null && free < this.src.modelBytes + SPARE_BYTES) {
       throw new LocalSpeechError("disk", `It needs about ${Math.ceil((this.src.modelBytes + SPARE_BYTES) / 1e9 * 10) / 10} GB free on this computer.`);
     }
+    // An engine an earlier run left running from runtime/ would keep Windows from replacing it.
+    await this.reap();
 
-    // NVIDIA's runtime (and its number rules), unpacked into runtime/.
-    const archive = await this.download("runtime", this.src.runtimeUrl, path.join(p.downloads, path.basename(new URL(this.src.runtimeUrl).pathname)), this.src.runtimeSha256);
     const unpack = path.join(this.dir, "runtime.tmp");
     await fsp.rm(unpack, { recursive: true, force: true });
-    await fsp.mkdir(unpack, { recursive: true });
-    try {
-      await run(this.spawn, tarFor(this.platform), ["-xf", archive, "-C", unpack]);
-    } catch (err) {
-      throw new LocalSpeechError("unpack", `Couldn't unpack NVIDIA's runtime (${String(/** @type {any} */ (err)?.message ?? err).slice(0, 120)}).`);
+    if (this.bundled) {
+      // NVIDIA's runtime as the installer brought it (signed with the app), copied into runtime/.
+      await fsp.cp(this.bundled, unpack, { recursive: true });
+      await fsp.rm(p.runtime, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+      await fsp.rename(unpack, p.runtime);
+    } else {
+      // NVIDIA's runtime (and its number rules), unpacked into runtime/.
+      const archive = await this.download("runtime", this.src.runtimeUrl, path.join(p.downloads, path.basename(new URL(this.src.runtimeUrl).pathname)), this.src.runtimeSha256);
+      await fsp.mkdir(unpack, { recursive: true });
+      try {
+        await run(this.spawn, tarFor(this.platform), ["-xf", archive, "-C", unpack]);
+      } catch (err) {
+        throw new LocalSpeechError("unpack", `Couldn't unpack NVIDIA's runtime (${String(/** @type {any} */ (err)?.message ?? err).slice(0, 120)}).`);
+      }
+      const root = await findRuntimeRoot(unpack, this.exe);
+      if (!root) throw new LocalSpeechError("unpack", "NVIDIA's runtime wasn't where it should be in the download.");
+      await fsp.rm(p.runtime, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+      await fsp.rename(root, p.runtime);
+      await fsp.rm(unpack, { recursive: true, force: true });
     }
-    const root = await findRuntimeRoot(unpack, this.exe);
-    if (!root) throw new LocalSpeechError("unpack", "NVIDIA's runtime wasn't where it should be in the download.");
-    await fsp.rm(p.runtime, { recursive: true, force: true });
-    await fsp.rename(root, p.runtime);
-    await fsp.rm(unpack, { recursive: true, force: true });
     if (this.platform !== "win32") await fsp.chmod(p.bin, 0o755);
     // macOS: if the system marked the download as quarantined, Gatekeeper would stop NVIDIA's
     // (ad-hoc signed) runtime from running. It matched NVIDIA's published hash above.
@@ -459,9 +505,11 @@ export class LocalSpeech extends EventEmitter {
     }
 
     // The model.
-    await fsp.mkdir(path.dirname(p.model), { recursive: true });
-    const model = await this.download("model", this.src.modelUrl, path.join(p.downloads, LOCAL_MODEL.file), this.src.modelSha256, this.src.modelBytes);
-    await fsp.rename(model, p.model);
+    if (!keepModel) {
+      await fsp.mkdir(path.dirname(p.model), { recursive: true });
+      const model = await this.download("model", this.src.modelUrl, path.join(p.downloads, LOCAL_MODEL.file), this.src.modelSha256, this.src.modelBytes);
+      await fsp.rename(model, p.model);
+    }
     await fsp.writeFile(p.marker, JSON.stringify({ runtime: this.src.runtimeSha256, model: this.src.modelSha256, at: new Date().toISOString() }));
     await fsp.rm(p.downloads, { recursive: true, force: true });
     this.files.clear();

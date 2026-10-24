@@ -154,6 +154,10 @@ jobs:
           cache: npm
           cache-dependency-path: desktop/package-lock.json
       - run: npm ci
+      # Private speech's engine goes inside the installer (and is signed with the app, by
+      # build/sign-the-rest.cjs): NVIDIA's own release, checked against the hash the app pins.
+      - name: NVIDIA's speech runtime, for the installer
+        run: node scripts/bundle-speech-runtime.mjs
       - name: Build it (signed once the signing settings are in)
         id: build
         shell: pwsh
@@ -183,15 +187,26 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           "signed=$($signed.ToString().ToLower())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           Get-ChildItem dist -File | Select-Object Name, Length
-      - name: Check the signature
-        if: steps.build.outputs.signed == 'true'
+      # The installer, and every program file in the app (Smart App Control checks each one as it
+      # loads): in a signed build, each one signed, by us or by Microsoft. Prebuilds for other
+      # systems (not "MZ") don't count. An unsigned build (pull requests) only lists them.
+      - name: Check the signatures
         shell: pwsh
+        env:
+          SIGNED: ${{ steps.build.outputs.signed }}
         run: |
-          foreach ($f in @(Get-ChildItem dist\*.exe) + @(Get-ChildItem dist\win-unpacked\*.exe)) {
-            $sig = Get-AuthenticodeSignature $f.FullName
-            "$($f.Name): $($sig.Status) ($($sig.SignerCertificate.Subject))"
-            if ($sig.Status -ne "Valid") { throw "$($f.Name) isn't signed properly." }
+          if (-not (Test-Path dist\win-unpacked\resources\speech-runtime\bin\nemo-speech.exe)) { throw "NVIDIA's runtime isn't in the app." }
+          function Test-Pe($path) { $s = [IO.File]::OpenRead($path); try { $s.ReadByte() -eq 0x4D -and $s.ReadByte() -eq 0x5A } finally { $s.Dispose() } }
+          $files = @(Get-ChildItem dist\*.exe) + @(Get-ChildItem dist\win-unpacked -Recurse -File | Where-Object { ($_.Extension -in @('.exe', '.dll', '.node')) -and (Test-Pe $_.FullName) })
+          $bad = 0
+          foreach ($f in $files) {
+            $sig = Get-AuthenticodeSignature -LiteralPath $f.FullName
+            "$($f.FullName.Substring((Get-Location).Path.Length + 1)): $($sig.Status) ($($sig.SignerCertificate.Subject))"
+            if ($sig.Status -ne "Valid") { $bad++ }
           }
+          if ($env:SIGNED -ne "true") { "unsigned build: $bad of $($files.Count) program files unsigned (a signed build signs them all)"; exit 0 }
+          if ($bad) { throw "$bad program file(s) aren't signed properly." }
+          "$($files.Count) program files, all signed"
       # Installed the way an owner does it (for them only, no admin), silently: it goes to
       # %LOCALAPPDATA%\Programs\build-a-bot-desktop.
       - name: Install it, and let the installed app check itself

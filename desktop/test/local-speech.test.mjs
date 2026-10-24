@@ -16,7 +16,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import zlib from "node:zlib";
-import { LOCAL_LANGUAGES, LOCAL_MODEL, LocalSpeech, LocalSpeechError, RUNTIMES, localFirst, tidyLocalText } from "../src/main/voice/local-speech.mjs";
+import { LOCAL_LANGUAGES, LOCAL_MODEL, LocalSpeech, LocalSpeechError, RUNTIMES, bundledRuntime, localFirst, tidyLocalText } from "../src/main/voice/local-speech.mjs";
 
 const sha256 = (b) => createHash("sha256").update(b).digest("hex");
 
@@ -390,6 +390,59 @@ test("gives up after four tries in a row that get nowhere", async (t) => {
   assert.equal(local.state, "installed");
   assert.equal(local.error, null);
   assert.equal(server.hits("/runtime.tar.gz").length, 1);
+});
+
+test("a runtime that came with the installer (Windows, signed with the app) is copied, not downloaded, and an update that brings another keeps the model", async (t) => {
+  const { local, server, make } = await setup(t);
+  // Installed before, from NVIDIA's download.
+  await local.install();
+  assert.equal(server.hits("/runtime.tar.gz").length, 1);
+  assert.equal(server.hits("/model.gguf").length, 1);
+
+  const bundle = fs.mkdtempSync(path.join(os.tmpdir(), "bab-bundled-"));
+  t.after(() => fs.rmSync(bundle, { recursive: true, force: true }));
+  const bring = (program) => {
+    fs.mkdirSync(path.join(bundle, "bin"), { recursive: true });
+    fs.writeFileSync(path.join(bundle, "bin", "nemo-speech"), program);
+    fs.mkdirSync(path.join(bundle, "share", "licenses"), { recursive: true });
+    fs.writeFileSync(path.join(bundle, "share", "licenses", "LICENSE"), "Apache-2.0");
+  };
+  assert.equal(bundledRuntime(path.dirname(bundle)), null, "no speech-runtime folder there");
+  bring(FAKE_RUNTIME);
+
+  // The app now brings its own: another runtime, so it's installed again, from the bundle.
+  const updated = make({ bundled: bundle });
+  assert.equal(updated.state, "absent");
+  await updated.install();
+  assert.equal(updated.state, "installed");
+  assert.equal(fs.readFileSync(updated.paths.bin, "utf8"), FAKE_RUNTIME);
+  assert.ok(fs.existsSync(path.join(updated.paths.runtime, "share", "licenses", "LICENSE")), "its licenses come along");
+  assert.equal(JSON.parse(fs.readFileSync(updated.paths.marker, "utf8")).runtime, `bundled:${sha256(FAKE_RUNTIME)}`);
+  assert.equal(server.hits("/runtime.tar.gz").length, 1, "NVIDIA's runtime isn't downloaded");
+  assert.equal(server.hits("/model.gguf").length, 1, "the model already here isn't downloaded again");
+  assert.deepEqual(fs.readFileSync(updated.paths.model), FILES["/model.gguf"]);
+  assert.equal(make({ bundled: bundle }).state, "installed", "the next run of the app knows it");
+  assert.equal(await updated.transcribe(wav(), { durationMs: 500 }), "Let's meet at 3:30 on Friday, or 3:45.", "it runs from where it was copied");
+  await updated.stop();
+
+  // The next update brings another build of it (signed anew): copied again, still no downloads.
+  bring(`${FAKE_RUNTIME}\n// the next build\n`);
+  const next = make({ bundled: bundle });
+  assert.equal(next.state, "absent");
+  await next.install();
+  assert.match(fs.readFileSync(next.paths.bin, "utf8"), /the next build/);
+  assert.equal(server.hits("/runtime.tar.gz").length + server.hits("/model.gguf").length, 2);
+  assert.equal(bundledRuntime(path.dirname(bundle), "nemo-speech"), null, "it's looked for in resources/speech-runtime");
+});
+
+test("the app finds the runtime it brought in resources/speech-runtime", () => {
+  const resources = fs.mkdtempSync(path.join(os.tmpdir(), "bab-resources-"));
+  assert.equal(bundledRuntime(resources), null);
+  assert.equal(bundledRuntime(undefined), null);
+  fs.mkdirSync(path.join(resources, "speech-runtime", "bin"), { recursive: true });
+  fs.writeFileSync(path.join(resources, "speech-runtime", "bin", "nemo-speech.exe"), "MZ");
+  assert.equal(bundledRuntime(resources), path.join(resources, "speech-runtime"));
+  fs.rmSync(resources, { recursive: true, force: true });
 });
 
 test("a download that finished just before the app quit isn't downloaded again", async (t) => {

@@ -2,7 +2,8 @@
  * Voice typing on Windows, end to end, on a real Windows computer (CI's windows-latest):
  *
  *  - the app as installed by its installer (BAB_E2E_APP; or from source without it), paired;
- *  - NVIDIA Parakeet downloaded from NVIDIA's own pages and run on the computer, as for an owner;
+ *  - NVIDIA Parakeet run on the computer, as for an owner: NVIDIA's runtime from the installer (signed
+ *    with the app in signed builds), the model downloaded from NVIDIA's own page;
  *  - a sentence the system's own voice says (BAB_E2E_SPEECH_WAV, 16-bit PCM) playing into
  *    Chromium's fake microphone while the real shortcut, Ctrl + Windows, is held down with
  *    SendInput (e2e/fixtures/winkey.py), with another app in front;
@@ -202,7 +203,7 @@ test("Windows: hold Ctrl + Windows, talk, let go: NVIDIA Parakeet hears it on th
   await step("paired", () => pairWin.waitForSelector("#paired:not([hidden])", { timeout: 30_000 }));
   await step("hold mode", () => until("the shortcut to be heard", async () => (await probe())?.mode === "hold", 30_000));
 
-  // ---- NVIDIA Parakeet: downloaded from NVIDIA's pages, checked, unpacked and loaded
+  // ---- NVIDIA Parakeet: the runtime copied from the installed app, the model downloaded and checked, then loaded
   const t0 = Date.now();
   await step("private speech ready", () => until("Parakeet downloaded and loaded", async () => (await probe())?.local?.state === "ready", 600_000, 1000));
   console.log(`windows voice e2e: Parakeet downloaded, checked and loaded in ${((Date.now() - t0) / 1000).toFixed(1)} s`);

@@ -3,3 +3,4 @@ dist/
 out/
 native/macos/build/
 *.log
+build/speech-runtime/
