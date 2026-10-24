@@ -7,8 +7,12 @@ import { MAX_INSTRUCTION_CHARS, MAX_SELECTION_CHARS } from "@/lib/dictation/edit
 export const maxDuration = 60;
 
 const bodySchema = z.object({
-  instruction: z.string().trim().min(1).max(MAX_INSTRUCTION_CHARS),
-  selection: z.string().max(MAX_SELECTION_CHARS).nullish(),
+  instruction: z.string().trim().min(1).max(MAX_INSTRUCTION_CHARS, "That's a long instruction. Say it in a sentence or two."),
+  // Said in words the app shows as they are (not "selection: Too big").
+  selection: z
+    .string()
+    .max(MAX_SELECTION_CHARS, `That's a lot of text to edit at once (up to ${MAX_SELECTION_CHARS.toLocaleString("en-US")} characters). Select less and try again.`)
+    .nullish(),
   category: z.enum(APP_CATEGORIES).optional(),
   app: z.string().trim().max(60).optional(),
   styles: z.boolean().optional(),

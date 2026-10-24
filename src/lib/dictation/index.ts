@@ -283,10 +283,9 @@ export async function dictate(db: Db, owner: User, input: DictateInput): Promise
       text = guarded.slots.length ? null : demoPolish(heard);
     } else {
       const ai = await polishText({ text: guarded.text, vocabulary: ctx.vocabulary, category: input.category ?? "other", appName: input.appName, styles: input.styles });
-      if (ai) {
-        text = restoreSnippets(ai.text, guarded.slots);
-        costMicros += ai.costMicros;
-      }
+      // An answer that changed what was said isn't typed, but it was paid for.
+      if (ai) costMicros += ai.costMicros;
+      if (ai?.text) text = restoreSnippets(ai.text, guarded.slots);
     }
     polished = text !== null;
   }
