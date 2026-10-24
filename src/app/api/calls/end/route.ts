@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { apiError, json } from "@/lib/api";
-import { activeCall, endCall } from "@/lib/calls";
+import { endCall, endingCall } from "@/lib/calls";
 import { voiceRequest } from "@/lib/calls/http";
 
 const Report = z.object({
@@ -16,7 +16,7 @@ const Report = z.object({
 export async function POST(req: Request) {
   const r = await voiceRequest(req, z.object({ callId: z.string().min(1).max(64), report: Report }));
   if (!r.ok) return r.res;
-  const call = await activeCall(r.db, r.data.callId);
+  const call = await endingCall(r.db, r.data.callId);
   if (!call) return apiError(404, "No such call in progress");
   return json(await endCall(r.db, call, r.data.report));
 }

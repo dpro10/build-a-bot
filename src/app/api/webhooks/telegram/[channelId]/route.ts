@@ -1,12 +1,13 @@
 import { after } from "next/server";
-import { and, eq, gt, isNull, ne } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { timingSafeEqualStr } from "@/lib/crypto";
 import { channelSecret } from "@/lib/channels/secrets";
 import { telegramCall, sendTelegram } from "@/lib/channels/telegram";
 import { handleInbound, loadBotAndOwner, seenBefore } from "@/lib/channels/inbound";
 import { decideApproval, readApprovalButtonToken, resolveShortApprovalKey } from "@/lib/agent/approvals";
-import { runTurn } from "@/lib/agent/run";
+import { runTurn, setPaused } from "@/lib/agent/run";
+import { demoMode } from "@/lib/env";
 import { greetingDirective } from "@/lib/agent/prompt";
 import { ensureConversation } from "@/lib/channels/outbound";
 import { appKinds } from "@/lib/connectors";
@@ -24,6 +25,9 @@ type TgUpdate = {
     from?: { id: number; first_name?: string; username?: string };
     text?: string;
     caption?: string;
+    /** Set when the owner forwarded someone else's message: its words aren't the owner's. */
+    forward_origin?: unknown;
+    forward_date?: number;
     /** A file sent as a file (PDF, Word, a photo sent uncompressed). */
     document?: { file_id: string; file_name?: string; mime_type?: string; file_size?: number };
     /** A photo, in several sizes (the last is the largest). */
@@ -40,6 +44,8 @@ export async function POST(req: Request, ctx: RouteCtx<{ channelId: string }>) {
   if (!channel || channel.kind !== "telegram" || !expected) return new Response("not found", { status: 404 });
   if (!timingSafeEqualStr(req.headers.get("x-telegram-bot-api-secret-token") ?? "", expected)) return new Response("forbidden", { status: 403 });
 
+  // Turned off in the app: Telegram may still deliver, but the bot doesn't answer anyone.
+  if (channel.status === "disabled") return new Response("ok");
   const update = (await req.json().catch(() => null)) as TgUpdate | null;
   if (!update) return new Response("bad request", { status: 400 });
   if (await seenBefore(db, `tg-${channelId}`, update.update_id)) return new Response("ok");
@@ -85,8 +91,8 @@ export async function POST(req: Request, ctx: RouteCtx<{ channelId: string }>) {
     }
     const fromId = String(msg.from.id);
 
-    // Owner verification for pasted-token bots: /start own_123456
-    const own = /^\/start\s+own_(\d{6})$/.exec(text);
+    // Owner verification for pasted-token bots: /start own_<code> (the code is long: it comes in a link, never typed).
+    const own = /^\/start\s+own_([A-Za-z0-9_-]{6,40})$/.exec(text);
     if (own && !channel.ownerAddress) {
       const [code] = await db
         .select()
@@ -101,14 +107,21 @@ export async function POST(req: Request, ctx: RouteCtx<{ channelId: string }>) {
     }
 
     const isOwner = channel.ownerAddress === fromId;
+    if (isOwner && /^\/start(\s|$)/.test(text) && bot.status === "paused") {
+      // The menu's /start also wakes a paused bot.
+      await setPaused(db, bot, false, "/start from telegram");
+      await sendTelegram(token, String(msg.chat.id), "I'm back! What do you need?").catch(() => {});
+      return;
+    }
     if (isOwner && /^\/start(\s|$)/.test(text)) {
       // First hello on Telegram: the bot introduces itself.
       await telegramCall(token, "sendChatAction", { chat_id: msg.chat.id, action: "typing" }).catch(() => {});
       const conversation = await ensureConversation(db, bot.id, "telegram", String(msg.chat.id));
+      // Ideas only for what works now: built-ins and apps already signed in to.
       const apps = await db
         .select({ connectorId: schema.connections.connectorId })
         .from(schema.connections)
-        .where(and(eq(schema.connections.botId, bot.id), ne(schema.connections.status, "disabled")));
+        .where(and(eq(schema.connections.botId, bot.id), inArray(schema.connections.status, demoMode ? ["connected", "demo"] : ["connected"])));
       const starters = startersFor(bot.jobs ?? [], appKinds(apps.map((c) => c.connectorId)), bot.role);
       const result = await runTurn({
         db, bot, owner, conversation, channelKind: "telegram", message: null, noTools: true,
@@ -152,6 +165,8 @@ export async function POST(req: Request, ctx: RouteCtx<{ channelId: string }>) {
           } else meta = { ...meta, files: [got.attached] };
         }
       }
+      // A forwarded message is someone else's words: shown to the bot as outside content.
+      const forwarded = Boolean(msg.forward_origin || msg.forward_date);
       await handleInbound({
         db,
         bot,
@@ -160,11 +175,12 @@ export async function POST(req: Request, ctx: RouteCtx<{ channelId: string }>) {
         kind: "telegram",
         threadId: String(msg.chat.id),
         replyTo: String(msg.chat.id),
-        text: text.replace(/^\/(stop|status|help)(@\w+)?$/i, "$1"),
+        text: forwarded ? text : text.replace(/^\/(stop|status|help)(@\w+)?$/i, "$1"),
         isOwner,
         from: fromId,
         contactLabel: msg.from.username ? `@${msg.from.username}` : msg.from.first_name,
-        meta,
+        meta: forwarded ? { ...meta, forwarded: true } : meta,
+        tainted: forwarded,
       });
     } finally {
       clearInterval(typing);

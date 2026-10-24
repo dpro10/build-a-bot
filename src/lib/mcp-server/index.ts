@@ -57,7 +57,15 @@ async function authenticate(db: Db, req: Request, botId: string): Promise<Auth |
 export async function handleMcpRequest(req: Request, botId: string): Promise<Response> {
   // Browsers must not drive this endpoint from other sites.
   const origin = req.headers.get("origin");
-  if (origin && new URL(origin).host !== new URL(appUrl()).host) return new Response("Forbidden origin", { status: 403 });
+  // Browsers send "null" (or worse) from sandboxed pages: an origin that isn't this site's is refused.
+  const host = (() => {
+    try {
+      return new URL(origin ?? "").host;
+    } catch {
+      return null;
+    }
+  })();
+  if (origin && host !== new URL(appUrl()).host) return new Response("Forbidden origin", { status: 403 });
 
   let body: Rpc;
   try {

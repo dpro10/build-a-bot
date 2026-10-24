@@ -153,6 +153,8 @@ export function AppsTrustView({ bot, connections: initial, composioLive, comingS
         body: { method: plan.kind },
       });
       if (res.redirect) {
+        // Only ever leave for a web address (never "javascript:" or another scheme).
+        if (!/^https:\/\//i.test(res.redirect)) throw new Error("That sign-in address isn't a secure web address.");
         try {
           sessionStorage.setItem(PENDING_KEY, JSON.stringify({ id: conn.id, connectorId: conn.connectorId, name }));
         } catch {

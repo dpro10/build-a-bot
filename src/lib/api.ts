@@ -26,7 +26,9 @@ export async function parseJson<S extends z.ZodTypeAny>(req: Request, schema: S)
   const parsed = schema.safeParse(body);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
-    return { ok: false, res: apiError(422, issue ? `${issue.path.join(".") || "body"}: ${issue.message}` : "Invalid input") };
+    // A message written for people (one that ends in a full stop) is shown as it is.
+    const plain = issue && /[.!?]$/.test(issue.message);
+    return { ok: false, res: apiError(422, !issue ? "Invalid input" : plain ? issue.message : `${issue.path.join(".") || "body"}: ${issue.message}`) };
   }
   return { ok: true, data: parsed.data };
 }

@@ -95,6 +95,8 @@ export type OpenAiLlmOptions = {
   model: string;
   /** Model knobs merged into each request, e.g. { reasoning_effort: "none" }. */
   extraBody?: Record<string, unknown>;
+  /** The longest one reply may take, first byte to last: a caller can't be left waiting on a stuck request. */
+  timeoutMs?: number;
   fetchImpl?: typeof fetch;
 };
 
@@ -123,21 +125,27 @@ export class OpenAiCompatibleLlm implements Llm {
         : {}),
       ...this.opts.extraBody,
     };
+    // A healthy reply takes a second or two (reasoning off, about 25 words).
+    const timeout = AbortSignal.timeout(this.opts.timeoutMs ?? 10_000);
+    const signal = req.signal ? AbortSignal.any([req.signal, timeout]) : timeout;
+    const tooSlow = () => new LlmError(`the model didn't answer within ${Math.round((this.opts.timeoutMs ?? 10_000) / 1000)} s`);
     let res: Response;
     try {
       res = await this.fetchImpl(`${this.opts.baseUrl.replace(/\/$/, "")}/chat/completions`, {
         method: "POST",
         headers: { "content-type": "application/json", accept: "text/event-stream", authorization: `Bearer ${this.opts.apiKey}` },
         body: JSON.stringify(body),
-        signal: req.signal,
+        signal,
         redirect: "error",
       });
     } catch (err) {
-      if ((err as Error).name === "AbortError") return;
+      if (req.signal?.aborted) return;
+      if (timeout.aborted) throw tooSlow();
       throw new LlmError(`couldn't reach the model: ${redact((err as Error).message)}`);
     }
     if (!res.ok || !res.body) {
       const text = await res.text().catch(() => "");
+      if (req.signal?.aborted) return;
       throw new LlmError(`model error ${res.status}: ${redact(text)}`, res.status);
     }
 
@@ -210,10 +218,13 @@ export class OpenAiCompatibleLlm implements Llm {
         if (choice.finish_reason) finish = choice.finish_reason;
       }
     } catch (err) {
-      if ((err as Error).name === "AbortError" || req.signal?.aborted) return;
+      if (req.signal?.aborted) return;
+      if (timeout.aborted) throw tooSlow();
       throw err instanceof LlmError ? err : new LlmError(`model stream broke: ${redact((err as Error).message)}`);
     }
     if (req.signal?.aborted) return;
+    // The timeout can end the body quietly (as a clean end of stream): a cut-off reply isn't one.
+    if (timeout.aborted) throw tooSlow();
 
     // Text left over that isn't hidden (it ended without a newline or tag).
     if (!hidden && spokenUpTo < text.length) yield { type: "text", delta: text.slice(spokenUpTo) };

@@ -16,7 +16,7 @@
  *   unverified  the owner's number without full attestation (caller ID can be faked): a PIN unlocks it
  *   contact     anyone else: polite, takes messages, does nothing for them
  */
-import { and, desc, eq, gt, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, lt, sql } from "drizzle-orm";
 import { schema, type Db } from "@/lib/db";
 import type { Bot, Call, CallTurn, User } from "@/lib/db/schema";
 import { config, live } from "@/lib/env";
@@ -37,7 +37,7 @@ export type Speaker = "owner" | "unverified" | "contact";
 
 /** How long a call token is good for: long enough to connect, too short to keep. */
 export const CALL_TOKEN_TTL_S = { web: 120, phone: 600 } as const;
-export const MAX_CALL_MINUTES = { web: 15, phone: 20 } as const;
+export const MAX_CALL_MINUTES = { web: 15, phone: 15 } as const;
 /** A call the voice server never picked up is stale after this. */
 const PENDING_FOR_MS = 15 * 60_000;
 const MAX_TURNS = 400;
@@ -159,6 +159,35 @@ export async function activeCall(db: Db, callId: string): Promise<Call | null> {
     .where(and(eq(schema.calls.id, callId), eq(schema.calls.status, "active")))
     .limit(1);
   return row ?? null;
+}
+
+/**
+ * A call the voice server is reporting the end of: still active, or just handed to the simpler
+ * line (its stream ended before the report came in). Either way its transcript and bill count.
+ */
+export async function endingCall(db: Db, callId: string): Promise<Call | null> {
+  const [row] = await db
+    .select()
+    .from(schema.calls)
+    .where(and(eq(schema.calls.id, callId), inArray(schema.calls.status, ["active", "failed"])))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * Calls still "active" long after any call could last (the voice server went away mid-call: a
+ * restart, a power loss), and ones it never picked up (the caller hung up before it did).
+ */
+export async function closeStaleCalls(db: Db, now = new Date()): Promise<void> {
+  const cutoff = new Date(now.getTime() - (Math.max(MAX_CALL_MINUTES.web, MAX_CALL_MINUTES.phone) + 15) * 60_000);
+  await db
+    .update(schema.calls)
+    .set({ status: "failed", endedAt: now })
+    .where(and(eq(schema.calls.status, "active"), lt(schema.calls.startedAt, cutoff)));
+  await db
+    .update(schema.calls)
+    .set({ status: "failed", endedAt: now })
+    .where(and(eq(schema.calls.status, "pending"), lt(schema.calls.createdAt, new Date(now.getTime() - PENDING_FOR_MS))));
 }
 
 async function botAndOwner(db: Db, call: Call): Promise<{ bot: Bot; owner: User } | null> {
@@ -289,12 +318,10 @@ export type CallActResult = { text: string; status: string; approvals: { title: 
 
 /** A request from the call, done by the bot's own agent with every safeguard a chat has. */
 export async function callAct(db: Db, call: Call, request: string): Promise<CallActResult> {
-  if (call.speaker === "unverified") {
-    return { text: "Nothing was done: the caller hasn't shown they're the owner (no PIN yet).", status: "refused", approvals: [] };
-  }
   const loaded = await botAndOwner(db, call);
   if (!loaded) return { text: "This bot is gone.", status: "error", approvals: [] };
   const conversation = await ensureConversation(db, loaded.bot.id, "voice", `call:${call.id}`);
+  // A caller who hasn't said the PIN yet is anyone else: the bot only passes a message on (as it promised).
   const owner = call.speaker === "owner";
   const result = await runTurn({
     db,
@@ -306,7 +333,11 @@ export async function callAct(db: Db, call: Call, request: string): Promise<Call
       text: request,
       author: owner ? "owner" : "contact",
       from: call.fromAddress ?? (call.kind === "web" ? "the app" : undefined),
-      contactLabel: owner ? undefined : `a caller on the phone (${call.fromAddress ?? "number withheld"})`,
+      contactLabel: owner
+        ? undefined
+        : call.speaker === "unverified"
+          ? `a caller from the owner's number who hasn't said the phone PIN (${call.fromAddress ?? "number withheld"})`
+          : `a caller on the phone (${call.fromAddress ?? "number withheld"})`,
       meta: { via: "call", callId: call.id },
     },
   });
@@ -393,8 +424,16 @@ export async function endCall(db: Db, call: Call, report: CallReportIn): Promise
   };
   const [ended] = await db
     .update(schema.calls)
-    .set({ status: "ended", endedAt: new Date(), durationS, transcript: turns, report: summary, costMicros: sql`${schema.calls.costMicros} + ${costMicros}` })
-    .where(and(eq(schema.calls.id, call.id), eq(schema.calls.status, "active")))
+    .set({
+      // A call that went on on the simpler line stays "failed": its minutes are charged at that line's price (twilio/voice/status).
+      status: sql`case when ${schema.calls.status} = 'failed' then 'failed' else 'ended' end`,
+      endedAt: new Date(),
+      durationS,
+      transcript: turns,
+      report: summary,
+      costMicros: sql`${schema.calls.costMicros} + ${costMicros}`,
+    })
+    .where(and(eq(schema.calls.id, call.id), inArray(schema.calls.status, ["active", "failed"])))
     .returning();
   if (!ended || !loaded) return { costMicros: 0 };
   const { bot, owner } = loaded;
@@ -409,8 +448,8 @@ export async function endCall(db: Db, call: Call, report: CallReportIn): Promise
     { callId: call.id, durationS, turns: turns.length, latencyP50Ms: summary.latency.p50Ms, model: model.id, engine: summary.engine, speaker: ended.speaker },
     costMicros,
   );
-  // The owner's calls show in the bot's chat, with the transcript.
-  if (ended.speaker === "owner" && turns.length > 1) {
+  // The owner's calls show in the bot's chat, with the transcript (a call where they never spoke doesn't).
+  if (ended.speaker === "owner" && turns.length > 1 && turns.some((t) => t.role === "caller")) {
     const web = await ensureConversation(db, bot.id, "web", "owner");
     await db.insert(schema.messages).values({
       id: sortableId("msg"),

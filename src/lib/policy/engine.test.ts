@@ -131,8 +131,9 @@ describe("policy engine", () => {
       evaluate({ ...base, trust: "trusted", effect: "spend", amountUsd: 10, spendCapUsd: 50, spentThisMonthUsd: 0 })
         .verdict,
     ).toBe("ask");
-    // Unknown amount counts as over the cap.
-    expect(evaluate({ ...base, trust: "full", effect: "spend", spendCapUsd: 50 }).verdict).toBe("deny");
+    // An app that doesn't say what it costs: the owner decides, even on Full faith.
+    expect(evaluate({ ...base, trust: "full", effect: "spend", spendCapUsd: 50 }).verdict).toBe("ask");
+    expect(evaluate({ ...base, trust: "full", effect: "spend", spendCapUsd: 50, ownerRule: "allow" }).verdict).toBe("ask");
   });
 
   it("secrets never leave", () => {

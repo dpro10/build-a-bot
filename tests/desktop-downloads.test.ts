@@ -87,6 +87,23 @@ describe("desktop downloads", () => {
     expect(await desktopReleases(offline)).toEqual([]);
   });
 
+  it("a failure after a good read keeps the list it had (and tries again a minute later)", async () => {
+    const ok = (async () => Response.json(GITHUB)) as unknown as typeof fetch;
+    let downCalls = 0;
+    const down = (async () => {
+      downCalls++;
+      return new Response("rate limited", { status: 403 });
+    }) as unknown as typeof fetch;
+    const t = 5_000_000;
+    expect((await desktopReleases(ok, t)).length).toBe(2);
+    // Five minutes on, GitHub says no: the downloads stay up.
+    expect((await desktopReleases(down, t + 5 * 60_000 + 1)).length).toBe(2);
+    expect((await desktopReleases(down, t + 5 * 60_000 + 30_000)).length).toBe(2);
+    expect(downCalls).toBe(1);
+    expect((await desktopReleases(down, t + 5 * 60_000 + 61_000)).length).toBe(2);
+    expect(downCalls).toBe(2);
+  });
+
   it("/download/<platform> and the update feed redirect to the files", async () => {
     vi.stubGlobal("fetch", async () => Response.json(GITHUB));
     const download = await import("@/app/(marketing)/download/[platform]/route");

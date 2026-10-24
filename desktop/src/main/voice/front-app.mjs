@@ -14,7 +14,7 @@ import { spawn } from "node:child_process";
 import { execText } from "../detect/index.mjs";
 
 /** @typedef {'chat'|'email'|'code'|'terminal'|'docs'|'browser'|'other'} Category */
-/** @typedef {{ name: string, category: Category }} FrontAppInfo */
+/** @typedef {{ name: string, category: Category, remote?: boolean }} FrontAppInfo  `remote`: a remote desktop or virtual machine window (never sent) */
 
 /** Apps by macOS bundle id, Windows exe (no .exe) or Linux WM_CLASS, all lowercase. */
 const APPS = /** @type {Array<[Category, string, string[]]>} */ ([
@@ -84,6 +84,34 @@ const APPS = /** @type {Array<[Category, string, string[]]>} */ ([
 const BY_ID = new Map();
 for (const [category, name, ids] of APPS) for (const id of ids) BY_ID.set(id, { name, category });
 
+/**
+ * Remote desktops and virtual machines: what's pasted there reaches the other computer's clipboard
+ * over the network, a while after the paste key, so the clipboard is put back later (paste.mjs).
+ * They're "other" apps: their names stay on this computer. macOS bundle id, Windows exe or Linux
+ * WM_CLASS, lowercase.
+ */
+const REMOTE = /** @type {Array<[string, string[]]>} */ ([
+  ["Remote Desktop", ["com.microsoft.rdc.macos", "com.microsoft.rdc.mac", "mstsc", "msrdc", "msrdcw"]],
+  ["Citrix", ["com.citrix.receiver.icaviewer.mac", "wfica32", "cdviewer", "wfica"]],
+  ["VMware Horizon", ["com.vmware.horizon", "vmware-view", "vmware-remotemks"]],
+  ["Parallels Desktop", ["com.parallels.desktop.console"]],
+  ["VMware", ["com.vmware.fusion", "vmware", "vmplayer"]],
+  ["VirtualBox", ["org.virtualbox.app.virtualboxvm", "virtualboxvm", "virtualbox machine"]],
+  ["UTM", ["com.utmapp.utm"]],
+  ["Screen Sharing", ["com.apple.screensharing"]],
+  ["TeamViewer", ["com.teamviewer.teamviewer", "teamviewer"]],
+  ["AnyDesk", ["com.philandro.anydesk", "anydesk"]],
+  ["RustDesk", ["com.carriez.rustdesk", "rustdesk"]],
+  ["VNC Viewer", ["com.realvnc.vncviewer", "vncviewer", "tvnviewer"]],
+  ["Jump Desktop", ["com.p5sys.jump.mac.viewer"]],
+  ["Parsec", ["tv.parsec.www", "parsecd"]],
+  ["Remmina", ["remmina", "org.remmina.remmina"]],
+  ["FreeRDP", ["xfreerdp", "wlfreerdp", "sdl-freerdp"]],
+  ["Remote Viewer", ["remote-viewer", "virt-viewer"]],
+]);
+const REMOTE_BY_ID = new Map();
+for (const [name, ids] of REMOTE) for (const id of ids) REMOTE_BY_ID.set(id, name);
+
 /** A browser tab's title says what the page is (Windows and Linux; macOS doesn't tell without asking). */
 const TAB_TITLES = /** @type {Array<[Category, string, RegExp]>} */ ([
   ["email", "Gmail", /\bgmail\b|\binbox\b.*\b(?:gmail|google)\b/i],
@@ -113,6 +141,8 @@ export function categorize(app) {
     .toLowerCase()
     .replace(/\.exe$/, "")
     .trim();
+  const remote = REMOTE_BY_ID.get(id);
+  if (remote) return { name: remote, category: "other", remote: true };
   let hit = BY_ID.get(id);
   // JetBrains and other families: com.jetbrains.goland, com.jetbrains.rider…
   if (!hit && /^com\.jetbrains\./.test(id)) hit = { name: app.name || "JetBrains", category: "code" };

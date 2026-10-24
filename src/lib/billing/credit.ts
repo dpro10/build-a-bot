@@ -7,8 +7,10 @@
  */
 import { and, eq, sql } from "drizzle-orm";
 import { schema, type Db } from "@/lib/db";
+import { creditOpen, demoMode } from "@/lib/env";
 import { newId } from "@/lib/utils";
-import { DEMO_CREDIT_CAP_USD } from "./prices";
+import { SITE_BUDGET_MESSAGE, siteBudgetLeft } from "./ceiling";
+import { DEMO_CREDIT_CAP_USD, formatMicros } from "./prices";
 
 /** Diego, 2026-10-21: "give people like $5 free credit to start". */
 const STARTER_CREDIT_DEFAULT_USD = 5;
@@ -47,9 +49,36 @@ export async function getCredit(db: Db, userId: string): Promise<Credit> {
   return { balanceMicros: starterMicros + addedMicros - spentMicros, starterMicros, addedMicros, spentMicros };
 }
 
-/** There's credit left for something that costs money. */
+/** What an account that hasn't signed in hears when something needs its credit. */
+export function signInForCreditMessage(): string {
+  const starter = starterCreditMicros();
+  return `Sign in with your email to do that (it's free)${starter > 0 ? `: your ${formatMicros(starter)} of starter credit comes with it` : ""}.`;
+}
+
+/** For an account that hasn't signed in, once the guests' share of today's budget is spent (ceiling.ts). */
+export function guestsBudgetMessage(): string {
+  const starter = starterCreditMicros();
+  return `So many people are trying Build-a-bot without signing in today that the free messages are used up until midnight UTC. Sign in with your email (it's free) to keep going${starter > 0 ? `: your ${formatMicros(starter)} of starter credit comes with it` : ""}.`;
+}
+
+/**
+ * Why something that costs money can't run now, said for the owner, or null when it can. Credit
+ * opens up with an email: before signing in, only the few free messages are on us (usage.ts), so
+ * nothing else spends anything (calls, routines, meeting notes, reading scanned pages). And today's
+ * budget for the whole site (ceiling.ts) has to have room. Demo mode, where nothing real is
+ * charged, keeps credit open before signing in.
+ */
+export async function creditRefusal(db: Db, userId: string, opts: { ownBrain?: boolean } = {}): Promise<string | null> {
+  const [user] = await db.select({ verified: schema.users.emailVerifiedAt }).from(schema.users).where(eq(schema.users.id, userId)).limit(1);
+  if (!user?.verified && !demoMode) return signInForCreditMessage();
+  if (!(await siteBudgetLeft(db))) return SITE_BUDGET_MESSAGE;
+  if ((await getCredit(db, userId)).balanceMicros > 0) return null;
+  return outOfCreditMessage({ canAdd: creditOpen, ownBrain: opts.ownBrain });
+}
+
+/** There's credit to spend on something that costs money (creditRefusal says why not). */
 export async function hasCredit(db: Db, userId: string): Promise<boolean> {
-  return (await getCredit(db, userId)).balanceMicros > 0;
+  return (await creditRefusal(db, userId)) === null;
 }
 
 export type CreditKind = "topup" | "demo" | "gift" | "refund";

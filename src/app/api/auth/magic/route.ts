@@ -10,8 +10,14 @@ import { rateLimit } from "@/lib/safety/ratelimit";
 import { adminEmails } from "@/lib/admin/metrics";
 import { randomToken, timingSafeEqualStr } from "@/lib/crypto";
 
-/** Sign-in links one network can ask for in an hour, whatever the addresses (each one is an email we send). */
-const LINKS_PER_IP_PER_HOUR = 30;
+/**
+ * Sign-in links one network can ask for, whatever the addresses: each one is an email we send, and
+ * the email provider's daily quota is everyone's way in.
+ */
+const LINKS_PER_IP_PER_HOUR = 20;
+const LINKS_PER_IP_PER_DAY = 40;
+/** Links one address gets in a day, from anywhere (nobody gets their inbox flooded). */
+const LINKS_PER_ADDRESS_PER_DAY = 20;
 
 export async function POST(req: Request) {
   if (!sameOrigin(req)) return apiError(403, "Bad origin");
@@ -22,11 +28,16 @@ export async function POST(req: Request) {
   if (!parsed.ok) return parsed.res;
   const db = await getDb();
   const ip = clientIp(req);
-  if (ip && !(await rateLimit(db, `magic-ip:${ip}`, LINKS_PER_IP_PER_HOUR, 60 * 60)).ok) {
+  if (ip && (!(await rateLimit(db, `magic-ip:${ip}`, LINKS_PER_IP_PER_HOUR, 60 * 60)).ok || !(await rateLimit(db, `magic-ip-day:${ip}`, LINKS_PER_IP_PER_DAY, 86_400)).ok)) {
     return apiError(429, "Too many sign-in links from here. Try again in a while.");
   }
-  const limited = await rateLimit(db, `magic:${parsed.data.email}`, 5, 15 * 60);
+  // A few a quarter-hour for an address from one network: someone asking for your address from
+  // elsewhere can't use up yours.
+  const limited = await rateLimit(db, `magic:${parsed.data.email}:${ip ?? "unknown"}`, 5, 15 * 60);
   if (!limited.ok) return apiError(429, "Too many sign-in links. Try again in a few minutes.");
+  if (!(await rateLimit(db, `magic-day:${parsed.data.email}`, LINKS_PER_ADDRESS_PER_DAY, 86_400)).ok) {
+    return apiError(429, "That's a lot of sign-in links for this address today. Use the newest one in your inbox, or try again tomorrow.");
+  }
   // A demo server without email shows the link on screen, so anyone could ask for anyone's. The operator's
   // own emails (ADMIN_EMAILS) also need the admin code there (ADMIN_SIGNIN_CODE, set on the
   // server), so nobody else can open /admin. Guesses share the rate limit above.

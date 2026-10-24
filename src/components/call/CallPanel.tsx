@@ -6,7 +6,7 @@
  * conversation; the bot's own agent does the work.
  */
 import * as React from "react";
-import { Check, Gauge, LoaderCircle, Mic, MicOff, Phone, PhoneOff, X } from "lucide-react";
+import { Check, Clock, Gauge, LoaderCircle, Mic, MicOff, Phone, PhoneOff, X } from "lucide-react";
 import { Avatar } from "@/components/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -157,6 +157,9 @@ export function CallPanel({
                   <LoaderCircle className="mt-0.5 size-4 shrink-0 animate-spin text-primary" />
                 ) : t.state === "done" ? (
                   <Check className="mt-0.5 size-4 shrink-0 text-success" />
+                ) : t.status === "ok" ? (
+                  // It ran, and waits for the owner's tap in the app (not a failure).
+                  <Clock className="mt-0.5 size-4 shrink-0 text-warning" aria-label="Waiting for your OK" />
                 ) : (
                   <X className="mt-0.5 size-4 shrink-0 text-danger" />
                 )}

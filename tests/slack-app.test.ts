@@ -282,6 +282,8 @@ describe("Add to Slack", () => {
     expect((await db.select().from(schema.approvals).where(eq(schema.approvals.id, "apr_slack")))[0].status).toBe("pending");
 
     expect((await press("U_DANA")).status).toBe(200);
+    // Slack gets its answer at once; the decision runs right after.
+    await Promise.all(background.splice(0));
     expect((await db.select().from(schema.approvals).where(eq(schema.approvals.id, "apr_slack")))[0].status).not.toBe("pending");
   });
 

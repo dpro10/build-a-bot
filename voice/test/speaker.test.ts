@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Speaker, SpeechPace } from "../src/call/speaker.ts";
-import { FakeEngine, FakeTransport, sleep } from "./fixtures/fakes.ts";
+import { FakeEngine, FakeTransport, sleep, until } from "./fixtures/fakes.ts";
 
 /** A transport that plays like a phone or browser: tracks when the far end has nothing to play. */
 class PlayingTransport extends FakeTransport {
@@ -51,6 +51,43 @@ test("with pacing, the sentence waits until it can play through without a gap", 
   const t = await speakOnce(new SpeechPace(0.8, 12));
   assert.ok(t.sentMs > 1700, `${t.sentMs} ms sent`);
   assert.ok(t.gaps <= 1, `${t.gaps} gaps`);
+});
+
+test("a sentence the engine goes quiet on is given up on as an error, and the next one is said", async () => {
+  const engine = new FakeEngine();
+  engine.hung = true;
+  const transport = new FakeTransport("phone");
+  const errors: string[] = [];
+  const starts: { text: string; made: boolean }[] = [];
+  const speaker = new Speaker({ engine, transport, stallMs: 50, events: { onError: (e) => errors.push(e.message), onAudioStart: (p) => starts.push(p) } });
+  speaker.say("hello there");
+  await until(() => errors.length === 1, 3000, "given up");
+  assert.match(errors[0], /no audio from the speech engine/);
+  engine.hung = false;
+  speaker.say("second one");
+  await until(() => starts.length === 1, 3000, "next sentence");
+  assert.equal(starts[0].text, "second one");
+  assert.equal(starts[0].made, true, "made by the engine");
+  // Pre-made audio (a filler from the cache) didn't come from the engine.
+  speaker.say("Mm-hm.", new Int16Array(800).fill(1000));
+  await until(() => starts.length === 2, 3000, "filler");
+  assert.equal(starts[1].made, false);
+  speaker.close();
+});
+
+test("stopping a sentence a stuck engine is making doesn't wait for the engine", async () => {
+  const engine = new FakeEngine();
+  engine.hung = true;
+  const transport = new FakeTransport("phone");
+  const errors: string[] = [];
+  const speaker = new Speaker({ engine, transport, stallMs: 60_000, events: { onError: (e) => errors.push(e.message) } });
+  speaker.say("hello there");
+  await sleep(30);
+  assert.ok(speaker.busy);
+  speaker.stop();
+  await until(() => !speaker.busy, 1000, "quiet");
+  assert.deepEqual(errors, [], "a stop isn't an engine error");
+  speaker.close();
 });
 
 test("pace: fast machines don't wait; slow ones wait for about the shortfall", () => {

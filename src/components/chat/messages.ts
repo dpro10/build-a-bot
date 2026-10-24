@@ -21,6 +21,8 @@ export type ChatMessage = {
   /** `href`: a page in the app the notice links to (e.g. Credit & usage, to add credit). */
   notices: { tone: "info" | "warn" | "danger"; text: string; href?: string }[];
   pending?: boolean;
+  /** The stream ended before the reply was done (Stop, a dropped connection): the server's copy replaces it. */
+  cutOff?: boolean;
   proactive?: boolean;
   via?: string;
   /** Text the owner selected on their screen and sent with a request by voice. */
@@ -52,6 +54,13 @@ export function mergeServerMessages(prev: ChatMessage[], incoming: ChatMessage[]
     const local = next.findIndex((x) => x.id.startsWith("local-") && x.role === m.role && x.text.trim() === m.text.trim());
     if (local >= 0) {
       next[local] = { ...m, key: next[local].key ?? next[local].id, proactive: next[local].role === "assistant" ? false : m.proactive };
+      continue;
+    }
+    // A reply cut off here (Stop, a dropped connection) was saved under the server's own id, maybe
+    // longer or shorter than what was shown: the next reply from the server is that one.
+    const cut = m.role === "assistant" ? next.findIndex((x) => x.cutOff && x.role === "assistant") : -1;
+    if (cut >= 0) {
+      next[cut] = { ...m, key: next[cut].key ?? next[cut].id };
       continue;
     }
     if (append.some((x) => x.id === m.id)) continue;

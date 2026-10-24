@@ -23,8 +23,8 @@ import { schema, type Db } from "@/lib/db";
 import type { DictionaryEntry, User } from "@/lib/db/schema";
 import { roomToday, spenderOf, type Room } from "@/lib/billing/ceiling";
 import { getUsage, recordUsage } from "@/lib/billing/usage";
-import { hasCredit, outOfCreditMessage } from "@/lib/billing/credit";
-import { creditOpen, demoMode, demoSpeech } from "@/lib/env";
+import { creditRefusal } from "@/lib/billing/credit";
+import { demoMode, demoSpeech } from "@/lib/env";
 import { rateLimit } from "@/lib/safety/ratelimit";
 import { TranscriptionError, transcribe, transcriptionSetup } from "@/lib/transcribe";
 import { demoEdit, demoHeard, demoPolish, type DemoSample } from "./demo";
@@ -217,8 +217,9 @@ export async function dictate(db: Db, owner: User, input: DictateInput): Promise
   // What it costs: hearing it here (speech-to-text) and the AI cleanup are paid from credit; heard
   // on the computer it's free. Out of credit, a recording can't be heard here, and what was heard on
   // the computer gets the plain cleanup (still free) instead of the AI's.
-  const credit = await hasCredit(db, owner.id);
-  if (!onDevice && transcriptionSetup() && !credit) return { ok: false, status: 402, code: "no_credit", error: outOfCreditMessage({ canAdd: creditOpen }) };
+  const refused = await creditRefusal(db, owner.id);
+  const credit = !refused;
+  if (!onDevice && transcriptionSetup() && refused) return { ok: false, status: 402, code: "no_credit", error: refused };
 
   // Voice typing is for people, not scripts: a daily cap per account, and one for the whole site.
   const today = await rateLimit(db, `dictate-day:${owner.id}`, DAILY_DICTATIONS, 86_400);
@@ -282,10 +283,9 @@ export async function dictate(db: Db, owner: User, input: DictateInput): Promise
       text = guarded.slots.length ? null : demoPolish(heard);
     } else {
       const ai = await polishText({ text: guarded.text, vocabulary: ctx.vocabulary, category: input.category ?? "other", appName: input.appName, styles: input.styles });
-      if (ai) {
-        text = restoreSnippets(ai.text, guarded.slots);
-        costMicros += ai.costMicros;
-      }
+      // An answer that changed what was said isn't typed, but it was paid for.
+      if (ai) costMicros += ai.costMicros;
+      if (ai?.text) text = restoreSnippets(ai.text, guarded.slots);
     }
     polished = text !== null;
   }
@@ -358,7 +358,8 @@ export async function editByVoice(db: Db, owner: User, input: EditByVoiceInput):
   if (!setup && !demoMode) return { ok: false, status: 503, code: "unavailable", error: "Editing by voice isn't set up on this server yet." };
 
   // The model that does it is paid from credit (demo mode's rules are free).
-  if (setup && !(await hasCredit(db, owner.id))) return { ok: false, status: 402, code: "no_credit", error: outOfCreditMessage({ canAdd: creditOpen }) };
+  const refused = setup ? await creditRefusal(db, owner.id) : null;
+  if (refused) return { ok: false, status: 402, code: "no_credit", error: refused };
   const today = await rateLimit(db, `dictate-day:${owner.id}`, DAILY_DICTATIONS, 86_400);
   if (!today.ok) return { ok: false, status: 429, code: "daily", error: "That's a lot of voice typing for one day. It resets tomorrow." };
   const room = await roomToday(db, "dictation", spenderOf(owner));

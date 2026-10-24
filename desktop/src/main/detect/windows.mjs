@@ -12,7 +12,7 @@
  * says Meet/Teams/Zoom. A WASAPI audio-session helper is the better long-term path
  * (see native/windows/README in desktop/README.md). Pure parsing here.
  */
-import { WIN_BROWSERS, WIN_EXES, WIN_PACKAGES, WIN_PACKAGE_EXES, appFromTitle, browserLabel } from "./catalog.mjs";
+import { WIN_BROWSERS, WIN_EXES, WIN_PACKAGES, WIN_PACKAGE_EXES, appFromTitle, browserLabel, isOwnPage } from "./catalog.mjs";
 
 export const CONSENT_STORE_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\microphone";
 
@@ -130,7 +130,8 @@ export function parseCsvLine(line) {
  * @param {ReturnType<typeof consentStoreEntries>} entries
  * @param {Array<{ image: string, pid: number, title?: string | null }>} processes  running programs (`tasklist`)
  * @param {{ ownExe?: string, titles?: Array<{ image: string, title: string | null }> }} [opts]
- * @returns {Array<{ key: string, app: string, kind: 'native'|'browser', pid: number|null, label: string, source: string }>}
+ * @returns {Array<{ key: string, app: string, kind: 'native'|'browser', pid: number|null, label: string, source: string, own?: boolean }>}
+ *   `own`: the browser's window shows a Build-a-bot page (the owner calling their bot), and no meeting
  */
 export function windowsSightings(entries, processes, opts = {}) {
   const running = new Map();
@@ -164,7 +165,9 @@ export function windowsSightings(entries, processes, opts = {}) {
       // "Meet - abc-defg-hij - Google Chrome" names the call; otherwise it's "a call in Chrome".
       const titles = (opts.titles ?? []).filter((t) => t.image.toLowerCase() === e.exe).map((t) => t.title);
       const named = titles.map((t) => appFromTitle(t)).find(Boolean);
-      found.push({ key: `win:${e.exe}`, app: named ?? "browser", kind: "browser", pid, label: browserLabel(e.exe), source: "consentstore" });
+      // "Otto · Build-a-bot - Google Chrome": the owner calling their own bot isn't a meeting.
+      const own = !named && titles.some((t) => isOwnPage(t));
+      found.push({ key: `win:${e.exe}`, app: named ?? "browser", kind: "browser", pid, label: browserLabel(e.exe), source: "consentstore", ...(own ? { own: true } : {}) });
     }
   }
   // Zoom.exe and CptHost.exe are the same call.

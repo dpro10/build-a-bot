@@ -124,6 +124,48 @@ test("macos: without the helper, Zoom's in-meeting process and meeting tabs stil
   assert.equal(appFromTabs(parseTabLines(fixture("mac-tabs.txt")), "com.apple.Safari"), "teams");
 });
 
+test("the owner calling their own bot on build-a-bot.site isn't a call to take notes in, for as long as the browser keeps the mic", () => {
+  const entries = consentStoreEntries(parseRegQuery(fixture("reg-consentstore.txt")));
+  const procs = parseTasklistCsv(fixture("tasklist.csv"));
+  const title = (t) => [{ image: "chrome.exe", pid: 9120, title: t }];
+  // Windows: the browser's window title names the page in front.
+  const call = windowsSightings(entries, procs, { titles: title("Otto · Build-a-bot - Google Chrome") }).find((f) => f.key === "win:chrome.exe");
+  assert.equal(call.app, "browser");
+  assert.equal(call.own, true);
+  assert.equal(windowsSightings(entries, procs, { titles: title("Weather - Google Chrome") }).find((f) => f.key === "win:chrome.exe").own, undefined);
+  assert.equal(windowsSightings(entries, procs, { titles: title("Meet - abc-defg-hij - Google Chrome") }).find((f) => f.key === "win:chrome.exe").app, "meet", "a meeting is a meeting");
+
+  // macOS, with tab reading on: a Build-a-bot tab in the browser on the mic, and no meeting tab.
+  const out = parseHelperOutput(fixture("mac-helper.json"));
+  const tabs = [{ browser: "Google Chrome", url: "https://build-a-bot.site/app/bots/bot_1", title: "Your bots · Build-a-bot" }];
+  assert.equal(macHelperSightings(out, { tabs }).find((f) => f.key === "mac:com.google.Chrome").own, true);
+  assert.equal(macHelperSightings(out, { tabs: [{ ...tabs[0], browser: "Safari" }] }).find((f) => f.key === "mac:com.google.Chrome").own, undefined, "another browser's tab says nothing");
+  const both = macHelperSightings(out, { tabs: [...tabs, ...parseTabLines(fixture("mac-tabs.txt"))] }).find((f) => f.key === "mac:com.google.Chrome");
+  assert.equal(both.app, "meet");
+  assert.equal(both.own, undefined);
+
+  // Not offered, even once another tab comes to the front, until the browser lets go of the mic.
+  const t = createTracker();
+  const chrome = { key: "win:chrome.exe", app: "browser", kind: "browser" };
+  assert.deepEqual(t.update(0, [{ ...chrome, own: true }]), []);
+  for (const now of [3000, 6000, 9000, 15000, 30000]) assert.deepEqual(t.update(now, [chrome]), [], `at ${now} ms`);
+  assert.deepEqual(t.update(33000, []), []);
+  // A new use of the mic later is a call as usual.
+  for (const now of [40000, 45000, 50000]) assert.deepEqual(t.update(now, [chrome]), []);
+  assert.deepEqual(
+    t.update(55000, [chrome]).map((e) => [e.type, e.app]),
+    [["start", "browser"]],
+  );
+  // A meeting turning up in that browser is offered.
+  const m = createTracker();
+  m.update(0, [{ ...chrome, own: true }]);
+  m.update(10000, [chrome]);
+  assert.deepEqual(
+    m.update(16000, [{ ...chrome, app: "meet" }]).map((e) => [e.type, e.app]),
+    [["start", "meet"]],
+  );
+});
+
 test("catalog: bundle IDs, URLs and titles", () => {
   assert.deepEqual(appFromBundleId("com.microsoft.teams2"), { app: "teams", kind: "native", bundle: "com.microsoft.teams2" });
   assert.equal(appFromBundleId("com.google.Chrome.helper.renderer").kind, "browser");

@@ -46,11 +46,30 @@ type Conn = { url: string; token?: string | null; headers?: Record<string, strin
 
 let rpcId = 0;
 
-async function readRpcResponse(res: Response, id: number): Promise<{ result?: unknown; error?: { code: number; message: string } }> {
-  const type = res.headers.get("content-type") ?? "";
-  if (type.includes("text/event-stream")) {
-    const text = await res.text();
-    for (const block of text.split(/\r?\n\r?\n/)) {
+/** How long a server has to answer, and how much it may send: one that streams forever or floods can't hang a bot's turn. */
+const ANSWER_TIMEOUT_MS = 30_000;
+const ANSWER_MAX_BYTES = 4_000_000;
+
+type RpcMessage = { result?: unknown; error?: { code: number; message: string } };
+
+/**
+ * Reads the answer, a piece at a time, within ANSWER_TIMEOUT_MS and ANSWER_MAX_BYTES. On an event
+ * stream, it stops at the event that answers this request (a server may keep the stream open).
+ */
+export async function readRpcResponse(res: Response, id: number): Promise<RpcMessage> {
+  const stream = (res.headers.get("content-type") ?? "").includes("text/event-stream");
+  const reader = res.body?.getReader();
+  if (!reader) throw new McpError(`Empty response (${res.status})`);
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    void reader.cancel().catch(() => {});
+  }, ANSWER_TIMEOUT_MS);
+  const decoder = new TextDecoder();
+  let text = "";
+  let size = 0;
+  const answerIn = (blocks: string[]): RpcMessage | null => {
+    for (const block of blocks) {
       const data = block
         .split(/\r?\n/)
         .filter((l) => l.startsWith("data:"))
@@ -64,11 +83,40 @@ async function readRpcResponse(res: Response, id: number): Promise<{ result?: un
         /* skip non-JSON events */
       }
     }
-    throw new McpError("No response in event stream");
+    return null;
+  };
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > ANSWER_MAX_BYTES) throw new McpError("The server's answer was too large.");
+      text += decoder.decode(value, { stream: true });
+      if (stream) {
+        const blocks = text.split(/\r?\n\r?\n/);
+        text = blocks.pop() ?? "";
+        const found = answerIn(blocks);
+        if (found) return found;
+      }
+    }
+    if (timedOut) throw new McpError("The server took too long to answer.");
+    text += decoder.decode();
+    if (stream) {
+      const found = answerIn([text]);
+      if (found) return found;
+      throw new McpError("No response in event stream");
+    }
+    try {
+      const body = JSON.parse(text) as RpcMessage | null;
+      if (body) return body;
+    } catch {
+      /* not JSON */
+    }
+    throw new McpError(`Empty response (${res.status})`);
+  } finally {
+    clearTimeout(timer);
+    void reader.cancel().catch(() => {});
   }
-  const body = await res.json().catch(() => null);
-  if (!body) throw new McpError(`Empty response (${res.status})`);
-  return body;
 }
 
 async function post(conn: Conn, payload: Record<string, unknown>, sessionId: string | null, protocol: string | null) {
@@ -111,8 +159,8 @@ async function open(conn: Conn) {
     const rid = ++rpcId;
     const res = await post(conn, { jsonrpc: "2.0", id: rid, method, params }, sessionId, protocol);
     if (!res.ok && res.status !== 200) {
-      const text = await res.text().catch(() => "");
-      throw new McpError(`${method} failed (${res.status}) ${text.slice(0, 200)}`);
+      await res.body?.cancel().catch(() => {});
+      throw new McpError(`${method} failed (${res.status})`);
     }
     const msg = await readRpcResponse(res, rid);
     if (msg.error) throw new McpError(msg.error.message, msg.error.code);

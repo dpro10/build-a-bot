@@ -169,7 +169,10 @@ export function evaluate(ctx: ActionContext): Decision {
   if (ctx.effect === "spend") {
     if (!ctx.spendCapUsd || ctx.spendCapUsd <= 0) {
       bump("deny", "money_off");
-    } else if ((ctx.spentThisMonthUsd ?? 0) + (ctx.amountUsd ?? Number.POSITIVE_INFINITY) > ctx.spendCapUsd) {
+    } else if (ctx.amountUsd === undefined) {
+      // The app doesn't say what it costs: the owner sees the purchase and decides.
+      bump("ask", "needs_approval");
+    } else if ((ctx.spentThisMonthUsd ?? 0) + ctx.amountUsd > ctx.spendCapUsd) {
       bump("deny", "over_spend_cap");
     } else if (ctx.trust !== "full") {
       bump("ask", "needs_approval");

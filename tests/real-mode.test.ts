@@ -5,7 +5,7 @@
  * A fake MCP server stands in for the vendors'.
  */
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 process.env.DATA_DIR = "memory";
 process.env.DEMO_MODE = "0";
@@ -26,6 +26,7 @@ const { createBot } = await import("@/lib/bots/create");
 const { runTurn } = await import("@/lib/agent/run");
 const { ensureConversation } = await import("@/lib/channels/outbound");
 const { checkSpend, recordUsage } = await import("@/lib/billing/usage");
+const { hasCredit, creditRefusal } = await import("@/lib/billing/credit");
 const { FAIR_USE } = await import("@/lib/billing/prices");
 const { buildToolset } = await import("@/lib/tools/registry");
 const { webSearch } = await import("@/lib/tools/builtin/web");
@@ -218,6 +219,32 @@ describe("connecting an app over MCP", () => {
     expect(log.some((l) => l.endsWith("tools/list"))).toBe(false);
   });
 
+  it("a sign-in address that isn't https (a server answering javascript:) is refused", async () => {
+    const bot = await makeBot("Mailer three");
+    const id = (await addApp(bot.id, { connectorId: "gmail" })).data.connection!.id;
+    const AUTH = "https://evil-auth.example.test";
+    stubNet({
+      [GMAIL]: mcpServer({ listsToolsUnsigned: true }),
+      "https://gmailmcp.googleapis.com/.well-known/oauth-protected-resource/mcp/v1": json({ resource: GMAIL, authorization_servers: [AUTH] }),
+      [`${AUTH}/.well-known/oauth-authorization-server`]: json({
+        issuer: AUTH,
+        authorization_endpoint: "javascript:fetch('/api/account/export').then(r=>r.text()).then(alert)//",
+        token_endpoint: `${AUTH}/token`,
+        registration_endpoint: `${AUTH}/register`,
+        code_challenge_methods_supported: ["S256"],
+      }),
+      [`${AUTH}/register`]: json({ client_id: "client-123" }),
+    });
+    const res = await connect(bot.id, id);
+    expect(res.data.redirect).toBeUndefined();
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    // This owner can have 10 bots: delete it the way the app does.
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`set local app.allow_receipt_delete = 'on'`);
+      await tx.delete(schema.bots).where(eq(schema.bots.id, bot.id));
+    });
+  });
+
   it("where the server publishes its sign-in, it goes there", async () => {
     const bot = await makeBot("Mailer two");
     const id = (await addApp(bot.id, { connectorId: "gmail" })).data.connection!.id;
@@ -327,5 +354,68 @@ describe("what isn't set up is said plainly, once", () => {
     // The limit, and nothing about credit (or switching to its own key: it's on one).
     expect(res.text).toBe("You've sent 100,000 messages on your own AI this month, the fair-use limit. It resets on the 1st.");
     expect(notices).toEqual([]);
+  });
+});
+
+describe("credit, before signing in and across the site", () => {
+
+  it("before signing in: the free messages and their lookups, and nothing else that costs money", async () => {
+    const [guest] = await db.insert(schema.users).values({ id: "usr_guest_spend", timezone: "UTC" }).returning();
+    expect(await checkSpend(db, guest, "included")).toEqual({ ok: true });
+    expect(await checkSpend(db, guest, "lookup")).toEqual({ ok: true });
+    const call = await checkSpend(db, guest, "call");
+    expect(call).toMatchObject({ ok: false, code: "sign_in" });
+    expect(!call.ok && call.message).toMatch(/^Sign in with your email to do that \(it's free\): your \$5\.00 of starter credit comes with it\.$/);
+    expect(await hasCredit(db, guest.id)).toBe(false);
+    expect(await creditRefusal(db, guest.id)).toMatch(/^Sign in with your email/);
+    // Signed in, the starter credit is there.
+    expect(await hasCredit(db, owner.id)).toBe(true);
+  });
+
+  it("the day's budget for the whole site stops what costs money, not people's own AI keys", async () => {
+    const before = process.env.SITE_DAILY_USD;
+    process.env.SITE_DAILY_USD = "0.01";
+    try {
+      const [spender] = await db.insert(schema.users).values({ id: "usr_budget", email: "budget@example.com", emailVerifiedAt: new Date(), timezone: "UTC" }).returning();
+      expect(await checkSpend(db, spender, "included")).toEqual({ ok: true });
+      await recordUsage(db, spender.id, { costMicros: 10_000 });
+      expect(await checkSpend(db, spender, "included")).toMatchObject({ ok: false, code: "site_budget" });
+      expect(await creditRefusal(db, spender.id)).toMatch(/today's budget/);
+      expect(await checkSpend(db, spender, "ownBrain")).toEqual({ ok: true });
+    } finally {
+      if (before === undefined) delete process.env.SITE_DAILY_USD;
+      else process.env.SITE_DAILY_USD = before;
+    }
+  });
+
+  it("accounts that haven't signed in share 30% of the day's budget; past it they're asked to sign in, not everyone stopped", async () => {
+    const before = process.env.SITE_DAILY_USD;
+    process.env.SITE_DAILY_USD = "1"; // the guests' share: $0.30
+    try {
+      await db.delete(schema.rateLimits).where(sql`${schema.rateLimits.key} like 'ceiling:usd%'`);
+      const [guest] = await db.insert(schema.users).values({ id: "usr_guest_share", timezone: "UTC" }).returning();
+      const [other] = await db.insert(schema.users).values({ id: "usr_guest_share_2", timezone: "UTC" }).returning();
+      const [member] = await db.insert(schema.users).values({ id: "usr_member_share", email: "member@example.com", emailVerifiedAt: new Date(), timezone: "UTC" }).returning();
+      // What signed-in accounts spend doesn't count toward the guests' share.
+      await recordUsage(db, member.id, { costMicros: 400_000 });
+      expect(await checkSpend(db, other, "included")).toEqual({ ok: true });
+      await recordUsage(db, guest.id, { costMicros: 300_000 });
+      const refused = await checkSpend(db, other, "included");
+      expect(refused).toMatchObject({ ok: false, code: "sign_in" });
+      expect(!refused.ok && refused.message).toBe(
+        "So many people are trying Build-a-bot without signing in today that the free messages are used up until midnight UTC. Sign in with your email (it's free) to keep going: your $5.00 of starter credit comes with it.",
+      );
+      expect(await checkSpend(db, other, "lookup")).toMatchObject({ ok: false, code: "sign_in" });
+      // Signed in, there's the rest of the day's budget.
+      expect(await checkSpend(db, member, "included")).toEqual({ ok: true });
+    } finally {
+      if (before === undefined) delete process.env.SITE_DAILY_USD;
+      else process.env.SITE_DAILY_USD = before;
+    }
+  });
+
+  it("Kimi K3 is the one included model that waits for credit you've added", async () => {
+    const { INCLUDED_MODELS, needsAddedCredit } = await import("@/lib/models/catalog");
+    expect(INCLUDED_MODELS.filter((m) => needsAddedCredit(m.id)).map((m) => m.label)).toEqual(["Kimi K3"]);
   });
 });

@@ -98,6 +98,7 @@ export default async function RoutinesPage({ params }: { params: Promise<{ botId
           deliverOptions={deliverOptions}
           autoHint={autoHint}
           apps={[...appKinds(connections.map((c) => c.connectorId))]}
+          signInFirst={!user.emailVerifiedAt}
         />
       </div>
     </div>

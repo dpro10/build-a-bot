@@ -8,7 +8,7 @@ import { FieldHint, Input, Label } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
 import { formatMicros, perMessageMicros } from "@/lib/billing/prices";
-import { INCLUDED_MODELS, PROVIDERS, PROVIDER_BY_ID, contextLabel, type ModelDef, type ProviderId } from "@/lib/models/catalog";
+import { INCLUDED_MODELS, PROVIDERS, PROVIDER_BY_ID, contextLabel, needsAddedCredit, type ModelDef, type ProviderId } from "@/lib/models/catalog";
 import { cn } from "@/lib/utils";
 import { DEFAULT_MODEL, type BrainChoice } from "../state";
 import { onRadioGroupKeyDown, radioTabIndex } from "../radio-group";
@@ -32,6 +32,7 @@ export function BrainStep({
   onValidate,
   demo,
   starterCredit,
+  paidModels,
   botName,
 }: {
   brain: BrainChoice;
@@ -44,6 +45,8 @@ export function BrainStep({
   demo: boolean;
   /** Credit every account starts with ("$5.00"), or null when there's none. */
   starterCredit: string | null;
+  /** The models only for accounts that added credit are offered (it can be added). */
+  paidModels: boolean;
   botName: string;
 }) {
   const kinds: { id: BrainChoice["kind"]; title: string; blurb: string; icon: React.ReactNode; badge?: string; tone?: "primary" | "success" }[] = [
@@ -95,7 +98,7 @@ export function BrainStep({
       </div>
 
       <div key={brain.kind} className="animate-fade-up">
-        {brain.kind === "included" ? <IncludedPanel brain={brain} onBrain={onBrain} demo={demo} starterCredit={starterCredit} /> : null}
+        {brain.kind === "included" ? <IncludedPanel brain={brain} onBrain={onBrain} demo={demo} starterCredit={starterCredit} paidModels={paidModels} /> : null}
         {brain.kind === "byok" ? (
           <ByokPanel brain={brain} onBrain={onBrain} apiKey={apiKey} onApiKey={onApiKey} keyStatus={keyStatus} keyMessage={keyMessage} onValidate={onValidate} />
         ) : null}
@@ -109,11 +112,13 @@ function IncludedPanel({
   onBrain,
   demo,
   starterCredit,
+  paidModels,
 }: {
   brain: Extract<BrainChoice, { kind: "included" }>;
   onBrain: (b: BrainChoice) => void;
   demo: boolean;
   starterCredit: string | null;
+  paidModels: boolean;
 }) {
   const current = INCLUDED_MODELS.find((m) => m.id === brain.model);
   const thinks = current?.thinking && current.thinking.style !== "none";
@@ -125,7 +130,8 @@ function IncludedPanel({
         to train models. Prices are for a typical message.
       </p>
       {TIERS.map((tier) => {
-        const models = INCLUDED_MODELS.filter((m) => m.tier === tier.id);
+        // A model that needs added credit is offered only where credit can be added (it would only say no).
+        const models = INCLUDED_MODELS.filter((m) => m.tier === tier.id && (paidModels || !needsAddedCredit(m.id) || m.id === brain.model));
         return (
           <div key={tier.id} className="flex flex-col gap-2">
             <div className="flex items-center gap-2">
@@ -211,6 +217,11 @@ function ByokPanel({
   const provider = PROVIDER_BY_ID[brain.provider];
   const [show, setShow] = React.useState(false);
   const known = provider.models.some((m) => m.id === brain.model);
+  // A key that didn't work: its message comes into view, clear of the footer bar on a phone.
+  const statusRef = React.useRef<HTMLSpanElement>(null);
+  React.useEffect(() => {
+    if (keyStatus === "error") statusRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [keyStatus, keyMessage]);
   const [custom, setCustom] = React.useState(!known && Boolean(brain.model));
 
   const setProvider = (id: ProviderId) => {
@@ -318,7 +329,11 @@ function ByokPanel({
         <Button type="button" variant="outline" size="sm" onClick={onValidate} disabled={apiKey.trim().length < 8 || keyStatus === "checking"}>
           {keyStatus === "checking" ? <Spinner /> : <KeyRound />} Check key
         </Button>
-        <span className={cn("flex items-center gap-1.5 text-sm", keyStatus === "ok" && "text-success", keyStatus === "error" && "text-danger", keyStatus === "idle" && "text-muted-foreground")} aria-live="polite">
+        <span
+          ref={statusRef}
+          className={cn("flex items-center gap-1.5 text-sm", keyStatus === "ok" && "text-success", keyStatus === "error" && "text-danger", keyStatus === "idle" && "text-muted-foreground")}
+          aria-live="polite"
+        >
           {keyStatus === "ok" ? <Check className="size-4" strokeWidth={3} /> : keyStatus === "error" ? <CircleAlert className="size-4" /> : null}
           {keyStatus === "checking" ? "Checking with the provider…" : (keyMessage ?? (keyStatus === "idle" ? "We'll check it works before saving." : ""))}
         </span>

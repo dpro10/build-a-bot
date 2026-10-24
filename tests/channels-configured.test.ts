@@ -174,9 +174,10 @@ describe("phone codes", () => {
     expect(await res.json()).toEqual({ ok: true, sent: true, via: "call" });
     expect(calls).toHaveLength(1);
     expect(calls[0]).toMatchObject({ From: "+15555550100", To: "+15125550188" });
-    // Said to be an AI, and read a digit at a time, three times.
+    // Our own words (not the bot's name, which whoever asked chose), read a digit at a time, three times.
     const twiml = calls[0].Twiml;
-    expect(twiml).toContain("Hi, it&apos;s Inkwell, an AI assistant.");
+    expect(twiml).toContain("this is Build-a-bot with the code you asked for");
+    expect(twiml).not.toContain("Inkwell");
     const digits = /Your code is: ((?:\d, ){5}\d)\./.exec(twiml)?.[1];
     expect(digits).toBeTruthy();
     expect(twiml.split(digits!).length - 1).toBe(3);

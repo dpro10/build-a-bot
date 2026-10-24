@@ -13,7 +13,7 @@ import { demoMode, appUrl } from "@/lib/env";
 import { signToken, verifyToken } from "@/lib/crypto";
 import { buildToolset } from "@/lib/tools/registry";
 import type { ToolContext } from "@/lib/tools/types";
-import { deliver, ensureConversation } from "@/lib/channels/outbound";
+import { deliver, ensureConversation, postToWebInbox } from "@/lib/channels/outbound";
 import type { ChannelKind } from "@/lib/channels/catalog";
 import { errorMessage, newId, truncate } from "@/lib/utils";
 import { receipt, runTurn, type RunInput } from "./run";
@@ -151,7 +151,9 @@ async function followUpTurn(db: Db, bot: Bot, owner: User, approval: Approval, d
     ran,
   });
   if (conversation.channelKind !== "web" && result.text) {
-    await deliver(db, bot, conversation.channelKind as ChannelKind, { to: conversation.externalId, text: result.text, toOwner: true }, { owner });
+    // Approved from a call: the call is over by then (it has no address to send to), so the follow-up goes to the web chat.
+    if (conversation.externalId.startsWith("call:")) await postToWebInbox(db, bot, result.text);
+    else await deliver(db, bot, conversation.channelKind as ChannelKind, { to: conversation.externalId, text: result.text, toOwner: true }, { owner });
   }
   return result.text;
 }
@@ -172,15 +174,33 @@ export function readApprovalButtonToken(token: string): { approvalId: string; de
 /** Buttons for a channel message. High-risk approvals link to the app instead. */
 export function approvalButtons(approvals: Approval[]) {
   const buttons: { label: string; url?: string; data?: string }[] = [];
-  for (const a of approvals.slice(0, 2)) {
+  const shown = approvals.slice(0, 2);
+  // Two waiting at once: numbered to match the list in the message (approvalLines).
+  for (const [i, a] of shown.entries()) {
+    const n = shown.length > 1 ? ` ${i + 1}` : "";
     if (a.risk === "high") {
-      buttons.push({ label: "Review in app", url: `${appUrl()}/app/approvals?focus=${a.id}` });
+      buttons.push({ label: `Review${n} in app`, url: `${appUrl()}/app/approvals?focus=${a.id}` });
     } else {
-      buttons.push({ label: "✅ Approve", data: `ap:${approvalButtonToken(a.id, "approve")}` });
-      buttons.push({ label: "✖ Deny", data: `ap:${approvalButtonToken(a.id, "deny")}` });
+      buttons.push({ label: `✅ Approve${n}`, data: `ap:${approvalButtonToken(a.id, "approve")}` });
+      buttons.push({ label: `✖ Deny${n}`, data: `ap:${approvalButtonToken(a.id, "deny")}` });
     }
   }
   return buttons;
+}
+
+/**
+ * What's waiting, said under the bot's reply on a chat app, so the owner sees what the buttons
+ * approve: each one's title and the first lines of what it would send or change.
+ */
+export function approvalLines(approvals: Approval[]): string {
+  const shown = approvals.slice(0, 2);
+  const lines = shown.map((a, i) => {
+    const head = `${shown.length > 1 ? `${i + 1}. ` : ""}${a.title}`;
+    const detail = (a.detail ?? "").split("\n").filter(Boolean).slice(0, 4).map((l) => `   ${l.length > 300 ? `${l.slice(0, 300)}…` : l}`);
+    return [head, ...detail].join("\n");
+  });
+  const more = approvals.length > shown.length ? `\n(${approvals.length - shown.length} more in the app.)` : "";
+  return `Waiting for your OK:\n${lines.join("\n")}${more}`;
 }
 
 /** Callback data is limited (Telegram: 64 bytes), so channels store a short key → token map. */

@@ -394,9 +394,11 @@ function DeleteAccount({ botCount, creditLeft }: { botCount: number; creditLeft:
         <DialogBody>
           <ul className="flex flex-col gap-2 text-sm">
             {[
-              botCount === 1
-                ? "Your bot, with its chats, memories, notes, meetings and routines"
-                : `All ${botCount} of your bots, with their chats, memories, notes, meetings and routines`,
+              botCount === 0
+                ? "Your chats and settings (you have no bots right now)"
+                : botCount === 1
+                  ? "Your bot, with its chats, memories, notes, meetings and routines"
+                  : `All ${botCount} of your bots, with their chats, memories, notes, meetings and routines`,
               "Every receipt and approval",
               "Your saved API keys and app connections",
               "Computers paired with the desktop app",

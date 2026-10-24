@@ -19,7 +19,11 @@ export async function POST(req: Request) {
     const [row] = await db.select().from(schema.asyncResults).where(eq(schema.asyncResults.id, resultId)).limit(1);
     if (!row) return twiml(`${say("Sorry, I lost my train of thought.")}<Hangup/>`);
     if (row.status !== "pending") return twiml(answerTwiml(channelId, row.result as { text?: string; approvals?: number; error?: string } | null, tier));
-    if (i === 0 && row.polls >= 6) return twiml(`${say("This is taking a while. I'll text you the answer when it's ready.")}<Hangup/>`);
+    // Texts are off, so the answer goes where the owner can read it (turn/route.ts posts it to their chat).
+    if (i === 0 && row.polls >= 6) {
+      const bye = tier === "owner" ? "This is taking a while, so I'll let you go. The answer will be in your chat in the Build-a-bot app." : "This is taking a while. Thanks for calling, bye!";
+      return twiml(`${say(bye)}<Hangup/>`);
+    }
     await sleep(500);
   }
   await db.update(schema.asyncResults).set({ polls: sql`${schema.asyncResults.polls} + 1` }).where(eq(schema.asyncResults.id, resultId));

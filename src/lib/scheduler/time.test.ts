@@ -36,6 +36,10 @@ describe("schedule time math", () => {
   it("parses model-supplied local datetimes in the owner's timezone", () => {
     expect(parseOwnerDateTime("2026-10-14T18:00", "America/Chicago")?.toISOString()).toBe("2026-10-14T23:00:00.000Z");
     expect(parseOwnerDateTime("2026-10-14T18:00:00-05:00", "UTC")?.toISOString()).toBe("2026-10-14T23:00:00.000Z");
+    // Seconds, milliseconds or a Z a model tacks on are still the owner's 6 PM (what the reminder chip shows).
+    expect(parseOwnerDateTime("2026-10-14T18:00:00.000", "America/Chicago")?.toISOString()).toBe("2026-10-14T23:00:00.000Z");
+    expect(parseOwnerDateTime("2026-10-14T18:00:00Z", "America/Chicago")?.toISOString()).toBe("2026-10-14T23:00:00.000Z");
+    expect(parseOwnerDateTime("2026-10-14T18:00:00.000Z", "America/Chicago")?.toISOString()).toBe("2026-10-14T23:00:00.000Z");
   });
 
   it("describes schedules in plain words", () => {

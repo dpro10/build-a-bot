@@ -65,7 +65,7 @@ Nothing on the live site is simulated. Each service that isn't set up says "Comi
 | Texts | **Coming soon**: the number waits for carrier registration (A2P). Phone codes come by call meanwhile. |
 | The email channel, and the bot's own inbox | **Coming soon**: they need a brand-free mail domain. |
 | Web actions (filling in forms in a cloud browser) | **Coming soon**: Browser Use isn't set up. |
-| Adding credit | **Coming soon**, until Stripe is set up. Every account has its $5 of starter credit. |
+| Adding credit | **Coming soon**, until Stripe is set up. Every account that signs in has $5 of starter credit. |
 | The desktop app (Mac and Windows): voice typing and meeting notes | **Real**: signed, self-updating, from [build-a-bot.site/download](https://build-a-bot.site/download). NVIDIA Parakeet hears everything on the user's computer. build-a-bot.site has no speech-to-text of its own, so the audio never leaves the computer. |
 
 ## For the judges (testing instructions)
@@ -74,16 +74,17 @@ Nothing on the live site is simulated. Each service that isn't set up says "Comi
 2. **Build it:**
    - Pick a face and a name.
    - Keep **Nemotron 3.5 Lightning** as the brain.
-   - Add a couple of apps (Gmail and Google Calendar sign in with one click), and choose **Ask me first**.
-   - Finish, and the bot greets you.
+   - Add a couple of apps (Gmail and Google Calendar), and choose **Ask me first**.
+   - Finish, and the bot greets you. Then sign in to the apps you added, with one click each, in its **Apps & trust** tab.
 
-   Your first five messages are free. After that, sign in with your email (the link comes back to the same chat), and your $5 of credit takes over. **Credit & usage** shows what each message cost, at Token Factory's price.
+   Your first five messages are free. Then sign in with your email (it's free, and the link comes back to the same chat): your $5 of credit comes with it, and so do calls, routines, meeting notes and the desktop app. **Sign in before steps 4 to 6.** Each message's cost is on its receipt in **Activity**, at Token Factory's price; **Credit & usage** has the totals.
 3. **Try it:** ask something that needs the web ("what's the weather in Austin this weekend and anything fun to do?"). Then, with Gmail added, ask for something that needs a yes from you ("email Sam that I'm running late"): it shows you the email and asks first.
 4. **Call it:** click **Call** in the bot's header and allow the microphone.
    - NVIDIA Parakeet hears you and NVIDIA Magpie answers, both on our own server.
    - Nemotron 3.5 Lightning holds the conversation and hands real work to the bot ("what's on my calendar tomorrow?" with Google Calendar added, "remind me at five to call Sam").
    - Cut in whenever you like: it stops mid-word and listens.
    - When you hang up, the transcript is in the chat.
+   - The voice server takes one call at a time. If someone else is on it, the bot's phone number still answers, on Twilio's own speech.
 5. **Voice typing**, in the desktop app:
    - **Get it** from [build-a-bot.site/download](https://build-a-bot.site/download). On a Mac, open the disk image and double-click Build-a-bot (it moves itself into Applications). On Windows, open the installer (no questions, no admin).
    - **Pair it** from the **Desktop app** page.

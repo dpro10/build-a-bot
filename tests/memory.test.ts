@@ -204,6 +204,10 @@ describe("same fact or a new one?", () => {
     expect(mem.compareFacts("Dana has a sister named Ana", "Dana has a sister")).toBe("more");
     expect(mem.compareFacts("Dana has a sister", "Dana has a sister named Ana")).toBe("less");
     expect(mem.compareFacts("Dana is not vegetarian", "Dana is vegetarian")).not.toBe("same");
+    // A correction is a new fact (the bot replaces the old one), never "already known".
+    expect(mem.compareFacts("Dana is allergic to peanuts", "Dana is not allergic to peanuts")).toBe("different");
+    expect(mem.compareFacts("Dana's brother is Will", "Dana's brother is Sam")).toBe("different");
+    expect(mem.compareFacts("Ana's birthday is May 12", "Ana's birthday is June 12")).toBe("different");
     expect(mem.compareFacts("Dana likes coffee shops near the office downtown", "Dana likes coffee")).toBe("different");
     expect(mem.compareFacts("Dana lives in Austin", "Dana lives in Dallas")).toBe("different");
     expect(mem.compareFacts("Dana has 3 kids", "Dana has 2 kids")).toBe("different");

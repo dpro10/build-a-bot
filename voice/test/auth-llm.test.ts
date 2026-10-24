@@ -4,7 +4,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { signBody, signCallToken, verifyBodySignature, verifyCallToken } from "../src/auth.ts";
 import { OpenAiCompatibleLlm, redact, type LlmEvent } from "../src/brain/llm.ts";
-import { talkerPrompt, talkerTools } from "../src/brain/talker.ts";
+import { WORKING, jobResult, talkerPrompt, talkerTools } from "../src/brain/talker.ts";
 import { sessionInfo } from "./fixtures/fakes.ts";
 
 const SECRET = "s".repeat(40);
@@ -131,6 +131,37 @@ test(`talker stream: a "<" that isn't a tag is still spoken; errors never show a
   assert.equal(redact("Bearer abc.def key-1234567890abcdef"), "Bearer [redacted] [redacted]");
 });
 
+test("talker stream: a request that hangs, or a stream that stalls, fails after the timeout", async () => {
+  const quiet = createServer((req) => req.resume()); // never answers
+  const stalls = createServer((req, res) => {
+    req.resume();
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    res.write(`data: ${delta("Let me")}\n\n`); // then nothing more
+  });
+  for (const srv of [quiet, stalls]) {
+    await new Promise<void>((r) => srv.listen(0, "127.0.0.1", () => r()));
+    const llm = new OpenAiCompatibleLlm({ baseUrl: `http://127.0.0.1:${(srv.address() as AddressInfo).port}/v1`, apiKey: "k", model: "m", timeoutMs: 200 });
+    const t0 = Date.now();
+    await assert.rejects(collect(llm.stream({ system: "s", messages: [], tools: [] })), /didn't answer within/);
+    assert.ok(Date.now() - t0 < 2000, `${Date.now() - t0} ms`);
+    srv.closeAllConnections();
+    await new Promise<void>((r) => srv.close(() => r()));
+  }
+});
+
+test("talker stream: the caller cutting in stops it quietly (no error)", async () => {
+  const srv = await sseServer([delta("One, "), delta("two, "), delta("three. "), delta("Four.")]);
+  const llm = new OpenAiCompatibleLlm({ baseUrl: srv.url, apiKey: "k", model: "m" });
+  const ac = new AbortController();
+  const events: LlmEvent[] = [];
+  for await (const e of llm.stream({ system: "s", messages: [], tools: [], signal: ac.signal })) {
+    events.push(e);
+    ac.abort();
+  }
+  assert.ok(!events.some((e) => e.type === "done"));
+  await srv.close();
+});
+
 test("talker prompt and tools follow who's on the line", () => {
   const owner = sessionInfo();
   const p = talkerPrompt(owner, new Date("2026-10-16T15:00:00Z"));
@@ -148,4 +179,18 @@ test("talker prompt and tools follow who's on the line", () => {
 
   assert.match(talkerPrompt(sessionInfo({ speaker: "unverified" })), /hasn't proved it yet/);
   assert.match(talkerPrompt(sessionInfo({ kind: "web" })), /on a voice call in the Build-a-bot app/);
+});
+
+test("the talker promises no texts, and a caller who hasn't said the PIN can still leave a message", () => {
+  for (const speaker of ["owner", "unverified", "contact"] as const) {
+    const p = talkerPrompt(sessionInfo({ speaker }));
+    assert.match(p, /Don't promise a text, an email or a call later/);
+    assert.doesNotMatch(p, /I'll text|by text|text you/i);
+  }
+  const unverified = talkerPrompt(sessionInfo({ speaker: "unverified" }));
+  assert.match(unverified, /take a message for Diego, passed on with ask_bot/);
+  assert.match(unverified, /Only say a message was passed on once ask_bot's answer says so/);
+  assert.match(talkerTools(sessionInfo({ speaker: "unverified" }))[0].description, /Pass a message from this caller on to Diego/);
+  // Work still running is reported on the call, not later by text.
+  assert.match(jobResult(WORKING, sessionInfo()), /tell them on this call when it's done/);
 });

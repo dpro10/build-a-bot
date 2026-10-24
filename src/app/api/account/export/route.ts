@@ -2,6 +2,11 @@ import { eq, inArray } from "drizzle-orm";
 import { schema } from "@/lib/db";
 import { authed } from "@/lib/api";
 
+/** Settings keep a few secrets of their own (Telegram's webhook secret): those stay out of the export. */
+function withoutSecrets(config: Record<string, unknown> | null | undefined): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(config ?? {}).filter(([k]) => !/secret|token|password|apikey|api_key/i.test(k)));
+}
+
 /** Everything we hold about you, as JSON (secrets are never included). */
 export async function GET() {
   const a = await authed();
@@ -40,8 +45,8 @@ export async function GET() {
     memories,
     notes,
     schedules,
-    connections: connections.map(({ credentialId: _x, ...c }) => c),
-    channels: channels.map(({ credentialId: _x, ...c }) => c),
+    connections: connections.map(({ credentialId: _x, ...c }) => ({ ...c, config: withoutSecrets(c.config) })),
+    channels: channels.map(({ credentialId: _x, ...c }) => ({ ...c, config: withoutSecrets(c.config) })),
     approvals,
     contacts,
     meetings: meetings.map((m) => ({ ...m, transcript: transcripts.filter((t) => t.meetingId === m.id && t.text) })),

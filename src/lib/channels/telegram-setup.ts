@@ -11,7 +11,7 @@ import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import { schema, type Db } from "@/lib/db";
 import type { Bot, Channel, User } from "@/lib/db/schema";
 import { appUrl, config } from "@/lib/env";
-import { numericCode, randomToken } from "@/lib/crypto";
+import { randomToken } from "@/lib/crypto";
 import { shortCode, slugify, UnreachableError } from "@/lib/utils";
 import { storeCredential } from "./secrets";
 import { setTelegramProfilePhoto, telegramCall } from "./telegram";
@@ -98,7 +98,8 @@ export async function connectTelegramToken(db: Db, bot: Bot, owner: User, channe
   });
   if (!me.is_bot) throw new Error("That token isn't a bot token.");
   await activateTelegramBot(db, { bot, owner, channel, token: token.trim(), telegramBot: { id: me.id, username: me.username } });
-  const code = numericCode(6);
+  // It travels in a link the owner taps, never typed: long enough that it can't be guessed.
+  const code = randomToken(12);
   await db.insert(schema.pairingCodes).values({
     code: `tgo_${channel.id}_${code}`,
     purpose: "telegram_owner",

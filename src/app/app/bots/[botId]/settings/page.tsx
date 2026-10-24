@@ -4,7 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { requireUser } from "@/lib/auth/session";
 import { credentialHint, getOwnedBot } from "@/lib/data";
-import { appUrl, config, demoMode } from "@/lib/env";
+import { appUrl, config, creditOpen, demoMode } from "@/lib/env";
 import { isAvatarId, isColorwayId } from "@/lib/avatars";
 import { brainLabel } from "@/lib/bots/labels";
 import { SettingsNav } from "@/components/bot/settings/SettingsNav";
@@ -79,6 +79,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ botId
               label={brainLabel(bot.brain)}
               keyHint={hint?.hint ?? null}
               demoBrain={!config.tokenFactory.apiKey && demoMode}
+              paidModels={creditOpen}
             />
             <RecipeSection botId={botId} botName={bot.name} hasInstructions={Boolean(bot.instructions?.trim())} initial={recipe} />
             <McpSection botId={botId} botName={bot.name} mcpUrl={`${base}/api/mcp/${botId}`} hasToken={Boolean(bot.mcpTokenHash)} />

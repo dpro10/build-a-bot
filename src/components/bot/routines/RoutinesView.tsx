@@ -70,6 +70,7 @@ export function RoutinesView({
   deliverOptions,
   autoHint,
   apps,
+  signInFirst,
 }: {
   botId: string;
   botName: string;
@@ -81,6 +82,8 @@ export function RoutinesView({
   autoHint: string;
   /** What the bot's apps can see, so templates only mention those. */
   apps: AppKind[];
+  /** The account hasn't signed in: its routines wait for it (reminders don't). */
+  signInFirst: boolean;
 }) {
   const router = useRouter();
   const live = useBotLive();
@@ -210,6 +213,16 @@ export function RoutinesView({
       {live.paused ? (
         <div className="rounded-2xl border border-warning/30 bg-warning-soft px-4 py-3 text-sm text-warning">
           {botName} is paused. Nothing runs until you resume it from the top of the page.
+        </div>
+      ) : null}
+
+      {signInFirst ? (
+        <div className="rounded-2xl border border-primary/20 bg-primary-soft/60 px-4 py-3 text-sm">
+          Routines start running once you{" "}
+          <Link href={`/login?next=/app/bots/${botId}/routines`} className="font-semibold text-primary hover:underline">
+            sign in with your email
+          </Link>{" "}
+          (it&apos;s free). Reminders work already.
         </div>
       ) : null}
 

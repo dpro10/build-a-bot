@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import { schema } from "@/lib/db";
 import type { Bot } from "@/lib/db/schema";
 import { config, demoMode, live } from "@/lib/env";
@@ -28,6 +28,8 @@ async function emailRecipients(addresses: string[], ctx: ToolContext): Promise<R
             eq(schema.contacts.botId, ctx.bot.id),
             eq(schema.contacts.kind, "email"),
             inArray(schema.contacts.address, normalized),
+            // Approved ones only: someone who opted out isn't a known contact.
+            isNotNull(schema.contacts.approvedAt),
           ),
         )
     : [];

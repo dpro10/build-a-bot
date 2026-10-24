@@ -11,6 +11,9 @@ import { schema, type Db } from "@/lib/db";
 import type { Bot, User } from "@/lib/db/schema";
 import { containsSecret } from "@/lib/policy/engine";
 import { spenderOf, underDailyCeiling } from "@/lib/billing/ceiling";
+import { hasCredit } from "@/lib/billing/credit";
+import { recordUsage } from "@/lib/billing/usage";
+import { estimateCostMicros } from "@/lib/models/catalog";
 import { ownerName } from "@/lib/agent/prompt";
 import { newId } from "@/lib/utils";
 import { MAX_MEMORIES, MAX_PINNED, compareFacts, findSameFact, loadMemories, terms } from "./index";
@@ -175,8 +178,11 @@ async function tidy(db: Db, bot: Bot, owner: User, text: string): Promise<{ text
   const { resolveBrain } = await import("@/lib/agent/brain");
   const brain = await resolveBrain(db, { ...bot, brain: { kind: "included", provider: "nebius", model: TIDY_MODEL, effort: "low" } });
   if (brain.kind !== "llm" || brain.providerId === "demo") return null;
+  // Paid from credit like any message on an included model (without credit, it's read line by line).
+  if (!(await hasCredit(db, owner.id))) return null;
   if (!(await underDailyCeiling(db, "included", 1, spenderOf(owner)))) return null;
   let out = "";
+  let usage = { inputTokens: 0, outputTokens: 0 };
   try {
     for await (const ev of brain.provider.stream({
       model: brain.model,
@@ -187,10 +193,14 @@ async function tidy(db: Db, bot: Bot, owner: User, text: string): Promise<{ text
       temperature: 0.1,
     })) {
       if (ev.type === "text") out += ev.delta;
+      else if (ev.type === "done") usage = ev.usage;
     }
   } catch (err) {
     console.error("[memory import] tidying failed, reading line by line instead:", (err as Error).message);
     return null;
+  } finally {
+    const costMicros = estimateCostMicros(brain.providerId, brain.model, usage);
+    if (costMicros > 0) await recordUsage(db, owner.id, { tokensIn: usage.inputTokens, tokensOut: usage.outputTokens, costMicros });
   }
   const lines = readLines(out, true);
   return lines.length ? lines : null;

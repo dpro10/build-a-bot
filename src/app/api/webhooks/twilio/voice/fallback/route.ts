@@ -1,6 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { gather, readTwilioForm, say, twiml } from "@/lib/channels/twilio-inbound";
+import { sleep } from "@/lib/utils";
 
 /**
  * Twilio comes here when a call's stream to the voice server ends. If the voice server ended the
@@ -14,7 +15,13 @@ export async function POST(req: Request) {
   const channelId = url.searchParams.get("c") ?? "";
   const callId = url.searchParams.get("call") ?? "";
   const db = await getDb();
-  const [call] = await db.select().from(schema.calls).where(eq(schema.calls.id, callId)).limit(1);
+  const load = async () => (await db.select().from(schema.calls).where(eq(schema.calls.id, callId)).limit(1))[0];
+  let call = await load();
+  // A goodbye ends the stream a moment before the voice server's report says so: give it a few seconds.
+  for (let i = 0; i < 8 && call?.status === "active"; i++) {
+    await sleep(500);
+    call = await load();
+  }
   if (!call || call.status === "ended") return twiml("<Hangup/>");
   await db
     .update(schema.calls)

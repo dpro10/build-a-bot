@@ -1,6 +1,7 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowUp, Brain, FileUp, Paperclip, Sparkles, Square } from "lucide-react";
 import { Avatar } from "@/components/avatar";
 import { useBotLive } from "@/components/app/live-state";
@@ -106,6 +107,7 @@ export function ChatView({
   canAttach?: boolean;
 }) {
   const live = useBotLive();
+  const router = useRouter();
   const [messages, setMessages] = React.useState<ChatMessage[]>(initialMessages);
   const [approvals, setApprovals] = React.useState<Record<string, ApprovalView>>(() => Object.fromEntries(initialApprovals.map((a) => [a.id, a])));
   const [input, setInput] = React.useState(initialInput ?? "");
@@ -238,9 +240,14 @@ export function ChatView({
           }
         }
       } catch (err) {
-        if ((err as Error).name !== "AbortError") {
-          patchLast((m) => ({ ...m, notices: [...m.notices, { tone: "danger", text: "Connection lost. Try again." }] }));
-        }
+        // Stopped here, or the connection dropped: the server keeps the reply (what was said before
+        // Stop, or all of it), and its copy takes this bubble's place at the next check (messages.ts).
+        const stopped = (err as Error).name === "AbortError";
+        patchLast((m) => ({
+          ...m,
+          cutOff: true,
+          notices: stopped ? m.notices : [...m.notices, { tone: "warn", text: "The connection dropped. The answer shows up here once it's back." }],
+        }));
       } finally {
         patchLast((m) => ({ ...m, pending: false }));
         setStreaming(false);
@@ -252,9 +259,11 @@ export function ChatView({
         if (!failed) setTimeout(() => live.setMood("idle"), 2400);
         // STOP / START typed in the chat: show the new state in the header right away.
         if (finalStatus === "command" || finalStatus === "paused") setTimeout(() => void syncRef.current(true), 0);
+        // The sidebar's free messages, credit and approvals badges count this turn too.
+        router.refresh();
       }
     },
-    [live, patchLast],
+    [live, patchLast, router],
   );
 
   // The bot talks first.
@@ -461,7 +470,11 @@ export function ChatView({
             onChange={setInput}
             onSend={() => send(input)}
             streaming={streaming}
-            onStop={() => abortRef.current?.abort()}
+            onStop={() => {
+              // The server stops the answer where it is (stop.ts); the stream is let go of here at once.
+              void fetch(`/api/bots/${botId}/chat/stop`, { method: "POST", keepalive: true }).catch(() => {});
+              abortRef.current?.abort();
+            }}
             inputRef={inputRef}
             placeholder={live.paused ? `Paused — say START to wake ${botName}` : attachments.items.length ? `Ask ${botName} about ${attachments.items.length === 1 ? "it" : "them"}…` : `Message ${botName}…`}
             onFiles={canAttach ? attachments.add : undefined}

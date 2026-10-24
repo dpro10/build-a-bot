@@ -231,10 +231,33 @@ function factRelation(a: Set<string>, b: Set<string>, next: string, existing: st
   if (!a.size || !b.size) return next.trim().toLowerCase() === existing.trim().toLowerCase() ? "same" : "different";
   let shared = 0;
   for (const t of a) if (b.has(t)) shared++;
-  if (shared / (a.size + b.size - shared) >= 0.85) return "same";
-  if (b.size >= 2 && shared === b.size && a.size - shared <= 2) return "more";
-  if (a.size >= 2 && shared === a.size && b.size - shared <= 2) return "less";
-  return "different";
+  const relation: FactRelation =
+    shared / (a.size + b.size - shared) >= 0.85
+      ? "same"
+      : b.size >= 2 && shared === b.size && a.size - shared <= 2
+        ? "more"
+        : a.size >= 2 && shared === a.size && b.size - shared <= 2
+          ? "less"
+          : "different";
+  return relation !== "different" && corrects(next, existing) ? "different" : relation;
+}
+
+const NEGATION = /\b(not|no|never|none|nobody|nothing|neither|nor|without)\b|n['’]t\b/i;
+/** Names and numbers: what a fact is about ("Will", "May", "12"), even where the word is also a common one. */
+function salient(text: string): Set<string> {
+  return new Set((text.match(/[A-Z][\p{L}]*|\d[\d.:/-]*/gu) ?? []).map((w) => w.toLowerCase()));
+}
+
+/**
+ * Close in words but saying something else: a correction, kept as a new fact rather than taken as
+ * one already known. One of them says "not", or each names something the other doesn't ("brother
+ * is Will" after "brother is Sam", "May 12" after "June 12").
+ */
+function corrects(next: string, existing: string): boolean {
+  if (NEGATION.test(next) !== NEGATION.test(existing)) return true;
+  const a = salient(next);
+  const b = salient(existing);
+  return [...a].some((t) => !b.has(t)) && [...b].some((t) => !a.has(t));
 }
 
 // An import checks up to 200 facts against up to 2,000 memories: read each memory's words once.

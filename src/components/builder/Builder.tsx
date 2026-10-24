@@ -44,6 +44,8 @@ export type BuilderProps = {
   ownerEmail: string | null;
   /** Credit every account starts with ("$5.00"), or null when there's none. */
   starterCredit: string | null;
+  /** Credit can be added, so the models only for accounts that added some are offered (catalog.ts). */
+  paidModels: boolean;
 };
 
 /**
@@ -64,7 +66,7 @@ function currentEntry(): StepEntry | null {
   return typeof s?.babStep === "number" ? { babStep: s.babStep, babPrev: s.babPrev ?? null } : null;
 }
 
-export function Builder({ demo, live, comingSoon, recipe, botCount, signedIn, ownerEmail, starterCredit }: BuilderProps) {
+export function Builder({ demo, live, comingSoon, recipe, botCount, signedIn, ownerEmail, starterCredit, paidModels }: BuilderProps) {
   const router = useRouter();
   const ctx = React.useMemo<BuilderContext>(() => ({ demo, live, comingSoon, ownerEmail }), [demo, live, comingSoon, ownerEmail]);
   const [state, setState] = React.useState<BuilderState>(() => initialState(recipe, ctx));
@@ -248,6 +250,8 @@ export function Builder({ demo, live, comingSoon, recipe, botCount, signedIn, ow
   };
 
   const create = async () => {
+    // Once: a second Ctrl+Enter (or click) while the first is on its way makes no second bot.
+    if (creatingRef.current) return;
     const err = stepError("review", state, { apiKey, keyStatus });
     if (err) {
       setShowError(true);
@@ -269,6 +273,7 @@ export function Builder({ demo, live, comingSoon, recipe, botCount, signedIn, ow
       return;
     }
     toast.dismiss();
+    creatingRef.current = "working";
     setCreating("working");
     const started = Date.now();
     try {
@@ -312,6 +317,7 @@ export function Builder({ demo, live, comingSoon, recipe, botCount, signedIn, ow
       router.push(`/app/bots/${res.id}`);
       router.refresh();
     } catch (err) {
+      creatingRef.current = null;
       setCreating(null);
       const e = err as ApiError;
       toast.error(e.message || "Couldn't create your bot. Try again.");
@@ -456,6 +462,7 @@ export function Builder({ demo, live, comingSoon, recipe, botCount, signedIn, ow
               onValidate={() => void validateRef.current()}
               demo={demo}
               starterCredit={starterCredit}
+              paidModels={paidModels}
               botName={name}
             />
           ) : null}

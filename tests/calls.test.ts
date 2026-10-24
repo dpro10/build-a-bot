@@ -285,9 +285,11 @@ describe("phone PINs", () => {
     const info = (await (await sessionRoute.POST(fromVoice("/api/calls/session", { callId: started!.call.id, kind: "phone" }))).json()) as { speaker: string; pinAvailable: boolean; greeting: string; context: string };
     expect(info).toMatchObject({ speaker: "unverified", pinAvailable: true, context: "" });
     expect(info.greeting).toMatch(/say or type your phone PIN/);
-    // Nothing is done for them before the PIN.
-    const early = (await (await actRoute.POST(fromVoice("/api/calls/act", { callId: started!.call.id, request: "Read my email" }))).json()) as { status: string };
-    expect(early.status).toBe("refused");
+    // Before the PIN they're anyone else: the bot only takes a message (nothing is read or done for them).
+    const early = await actRoute.POST(fromVoice("/api/calls/act", { callId: started!.call.id, request: "Read my email" }));
+    expect(early.status).toBe(200);
+    const asked = await db.select().from(schema.messages).where(eq(schema.messages.text, "Read my email"));
+    expect(asked.at(-1)?.author).toBe("contact");
     const wrong = await (await pinRoute.POST(fromVoice("/api/calls/pin", { callId: started!.call.id, pin: "4482" }))).json();
     expect(wrong).toEqual({ ok: false, remaining: 4, locked: false });
     const right = (await (await pinRoute.POST(fromVoice("/api/calls/pin", { callId: started!.call.id, pin: "4481" }))).json()) as { ok: boolean; firstName: string; context: string };
@@ -387,5 +389,21 @@ describe("phone calls", () => {
     expect(after.voiceSeconds - before.voiceSeconds).toBe(130);
     const [billed] = await db.select().from(schema.calls).where(eq(schema.calls.id, call.id));
     expect(billed.costMicros).toBe(3 * UNIT_PRICES.callMinuteStreamIn);
+  });
+
+  it("a call the simpler line took over keeps its price when the voice server's report comes after", async () => {
+    const db = await getDb();
+    const started = await calls.startCall(db, { bot, kind: "phone", speaker: "owner", from: OWNER_PHONE, to: BOT_NUMBER, callSid: "CA_late_report" });
+    // The stream dropped and the simpler line carried on (fallback) before the voice server reported.
+    await db.update(schema.calls).set({ status: "failed" }).where(eq(schema.calls.id, started!.call.id));
+    const report = { endedBy: "error", durationS: 40, turns: [{ role: "bot", text: "Hi Diego." }, { role: "caller", text: "Remind me at five." }] };
+    expect((await endRoute.POST(fromVoice("/api/calls/end", { callId: started!.call.id, report }))).status).toBe(200);
+    const [kept] = await db.select().from(schema.calls).where(eq(schema.calls.id, started!.call.id));
+    expect(kept.status).toBe("failed");
+    expect(kept.transcript).toHaveLength(2);
+    const before = await getUsage(db, owner.id);
+    await statusRoute.POST(twilio("/api/webhooks/twilio/voice/status", { CallSid: "CA_late_report", CallStatus: "completed", CallDuration: "130", Direction: "inbound", From: OWNER_PHONE, To: BOT_NUMBER }));
+    const after = await getUsage(db, owner.id);
+    expect(after.costMicros - before.costMicros).toBe(3 * UNIT_PRICES.callMinute);
   });
 });

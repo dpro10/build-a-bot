@@ -227,7 +227,7 @@ export const INCLUDED_MODELS: ModelDef[] = [
     id: "moonshotai/Kimi-K3",
     label: "Kimi K3",
     maker: "Moonshot AI",
-    blurb: "Frontier open model with vision. Pricier.",
+    blurb: "Frontier open model with vision. Pricier: for accounts that have added credit.",
     tier: "smart",
     context: 1_024_000,
     priceIn: 3,
@@ -249,6 +249,15 @@ export const INCLUDED_MODELS: ModelDef[] = [
     tools: true,
   },
 ];
+
+/**
+ * Included models priced far above the rest (Kimi K3, about 60 times Nemotron 3.5 Lightning): only
+ * for accounts that added credit of their own, or the starter credit would go in a few dozen messages.
+ */
+export function needsAddedCredit(modelId: string): boolean {
+  const m = INCLUDED_MODELS.find((x) => x.id === modelId || resolveIncludedModelId(x) === modelId);
+  return (m?.priceOut ?? 0) >= 10;
+}
 
 /** How much a model can take in at once, for the pickers: "128K", "256K", "1M" (K = 1,024 tokens, as vendors count). */
 export function contextLabel(tokens?: number): string | null {

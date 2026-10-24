@@ -141,7 +141,8 @@ function policyContext(trust: TrustLevel, def: PolicyDef, cap: Capability, spend
     alwaysAsk: isAlwaysAsk(def, cap),
     tainted: false,
     actionsToday: 0,
-    amountUsd: 0,
+    // No app tells us a price up front, so a purchase always shows as asking first.
+    amountUsd: undefined,
     spendCapUsd,
     spentThisMonthUsd: 0,
   };
@@ -170,8 +171,7 @@ export function lockedChoices(trust: TrustLevel, def: PolicyDef, cap: Capability
       const why = "Money is off until you set a monthly spending cap.";
       return { allow: why, ask: why };
     }
-    if (trust !== "full") return { allow: "Spending asks you first unless it's on Full faith." };
-    return {};
+    return { allow: "Every purchase asks you first: apps don't say what something costs until you see it." };
   }
   if (def.sensitive) return { allow: "This app holds money, health or identity data, so changes always ask you first." };
   return {};

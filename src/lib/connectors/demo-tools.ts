@@ -10,7 +10,7 @@ import { z } from "zod";
 import type { Capability, ConnectorDef } from "./types";
 import { defineTool, safeToolName, type AnyToolSpec, type ToolContext } from "@/lib/tools/types";
 import type { Recipient } from "@/lib/policy/engine";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { schema } from "@/lib/db";
 
 const DEMO = "(demo data)";
@@ -38,7 +38,7 @@ async function emailRecipients(addresses: string[], ctx: ToolContext): Promise<R
     ? await ctx.db
         .select({ address: schema.contacts.address })
         .from(schema.contacts)
-        .where(and(eq(schema.contacts.botId, ctx.bot.id), inArray(schema.contacts.address, normalized)))
+        .where(and(eq(schema.contacts.botId, ctx.bot.id), inArray(schema.contacts.address, normalized), isNotNull(schema.contacts.approvedAt)))
     : [];
   const knownSet = new Set(known.map((k) => k.address));
   const demoKnown = new Set(["sam.rivera@example.com", "mom@example.com", "alex.chen@example.com"]);

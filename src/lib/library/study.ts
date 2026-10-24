@@ -207,8 +207,12 @@ export async function studyStatus(db: Db, botId: string): Promise<{ due: number;
   return { due: withDue.reduce((n, s) => n + s.due, 0), sets: withDue, weak: weak.slice(0, 10), quizzes: quizzes.slice(0, 10) };
 }
 
-/** One CSV cell, quoted when it needs to be. */
-function cell(v: string): string {
+/**
+ * One CSV cell, quoted when it needs to be. A cell a spreadsheet would run as a formula (it starts
+ * with = + - @ or a tab) gets a leading apostrophe: a card's text is never a formula.
+ */
+function cell(raw: string): string {
+  const v = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw;
   return /[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
 }
 

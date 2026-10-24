@@ -7,7 +7,7 @@ import type { Channel } from "@/lib/db/schema";
 import { UnreachableError } from "@/lib/utils";
 import type { ChannelAdapter, OutboundButton } from "./outbound";
 import { channelSecret } from "./secrets";
-import { avatarImageUrl } from "./telegram";
+import { avatarImageUrl, splitMessage } from "./telegram";
 
 export async function slackCall<T = Record<string, unknown>>(token: string, method: string, body: Record<string, unknown>): Promise<T> {
   const res = await fetch(`https://slack.com/api/${method}`, {
@@ -68,16 +68,20 @@ export const slackAdapter: ChannelAdapter = {
   async send({ db, bot, channel }, msg) {
     const token = slackBotToken(await channelSecret(db, channel));
     if (!token) return { status: "failed", error: "Slack token missing" };
-    // msg.to is a Slack user id: open (or reuse) the DM, then post.
+    // msg.to is a Slack user id: open (or reuse) the DM, then post (a long reply in parts, buttons on the last).
     const open = await slackCall<{ channel: { id: string } }>(token, "conversations.open", { users: msg.to });
-    const sent = await slackCall<{ ts: string }>(token, "chat.postMessage", {
-      channel: open.channel.id,
-      text: msg.text.slice(0, 3000),
-      blocks: slackBlocks(msg.text, msg.buttons),
-      // On the shared app, every message carries this bot's own name and face.
-      ...(isSlackAppChannel(channel) ? { username: bot.name, icon_url: avatarImageUrl(bot) } : {}),
-    });
-    return { status: "sent", providerId: sent.ts };
+    const parts = splitMessage(msg.text, 2800);
+    let sent: { ts: string } | undefined;
+    for (let i = 0; i < parts.length; i++) {
+      sent = await slackCall<{ ts: string }>(token, "chat.postMessage", {
+        channel: open.channel.id,
+        text: parts[i],
+        blocks: slackBlocks(parts[i], i === parts.length - 1 ? msg.buttons : undefined),
+        // On the shared app, every message carries this bot's own name and face.
+        ...(isSlackAppChannel(channel) ? { username: bot.name, icon_url: avatarImageUrl(bot) } : {}),
+      });
+    }
+    return { status: "sent", providerId: sent!.ts };
   },
 };
 

@@ -40,7 +40,13 @@ function tiles(callsAndTexts: boolean): Tile[] {
     { key: "searches", label: "Web lookups", unit: plural("search", "searches"), note: `${formatMicros(UNIT_PRICES.lookup)} each.`, icon: <Search className="size-4" /> },
     { key: "meetingMinutes", label: "Meeting notes", unit: plural("minute"), note: "Heard on your computer, free. The notes are one message.", icon: <AudioLines className="size-4" />, free: true },
     { key: "dictationWords", label: "Voice typing", unit: plural("word"), note: "Heard on your computer, free. The AI cleanup is a fraction of a cent.", icon: <Mic className="size-4" />, free: true },
-    { key: "voiceMinutes", label: "Calls", unit: plural("minute"), note: `${formatMicros(callMinuteMicros())} a minute, plus the thinking.`, icon: <Phone className="size-4" /> },
+    {
+      key: "voiceMinutes",
+      label: "Calls",
+      unit: plural("minute"),
+      note: `In the app, only the thinking. From a phone, ${formatMicros(callMinuteMicros())} a minute for the line, plus the thinking.`,
+      icon: <Phone className="size-4" />,
+    },
     { key: "smsSegments", label: "Texts", unit: plural("segment"), note: "Counted in segments of about 160 characters.", icon: <MessageSquareText className="size-4" /> },
     { key: "bots", label: "Bots", unit: plural("bot"), note: `Up to ${FAIR_USE.bots}. Having a bot costs nothing.`, icon: <Bot className="size-4" />, free: true },
   ];

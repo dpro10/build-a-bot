@@ -1,5 +1,6 @@
-# The website (src/): typecheck and unit tests on every pull request and push to main that could
-# change it. Vercel builds and deploys it; the Live call workflow checks calls after each deploy.
+# The website (src/): typecheck, unit tests, the tests on real Postgres, and a production build, on
+# every pull request and push to main that could change it. Vercel builds and deploys it; the Live
+# call workflow checks calls after each deploy.
 name: Website
 
 on:
@@ -31,3 +32,42 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+
+  postgres:
+    name: Tests on real Postgres
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The other tests run on PGlite; these run through postgres.js the way the site does on Supabase.
+    # Port 6543 makes the client skip prepared statements, as on Supabase's pooler.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: bab_test
+        ports: ["6543:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx vitest run tests/postgres.test.ts
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:6543/bab_test
+
+  build:
+    name: Production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build

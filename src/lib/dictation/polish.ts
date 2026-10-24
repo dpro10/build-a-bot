@@ -115,11 +115,12 @@ const EXAMPLES: LlmMessage[] = [
   { role: "assistant", content: "Hey Sam,\n\nI wanted to ask if you're free Friday at 5:30 PM. My email is sam@gmail.com." },
 ];
 
-export type Polished = { text: string; by: string; costMicros: number };
+/** `text` is null when the model's answer changed what was said: it isn't used, but it was paid for. */
+export type Polished = { text: string | null; by: string; costMicros: number };
 
 /**
- * The cleaned-up text, or null when the cleanup isn't set up, took too long, failed, or changed
- * what they said (the caller types the plain cleanup then).
+ * The cleaned-up text, or null when the cleanup isn't set up, took too long or failed (the caller
+ * types the plain cleanup then, as it does for an answer that changed what was said).
  */
 export async function polishText(input: PolishInput, opts: { setup?: PolishSetup | null; signal?: AbortSignal; timeoutMs?: number } = {}): Promise<Polished | null> {
   const setup = opts.setup === undefined ? polishSetup() : opts.setup;
@@ -160,7 +161,7 @@ export async function polishText(input: PolishInput, opts: { setup?: PolishSetup
   const text = acceptPolish(input.text, out, input.vocabulary);
   if (!text) {
     console.warn(`[voice] cleanup not used (${setup.by}): it changed what was said`);
-    return null;
+    return { text: null, by: setup.by, costMicros };
   }
   return { text, by: setup.by, costMicros };
 }

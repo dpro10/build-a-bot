@@ -9,8 +9,11 @@
  * When speech is made slower than it plays (Magpie on a small CPU), a sentence streamed straight
  * out would stutter, a little gap every chunk. With a SpeechPace, each sentence waits until enough
  * of it is ready to play through without a gap, and the pauses fall between sentences instead.
+ *
+ * A sentence the engine goes quiet on (no audio for stallMs) is given up on as an error, so a stuck
+ * engine can't keep the call waiting forever.
  */
-import type { SpeechEngine } from "../speech/engine.ts";
+import type { SpeechEngine, Spoken } from "../speech/engine.ts";
 import type { CallTransport } from "./transport.ts";
 import { forSpeech } from "../speech/text.ts";
 
@@ -64,8 +67,8 @@ type Piece = {
 type Out = { audio: Int16Array; piece: number } | { mark: number };
 
 export type SpeakerEvents = {
-  /** A piece's first audio went out (latency is measured to here). */
-  onAudioStart?: (piece: { id: number; text: string }) => void;
+  /** A piece's first audio went out (latency is measured to here). `made`: by the engine just now, not pre-made. */
+  onAudioStart?: (piece: { id: number; text: string; made: boolean }) => void;
   /** The bot started talking (nothing was playing before). */
   onTalking?: () => void;
   /** Everything queued has been heard: the bot is quiet. */
@@ -94,11 +97,23 @@ export class Speaker {
   private talking = false;
   private timers = new Set<ReturnType<typeof setTimeout>>();
   private closed = false;
+  private readonly stallMs: number;
 
-  constructor(opts: { engine: SpeechEngine; transport: CallTransport; voice?: string; language?: string; events?: SpeakerEvents; now?: () => number; pace?: SpeechPace }) {
+  constructor(opts: {
+    engine: SpeechEngine;
+    transport: CallTransport;
+    voice?: string;
+    language?: string;
+    events?: SpeakerEvents;
+    now?: () => number;
+    pace?: SpeechPace;
+    /** Give up on a sentence after this long without audio from the engine. */
+    stallMs?: number;
+  }) {
     this.engine = opts.engine;
     this.transport = opts.transport;
     this.pace = opts.pace;
+    this.stallMs = opts.stallMs ?? 10_000;
     this.voice = opts.voice;
     this.language = opts.language;
     this.events = opts.events ?? {};
@@ -162,9 +177,30 @@ export class Speaker {
             let firstAt = 0;
             let firstMs = 0;
             let madeMs = 0;
+            // Stopped (stop(), close()) or stalled (the engine went quiet on it): don't wait for the
+            // engine to agree, it may never answer.
+            let stalled = false;
+            let stallTimer: ReturnType<typeof setTimeout> | undefined;
+            const gaveUp = new Promise<Spoken>((resolve) => {
+              ac.signal.addEventListener(
+                "abort",
+                () => resolve({ status: stalled ? "error" : "cancelled", error: stalled ? "no audio from the speech engine" : undefined, ttfaMs: 0, rtfx: 0, audioS: 0, elapsedS: 0 }),
+                { once: true },
+              );
+            });
+            const watch = (ms = this.stallMs) => {
+              clearTimeout(stallTimer);
+              stallTimer = setTimeout(() => {
+                stalled = true;
+                ac.abort();
+              }, ms);
+            };
+            // The first audio can take as long as the sentence lasts, from an engine that makes it whole (http.ts).
+            watch(this.stallMs + spoken.length * (this.pace?.msPerChar ?? 62));
             try {
-              const result = await this.engine.speak(spoken, { sampleRate: rate, voice: this.voice, language: this.language, signal: ac.signal }, (pcm) => {
+              const speaking = this.engine.speak(spoken, { sampleRate: rate, voice: this.voice, language: this.language, signal: ac.signal }, (pcm) => {
                 if (ac.signal.aborted) return;
+                watch();
                 const ms = (pcm.length * 1000) / rate;
                 if (!firstAt) {
                   firstAt = this.now();
@@ -173,15 +209,17 @@ export class Speaker {
                 madeMs += ms;
                 this.out(piece, pcm);
               });
+              const result = await Promise.race([speaking, gaveUp]);
               if (result.status === "error") this.events.onError?.(new Error(result.error ?? "speech synthesis failed"));
               if (result.status === "ok" && firstAt) this.pace?.observe(madeMs - firstMs, this.now() - firstAt, madeMs, spoken.length);
             } catch (err) {
               this.events.onError?.(err as Error);
             } finally {
+              clearTimeout(stallTimer);
               this.synth = null;
             }
             // stop() dropped the queue (and this piece) while it was being made.
-            if (ac.signal.aborted) continue;
+            if (ac.signal.aborted && !stalled) continue;
             if (piece.pending) this.flush(piece);
           }
         }
@@ -236,7 +274,7 @@ export class Speaker {
       const piece = this.pieces.get(o.piece);
       if (piece && piece.startsAt === null) {
         piece.startsAt = start;
-        this.events.onAudioStart?.({ id: piece.id, text: piece.text });
+        this.events.onAudioStart?.({ id: piece.id, text: piece.text, made: !piece.audio });
       }
       this.playhead = start + (o.audio.length * 1000) / this.transport.outputRate;
       this.transport.sendAudio(o.audio);

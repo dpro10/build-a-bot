@@ -2,7 +2,7 @@ import { and, eq, inArray, isNull } from "drizzle-orm";
 import { schema } from "@/lib/db";
 import { apiError, json } from "@/lib/api";
 import { authDevice } from "@/lib/bridge/auth";
-import { getCredit } from "@/lib/billing/credit";
+import { creditRefusal, getCredit } from "@/lib/billing/credit";
 import { appUrl, available, config, demoMode, demoSpeech } from "@/lib/env";
 import { CHUNK_MS, MEETINGS_CONNECTOR } from "@/lib/meetings";
 import { dictationUsage, speechToTextAvailable, voiceEditAvailable, voicePolishAvailable } from "@/lib/dictation";
@@ -23,7 +23,8 @@ export async function GET(req: Request) {
         .where(and(inArray(schema.connections.botId, bots.map((b) => b.id)), eq(schema.connections.connectorId, MEETINGS_CONNECTOR)))
     : [];
   const credit = await getCredit(db, owner.id);
-  const hasCredit = credit.balanceMicros > 0;
+  // Spendable: signed in, and today's budget for the whole site has room (credit.ts).
+  const hasCredit = (await creditRefusal(db, owner.id)) === null;
   // Notes written by an included model cost credit (when it's the real one); the owner's own AI is free here.
   const needsCredit = (b: (typeof bots)[number]) => b.brain.kind === "included" && Boolean(config.tokenFactory.apiKey);
   const meetingsOn = (b: (typeof bots)[number]) => on.some((c) => c.botId === b.id && c.status !== "disabled");

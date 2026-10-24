@@ -40,7 +40,7 @@ export function escapeXml(s: string): string {
 /** Make text speakable: no markdown, no URLs read out character by character. */
 export function speakable(text: string): string {
   return text
-    .replace(/```[\s\S]*?```/g, " (I've sent the details by text.) ")
+    .replace(/```[\s\S]*?```/g, " (I'll skip reading that part out.) ")
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
     .replace(/https?:\/\/\S+/g, "the link")
     .replace(/[*_#>`]/g, "")
@@ -55,11 +55,14 @@ export async function placeCall(from: string, to: string, twiml: string, statusC
   return twilioPost("Calls.json", { From: from, To: to, Twiml: twiml, ...(statusCallback ? { StatusCallback: statusCallback } : {}) });
 }
 
-/** The call that reads an owner their phone code: one digit at a time, three times. */
-export function codeCallTwiml(botName: string, code: string): string {
+/**
+ * The call that reads an owner their phone code: one digit at a time, three times. It says only
+ * our own words (not the bot's name, which whoever asked for the call chose).
+ */
+export function codeCallTwiml(code: string): string {
   const say = (text: string) => `<Say voice="${escapeXml(config.twilio.voice)}">${escapeXml(text)}</Say>`;
   const digits = code.split("").join(", ");
-  return `<Response><Pause length="1"/>${say(`Hi, it's ${botName}, an AI assistant. Your code is: ${digits}.`)}<Pause length="1"/>${say(`Again: ${digits}.`)}<Pause length="1"/>${say(`Once more: ${digits}. Bye!`)}</Response>`;
+  return `<Response><Pause length="1"/>${say(`Hi, this is Build-a-bot with the code you asked for. Your code is: ${digits}.`)}<Pause length="1"/>${say(`Again: ${digits}.`)}<Pause length="1"/>${say(`Once more: ${digits}. If you didn't ask for it, you can ignore this call. Bye!`)}</Response>`;
 }
 
 export const smsAdapter: ChannelAdapter = {

@@ -31,7 +31,7 @@ caller ─┬─ phone: Twilio Media Streams (8 kHz μ-law, WebSocket /twilio)
 - **`src/`**, TypeScript run directly by Node 22 (no build step):
   - `call/session.ts`: one call. Turn-taking with an early guess, held replies, barge-in (with
     what the caller actually heard), fillers, background work reported as `<update>`s, PIN unlock,
-    idle and time limits, a latency report per turn.
+    idle and time limits, a latency report per turn. Keeping the talker honest (below).
   - `turn/detector.ts`, `vad/vad.ts`: Silero VAD (ONNX Runtime) and the turn state machine.
   - `speech/`: the sidecar client (`sidecar.ts`), a fallback for NVIDIA's stock HTTP server
     (`http.ts`), and text made speakable (`text.ts`: "$12.50", "3:30 PM", dates, phone numbers).
@@ -52,8 +52,43 @@ The app decides (`src/lib/calls/index.ts` in the app):
 - **The app's Call button**: the owner, signed in.
 - **The owner's phone, vouched for by the carrier** (STIR/SHAKEN attestation A): the owner.
 - **The owner's phone otherwise**: unverified until they say or type their phone PIN (set in the
-  app's Account page). A PIN never reaches the model.
+  app's Account page), on its own or in a short sentence ("Yes, 4481"). Until then the bot only
+  takes a message. A PIN never reaches the model or the transcript: while one is wanted, digits
+  that could be one are taken out of what the caller said.
 - **Anyone else**: a contact. The bot is polite, takes a message, and does nothing for them.
+
+## Keeping the talker honest
+
+The talker runs without reasoning (it would add a second or two to every answer), so the server
+checks its work instead:
+- **The agent's real outcome**: `ask_bot`'s result carries the app's status (`ok`, `refused`,
+  `limited`, `unavailable`, `error`, `paused`), the agent's own words, what waits for the owner's OK,
+  and plainly what that means ("Nothing was done", "Not done yet: it's waiting for Diego's OK").
+- **Nothing said before the job is back**: a step of the talker's answer is heard whole before any
+  of it is spoken (it adds about a tenth of a second: the whole answer comes right after the first
+  word). Words that come with a hand-off ("Done! I've booked it") are never spoken: the caller hears
+  "Let me check." while the agent works, then the answer from the result.
+- **A claim that didn't happen is never spoken**: after a job that didn't succeed, a reply that
+  still says it did is replaced by an honest line from the agent's own words ("That didn't go
+  through. You're out of credit…"). A reply that says something was done when nothing was handed to
+  the agent is sent back to the talker once ("use ask_bot, or say it isn't done"), then replaced.
+- **No promises it can't keep**: no texts, emails or calls later; work still running is reported on
+  the call.
+
+## When things go wrong
+
+- **The talker fails or hangs** (each request gets 10 s): the caller hears what's true (what the
+  agent already did, or "Sorry, I lost my train of thought"), and the call carries on.
+- **The speech engine is down or restarting**: `/health` says 503 and no call is taken. A call it
+  fails during hears a short apology made at start-up (it can't be made then) and ends. A sentence
+  the engine goes quiet on is given up on after 10 s.
+- **A caller who hangs up at once** (even while the call is being set up) ends the call right away,
+  and a call where the caller never said anything sends no transcript.
+- **A deploy or restart** (SIGTERM or SIGINT): every call hears a short goodbye and its report goes
+  to the app (`/api/calls/end`), within 15 s, then the server stops. The deploy stops the VM cleanly
+  for this, rather than resetting it.
+- **Calls at once**: a line is taken the moment a call is let in, so two callers at once can't both
+  get the last one. Phone calls last at most 15 minutes, in-app calls as long as the app says (15).
 
 ## Speed
 
@@ -83,7 +118,7 @@ in demo mode. The question was heard, the answer spoken back, and the call lande
 
 ```bash
 cd voice && npm install
-npm test                      # 60+ tests on fakes: no models needed
+npm test                      # 90+ tests on fakes: no models needed
 npm run typecheck
 
 # With the real models (as the CI's real-models job sets them up): NeMo-Speech.cpp v0.2.0 and
@@ -101,8 +136,10 @@ docker run -p 8080:8080 --env-file voice.env build-a-bot-voice
 Settings: `APP_URL`, `VOICE_SERVER_SECRET` (shared with the app, 32+ characters),
 `TOKEN_FACTORY_API_KEY`, and optionally `TALKER_MODEL` (default `nvidia/Nemotron-3_5-Lightning`),
 `VOICE` (default Sofia; or Aria, Jason, John or Leo), `MAX_CALLS` (default 1: the engine speaks for
-one call at a time), `TTS_THREADS`, `CODEC_THREADS`, `TTS_CFG=0` (turns classifier-free guidance
-off: Magpie then reads slower), `SPEECH_URL` (use a stock `nemo-speech serve` instead of the
-sidecar), `ALLOWED_ORIGINS`.
+one call at a time; anything but a whole number of 1 or more means 1), `TTS_THREADS`,
+`CODEC_THREADS`, `TTS_CFG=0` (turns classifier-free guidance off: Magpie then reads slower),
+`SPEECH_URL` (use a stock `nemo-speech serve` instead of the sidecar), `ALLOWED_ORIGINS`. The deploy
+(`deploy/gce.sh`) takes `MAX_CALLS`, `TALKER_MODEL` and `TTS_CFG` from the GitHub variables
+`VOICE_MAX_CALLS`, `TALKER_MODEL` and `TTS_CFG`.
 
 Logs are one JSON object a line and never contain what anyone said.

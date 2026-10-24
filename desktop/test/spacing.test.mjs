@@ -280,6 +280,40 @@ test("in a terminal the box isn't read (its caret isn't the shell's): only the l
   assert.equal(box.value, "git status and then");
 });
 
+test("after Enter, a dictation starts the line with no space (a shell leaves a command that starts with one out of its history)", async () => {
+  const cb = fakeClipboard();
+  const box = fakeBox();
+  let t = 1_000_000;
+  let enterAt = 0;
+  const { p, logs } = paster(cb, box, { now: () => t, enterAt: () => enterAt });
+  await p.insert("git status", { category: "terminal", space: true, app: "Terminal" });
+  // The owner runs it: Enter, then the next command.
+  t += 2000;
+  enterAt = t;
+  box.paste("\n");
+  t += 2000;
+  await p.insert("git log", { category: "terminal", space: true, app: "Terminal" });
+  assert.equal(box.value, "git status\ngit log");
+  // No Enter since the last one: it follows it with a space, as before.
+  t += 2000;
+  await p.insert("--oneline", { category: "terminal", space: true, app: "Terminal" });
+  assert.equal(box.value, "git status\ngit log --oneline");
+  assert.deepEqual(logs, ["voice: spaced it (before; from the last dictation)"]);
+
+  // The same in a box that can't be read: Enter sent the message, and the next one starts afresh.
+  const chat = fakeBox();
+  t += 2000;
+  const q = paster(cb, chat, { around: async () => null, now: () => t, enterAt: () => enterAt }).p;
+  await q.insert("See you then.", { space: true, app: "Chat" });
+  t += 1000;
+  enterAt = t;
+  chat.value = "";
+  chat.caret = 0;
+  t += 1000;
+  await q.insert("One more thing.", { space: true, app: "Chat" });
+  assert.equal(chat.value, "One more thing.");
+});
+
 test("the box is read only once the last paste has had a moment to show in it", async () => {
   const cb = fakeClipboard();
   let pressedAt = 0;

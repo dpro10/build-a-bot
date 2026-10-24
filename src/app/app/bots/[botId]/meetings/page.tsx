@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { getDb } from "@/lib/db";
 import { requireUser } from "@/lib/auth/session";
 import { getOwnedBot, listBridgeDevices } from "@/lib/data";
-import { hasCredit } from "@/lib/billing/credit";
+import { creditRefusal } from "@/lib/billing/credit";
 import { TYPICAL_MEETING_HOUR, formatMicros, tokensMicros } from "@/lib/billing/prices";
 import { getUsage } from "@/lib/billing/usage";
 import { DEVICE_ONLINE_MS } from "@/lib/bridge/devices";
@@ -28,7 +28,7 @@ export default async function MeetingsPage({ params }: { params: Promise<{ botId
     meetingsEnabled(db, botId),
     getUsage(db, user.id),
     listBridgeDevices(db, user.id),
-    hasCredit(db, user.id),
+    creditRefusal(db, user.id, { ownBrain: true }),
     notesCostCredit(db, bot),
   ]);
   const now = new Date();
@@ -49,7 +49,8 @@ export default async function MeetingsPage({ params }: { params: Promise<{ botId
           enabled={enabled}
           minutesThisMonth={Math.floor(usage.meetingSeconds / 60)}
           notesCost={notesCost}
-          needsCredit={paid && !credit}
+          needsCredit={paid && credit !== null}
+          creditMessage={paid ? credit : null}
           transcriptDays={transcriptDays}
           audioStays={audioStaysOnComputer()}
           desktopDevices={devices

@@ -158,8 +158,8 @@ export function LimitsCard({
           help={
             spendOn ? (
               <>
-                {botName} can spend up to <strong className="font-semibold text-foreground">{money(spendNum)}</strong> a month and can never go over it.{" "}
-                {trust === "full" ? "Within the cap, it can pay on its own." : "Every purchase still asks you first."}
+                {botName} can spend up to <strong className="font-semibold text-foreground">{money(spendNum)}</strong> a month and can never go over it. Every
+                purchase still asks you first.
               </>
             ) : (
               <>

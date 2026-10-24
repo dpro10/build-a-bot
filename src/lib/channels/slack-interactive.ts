@@ -2,6 +2,7 @@
  * Approve / Deny buttons pressed in Slack, on the shared app or a bot's own app.
  * Only the bot's owner on Slack can decide.
  */
+import { after } from "next/server";
 import { eq } from "drizzle-orm";
 import { schema, type Db } from "@/lib/db";
 import type { Channel } from "@/lib/db/schema";
@@ -32,13 +33,16 @@ export async function answerSlackInteraction(db: Db, channel: Channel | null, pa
   if (!parsed) return Response.json({ text: "That button expired." });
   const [bot] = await db.select().from(schema.bots).where(eq(schema.bots.id, channel.botId)).limit(1);
   if (!bot) return new Response("");
-  const result = await decideApproval(db, { approvalId: parsed.approvalId, ownerId: bot.ownerId, decision: parsed.decision, via: "slack" });
-  if (payload.response_url?.startsWith("https://hooks.slack.com/")) {
-    await fetch(payload.response_url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ replace_original: false, text: result.ok ? (parsed.decision === "approve" ? "✅ Approved" : "✖ Declined") : result.error }),
-    }).catch(() => {});
-  }
+  // Slack wants an answer within 3 seconds, and the approved action can take longer: decide after answering.
+  after(async () => {
+    const result = await decideApproval(db, { approvalId: parsed.approvalId, ownerId: bot.ownerId, decision: parsed.decision, via: "slack" });
+    if (payload.response_url?.startsWith("https://hooks.slack.com/")) {
+      await fetch(payload.response_url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ replace_original: false, text: result.ok ? (parsed.decision === "approve" ? "✅ Approved" : "✖ Declined") : result.error }),
+      }).catch(() => {});
+    }
+  });
   return new Response("");
 }

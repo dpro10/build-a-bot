@@ -15,8 +15,8 @@ import { and, asc, desc, eq, gt, ilike, inArray, lt, ne, or, sql } from "drizzle
 import { schema, type Db } from "@/lib/db";
 import type { Bot, Meeting, MeetingSegment, User } from "@/lib/db/schema";
 import { recordUsage } from "@/lib/billing/usage";
-import { hasCredit, outOfCreditMessage } from "@/lib/billing/credit";
-import { config, creditOpen, demoMode, demoSpeech } from "@/lib/env";
+import { creditRefusal } from "@/lib/billing/credit";
+import { config, demoMode, demoSpeech } from "@/lib/env";
 import { receipt } from "@/lib/agent/run";
 import { transcribe, transcriptionAvailable, TranscriptionError } from "@/lib/transcribe";
 import { newId, sortableId, truncate } from "@/lib/utils";
@@ -28,6 +28,11 @@ export const CHUNK_MS = demoSpeech ? 6_000 : 20_000;
 export const CHUNK_MAX_BYTES = 8 * 1024 * 1024;
 export const CHUNK_MAX_MS = 5 * 60_000;
 export const MAX_MEETING_MS = 4 * 3600_000;
+/**
+ * Stopped from the website, the app may still be sending what it heard just before: those pieces
+ * still count for `chunkMs`, and the notes wait `notesDelayMs` for them.
+ */
+export const STOP_GRACE = { chunkMs: 30_000, notesDelayMs: 20_000 };
 /** No audio for this long: the recorder is gone (closed laptop, crashed app), so wrap the meeting up. */
 export const STALE_RECORDING_MS = 20 * 60_000;
 
@@ -207,9 +212,8 @@ export async function startMeeting(
     return { ok: false, status: 409, code: "meetings_off", error: `Turn on Meeting notes for ${bot.name} first.` };
   }
   // The call is heard on the computer (free); writing the notes costs what the bot's brain does.
-  if (!(await hasCredit(db, owner.id)) && (await notesCostCredit(db, bot))) {
-    return { ok: false, status: 402, code: "no_credit", error: outOfCreditMessage({ canAdd: creditOpen, ownBrain: true }) };
-  }
+  const refused = (await notesCostCredit(db, bot)) ? await creditRefusal(db, owner.id, { ownBrain: true }) : null;
+  if (refused) return { ok: false, status: 402, code: "no_credit", error: refused };
 
   // One recording per bot at a time. A leftover from the same recorder (crash, closed tab) is wrapped up instead.
   const active = await db
@@ -304,7 +308,12 @@ export type ChunkInput = {
 export async function addChunk(db: Db, input: ChunkInput): Promise<{ ok: true; segments: MeetingSegment[]; duplicate?: boolean; warning?: string } | MeetingFailure> {
   const { meeting, owner, track, chunk } = input;
   const audio = input.heard ? null : (input.audio ?? new ArrayBuffer(0));
-  if (meeting.status !== "recording") return { ok: false, status: 409, code: "not_recording", error: "This meeting isn't recording anymore." };
+  const late =
+    meeting.status === "processing" &&
+    meeting.endedAt !== null &&
+    Date.now() - meeting.endedAt.getTime() < STOP_GRACE.chunkMs &&
+    !(meeting.meta as { notesStartedAt?: string } | null)?.notesStartedAt;
+  if (meeting.status !== "recording" && !late) return { ok: false, status: 409, code: "not_recording", error: "This meeting isn't recording anymore." };
   if (!Number.isInteger(chunk) || chunk < 0 || chunk > 5000) return { ok: false, status: 422, error: "Bad chunk number" };
   if (input.startMs < 0 || input.startMs > MAX_MEETING_MS) return { ok: false, status: 422, code: "too_long", error: "Meetings can be up to 4 hours." };
   if (input.durationMs < 1 || input.durationMs > CHUNK_MAX_MS) return { ok: false, status: 422, error: "Chunks must be under 5 minutes" };
@@ -323,7 +332,8 @@ export async function addChunk(db: Db, input: ChunkInput): Promise<{ ok: true; s
   if (existing.length) return { ok: true, segments: existing.filter((s) => s.text), duplicate: true };
 
   // Audio heard here costs speech-to-text; lines heard on the computer are free.
-  if (toHear && !(await hasCredit(db, owner.id))) return { ok: false, status: 402, code: "no_credit", error: outOfCreditMessage({ canAdd: creditOpen }) };
+  const refused = toHear ? await creditRefusal(db, owner.id) : null;
+  if (refused) return { ok: false, status: 402, code: "no_credit", error: refused };
 
   let segments: { startMs: number; endMs: number; text: string }[] = [];
   let warning: string | undefined;
@@ -365,6 +375,16 @@ export async function addChunk(db: Db, input: ChunkInput): Promise<{ ok: true; s
     }
   }
 
+  // A piece that arrived after the Stop (the app hadn't heard of it yet) is kept only up to the Stop,
+  // give or take the two clocks: nothing said after it is stored.
+  let pieceEndMs = input.startMs + input.durationMs;
+  if (late && meeting.endedAt) {
+    const stopMs = meeting.endedAt.getTime() - meeting.startedAt.getTime() + 2000;
+    segments = segments.filter((s) => input.startMs + s.startMs <= stopMs);
+    pieceEndMs = Math.min(pieceEndMs, stopMs);
+    heardMs = Math.max(0, Math.min(heardMs, pieceEndMs - input.startMs));
+  }
+
   const speaker = track === "mic" ? ((meeting.meta as { inPerson?: boolean } | null)?.inPerson ? "Room" : "You") : "Others";
   const rows = segments.length
     ? segments.map((s, i) => ({
@@ -389,7 +409,7 @@ export async function addChunk(db: Db, input: ChunkInput): Promise<{ ok: true; s
   // Meeting length follows wall-clock time, whichever track gets there first.
   // The timeline comes from the recorder, so it's also held to the audio each track really had
   // transcribed (a track never overlaps itself): restarting the timeline can't hide minutes.
-  const reach = Math.ceil((input.startMs + input.durationMs) / 1000);
+  const reach = Math.ceil(pieceEndMs / 1000);
   const heardSoFar = sql`coalesce((meetings.meta->'heardMs'->>${track}::text)::bigint, 0) + ${heardMs}::bigint`;
   let meta = provider ? sql`meetings.meta || jsonb_build_object('transcribedBy', ${provider}::text)` : sql`meetings.meta`;
   // Real audio means it's recording again; a tiny silent "still here" ping from a paused recorder doesn't.
@@ -431,11 +451,14 @@ export async function renameMeeting(db: Db, meeting: Meeting, title: string): Pr
 }
 
 export async function setActionItemDone(db: Db, meeting: Meeting, index: number, done: boolean): Promise<Meeting> {
-  const items = [...(meeting.actionItems ?? [])];
-  if (!items[index]) return meeting;
-  items[index] = { ...items[index], done };
-  const [updated] = await db.update(schema.meetings).set({ actionItems: items, updatedAt: new Date() }).where(eq(schema.meetings.id, meeting.id)).returning();
-  return updated;
+  if (!meeting.actionItems?.[index]) return meeting;
+  // Set in the database itself, so quick ticks on two items don't undo each other.
+  const [updated] = await db
+    .update(schema.meetings)
+    .set({ actionItems: sql`jsonb_set(${schema.meetings.actionItems}, ${`{${index},done}`}::text[], ${JSON.stringify(done)}::jsonb)`, updatedAt: new Date() })
+    .where(eq(schema.meetings.id, meeting.id))
+    .returning();
+  return updated ?? meeting;
 }
 
 export async function markNoticeCopied(db: Db, meeting: Meeting): Promise<Meeting> {

@@ -5,7 +5,7 @@ import { getUser } from "@/lib/auth/session";
 import { starterCreditMicros } from "@/lib/billing/credit";
 import { FAIR_USE, formatMicros } from "@/lib/billing/prices";
 import { comingSoonConnectors } from "@/lib/connectors/availability";
-import { demoMode, live } from "@/lib/env";
+import { creditOpen, demoMode, live } from "@/lib/env";
 import { findFeatured, recipeSchema } from "@/lib/recipes";
 import { Builder, type BuilderProps } from "@/components/builder/Builder";
 import { BotLimit } from "@/components/builder/BotLimit";
@@ -58,6 +58,7 @@ export default async function BuildPage({ searchParams }: { searchParams: Promis
       signedIn={Boolean(user?.email)}
       ownerEmail={user?.email ?? null}
       starterCredit={starterCreditMicros() > 0 ? formatMicros(starterCreditMicros()) : null}
+      paidModels={creditOpen}
     />
   );
 }

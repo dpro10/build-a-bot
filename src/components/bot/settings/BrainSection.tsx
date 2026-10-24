@@ -11,7 +11,7 @@ import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
 import { toast } from "@/components/ui/toaster";
 import { api } from "@/lib/client/api";
-import { INCLUDED_MODELS, PROVIDERS, PROVIDER_BY_ID, contextLabel, type ModelDef, type ProviderId } from "@/lib/models/catalog";
+import { INCLUDED_MODELS, PROVIDERS, PROVIDER_BY_ID, contextLabel, needsAddedCredit, type ModelDef, type ProviderId } from "@/lib/models/catalog";
 import { formatMicros, perMessageMicros } from "@/lib/billing/prices";
 import { cn } from "@/lib/utils";
 import { FieldGroup, SettingsSection, useApiErrorToast } from "./ui";
@@ -69,6 +69,7 @@ export function BrainSection({
   label,
   keyHint,
   demoBrain,
+  paidModels,
 }: {
   botId: string;
   botName: string;
@@ -77,6 +78,8 @@ export function BrainSection({
   label: string;
   keyHint: string | null;
   demoBrain: boolean;
+  /** The models only for accounts that added credit are offered (it can be added). */
+  paidModels: boolean;
 }) {
   const router = useRouter();
   const onError = useApiErrorToast();
@@ -213,7 +216,8 @@ export function BrainSection({
               </Link>
             </p>
             {TIERS.map((tier) => {
-              const models = INCLUDED_MODELS.filter((m) => m.tier === tier.id);
+              // A model that needs added credit is offered only where credit can be added (it would only say no).
+              const models = INCLUDED_MODELS.filter((m) => m.tier === tier.id && (paidModels || !needsAddedCredit(m.id) || m.id === initial.model));
               return (
                 <div key={tier.id} className="flex flex-col gap-2">
                   <div className="flex items-baseline gap-2">
