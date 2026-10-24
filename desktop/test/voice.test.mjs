@@ -13,7 +13,7 @@ import { EventEmitter } from "node:events";
 import { KEY, checkCustom, defaultShortcut, inShortcut, presetsFor, resolveShortcut, shortcutDown } from "../src/main/voice/keys.mjs";
 import { hotkeyStep, initialHotkey } from "../src/main/voice/hotkey-machine.mjs";
 import { Hotkey, ToggleHotkey } from "../src/main/voice/hotkey.mjs";
-import { Paster, snapshotClipboard } from "../src/main/voice/paste.mjs";
+import { Paster, passingTypes, snapshotClipboard } from "../src/main/voice/paste.mjs";
 import { categorize, parseActiveWindow, parseAsn, parseLsappinfo, parseWinForeground, parseXpropWindow, permissionApp } from "../src/main/voice/front-app.mjs";
 import { VoiceHistory, addToStats, minutesSaved, wordsPerMinute, wordsThisWeek } from "../src/main/voice/history.mjs";
 import { suggestWords } from "../src/main/voice/learn.mjs";
@@ -444,6 +444,72 @@ test("the clipboard isn't put back over something copied in the meantime", async
   assert.equal(cb.data["text/plain"], "copied just now");
 });
 
+test("words on the clipboard only to be pasted are marked as passing through (out of clipboard history); a remote desktop gets them plain, and longer", async () => {
+  const before = { "text/plain": "what I had copied" };
+  const cb = fakeClipboard(before);
+  const seen = [];
+  const p = new Paster({ clipboard: cb, makeItem, press: async () => (seen.push({ ...cb.data }), true), canPress: () => true, restoreAfterMs: 5, remoteRestoreMs: 80, passing: () => passingTypes("win32") });
+  await p.insert("Hello there.", { category: "chat" });
+  assert.equal(seen[0]["text/plain"], "Hello there.");
+  assert.deepEqual(Object.keys(seen[0]).sort(), ["text/plain", ...Object.keys(passingTypes("win32"))].sort());
+  await p.restoring;
+  assert.deepEqual(cb.data, before, "put back as it was, without the marks");
+  // A remote desktop: plain text (its client mustn't skip it), and put back only once it has had time to fetch it.
+  const t0 = Date.now();
+  await p.insert("Over there.", { category: "other", remote: true });
+  assert.deepEqual(Object.keys(seen[1]), ["text/plain"]);
+  await new Promise((r) => setTimeout(r, 30));
+  assert.equal(cb.data["text/plain"], "Over there.", "not put back yet");
+  await p.restoring;
+  assert.ok(Date.now() - t0 >= 75, `put back after ${Date.now() - t0} ms`);
+  assert.deepEqual(cb.data, before);
+  // Kept on the clipboard (Put my clipboard back is off): plain, like any copy.
+  await p.insert("It stays.", { restore: false });
+  assert.deepEqual(Object.keys(seen[2]), ["text/plain"]);
+  // The marker that reads the selection is passing through too.
+  const sel = fakeClipboard(before);
+  const markedAt = [];
+  const q = new Paster({ clipboard: sel, makeItem, press: async () => true, pressCopy: async () => (markedAt.push(Object.keys(sel.data).length), true), canPress: () => true, copyWaitMs: 20, passing: () => passingTypes("darwin") });
+  await q.copySelection("docs");
+  assert.deepEqual(markedAt, [2]);
+  assert.deepEqual(sel.data, before);
+});
+
+test("a clipboard that won't take the marks (or loses the words with them) gets the words as plain text, as before", async () => {
+  const logs = [];
+  const cb = fakeClipboard({ "text/plain": "old" });
+  const write = cb.write.bind(cb);
+  cb.write = async (items) => {
+    if (Object.keys(items[0].data).length > 1) throw new Error("unsupported format");
+    return write(items);
+  };
+  const pressed = [];
+  const p = new Paster({ clipboard: cb, makeItem, press: async () => (pressed.push(cb.data["text/plain"]), true), canPress: () => true, restoreAfterMs: 5, passing: () => passingTypes("win32"), log: (m) => logs.push(m) });
+  assert.deepEqual(await p.insert("Hi."), { pasted: true, copied: false });
+  assert.deepEqual(pressed, ["Hi."]);
+  await p.restoring;
+  assert.equal(cb.data["text/plain"], "old");
+  assert.ok(logs.some((m) => /couldn't mark the clipboard as passing through/.test(m)));
+
+  const lossy = fakeClipboard({ "text/plain": "old" });
+  lossy.write = async (items) => lossy.set(Object.fromEntries(Object.entries(items[0].data).filter(([k]) => k !== "text/plain")));
+  const seen = [];
+  const q = new Paster({ clipboard: lossy, makeItem, press: async () => (seen.push(lossy.data["text/plain"]), true), canPress: () => true, restoreAfterMs: 5, passing: () => passingTypes("darwin") });
+  await q.insert("Words.", { restore: true });
+  assert.deepEqual(seen, ["Words."]);
+});
+
+test("what marks the clipboard as passing through, on each system", async () => {
+  const raw = (n) => `electron application/osclipboard;format="${n}"`;
+  const win = passingTypes("win32");
+  assert.deepEqual(Object.keys(win), [raw("CanIncludeInClipboardHistory"), raw("CanUploadToCloudClipboard")]);
+  assert.deepEqual([...new Uint8Array(await win[raw("CanIncludeInClipboardHistory")].arrayBuffer())], [0, 0, 0, 0], "a DWORD 0");
+  assert.ok(!Object.keys(win).some((k) => k.includes("ExcludeClipboardContentFromMonitorProcessing")), "remote desktop clients, which watch the clipboard too, still get the words");
+  assert.deepEqual(Object.keys(passingTypes("darwin")), [raw("org.nspasteboard.TransientType")]);
+  assert.equal(await passingTypes("linux")[raw("x-kde-passwordManagerHint")].text(), "secret");
+  assert.equal(passingTypes("freebsd"), null);
+});
+
 test("pastes happen one at a time, in order", async () => {
   const cb = fakeClipboard({ "text/plain": "old" });
   const seen = [];
@@ -538,6 +604,11 @@ test("apps sort into chat, email, code, terminal and docs; browser tabs by their
   assert.deepEqual(categorize({ id: "firefox", title: "general | Acme - Slack — Mozilla Firefox" }), { name: "Slack", category: "chat" });
   assert.deepEqual(categorize({ id: "com.google.chrome", title: null }), { name: "Chrome", category: "browser" });
   assert.deepEqual(categorize({ id: "com.example.unknown", name: "Unknown App" }), { name: "Unknown App", category: "other" });
+  // Remote desktops and virtual machines: "other" apps (their names stay here), marked as remote.
+  assert.deepEqual(categorize({ id: "mstsc.exe" }), { name: "Remote Desktop", category: "other", remote: true });
+  assert.deepEqual(categorize({ id: "com.microsoft.rdc.macos", name: "Windows App" }), { name: "Remote Desktop", category: "other", remote: true });
+  assert.deepEqual(categorize({ id: "com.citrix.receiver.icaviewer.mac" }), { name: "Citrix", category: "other", remote: true });
+  assert.deepEqual(categorize({ id: "Remmina", title: "server - Remmina" }), { name: "Remmina", category: "other", remote: true });
 });
 
 test("macOS asks for the app that started it: Build-a-bot when installed, the terminal when run from source", () => {
@@ -823,6 +894,16 @@ test("started offline: the pill says it can't reach Build-a-bot, and Try again s
   plain.hotkey.emit("start");
   await flush();
   assert.equal(plain.starts[0].wav, false);
+});
+
+test("typed into a remote desktop: its name isn't sent, and the paste is told it's remote (the clipboard is put back later)", async () => {
+  const env = setupVoice({ app: { name: "Remote Desktop", category: "other", remote: true } });
+  env.hotkey.emit("start");
+  await flush();
+  env.hotkey.emit("stop");
+  await flush(20);
+  assert.ok(env.calls.includes("api.dictate:other:-:polish=true:commands=true"), env.calls.join("\n"));
+  assert.deepEqual(env.inserts, [{ category: "other", restore: true, space: true, app: "Remote Desktop", remote: true }]);
 });
 
 test("an app it doesn't recognize is sent as 'other', without its name (kept only in local history)", async () => {

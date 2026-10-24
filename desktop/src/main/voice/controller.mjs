@@ -59,6 +59,9 @@ export function voiceError(err) {
   return { message: "Something went wrong. Try again in a moment.", actions: ["retry"] };
 }
 
+/** A remote desktop (or virtual machine) in front: it gets the clipboard over the network, so pasting there waits longer. */
+const remoteApp = (app) => (app?.remote ? { remote: true } : {});
+
 /** "Allow Accessibility" on a Mac, otherwise just "press Ctrl+V". */
 export function copiedNote(platform, canPaste) {
   if (platform === "darwin" && !canPaste) return "Copied. Press ⌘V to paste, or allow Accessibility so I can paste for you.";
@@ -364,7 +367,7 @@ export class VoiceTyping extends EventEmitter {
 
     // Text: type it where the cursor is, spaced against the words already there.
     const restore = v.restoreClipboard !== false;
-    const out = await this.paster.insert(res.text, { category: job.app?.category, restore, space: v.spacing !== false, app: job.app?.name ?? null });
+    const out = await this.paster.insert(res.text, { category: job.app?.category, restore, space: v.spacing !== false, app: job.app?.name ?? null, ...remoteApp(job.app) });
     if (!out.pasted) this.log("voice: couldn't paste; the words are on the clipboard");
     this.settings.update({ voiceStats: addToStats(this.settings.get().voiceStats, { words: res.words ?? 0, spokenMs, at: this.now() }) });
     if (v.history !== false) {
@@ -456,7 +459,7 @@ export class VoiceTyping extends EventEmitter {
 
     const restore = v.restoreClipboard !== false;
     // Written at the cursor (nothing selected): spaced like a dictation.
-    const pasted = await this.paster.insert(out.text, { category, restore, space: !selection && v.spacing !== false, app: job.app?.name ?? null });
+    const pasted = await this.paster.insert(out.text, { category, restore, space: !selection && v.spacing !== false, app: job.app?.name ?? null, ...remoteApp(job.app) });
     if (!pasted.pasted) this.log("voice: couldn't paste the edit; it's on the clipboard");
     if (v.history !== false) this.history.add({ kind: "edit", text: out.text, instruction, app: job.app?.name ?? null, words: out.words, pasted: pasted.pasted });
     this.last = { kind: "text", text: out.text, at: this.now(), pasted: pasted.pasted };

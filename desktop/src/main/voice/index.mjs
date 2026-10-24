@@ -19,7 +19,7 @@ import { Hotkey, ToggleHotkey } from "./hotkey.mjs";
 import { checkCustom, keyName, presetsFor, resolveShortcut } from "./keys.mjs";
 import { stillToLearn, suggestWords } from "./learn.mjs";
 import { LOCAL_LANGUAGES, LocalSpeech, localFirst } from "./local-speech.mjs";
-import { Paster, pressCopy, pressPaste } from "./paste.mjs";
+import { Paster, passingTypes, pressCopy, pressPaste } from "./paste.mjs";
 import { PillWindow } from "./pill-window.mjs";
 import { VoiceSettingsWindow } from "./settings-window.mjs";
 import { TextReader } from "./text-reader.mjs";
@@ -139,6 +139,8 @@ export function setupVoice(o) {
     press: pressPaste({ platform, hook: () => hook?.hook ?? null, expectSynthetic: (c) => hook?.expectSynthetic(c) }),
     pressCopy: pressCopy({ platform, hook: () => hook?.hook ?? null, expectSynthetic: (c) => hook?.expectSynthetic(c) }),
     canPress: canPaste,
+    // Words on the clipboard only to be pasted stay out of clipboard history (Win+V, Mac clipboard managers).
+    passing: () => passingTypes(platform),
     // After Enter the cursor is at the start of a line (a terminal's new prompt): no space before the words.
     enterAt: () => hook?.enterAt ?? 0,
     // Paste only once the shortcut's keys are let go (⌥ still down would make ⌘V into ⌥⌘V).

@@ -52,6 +52,27 @@ export async function snapshotClipboard(cb) {
 }
 
 /**
+ * Formats that mark what's on the clipboard as passing through: the words are put there only to be
+ * pasted, and the clipboard is put back a moment later. Windows leaves it out of its clipboard
+ * history (Win+V) and doesn't sync it to the owner's other devices; clipboard managers on a Mac
+ * skip it (nspasteboard.org's transient type; Universal Clipboard isn't told, Electron can't);
+ * KDE's Klipper skips it on Linux. Raw formats through Electron's clipboard, next to the text. Not
+ * ExcludeClipboardContentFromMonitorProcessing on Windows: remote desktop clients are clipboard
+ * monitors too, and the words have to reach them.
+ * @param {string} platform
+ * @returns {Record<string, Blob> | null}
+ */
+export function passingTypes(platform) {
+  const raw = (name) => `electron application/osclipboard;format="${name}"`;
+  /** A DWORD 0: "no". */
+  const no = () => new Blob([new Uint8Array(4)]);
+  if (platform === "win32") return { [raw("CanIncludeInClipboardHistory")]: no(), [raw("CanUploadToCloudClipboard")]: no() };
+  if (platform === "darwin") return { [raw("org.nspasteboard.TransientType")]: new Blob([]) };
+  if (platform === "linux") return { [raw("x-kde-passwordManagerHint")]: new Blob(["secret"]) };
+  return null;
+}
+
+/**
  * Linux: press Ctrl+V or Ctrl+C with XTest, like a real keyboard (the hook's own key taps are
  * synthetic events that many apps ignore). xdotool if it's there, else python3 talking to libXtst,
  * which every X11 desktop has (the keyboard hook needs it too).
@@ -166,7 +187,10 @@ export class Paster {
    * @param {(category: string) => Promise<boolean>} [o.pressCopy]  presses copy; false when it can't
    * @param {() => boolean} o.canPress  pressing keys is allowed now (macOS: Accessibility)
    * @param {() => Promise<void>} [o.waitForRelease]  until the shortcut's keys are let go
+   * @param {() => Record<string, unknown> | null} [o.passing]  formats that mark words put on the
+   *   clipboard only to paste them as passing through (passingTypes), or null
    * @param {number} [o.restoreAfterMs]  how long the app gets to read the clipboard
+   * @param {number} [o.remoteRestoreMs]  …when it's a remote desktop, which reads it over the network
    * @param {number} [o.copyWaitMs]  how long an app gets to put its selection on the clipboard
    * @param {() => Promise<{ before: string, after: string } | null>} [o.around]  what's right
    *   before and after the cursor in the box in front (null when it can't be read)
@@ -185,6 +209,7 @@ export class Paster {
     this.log = o.log ?? (() => {});
     this.now = o.now ?? (() => Date.now());
     this.restoreAfterMs = o.restoreAfterMs ?? 450;
+    this.remoteRestoreMs = o.remoteRestoreMs ?? 2500;
     this.copyWaitMs = o.copyWaitMs ?? 600;
     this.aroundMs = o.aroundMs ?? 600;
     this.settleMs = o.settleMs ?? 250;
@@ -198,13 +223,16 @@ export class Paster {
     this.pressedAt = 0;
     /** The last dictation typed (with its spacing), and the app it went to. @type {{ text: string, app: string, at: number } | null} */
     this.lastTyped = null;
+    /** Marking the clipboard as passing through failed once (said once in the log). */
+    this.passingFailed = false;
   }
 
   /**
    * Type `text` at the cursor.
    * @param {string} text
-   * @param {{ category?: string, restore?: boolean, space?: boolean, app?: string | null }} [opts]
-   *   `space`: a dictation, spaced against what's next to the cursor; `app`: the app in front
+   * @param {{ category?: string, restore?: boolean, space?: boolean, app?: string | null, remote?: boolean }} [opts]
+   *   `space`: a dictation, spaced against what's next to the cursor; `app`: the app in front;
+   *   `remote`: it's a remote desktop (or a virtual machine), which gets the clipboard over the network
    * @returns {Promise<{ pasted: boolean, copied: boolean }>}
    */
   insert(text, opts = {}) {
@@ -234,7 +262,7 @@ export class Paster {
     const marker = `\u2063bab-${Math.random().toString(36).slice(2)}`;
     let text = null;
     try {
-      await cb.writeText(marker);
+      await this.writePassing(marker);
       await this.o.waitForRelease?.();
       if (await this.o.pressCopy(category)) {
         const until = Date.now() + this.copyWaitMs;
@@ -267,6 +295,32 @@ export class Paster {
   /** Only put it on the clipboard (when pasting isn't possible, or the owner asked to copy). */
   copy(text) {
     return this.o.clipboard.writeText(text).catch(() => {});
+  }
+
+  /**
+   * Put `text` on the clipboard only to paste it, marked as passing through where the system has a
+   * way to say so (passingTypes), so clipboard history leaves it out. If that can't be written, or
+   * doesn't read back as the text, the text goes on as plain text, as before.
+   * @param {string} text
+   */
+  async writePassing(text) {
+    const cb = this.o.clipboard;
+    let marks = null;
+    try {
+      marks = this.o.passing?.() ?? null;
+    } catch {
+      marks = null;
+    }
+    if (marks && Object.keys(marks).length) {
+      try {
+        await cb.write([this.o.makeItem({ "text/plain": text, ...marks })]);
+        if ((await cb.readText()) === text) return;
+      } catch (err) {
+        if (!this.passingFailed) this.log(`voice: couldn't mark the clipboard as passing through (${/** @type {any} */ (err)?.message ?? err}); plain text instead`);
+        this.passingFailed = true;
+      }
+    }
+    await cb.writeText(text);
   }
 
   /**
@@ -313,7 +367,7 @@ export class Paster {
     return out.text;
   }
 
-  async insertNow(text, { category = "other", restore = true, space = false, app = null } = {}) {
+  async insertNow(text, { category = "other", restore = true, space = false, app = null, remote = false } = {}) {
     const cb = this.o.clipboard;
     if (!this.o.canPress()) {
       this.lastTyped = null;
@@ -322,7 +376,10 @@ export class Paster {
     }
     const typed = space ? await this.spaced(text, category, app) : text;
     const before = restore ? await snapshotClipboard(cb) : [];
-    await cb.writeText(typed);
+    // There only to be pasted, then put back: passing through (not in clipboard history). Not for a
+    // remote desktop, whose client might skip it; nor when it stays (the owner turned restoring off).
+    if (restore && !remote) await this.writePassing(typed);
+    else await cb.writeText(typed);
     await this.o.waitForRelease?.();
     let pasted = false;
     try {
@@ -348,7 +405,8 @@ export class Paster {
             this.log(`voice: couldn't put the clipboard back (${/** @type {any} */ (err)?.message ?? err})`);
           }
           resolve();
-        }, this.restoreAfterMs);
+          // A remote desktop's client fetches the clipboard over the network after the paste key reaches it.
+        }, remote ? this.remoteRestoreMs : this.restoreAfterMs);
       });
     }
     return { pasted: true, copied: !restore };
