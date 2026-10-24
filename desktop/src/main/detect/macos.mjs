@@ -10,7 +10,7 @@
  * Chrome or Safari via AppleScript (macOS asks for permission per browser).
  * Pure parsing here.
  */
-import { MAC_MEETING_PROCESSES, appFromBundleId, appFromTitle, appFromUrl, browserLabel } from "./catalog.mjs";
+import { MAC_MEETING_PROCESSES, appFromBundleId, appFromTitle, appFromUrl, browserLabel, isOwnPage } from "./catalog.mjs";
 
 /**
  * The helper's `mic` output:
@@ -44,7 +44,8 @@ export function parseHelperOutput(text) {
 /**
  * @param {ReturnType<typeof parseHelperOutput>} out
  * @param {{ ownPids?: Set<number>, tabs?: Array<{ url: string, title: string }> }} [opts]
- * @returns {Array<{ key: string, app: string, kind: 'native'|'browser', pid: number|null, label: string, source: string, bounds: {x:number,y:number,width:number,height:number}|null }>}
+ * @returns {Array<{ key: string, app: string, kind: 'native'|'browser', pid: number|null, label: string, source: string, bounds: {x:number,y:number,width:number,height:number}|null, own?: boolean }>}
+ *   `own`: (with tab reading on) the browser has a Build-a-bot tab and no meeting: the owner calling their bot
  */
 export function macHelperSightings(out, opts = {}) {
   const ownPids = opts.ownPids ?? new Set();
@@ -54,7 +55,11 @@ export function macHelperSightings(out, opts = {}) {
     const hit = appFromBundleId(p.bundleId);
     if (!hit) continue;
     let app = hit.app;
-    if (hit.kind === "browser") app = appFromTabs(opts.tabs ?? [], hit.bundle) ?? "browser";
+    let own = false;
+    if (hit.kind === "browser") {
+      app = appFromTabs(opts.tabs ?? [], hit.bundle) ?? "browser";
+      own = app === "browser" && tabsOf(opts.tabs ?? [], hit.bundle).some((t) => isOwnPage(t.title));
+    }
     const biggest = [...p.windows].sort((a, b) => b.width * b.height - a.width * a.height)[0] ?? null;
     found.push({
       key: `mac:${hit.bundle}`,
@@ -64,6 +69,7 @@ export function macHelperSightings(out, opts = {}) {
       label: hit.kind === "browser" ? browserLabel(hit.bundle) : hit.bundle,
       source: "helper",
       bounds: biggest,
+      ...(own ? { own: true } : {}),
     });
   }
   return dedupe(found);
@@ -115,9 +121,14 @@ export function parseTabLines(text) {
   return tabs;
 }
 
+/** The tabs of the browser with this bundle id (all of them when it isn't known). */
+function tabsOf(tabs, bundle) {
+  return bundle ? tabs.filter((t) => !t.browser || bundleMatches(t.browser, bundle)) : tabs;
+}
+
 /** The meeting a browser's tabs point at (Meet/Teams/Zoom on the web), if any. */
 export function appFromTabs(tabs, bundle) {
-  const mine = bundle ? tabs.filter((t) => !t.browser || bundleMatches(t.browser, bundle)) : tabs;
+  const mine = tabsOf(tabs, bundle);
   for (const t of mine) {
     const app = appFromUrl(t.url) ?? appFromTitle(t.title);
     if (app) return app;

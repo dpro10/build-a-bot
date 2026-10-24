@@ -143,7 +143,7 @@ Detection needs no permission on any OS. The app reads only which program has th
 | Windows | The privacy ConsentStore: `HKCU\…\CapabilityAccessManager\ConsentStore\microphone` (`LastUsedTimeStop == 0` means in use), checked against running processes because values can stick; browser window titles name Meet/Teams calls | `reg query` and `tasklist`, no native code. **TODO:** a small WASAPI helper (`IAudioSessionManager2` → active capture sessions → `GetProcessId`) is the better long-term signal (research §2.3, §6.1) |
 | Linux | `pactl --format=json list source-outputs` (text format on older pactl), skipping corked streams and level meters | |
 
-Rules everywhere: meeting apps only (allowlist in `src/main/detect/catalog.mjs`), our own processes ignored, 2 checks in a row and 5 s (browsers 15 s) to start, 15 s without the mic to end. Each OS's parsing is a pure function with tests on real-looking output (`test/fixtures`).
+Rules everywhere: meeting apps only (allowlist in `src/main/detect/catalog.mjs`), our own processes ignored, 2 checks in a row and 5 s (browsers 15 s) to start, 15 s without the mic to end. The owner calling their own bot on build-a-bot.site isn't a call to take notes in: a browser on the mic with a Build-a-bot page in it (on Windows, the page in front, from the browser's window title; on a Mac, only with *Recognize Meet and Teams in browser tabs* on, a Build-a-bot tab in that browser) isn't offered for as long as it keeps the mic, unless a meeting turns up in it. Without tab reading on a Mac, and on Linux, the app can't see which page uses the mic, so such a call is still offered as "a call in your browser". Each OS's parsing is a pure function with tests on real-looking output (`test/fixtures`).
 
 ## System audio
 
