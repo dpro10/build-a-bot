@@ -32,15 +32,12 @@ Diego (2026-10-15): "im in the nvidia x nebius hackathon and the more we create 
 
 1. **Demo mode off** on the live site: **done** on 2026-10-22. `DEMO_MODE` is deleted in Vercel, the site was redeployed, and nothing simulated is left (`docs/DECISIONS.md`, "demo mode off on the live site").
 2. **The support email:** **done** on 2026-10-23. diegoprozzi@gmail.com is the site's default (`src/lib/site.ts`), shown on the legal, safety, pricing and contact pages.
-3. **Zero data retention** for the included models: sign in at [tokenfactory.nebius.com](https://tokenfactory.nebius.com), open your account's profile page, and turn on **Zero Data Retention**. Nebius's guide says that's where it is; Claude can't see the console, so the label may differ a little.
+3. **Zero data retention** for the included models: **done** on 2026-10-24, in Token Factory's settings ("Enable zero data retention").
    - It applies to the whole organization (every project and key). Prompts and replies are no longer kept: by default Token Factory keeps them in Finland to speed up answers.
-   - It may make answers a little slower, and Data Lab stops collecting logs.
+   - It may make answers a little slower, and Data Lab stops collecting logs (build-a-bot doesn't use it).
    - Nebius support can confirm it in writing.
-   - The promo's "zero data retention" line is true only once this is on.
-4. **The repository page** (the gear next to **About** on github.com/dpro10/build-a-bot):
-   - **Website:** `https://build-a-bot.site`
-   - **Description:** `Your own AI agent in about a minute: pick a face, give it a brain (NVIDIA Nemotron and other open models on Nebius, at cost, or your own API key) and your apps, and talk to it on the web, Telegram, Discord or Slack, or call it.`
-   - **Topics:** `ai-agent` `personal-assistant` `nvidia` `nemotron` `nebius` `parakeet` `voice-assistant` `mcp` `tavily` `nextjs` `electron` `hackathon`
+   - The promo's "zero data retention" line is true now.
+4. **The repository page:** **done** on 2026-10-24. The description is the elevator pitch (below), the website is `https://build-a-bot.site`, and the topics are set.
 
    The old "Desktop app (test build)" pre-release goes on its own: the desktop workflow removes it now that both apps are signed.
 5. **The video:** the 2:48 cut is ready (`video/demo`, rendered on Diego's Mac to `video/out/demo/build-a-bot-demo.mp4`). Optionally record your half of the call and the two screen recordings first (`video/demo/SCRIPT.md`, "What Diego records", about 20 minutes), and Claude re-cuts it. Then put it on YouTube as a public video and paste the link into Devpost.
@@ -123,6 +120,7 @@ The sections below fill in **About the project**.
   - Nemotron 3.5 Lightning is the default, chosen because it's fast and cheap: about $0.0004 for a typical message.
   - There are no plans: people pay for what they use at Token Factory's price, with nothing added, and every account starts with $5 of credit.
   - Nemotron 3 Super and Ultra take the harder jobs.
+  - **Zero data retention** is on for our Token Factory organization: Nebius keeps none of the included models' prompts or replies.
 - **NVIDIA Parakeet TDT 0.6B v3 on the user's own computer** turns speech into text for voice typing and meeting notes.
   - **Setup:** the desktop app downloads the model once (about 0.7 GB, checked against NVIDIA's published hash) and runs it with NVIDIA's NeMo-Speech.cpp on 127.0.0.1 behind a random key, on the GPU with Metal on Apple silicon and on the CPU elsewhere. On the Mac the runtime is downloaded the same way. On Windows it comes inside our installer, and we sign NVIDIA's program files with our own certificate: Windows 11's Smart App Control won't run unsigned code it doesn't know.
   - **Voice typing:** only the words go to the server, to be cleaned up by Nemotron.

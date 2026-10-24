@@ -870,7 +870,7 @@ Diego: "i would be down to allow the bot get your files though, or atleast there
 Diego: "make a beautiful promo video about a minute long for build a bot. Key points is owning your data, owning your intelligence and a personal assistant that gets smarter the more you use it. And zero data retention."
 
 - `video/` builds it end to end (`video/README.md`, script and claims in `video/STORYBOARD.md`): the app's own characters, logo, icons, fonts and colors on an HTML stage rendered frame by frame; the voice is Otto's, NVIDIA Magpie (Sofia), picked by NVIDIA Parakeet's transcripts; an original synthesized score (no copyrighted music, as the hackathon asks), sound effects on the on-screen moments, -14 LUFS for YouTube, and captions.
-- **Zero data retention needs one setting:** the video says the included open models keep nothing, which is only true while Zero Data Retention is switched on for our Nebius Token Factory organization (off by default; Token Factory otherwise keeps prompts and replies, in Finland, for speculative decoding). Diego to confirm it's on before the video is published; the video's footnote names it.
+- **Zero data retention needs one setting:** the video says the included open models keep nothing, which is only true while Zero Data Retention is switched on for our Nebius Token Factory organization (off by default; Token Factory otherwise keeps prompts and replies, in Finland, for speculative decoding). Diego to confirm it's on before the video is published; the video's footnote names it. *(On since 2026-10-24: see "zero data retention is on", below.)*
 
 ## Decision: calls and texts reach the caller's own bot, and each call is charged to its bot's owner (Diego, 2026-10-19)
 
@@ -939,7 +939,7 @@ Diego: "the more that i think about, the more i think maybe we should drop being
 - **Stays:** your own API key, with an honest line wherever it's offered: what the bot reads and writes goes to that provider, under its rules for keeping data. Pairing stays too (`/api/bridge/pair`, `/api/bridge/pairing-code`, the device tokens), since meeting notes, voice typing and a bot's synced folder use it. Its page is now **Desktop app** (`/app/desktop`); `/app/bridge` sends you there, since older apps still open it.
 - **Bots that were on a plan** moved to the default open model (Nemotron 3.5 Lightning) in migration `0009_remove_bridge`, and each one's Activity says why. Computers paired only to run the terminal Bridge were unpaired; desktop apps stay paired.
 - **Older desktop apps, until they update:** the server stops naming any bot that needs Claude Code or Codex, so they never wait for turns, and their heartbeat still gets an answer ("nothing waiting"). The new app also deletes the folder older ones ran the Bridge in.
-- **Still open:** zero data retention on the included models has to be switched on in the Nebius Token Factory console (Diego's login); until it is, the site shouldn't promise it.
+- **Still open:** zero data retention on the included models has to be switched on in the Nebius Token Factory console (Diego's login); until it is, the site shouldn't promise it. *(Switched on 2026-10-24: see "zero data retention is on", below.)*
 
 ## Security: a sign-in link brings an account along only in the browser that asked for it (2026-10-20)
 
@@ -1160,3 +1160,18 @@ Diego, asked whether NVIDIA's unsigned program could be signed and packaged with
 - **Later:** telling the people on a call apart and naming them from what's said.
   - NeMo-Speech.cpp has a diarization API (`diar.h` is in its Windows release).
   - Today "Others" is everyone but the owner, whose own microphone is heard on its own track. A name is used only when someone says it.
+
+## Decision: zero data retention is on for the included models (Diego, 2026-10-24)
+
+Diego, after switching it on in Token Factory's settings (his screenshot shows "Enable zero data retention" checked): "zero data retention is saved, and so is the new github description".
+
+- **What it covers:** our whole Token Factory organization, every project and key. Nebius no longer keeps the included models' prompts and replies; until now it kept them, in Finland, for speculative decoding. It didn't train on them either way (Nebius's Legal Quick Guide, §3–5).
+- **What it doesn't:**
+  - a bot on its owner's own API key, which follows that provider's terms;
+  - a key from another Token Factory organization, which would need the setting there too.
+- **Side effects:**
+  - Data Lab stops collecting logs. Nothing in build-a-bot uses Data Lab.
+  - Logs from before may stay in Data Lab for up to a year, when raw logs expire. Nebius support is the one to ask about deleting them, and confirms the setting in writing.
+  - Nebius says it may slow answers. The last live call before it (17:26 UTC) started its answer 2,677 ms after the caller stopped (Parakeet 398 ms, Nemotron's first token 625 ms). The live call check after each deploy keeps reporting it.
+- **Claims it makes true:** the promo's "zero data retention" line and footnote (`video/STORYBOARD.md`), and a new line in the write-up's "How we built it" (`docs/HACKATHON.md`).
+- **The repository page is filled in too:** the description is the Devpost elevator pitch, the website is https://build-a-bot.site, and the topics are set.
