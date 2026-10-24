@@ -31,8 +31,9 @@ async function until(fn, ms = 5000) {
 /**
  * A stand-in for `nemo-speech serve`: the same flags, routes, key check and chatter as NVIDIA's.
  * FAKE_NEMO: "crash" exits at once, "gpu-crash" exits at once unless it's told to use the CPU,
- * "never-ready" never gets ready, "slow" takes 1.5 s to get ready, "broken" answers 500. No require
- * or import, so it runs the same as CommonJS or as a module.
+ * "never-ready" never gets ready, "slow" takes 1.5 s to get ready, "broken" answers 500,
+ * "crash-on-request" gets ready and then exits when it's asked to hear something. No require or
+ * import, so it runs the same as CommonJS or as a module.
  */
 const FAKE_RUNTIME = `#!/usr/bin/env node
 const http = process.getBuiltinModule("node:http");
@@ -55,6 +56,7 @@ http.createServer((req, res) => {
   req.on("data", (c) => parts.push(c));
   req.on("end", () => {
     const body = Buffer.concat(parts).toString("latin1");
+    if (mode === "crash-on-request") process.exit(4);
     if (mode === "broken") return send(500, { error: { message: "boom" } });
     const wav = /filename="audio\\.wav"\\r\\ncontent-type: audio\\/wav\\r\\n\\r\\nRIFF/i.test(body);
     const format = (/name="response_format"\\r\\n\\r\\n(json|verbose_json)\\r\\n/i.exec(body) || [])[1];
@@ -637,22 +639,49 @@ test("a runtime that keeps crashing (on the GPU, then on the CPU) is given up on
   assert.equal(local.crashing(), false);
 });
 
-test("the GPU failing on this computer moves it to the CPU, at once and from then on", async (t) => {
+test("the GPU failing to load moves it to the CPU at once; a later run starts there only after it failed in two", async (t) => {
   const { local, make, engineRuns, logs } = await setup(t, { mode: "gpu-crash", ...APPLE_SILICON });
   await local.install();
   assert.equal(await local.transcribe(wav()), "Let's meet at 3:30 on Friday, or 3:45.", "this dictation is still heard here");
   const devices = () => engineRuns().map((r) => r.args[r.args.indexOf("--device") + 1]);
   assert.deepEqual(devices(), ["auto", "cpu"]);
-  assert.ok(logs.some((m) => /it didn't start on the GPU \(it stopped: 3\); using the CPU from now on/.test(m)), logs.join("\n"));
-  assert.equal(JSON.parse(fs.readFileSync(local.paths.device, "utf8")).device, "cpu");
+  assert.ok(logs.some((m) => /it didn't start on the GPU \(it stopped: 3\); using the CPU for now/.test(m)), logs.join("\n"));
   await local.stop();
-  // The next run of the app goes straight to the CPU…
-  const next = make();
-  t.after(() => next.stop());
-  await next.transcribe(wav());
-  assert.deepEqual(devices(), ["auto", "cpu", "cpu"]);
-  // …until NVIDIA's runtime changes: a new one gets another try on the GPU.
+  // Once isn't enough to give up on it: the next run of the app tries the GPU again…
+  const second = make();
+  await second.transcribe(wav());
+  await second.stop();
+  assert.deepEqual(devices(), ["auto", "cpu", "auto", "cpu"]);
+  assert.ok(logs.some((m) => /using the CPU from now on/.test(m)), logs.join("\n"));
+  // …and after two runs it failed in, the next one goes straight to the CPU…
+  const third = make();
+  await third.transcribe(wav());
+  await third.stop();
+  assert.deepEqual(devices(), ["auto", "cpu", "auto", "cpu", "cpu"]);
+  assert.equal(make().loadDevice(), "cpu");
+  // …until the app, NVIDIA's runtime or macOS changes: then the GPU gets another try.
+  assert.equal(make({ appVersion: "0.1.999" }).loadDevice(), "auto");
   assert.equal(make({ sources: { ...local.src, runtimeSha256: "0".repeat(64) } }).loadDevice(), "auto");
+  assert.equal(make({ osRelease: "99.0.0" }).loadDevice(), "auto");
+});
+
+test("a crash once it's running on the GPU isn't the GPU failing: it stays there; and a good start forgets a failure", async (t) => {
+  const { local } = await setup(t, { mode: "crash-on-request", ...APPLE_SILICON });
+  await local.install();
+  await assert.rejects(local.transcribe(wav()));
+  await until(() => local.child === null);
+  assert.equal(local.crashes.length, 1, "it counts as a crash");
+  assert.equal(local.device, "auto", "still the GPU");
+  assert.equal(local.loadDevice(), "auto");
+  assert.equal(fs.existsSync(local.paths.device), false, "nothing learned about the GPU");
+
+  const ok = await setup(t, APPLE_SILICON);
+  await ok.local.install();
+  ok.local.writeEngine({ gpuFailures: 1 });
+  const next = ok.make();
+  await next.transcribe(wav());
+  assert.equal(next.lastDevice, "auto");
+  assert.equal(next.engineRecord()?.gpuFailures, 0, "the GPU loaded: the failure before is forgotten");
 });
 
 test("a runtime that can't run at all fails at once instead of hanging the dictation", async (t) => {

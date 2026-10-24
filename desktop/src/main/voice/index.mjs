@@ -65,6 +65,8 @@ export function setupVoice(o) {
   const local = new LocalSpeech({
     dir: path.join(o.userData, "speech"),
     fetchImpl: (url, init) => o.apiSession.fetch(url, init),
+    // What it learns about running here (the GPU failing to load) holds until the app updates.
+    appVersion: safely(() => electron.app?.getVersion?.() ?? null, null),
     log,
     sources: {
       ...(process.env.BAB_SPEECH_RUNTIME_URL ? { runtimeUrl: process.env.BAB_SPEECH_RUNTIME_URL } : {}),
