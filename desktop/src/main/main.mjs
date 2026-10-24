@@ -292,6 +292,37 @@ async function boot() {
   });
   // Awake again: a session that never loaded (it went to sleep offline) is tried now.
   powerMonitor.on("resume", () => account.reconnect());
+  // Shutting down, restarting or signing out. Windows sends no "before-quit" then: its windows hear
+  // it instead (every one of them; the first counts), and the app may be closed any moment after
+  // "session-end". macOS and Linux say so before they quit the app (which runs "before-quit").
+  // Never held up: what's recorded is kept on disk for the next start (controller.onSessionEnding).
+  let sessionEndingAt = 0;
+  const sessionEnding = (/** @type {string} */ why) => {
+    if (Date.now() - sessionEndingAt < 60_000) return;
+    sessionEndingAt = Date.now();
+    log(`shutdown: the computer is ending the session (${why}); keeping what's recorded for the next start`);
+    try {
+      controller.onSessionEnding();
+      void Promise.resolve(voice.interrupt()).catch(() => {});
+    } catch (err) {
+      log(`shutdown: ${err}`);
+    }
+  };
+  if (process.platform === "win32") {
+    app.on("browser-window-created", (_e, win) => {
+      win.on("query-session-end", () => sessionEnding("query-session-end"));
+      win.on("session-end", () => {
+        sessionEnding("session-end");
+        try {
+          controller.onSessionEnd();
+        } catch (err) {
+          log(`shutdown: ${err}`);
+        }
+      });
+    });
+  } else {
+    powerMonitor.on("shutdown", () => sessionEnding("shutdown"));
+  }
   for (const ev of ["display-metrics-changed", "display-added", "display-removed"]) screen.on(/** @type {any} */ (ev), () => buddy.reassert());
 
   let readyToQuit = false;

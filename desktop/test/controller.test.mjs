@@ -223,6 +223,26 @@ test("screen lock and sleep stop the notes", async () => {
   }
 });
 
+test("the computer shutting down mid-meeting: the notes stop, and what was recorded (its end too) goes to disk at once", async () => {
+  const env = setup();
+  await listening(env);
+  env.uploads.persist = () => (env.calls.push("uploads.persist"), 1);
+  env.c.onSessionEnding();
+  assert.equal(env.calls.at(-1), "uploads.persist", "what's in memory now, without waiting");
+  await flush();
+  const at = (x) => env.calls.indexOf(x);
+  // The capture page hands over the piece it was on (the end of the meeting), which goes to disk before any wait on the network.
+  assert.ok(at("capture.stop") >= 0);
+  assert.ok(env.calls.lastIndexOf("uploads.persist") > at("capture.stop"), env.calls.join("\n"));
+  assert.ok(env.calls.lastIndexOf("uploads.persist") < at("uploads.drain"), env.calls.join("\n"));
+  assert.ok(env.notes.some((n) => /because your computer is shutting down/.test(n)));
+  // Windows' last word: anything still only in memory goes to disk.
+  const before = env.calls.filter((x) => x === "uploads.persist").length;
+  env.c.onSessionEnd();
+  assert.equal(env.calls.filter((x) => x === "uploads.persist").length, before + 1);
+  env.c.dispose();
+});
+
 test("Stop → saving → done with a 'notes are ready' notification that opens the meeting", async () => {
   const env = setup();
   await listening(env);

@@ -54,6 +54,7 @@ const STOP_NOTES = {
   hidden: (bot) => `${bot} stopped taking notes because it couldn't stay on your screen.`,
   "lock-screen": (bot) => `${bot} stopped taking notes when your screen locked.`,
   suspend: (bot) => `${bot} stopped taking notes when your computer went to sleep.`,
+  shutdown: (bot) => `${bot} stopped taking notes because your computer is shutting down.`,
   not_recording: (bot) => `${bot} stopped: this meeting was ended somewhere else.`,
   gone: (bot) => `${bot} stopped: this meeting was ended somewhere else.`,
   mic_lost: (bot) => `${bot} stopped because it lost your microphone.`,
@@ -158,6 +159,8 @@ export class Controller extends EventEmitter {
     /** When failed deletes/finishes were last retried. */
     this.pendingRetryAt = Date.now();
     this.retryingPending = false;
+    /** When the computer said it's shutting down (or signing out), or 0. */
+    this.sessionEndingAt = 0;
     this.stats = { chunks: 0, uploaded: 0, captions: 0, notices: [], notifications: [], stops: [], chunkLog: [] };
     this.timer = setInterval(() => this.tick(), 1000);
     this.timer.unref?.();
@@ -426,6 +429,9 @@ export class Controller extends EventEmitter {
     }
     await this.capture.stop();
     this.level = 0;
+    // The computer is shutting down: the end of the meeting the capture page just handed over goes
+    // to disk at once, in case the app is gone before it's sent (it's sent at the next start).
+    if (this.endingSession()) this.persistPieces();
     // Pieces waiting for NVIDIA Parakeet can't go yet: Stop doesn't wait on them (they're finished below).
     const drained = await this.uploads.drain(rec.meetingId, this.o.hearing?.way() === "wait" ? Math.min(this.limits.drainMs, 3000) : this.limits.drainMs);
     if (!["not_recording", "gone", "unpaired"].includes(reason)) {
@@ -764,6 +770,38 @@ export class Controller extends EventEmitter {
   onPower(kind) {
     if (mustBeVisible(this.state.phase)) this.dispatch({ type: "stop", reason: kind });
     else if (this.state.phase === "asking") this.dispatch({ type: "ask_timeout" });
+  }
+
+  /**
+   * The computer is shutting down, restarting or signing out (Windows sends no "before-quit" then).
+   * The notes stop as for sleep, and what's recorded goes to disk without waiting on the network:
+   * the pieces in memory now, and the end of the meeting once the capture page hands it over. If
+   * the app doesn't get to send them, they're sent, and the meeting finished, when it starts again.
+   */
+  onSessionEnding() {
+    this.sessionEndingAt = Date.now();
+    this.onPower("shutdown");
+    this.persistPieces();
+  }
+
+  /** The session ends now (Windows may close the app any moment): what's still only in memory goes to disk. */
+  onSessionEnd() {
+    this.sessionEndingAt ||= Date.now();
+    this.persistPieces();
+  }
+
+  /** A shutdown began lately (one that was cancelled is forgotten after a while). */
+  endingSession() {
+    return Boolean(this.sessionEndingAt) && Date.now() - this.sessionEndingAt < 2 * 60_000;
+  }
+
+  persistPieces() {
+    try {
+      const n = this.uploads.persist();
+      if (n) this.log(`shutdown: ${n} piece(s) kept on disk for the next start`);
+    } catch (err) {
+      this.log(`shutdown: couldn't keep the pieces (${/** @type {any} */ (err)?.message ?? err})`);
+    }
   }
 
   /** From the tray: "Take notes now", or `inPerson` "Take notes in the room" (the mic only). */
