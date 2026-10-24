@@ -529,7 +529,13 @@ export function setupVoice(o) {
     if (problem) return `${problem}.`;
     const way = meetingWay();
     if (way === "server") {
-      const why = local.isInstalled() && local.crashing() ? "NVIDIA Parakeet keeps stopping on this computer, so for now " : settings.get().voice.onDevice === false ? "Private speech is off, so " : "";
+      const why = local.unavailable()
+        ? `NVIDIA Parakeet can't run on this computer (${local.unavailable()}), so `
+        : local.isInstalled() && local.crashing()
+          ? "NVIDIA Parakeet keeps stopping on this computer, so for now "
+          : settings.get().voice.onDevice === false
+            ? "Private speech is off, so "
+            : "";
       return `${why}Build-a-bot's servers turn the call's audio into text, and throw the audio away.`;
     }
     if (local.isInstalled()) return local.crashing() ? "NVIDIA Parakeet keeps stopping on this computer. It tries again in a few minutes." : "NVIDIA Parakeet turns calls into text on this computer: the audio never leaves it.";
