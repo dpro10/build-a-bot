@@ -1109,3 +1109,25 @@ Diego, on the audit's first two items: "Okay, fix the web search one and the Gma
   - **Apps share the room the built-ins leave** (48 tools in all; the built-ins now take 21). With Gmail and Calendar, they get 14 and 13. Before, the second app got whatever was left.
   - Composio's Gmail recipients (`recipient_email`, `extra_recipients`) are recognized, so a send to a known contact or to yourself isn't treated as someone new.
 - **Unchanged:** a Gmail reply is medium risk, because its name doesn't say "email" (a new email is high). On Trusted helper, the bot can reply to a known contact without asking. Deleting an event may not make Calendar's cut.
+
+## Decision: the rest of the audit's fixes, simple and correct (Diego, 2026-10-24)
+
+Diego, on the rest of the October 23 bug report: "ok, go ahead an just do the rest of the fixes, keep it simple yet correct. dont try and overengineer for small safety issues. Go over your work when your done. we need this to be great for the judges."
+
+**What changes for people (and the judges' guide says so):**
+- **Before signing in, it's chat:** the five free messages and the web lookups they make. Calls, routines, meeting notes, reading scanned pages, voice typing's AI cleanup and phone codes wait for an email. The $5 of starter credit comes with signing in (the app already said so). A guest's routines wait for the sign-in instead of running every day forever. Demo mode, where nothing real is charged, keeps credit open before signing in.
+- **A daily budget in dollars for the whole site:** `SITE_DAILY_USD`, $10 by default (0 turns it off), on everything we pay for. When it's spent, what costs money waits for midnight UTC; people's own AI keys keep working. Message counts alone couldn't bound the bill.
+- **Kimi K3 is only for accounts that have added credit** (it costs about 60 times what Lightning does). Every other included model stays open.
+- **A desktop app paired before signing in is unpaired by the sign-in** (on a shared computer it could be someone else's). It pairs again in a minute.
+- **Purchases always ask first.** No app says a price up front, so with a spending cap set, a purchase now asks instead of being refused, and the Limits card says so.
+- **A phone belongs to one account.** Linking it unlinks it from any other account's bots.
+- **Phone calls last up to 15 minutes**, on every line, and a phone can call 20 times an hour.
+
+**Set in Vercel when convenient:** `GITHUB_TOKEN` (any read-only token) makes the download page's release check count against it instead of GitHub's 60 calls an hour. Without it, the page now keeps the last good list through GitHub's refusals.
+
+**For Diego to decide (from the desktop fixes):** if NVIDIA Parakeet can't run on a computer, voice typing still sends the recording to a server that has its own speech-to-text (the documented fallback from 2026-10-16). build-a-bot.site has none, so nothing is ever sent there; closing the fallback for other servers is a small change.
+
+**Not changed:**
+- A link with a trailing backslash (`/pricing\`) still gives a 500 rather than a 404: it happens inside Next.js, before our code.
+- Next.js stays on 16.3.8: its advisories don't apply here, and a minor-version bump right before judging isn't worth the risk.
+- Turns cut off mid-way still aren't charged, and many messages sent at the same moment with a cent left can all run (small, and bounded by the daily budget).

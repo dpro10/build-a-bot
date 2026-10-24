@@ -94,8 +94,8 @@ describe.skipIf(!url)("on real Postgres, as on Supabase", () => {
   it("counts sign-in attempts per window", async () => {
     const { rateLimit } = await import("@/lib/safety/ratelimit");
     const db = await getDb();
-    expect(await rateLimit(db, "pg:test", 2, 900)).toEqual({ ok: true, remaining: 1 });
-    expect(await rateLimit(db, "pg:test", 2, 900)).toEqual({ ok: true, remaining: 0 });
+    expect(await rateLimit(db, "pg:test", 2, 900)).toMatchObject({ ok: true, remaining: 1 });
+    expect(await rateLimit(db, "pg:test", 2, 900)).toMatchObject({ ok: true, remaining: 0 });
     expect((await rateLimit(db, "pg:test", 2, 900)).ok).toBe(false);
   });
 

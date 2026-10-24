@@ -26,6 +26,7 @@ const { createBot } = await import("@/lib/bots/create");
 const { runTurn } = await import("@/lib/agent/run");
 const { ensureConversation } = await import("@/lib/channels/outbound");
 const { checkSpend, recordUsage } = await import("@/lib/billing/usage");
+const { hasCredit, creditRefusal } = await import("@/lib/billing/credit");
 const { FAIR_USE } = await import("@/lib/billing/prices");
 const { buildToolset } = await import("@/lib/tools/registry");
 const { webSearch } = await import("@/lib/tools/builtin/web");
@@ -353,5 +354,42 @@ describe("what isn't set up is said plainly, once", () => {
     // The limit, and nothing about credit (or switching to its own key: it's on one).
     expect(res.text).toBe("You've sent 100,000 messages on your own AI this month, the fair-use limit. It resets on the 1st.");
     expect(notices).toEqual([]);
+  });
+});
+
+describe("credit, before signing in and across the site", () => {
+
+  it("before signing in: the free messages and their lookups, and nothing else that costs money", async () => {
+    const [guest] = await db.insert(schema.users).values({ id: "usr_guest_spend", timezone: "UTC" }).returning();
+    expect(await checkSpend(db, guest, "included")).toEqual({ ok: true });
+    expect(await checkSpend(db, guest, "lookup")).toEqual({ ok: true });
+    const call = await checkSpend(db, guest, "call");
+    expect(call).toMatchObject({ ok: false, code: "sign_in" });
+    expect(!call.ok && call.message).toMatch(/^Sign in with your email to do that \(it's free\): your \$5\.00 of starter credit comes with it\.$/);
+    expect(await hasCredit(db, guest.id)).toBe(false);
+    expect(await creditRefusal(db, guest.id)).toMatch(/^Sign in with your email/);
+    // Signed in, the starter credit is there.
+    expect(await hasCredit(db, owner.id)).toBe(true);
+  });
+
+  it("the day's budget for the whole site stops what costs money, not people's own AI keys", async () => {
+    const before = process.env.SITE_DAILY_USD;
+    process.env.SITE_DAILY_USD = "0.01";
+    try {
+      const [spender] = await db.insert(schema.users).values({ id: "usr_budget", email: "budget@example.com", emailVerifiedAt: new Date(), timezone: "UTC" }).returning();
+      expect(await checkSpend(db, spender, "included")).toEqual({ ok: true });
+      await recordUsage(db, spender.id, { costMicros: 10_000 });
+      expect(await checkSpend(db, spender, "included")).toMatchObject({ ok: false, code: "site_budget" });
+      expect(await creditRefusal(db, spender.id)).toMatch(/today's budget/);
+      expect(await checkSpend(db, spender, "ownBrain")).toEqual({ ok: true });
+    } finally {
+      if (before === undefined) delete process.env.SITE_DAILY_USD;
+      else process.env.SITE_DAILY_USD = before;
+    }
+  });
+
+  it("Kimi K3 is the one included model that waits for credit you've added", async () => {
+    const { INCLUDED_MODELS, needsAddedCredit } = await import("@/lib/models/catalog");
+    expect(INCLUDED_MODELS.filter((m) => needsAddedCredit(m.id)).map((m) => m.label)).toEqual(["Kimi K3"]);
   });
 });

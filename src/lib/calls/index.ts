@@ -174,13 +174,20 @@ export async function endingCall(db: Db, callId: string): Promise<Call | null> {
   return row ?? null;
 }
 
-/** Calls still "active" long after any call could last: the voice server went away mid-call (a restart). */
+/**
+ * Calls still "active" long after any call could last (the voice server went away mid-call: a
+ * restart, a power loss), and ones it never picked up (the caller hung up before it did).
+ */
 export async function closeStaleCalls(db: Db, now = new Date()): Promise<void> {
   const cutoff = new Date(now.getTime() - (Math.max(MAX_CALL_MINUTES.web, MAX_CALL_MINUTES.phone) + 15) * 60_000);
   await db
     .update(schema.calls)
     .set({ status: "failed", endedAt: now })
     .where(and(eq(schema.calls.status, "active"), lt(schema.calls.startedAt, cutoff)));
+  await db
+    .update(schema.calls)
+    .set({ status: "failed", endedAt: now })
+    .where(and(eq(schema.calls.status, "pending"), lt(schema.calls.createdAt, new Date(now.getTime() - PENDING_FOR_MS))));
 }
 
 async function botAndOwner(db: Db, call: Call): Promise<{ bot: Bot; owner: User } | null> {
@@ -433,8 +440,8 @@ export async function endCall(db: Db, call: Call, report: CallReportIn): Promise
     { callId: call.id, durationS, turns: turns.length, latencyP50Ms: summary.latency.p50Ms, model: model.id, engine: summary.engine, speaker: ended.speaker },
     costMicros,
   );
-  // The owner's calls show in the bot's chat, with the transcript.
-  if (ended.speaker === "owner" && turns.length > 1) {
+  // The owner's calls show in the bot's chat, with the transcript (a call where they never spoke doesn't).
+  if (ended.speaker === "owner" && turns.length > 1 && turns.some((t) => t.role === "caller")) {
     const web = await ensureConversation(db, bot.id, "web", "owner");
     await db.insert(schema.messages).values({
       id: sortableId("msg"),

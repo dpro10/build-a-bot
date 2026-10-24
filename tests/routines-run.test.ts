@@ -177,4 +177,51 @@ describe("routine results", () => {
     expect(await res.json()).toMatchObject({ ran: 0, outcome: "paused" });
     expect(await newInChat(bot, before)).toHaveLength(0);
   });
+
+  it("the day's limit counts runs, not the notes about skipped ones", async () => {
+    const { bot, brief } = await botWithBrief("Counter");
+    const { receipt } = await import("@/lib/agent/run");
+    for (let i = 0; i < 30; i++) await receipt(db, bot, "routine", "blocked", `Skipped “${brief.title}”: daily proactive limit reached`, { scheduleId: brief.id });
+    await makeDue(brief);
+    const res = await runDueSchedules(db, new Date(), 25, { scheduleId: brief.id });
+    expect(res.runs).toEqual([{ scheduleId: brief.id, outcome: "ok" }]);
+  });
+
+  it("a routine turned off while the minute's list is being worked through stays off", async () => {
+    const { brief } = await botWithBrief("Offswitch");
+    await makeDue(brief);
+    // Turned off after the list was read: the claim finds it inactive and leaves it.
+    const [due] = await db.select().from(schema.schedules).where(eq(schema.schedules.id, brief.id));
+    await db.update(schema.schedules).set({ active: false }).where(eq(schema.schedules.id, brief.id));
+    const res = await runDueSchedules(db, new Date(), 25, { scheduleId: brief.id });
+    expect(res.runs).toEqual([]);
+    const [after] = await db.select().from(schema.schedules).where(eq(schema.schedules.id, brief.id));
+    expect(after.active).toBe(false);
+    expect(after.nextRunAt?.getTime()).toBe(due.nextRunAt?.getTime());
+  });
+
+  it("an account that hasn't signed in keeps its routines for when it does", async () => {
+    const [guest] = await db.insert(schema.users).values({ id: "usr_routines_guest", timezone: "UTC" }).returning();
+    const made = await createBot(db, guest, {
+      avatar: "blip",
+      color: "ocean",
+      name: "Waiting",
+      jobs: ["reminders"],
+      brain: { kind: "included", model: "nvidia/Nemotron-3_5-Lightning" },
+      connectors: [],
+      trust: "ask",
+      channels: [],
+      contact: {},
+      ageConfirmed: true,
+      timezone: "UTC",
+      morningBrief: { time: "08:00" },
+    });
+    if (!made.ok) throw new Error(made.error);
+    const [brief] = await db.select().from(schema.schedules).where(eq(schema.schedules.botId, made.bot.id));
+    await makeDue(brief);
+    expect((await runDueSchedules(db, new Date(), 25, { scheduleId: brief.id })).runs).toEqual([]);
+    // Signed in: it runs at the next tick.
+    await db.update(schema.users).set({ email: "waiting@example.com", emailVerifiedAt: new Date() }).where(eq(schema.users.id, guest.id));
+    expect((await runDueSchedules(db, new Date(), 25, { scheduleId: brief.id })).runs).toEqual([{ scheduleId: brief.id, outcome: "ok" }]);
+  });
 });

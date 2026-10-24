@@ -9,14 +9,15 @@ import * as React from "react";
 
 export type CallStatus = "idle" | "starting" | "connecting" | "listening" | "hearing" | "thinking" | "speaking" | "ended" | "error";
 export type CallLine = { id: number; role: "caller" | "bot"; text: string; cut?: boolean };
-export type CallTask = { id: number; request: string; state: "started" | "done" | "failed"; result?: string };
+/** `status` is the app's word for how it went: "failed" with "ok" means it's waiting for the owner's OK. */
+export type CallTask = { id: number; request: string; state: "started" | "done" | "failed"; status?: string; result?: string };
 
 type ServerEvent =
   | { type: "ready"; outputRate: number; bot?: string; engine?: string; talker?: string }
   | { type: "state"; state: "listening" | "hearing" | "thinking" | "speaking" }
   | { type: "transcript"; role: "caller" | "bot"; text: string }
   | { type: "latency"; ms: number }
-  | { type: "task"; state: "started" | "done" | "failed"; request: string; result?: string }
+  | { type: "task"; state: "started" | "done" | "failed"; request: string; status?: string; result?: string }
   | { type: "interrupted"; heard: string }
   | { type: "mark"; name: string }
   | { type: "clear" }
@@ -164,7 +165,7 @@ export function useVoiceCall(botId: string) {
             const i = [...prev].reverse().findIndex((t) => t.request === e.request && t.state === "started");
             if (i < 0) return prev;
             const idx = prev.length - 1 - i;
-            return prev.map((t, j) => (j === idx ? { ...t, state: e.state, result: e.result } : t));
+            return prev.map((t, j) => (j === idx ? { ...t, state: e.state, status: e.status, result: e.result } : t));
           });
           break;
         case "interrupted":
