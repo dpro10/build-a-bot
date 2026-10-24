@@ -13,7 +13,7 @@ export async function GET(req: Request, ctx: RouteCtx<{ botId: string; fileId: s
   const a = await authedBot(botId);
   if (!a.ok) return a.res;
   const file = await getFile(a.db, botId, fileId);
-  if (!file || file.status === "uploading") return apiError(404, "That file isn't in the Library anymore.");
+  if (!file || file.status === "uploading") return apiError(404, "That file isn't there anymore.");
   const bytes = await readBytes(file.storageKey);
   if (!bytes) return apiError(404, "That file's contents are gone.");
   const inline = new URL(req.url).searchParams.get("download") !== "1" && (file.kind === "pdf" || (file.kind === "image" && /^image\/(png|jpeg|gif|webp)$/.test(file.mime)));

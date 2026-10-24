@@ -390,7 +390,7 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
       // from asking again and having it done twice.
       const friendly = err instanceof LlmError ? err.friendly : "Something went wrong while thinking.";
       const didSome = state.parts.some((p) => p.type === "tool_result" && p.status === "ok" && toolset.byName.get(p.name)?.effect !== "read");
-      const text = didSome ? `${friendly} Part of it was already done before that (it's in Activity), so check there before asking again.` : friendly;
+      const text = didSome ? `${friendly} Part of it was already done before that (it's in Settings › Activity), so check there before asking again.` : friendly;
       await receipt(db, bot, "system", "error", "Brain error", { error: truncate(errorMessage(err), 300), model: brain.model });
       finalText = finalText ? `${finalText}\n\n${text}` : text;
       brainFailed = true;

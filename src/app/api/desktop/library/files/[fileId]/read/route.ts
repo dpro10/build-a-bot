@@ -16,7 +16,7 @@ export async function POST(req: Request, ctx: RouteCtx<{ fileId: string }>) {
   const a = await deviceBot(req, parsed.data.botId);
   if (!a.ok) return a.res;
   const [file] = await a.db.select().from(schema.files).where(and(eq(schema.files.id, fileId), eq(schema.files.botId, a.bot.id))).limit(1);
-  if (!file || !file.sourceRef?.startsWith(`desktop:${a.device.id}:`)) return apiError(404, "That file isn't in the Library anymore.");
+  if (!file || !file.sourceRef?.startsWith(`desktop:${a.device.id}:`)) return apiError(404, "That file isn't there anymore.");
   const [marked] = await a.db.update(schema.files).set({ status: "reading", error: null, updatedAt: new Date() }).where(eq(schema.files.id, file.id)).returning();
   after(async () => {
     await readLibraryFile(a.db, file.id);

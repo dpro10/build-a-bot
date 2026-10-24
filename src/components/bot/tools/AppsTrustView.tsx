@@ -46,9 +46,11 @@ export type AppsTrustProps = {
   timezone: string;
   /** From the sign-in callbacks: ?connected=1 or ?connect_error=… */
   flash: { connected: boolean; error: string | null };
+  /** The Apps & channels heading and its tabs. */
+  intro: React.ReactNode;
 };
 
-export function AppsTrustView({ bot, connections: initial, composioLive, comingSoon, timezone, flash }: AppsTrustProps) {
+export function AppsTrustView({ bot, connections: initial, composioLive, comingSoon, timezone, flash, intro }: AppsTrustProps) {
   const botId = bot.id;
   const soon = React.useMemo(() => new Set(comingSoon), [comingSoon]);
   const [trust, setTrust] = React.useState<TrustLevel>(bot.trust);
@@ -340,12 +342,7 @@ export function AppsTrustView({ bot, connections: initial, composioLive, comingS
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-10 px-4 py-6 sm:px-6 sm:py-8">
-        <header className="flex flex-col gap-1">
-          <h1 className="font-display text-2xl font-bold sm:text-3xl">Apps & trust</h1>
-          <p className="max-w-2xl text-muted-foreground">
-            What {bot.name} can use, and how much it does on its own. Every action follows these rules and gets a receipt.
-          </p>
-        </header>
+        {intro}
 
         <TrustSection botId={botId} botName={bot.name} trust={trust} onTrustChange={setTrust} apps={pickerApps} />
 

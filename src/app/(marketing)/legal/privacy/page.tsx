@@ -32,12 +32,12 @@ const n = (id: string) => SECTIONS.findIndex((s) => s.id === id) + 1;
 const title = (id: string) => `${n(id)}. ${SECTIONS[n(id) - 1].title}`;
 
 const SUBPROCESSORS: { name: string; purpose: string; data: string }[] = [
-  { name: "Vercel", purpose: "Hosting and running the app, and storing your bots' files (the Library)", data: "Everything passing through the app while it's processed, and the files you give your bots" },
+  { name: "Vercel", purpose: "Hosting and running the app, and storing the files you give your bots", data: "Everything passing through the app while it's processed, and the files you give your bots" },
   { name: "Our managed Postgres host", purpose: "Storing your account and bots", data: "Account, bots, messages, receipts (secrets stay encrypted)" },
   {
     name: "Nebius Token Factory",
     purpose: "The included open models",
-    data: "Messages and context when your bot uses an included model, including the meeting and call transcripts it works from; photos and scanned pages from your Library; dictated text, when voice typing's cleanup runs there",
+    data: "Messages and context when your bot uses an included model, including the meeting and call transcripts it works from; photos and scanned pages you gave your bot; dictated text, when voice typing's cleanup runs there",
   },
   { name: "Your chosen AI provider", purpose: "Your own API key, if you add one", data: "Messages and context, sent to that provider only" },
   { name: "Tavily", purpose: "Web search, reading web pages and checking facts", data: "Search queries, short facts to check (never your files) and the addresses of pages your bot reads" },
@@ -163,7 +163,7 @@ export default function PrivacyPage() {
             selected (&ldquo;Hey Otto, add this to my calendar&rdquo;), that text goes to your bot with your request and is kept in your chat with
             it.
           </p>
-          <h3>Your files (the Library)</h3>
+          <h3>Your files</h3>
           <p>
             Files you give a bot: ones you upload, ones you send it on Telegram or Discord, and the folder you sync from the desktop app (nothing
             else on your computer is read). They&apos;re stored privately, with their text, so your bot can read and quote them. Photos and scanned
@@ -277,7 +277,7 @@ export default function PrivacyPage() {
           <ul>
             <li>We keep your data while your account is open, so your bots remember what they should.</li>
             <li>Delete a bot and its messages, memories, notes, meetings, files and receipts go with it. Delete your account and everything goes.</li>
-            <li>Files in the Library stay until you delete them. Call transcripts are part of your chat with the bot, and go with it.</li>
+            <li>Files you give a bot stay until you delete them. Call transcripts are part of your chat with the bot, and go with it.</li>
             <li>You can delete individual memories and notes in the app at any time.</li>
             <li>
               Meeting transcripts are deleted after 90 days, unless you choose 30 days or to keep them. The notes from a meeting stay until you

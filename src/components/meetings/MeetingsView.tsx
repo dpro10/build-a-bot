@@ -321,7 +321,7 @@ function DesktopCard({ bot, devices, blocked, audioStays }: { bot: BotFace; devi
         </span>
         <div className="min-w-0">
           <h3 className="flex flex-wrap items-center gap-2 font-display text-lg leading-tight font-semibold">
-            The desktop app <Badge tone="primary">Beta</Badge>
+            The desktop app
           </h3>
           <p className="mt-1 text-sm text-muted-foreground">For Mac and Windows. {bot.name} sits at the bottom of your screen while it listens.</p>
         </div>

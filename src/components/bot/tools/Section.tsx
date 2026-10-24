@@ -1,7 +1,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
-/** A titled block on the bot dashboard pages (Apps & trust, Channels). */
+/** A titled block on the bot dashboard pages (Apps & channels). */
 export function Section({
   id,
   title,

@@ -15,7 +15,7 @@ test("the landing page says what thinks, above the fold and in its description",
   await expect(page.getByText(/whole time it listens|stays on your screen the whole/)).toHaveCount(0);
 });
 
-test("the safety page and the privacy policy describe the audio, the Library and calls as they are", async ({ page }) => {
+test("the safety page and the privacy policy describe the audio, your files and calls as they are", async ({ page }) => {
   await page.goto("/safety");
   await expect(page.getByText("You can always see it's listening.", { exact: true })).toBeVisible();
   await expect(page.getByText("The audio stays on your computer.")).toBeVisible();
@@ -23,7 +23,7 @@ test("the safety page and the privacy policy describe the audio, the Library and
 
   await page.goto("/legal/privacy");
   await expect(page.getByText("The audio never reaches our servers.")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Your files (the Library)" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Your files", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Calls", exact: true })).toBeVisible();
   await expect(page.getByText(/Calls with your bot aren.t recorded/)).toBeVisible();
   // No speech-to-text service here, so none is listed; nothing that's never called is listed either.

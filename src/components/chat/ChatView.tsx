@@ -44,7 +44,7 @@ const TOOL_ACTIVITY: Record<string, string> = {
   wikipedia_lookup: "Looking it up",
   search_files: "Searching your files",
   read_file: "Reading your file",
-  list_files: "Looking through your Library",
+  list_files: "Looking through your files",
   make_flashcards: "Making flashcards",
   make_quiz: "Writing a quiz",
 };

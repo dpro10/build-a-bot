@@ -53,16 +53,21 @@ export function LibraryView({
   initialFiles,
   initialUsage,
   initialSets,
+  onCountChange,
 }: {
   botId: string;
-  bot: { name: string; avatar: AvatarId; color: ColorwayId };
+  /** role: a tutor's empty Library asks for class files; anyone else's for any files. */
+  bot: { name: string; avatar: AvatarId; color: ColorwayId; role?: string | null };
   /** Files can be added here (the Library's storage is set up). */
   canAdd: boolean;
   initialFiles: FileView[];
   initialUsage: { bytes: number; maxBytes: number };
   initialSets: StudySetListItem[];
+  /** How many files there are now (Memory's Files tab shows it). */
+  onCountChange?: (count: number) => void;
 }) {
   const [files, setFiles] = React.useState(initialFiles);
+  React.useEffect(() => onCountChange?.(files.length), [files.length, onCountChange]);
   const [usage, setUsage] = React.useState(initialUsage);
   const [sets, setSets] = React.useState(initialSets);
   const [uploads, setUploads] = React.useState<Upload[]>([]);
@@ -104,7 +109,7 @@ export function LibraryView({
           setUploads((u) => u.map((x) => (x.key === key ? { ...x, phase: up.phase, progress: up.progress ?? x.progress, error: up.error } : x))),
         )
           .then((done) => {
-            if (done.status === "ready") toast.success(`${done.name} is in the Library`, { description: `${bot.name} can read it now.` });
+            if (done.status === "ready") toast.success(`${done.name} is added`, { description: `${bot.name} can read it now.` });
             // Read or not, it's in the list now (a file that couldn't be read says why there).
             setUploads((u) => u.filter((x) => x.key !== key));
             void refresh();
@@ -190,10 +195,10 @@ export function LibraryView({
         }}
       />
 
-      <header className="flex flex-wrap items-end justify-between gap-4">
+      <header className="flex flex-wrap items-center justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="font-display text-2xl font-bold">Library</h1>
-          <p className="mt-1 text-muted-foreground">Files {bot.name} can read, and the flashcards and quizzes it made from them.</p>
+          <h2 className="sr-only">Files</h2>
+          <p className="text-muted-foreground">Files {bot.name} can read, and the flashcards and quizzes it made from them.</p>
         </div>
         {canAdd && !empty ? (
           <Button onClick={() => pickRef.current?.click()}>
@@ -454,12 +459,30 @@ function UsageMeter({ bytes, maxBytes, count }: { bytes: number; maxBytes: numbe
   );
 }
 
-function EmptyLibrary({ botId, bot, canAdd, onPick }: { botId: string; bot: { name: string; avatar: AvatarId; color: ColorwayId }; canAdd: boolean; onPick: () => void }) {
-  const ideas = [
-    { icon: <ScrollText className="size-4" />, title: "A syllabus", body: "Exam dates, a study plan, what's on each test" },
-    { icon: <Layers className="size-4" />, title: "Lecture slides", body: "Flashcards for every term, with the slide it's on" },
-    { icon: <ListChecks className="size-4" />, title: "Your notes", body: "A practice quiz, scored, with explanations" },
-  ];
+function EmptyLibrary({
+  botId,
+  bot,
+  canAdd,
+  onPick,
+}: {
+  botId: string;
+  bot: { name: string; avatar: AvatarId; color: ColorwayId; role?: string | null };
+  canAdd: boolean;
+  onPick: () => void;
+}) {
+  // A tutor asks for class files; any other bot takes any files, for work or for home.
+  const tutor = bot.role === "tutor";
+  const ideas = tutor
+    ? [
+        { icon: <ScrollText className="size-4" />, title: "A syllabus", body: "Exam dates, a study plan, what's on each test" },
+        { icon: <Layers className="size-4" />, title: "Lecture slides", body: "Flashcards for every term, with the slide it's on" },
+        { icon: <ListChecks className="size-4" />, title: "Your notes", body: "A practice quiz, scored, with explanations" },
+      ]
+    : [
+        { icon: <ScrollText className="size-4" />, title: "A report or contract", body: "Ask anything and get the answer with its page" },
+        { icon: <Layers className="size-4" />, title: "Slides or a deck", body: "The key points, slide by slide" },
+        { icon: <BookOpenCheck className="size-4" />, title: "Notes or a manual", body: "Answers from them, or a quiz to learn them" },
+      ];
   return (
     <div className="flex flex-col gap-5">
       <button
@@ -469,9 +492,11 @@ function EmptyLibrary({ botId, bot, canAdd, onPick }: { botId: string; bot: { na
         className="group flex flex-col items-center gap-3 rounded-[2rem] border-2 border-dashed border-primary/30 bg-gradient-to-b from-primary-soft/40 to-card px-6 py-12 text-center transition hover:border-primary/60 disabled:pointer-events-none"
       >
         <Avatar avatar={bot.avatar} color={bot.color} size={96} mood="happy" />
-        <div className="font-display text-xl font-semibold">Give {bot.name} your class files</div>
+        <div className="font-display text-xl font-semibold">{tutor ? `Give ${bot.name} your class files` : `Give ${bot.name} files to work from`}</div>
         <p className="max-w-md text-sm text-muted-foreground">
-          Syllabi, slides, notes and readings, even photos of handwritten notes. {bot.name} reads them, answers from them, and turns them into flashcards and practice quizzes.
+          {tutor
+            ? `Syllabi, slides, notes and readings, even photos of handwritten notes. ${bot.name} reads them, answers from them, and turns them into flashcards and practice quizzes.`
+            : `Documents, PDFs, slides and notes, even photos of pages. ${bot.name} reads them, answers from them with the page it found it on, and can turn them into flashcards or a practice quiz.`}
         </p>
         {canAdd ? (
           <span className="mt-1 inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-[0_6px_20px_-6px_rgb(109_77_255/0.6)] transition group-hover:bg-primary-hover">

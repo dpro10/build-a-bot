@@ -17,7 +17,7 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string; fileId: 
   const a = await authedBot(botId);
   if (!a.ok) return a.res;
   const file = await getFile(a.db, botId, fileId);
-  if (!file) return apiError(404, "That file isn't in the Library anymore.", { code: "gone" });
+  if (!file) return apiError(404, "That file isn't there anymore.", { code: "gone" });
   if (file.status === "ready") return json({ file: fileView(file) });
   // Claimed once: two of these at the same moment read the file once (not twice, into duplicate passages).
   const [marked] = await a.db

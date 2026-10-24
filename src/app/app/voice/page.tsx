@@ -11,7 +11,6 @@ import { isDesktopApp } from "@/components/account/bridge-shared";
 import { PageContainer, PageHeader, SectionHeading } from "@/components/account/PageHeader";
 import { DictionaryEditor } from "@/components/voice/DictionaryEditor";
 import { VoicePillMock } from "@/components/voice/VoicePillMock";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = { title: "Voice typing" };
@@ -73,7 +72,6 @@ export default async function VoicePage() {
       <PageHeader
         title="Voice typing"
         description="Hold a key in any app and talk. What you meant is typed where your cursor is: no ums, the right punctuation, your names spelled your way. It works in the desktop app."
-        actions={<Badge tone="primary">Beta</Badge>}
       />
 
       <section aria-label="What voice typing does" className="mb-10 overflow-hidden rounded-3xl border border-border bg-card shadow-soft">

@@ -67,7 +67,7 @@ export default async function RoutinesPage({ params }: { params: Promise<{ botId
   const autoHint = usualIsChat
     ? others.length
       ? `Right here in your chat. Pick ${others.slice(0, 2).join(" or ")} to get it there instead.`
-      : `Right here in your chat.${suggest.length ? ` Set up ${joinList(suggest.slice(0, 3), "or")} in Channels to get it there.` : ""}`
+      : `Right here in your chat.${suggest.length ? ` Set up ${joinList(suggest.slice(0, 3), "or")} in Apps & channels to get it there.` : ""}`
     : `${channelLabel(usual!.kind)}, plus a copy in your chat.`;
 
   const schedules: ScheduleView[] = rows.map((r) => ({

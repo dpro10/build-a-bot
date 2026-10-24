@@ -2,7 +2,7 @@
 import * as React from "react";
 
 /**
- * Deep links like `/tools#gmail` or `/channels#telegram` (from the setup checklist):
+ * Deep links like `/tools#gmail` or `/tools?tab=channels#discord` (from the setup checklist):
  * scroll the matching element into view and briefly highlight it. Returns the id
  * that's highlighted right now, or null. `focus(id)` does the same on demand.
  */

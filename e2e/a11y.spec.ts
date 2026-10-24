@@ -57,7 +57,7 @@ test("dashboard pages", async ({ page }) => {
   });
   expect(asked.ok()).toBeTruthy();
   await asked.text();
-  for (const tab of ["", "/meetings", "/tools", "/channels", "/routines", "/activity", "/memory", "/settings"]) await scan(page, `/app/bots/${id}${tab}`);
+  for (const tab of ["", "/meetings", "/memory", "/memory?tab=files", "/tools", "/tools?tab=channels", "/routines", "/settings", "/settings?tab=activity"]) await scan(page, `/app/bots/${id}${tab}`);
   for (const path of ["/app/approvals", "/app/billing", "/app/voice", "/app/desktop", "/app/account"]) await scan(page, path);
 });
 
@@ -122,7 +122,7 @@ test("dark mode", async ({ page }) => {
   const { id } = await res.json();
   // A request by voice with selected text: the quote in the owner's bubble is checked in dark too.
   await (await page.request.post("/api/voice/ask", { data: { botId: id, text: "Remind me about this tomorrow at 9.", selection: "Team lunch Friday at 12:30." } })).text();
-  for (const path of ["/", "/pricing", "/safety", "/build", `/app/bots/${id}`, `/app/bots/${id}/meetings`, `/app/bots/${id}/tools`, `/app/bots/${id}/channels`, `/app/bots/${id}/settings`, "/app/billing", "/app/desktop"]) {
+  for (const path of ["/", "/pricing", "/safety", "/build", `/app/bots/${id}`, `/app/bots/${id}/meetings`, `/app/bots/${id}/memory?tab=files`, `/app/bots/${id}/tools`, `/app/bots/${id}/tools?tab=channels`, `/app/bots/${id}/settings`, `/app/bots/${id}/settings?tab=activity`, "/app/billing", "/app/desktop"]) {
     await scan(page, path);
   }
 });

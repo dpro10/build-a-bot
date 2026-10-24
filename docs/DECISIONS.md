@@ -1202,3 +1202,18 @@ Diego: "theres too many recipes, lets get rid of meal planner, study buddy, habi
 - **Nine left:** tutor, job applier, inbox zero, language partner, meeting buddy, fitness coach, PR patrol, deep researcher and family hub.
 - **The Meal planner role goes with its recipe.** The builder's ready-made bots are the Tutor, Job applier, Language partner and Fitness coach. A bot made as a meal planner keeps its memories and works as a general assistant.
 - The removed recipes' pages are gone. A link to one shows the site's not-found page.
+
+## Decision: six bot tabs instead of nine (Diego, 2026-10-24)
+
+Diego: "Honestly, on the website, I feel like the desktop app shouldn't be marked as beta anymore. Also for the library, the files that you give it acess to dont have to be school related, they can be work related or perosnal stuff. Memories and files should be one section, there are to many right now. Activity and setting i feel like can be merged too. Maybe even channels and apps an trust can be combined. What do you think? I want to make the ui/ux a little more simple. give me a plan." Then, on the plan: "go ahead with all of it, use memory and apps & channels".
+
+- **The tabs:** Chat · Meetings · Memory · Apps & channels · Routines · Settings.
+  - **Memory** has Memories, Files (the Library, with its flashcards and quizzes), Notes and People. Files is `?tab=files`.
+  - **Apps & channels** (`/tools`) has Apps & trust and Channels (`?tab=channels`) under one heading.
+  - **Settings** has General and Activity (`?tab=activity`). Activity's Timeline or Deliveries is `?view=`.
+- **Old addresses redirect, query string and all** (`src/lib/bots/tab-links.ts`): `/library`, `/channels` and `/activity`. Links already sent in Slack, Discord or email, and older desktop apps, still land in the right place. "Add to Slack" now comes back to Apps & channels.
+- **Words that named the old tabs now name the new places:** "Settings › Activity", "Apps & channels" and "Memory › Files". That covers toasts, the account page, routines, Slack's message, the Discord command, and the bot's own messages and Library tool.
+- **People see "files", not "the Library":** the built-in app is called Files, and the tool's messages and the model's guidance say files. The code keeps its name.
+- **The Files wording is general:** "Give {bot} files to work from", with reports, contracts, decks, notes and manuals as examples. A tutor's empty Files keeps the class-files version.
+- **The desktop app isn't marked Beta** anywhere: the Meetings tab, its card and the voice typing page.
+- **Still to do:** the 2:48 demo video's recordings show the old nine tabs. Re-record them so the video matches the site.

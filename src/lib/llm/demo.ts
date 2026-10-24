@@ -372,7 +372,7 @@ function fileFor(text: string, system: string): string | null {
   if (attached) return attached;
   const quoted = /["“]([^"”]{2,160}\.[a-z0-9]{2,5})["”]/i.exec(text)?.[1];
   if (quoted) return quoted;
-  return /Your Library \([^)]*\):\n- (.+?) \(/.exec(system)?.[1] ?? null;
+  return /Your files \([^)]*\):\n- (.+?) \(/.exec(system)?.[1] ?? null;
 }
 
 /** Facts in a file's text: "Term: definition" lines and "X is Y." sentences. */
@@ -508,7 +508,7 @@ function planFromUser(text: string, tools: Set<string>, p: Persona, system: stri
   if (file && wish) return { calls: [call("read_file", { file })] };
   if (file && /\[Attached to this message/.test(text) && tools.has("search_files")) {
     const asked = text.split("\n\n[Attached")[0].replace(/^\(Sent (?:a file|files), no message\.\)$/, "").trim();
-    if (!asked) return { text: `Got it, ${file} is in my Library now. Want flashcards, a practice quiz, or a summary?` };
+    if (!asked) return { text: `Got it, I have ${file} now. Want flashcards, a practice quiz, or a summary?` };
     return { calls: [call("search_files", { query: asked.slice(0, 200) })] };
   }
 
@@ -814,7 +814,7 @@ function summarizeResults(results: { name: string; content: string; isError?: bo
         break;
       }
       case "list_files": {
-        out.push(/empty/i.test(content) ? "Your Library is empty. Drop files on the chat or use the paperclip, and I'll read them." : `Here's what's in your Library:\n${content}`);
+        out.push(/^No files yet/.test(content) ? "You haven't given me any files yet. Drop them on the chat or use the paperclip, and I'll read them." : `Here are your files:\n${content}`);
         break;
       }
       case "search_meetings": {
@@ -828,7 +828,7 @@ function summarizeResults(results: { name: string; content: string; isError?: bo
         if (!emails.length) {
           out.push(
             base === "read_inbox"
-              ? `Nothing in my own inbox yet. ${content.replace(/^No emails yet\.\s*/, "")} To let me read *your* inbox, connect Gmail or Outlook in Apps & trust.`
+              ? `Nothing in my own inbox yet. ${content.replace(/^No emails yet\.\s*/, "")} To let me read *your* inbox, connect Gmail or Outlook in Apps & channels.`
               : "Nothing in your inbox matched that.",
           );
           break;

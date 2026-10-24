@@ -25,7 +25,7 @@ export async function SetupChecklist({ botId }: { botId: string }) {
     // Only what can be finished here: not a channel that's coming soon.
     const def = CHANNEL_BY_KIND[c.kind];
     if (!channelUsable(def, demoMode, live)) continue;
-    todo.push({ label: `Set up ${def.name}`, href: `/app/bots/${botId}/channels#${c.kind}` });
+    todo.push({ label: `Set up ${def.name}`, href: `/app/bots/${botId}/tools?tab=channels#${c.kind}` });
   }
   for (const c of connections) {
     if (c.status !== "needs_auth" && c.status !== "error") continue;

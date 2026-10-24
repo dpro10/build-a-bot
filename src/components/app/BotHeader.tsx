@@ -14,15 +14,14 @@ import { CallButton } from "@/components/call/CallPanel";
 import { cn } from "@/lib/utils";
 import type { AvatarId, ColorwayId } from "@/lib/avatars";
 
+// Six tabs (Diego, 2026-10-24): Memory holds the files too (the Library), Apps & channels holds the
+// channels, and Settings holds the activity. The old addresses redirect (src/lib/bots/tab-links.ts).
 const TABS = [
   { href: "", label: "Chat" },
-  { href: "/library", label: "Library" },
   { href: "/meetings", label: "Meetings" },
-  { href: "/activity", label: "Activity" },
-  { href: "/tools", label: "Apps & trust" },
-  { href: "/channels", label: "Channels" },
-  { href: "/routines", label: "Routines" },
   { href: "/memory", label: "Memory" },
+  { href: "/tools", label: "Apps & channels" },
+  { href: "/routines", label: "Routines" },
   { href: "/settings", label: "Settings" },
 ];
 

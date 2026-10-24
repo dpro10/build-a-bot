@@ -7,7 +7,7 @@ import { cardInput, createStudySet, MAX_CARDS, MAX_QUESTIONS, questionInput, stu
 import { pagesReadRecently, sameLink } from "../sources";
 import { defineTool, type ToolContext } from "../types";
 
-const libraryUrl = (ctx: ToolContext) => `${appUrl()}/app/bots/${ctx.bot.id}/library`;
+const libraryUrl = (ctx: ToolContext) => `${appUrl()}/app/bots/${ctx.bot.id}/memory?tab=files`;
 
 /** Files named in a tool call → their ids (unknown names are just left out). */
 async function fileIds(ctx: ToolContext, names: string[] | undefined): Promise<string[]> {
@@ -21,8 +21,8 @@ async function fileIds(ctx: ToolContext, names: string[] | undefined): Promise<s
 
 export const listFilesTool = defineTool({
   name: "list_files",
-  title: "Look through the Library",
-  description: "List the files in your Library (what the owner gave you: syllabi, slides, notes, readings): name, pages and when it was added, newest first.",
+  title: "Look through its files",
+  description: "List the files the owner gave you (documents, PDFs, slides, notes, readings): name, pages and when it was added, newest first.",
   input: z.object({}),
   connectorId: "library",
   capabilityId: "read_files",
@@ -30,10 +30,10 @@ export const listFilesTool = defineTool({
   risk: "low",
   // Names the owner chose; the files' contents are what's outside content.
   taints: false,
-  summarize: () => "Look through the Library",
+  summarize: () => "Look through its files",
   async run(_a, ctx) {
     const files = await listFiles(ctx.db, ctx.bot.id);
-    if (!files.length) return { ok: true, content: `The Library is empty. The owner can add files with the paperclip in the chat, on the Library page (${libraryUrl(ctx)}), or by sending them on a chat app.`, summary: "Empty" };
+    if (!files.length) return { ok: true, content: `No files yet. The owner can add files with the paperclip in the chat, in Memory › Files (${libraryUrl(ctx)}), or by sending them on a chat app.`, summary: "Empty" };
     const lines = files.map((f) => {
       const status = f.status === "ready" ? pagesLabel(f.kind, f.pages) : f.status === "failed" ? `couldn't be read: ${f.error ?? "unknown reason"}` : "still being read";
       return `- ${f.name} · ${status} · added ${f.createdAt.toISOString().slice(0, 10)}`;
@@ -44,7 +44,7 @@ export const listFilesTool = defineTool({
 
 export const searchFilesTool = defineTool({
   name: "search_files",
-  title: "Search the Library",
+  title: "Search its files",
   description:
     "Search the owner's files for passages about something (a topic, a term, a date, an assignment). Returns the best passages with their file and page, so you can quote and cite them. Optionally only in some files.",
   input: z.object({
@@ -56,14 +56,14 @@ export const searchFilesTool = defineTool({
   effect: "read",
   risk: "low",
   taints: true,
-  summarize: (a) => `Search the Library for “${a.query}”`,
+  summarize: (a) => `Search its files for “${a.query}”`,
   async run(args, ctx) {
     const ids = args.files?.length ? await fileIds(ctx, args.files) : undefined;
     if (args.files?.length && !ids?.length) return { ok: false, error: `No file called ${args.files.map((f) => `“${f}”`).join(" or ")}. Use list_files to see the names.` };
     const hits = await searchLibrary(ctx.db, ctx.bot.id, args.query, { fileIds: ids, limit: 8 });
     if (!hits.length) {
       const any = (await listFiles(ctx.db, ctx.bot.id)).some((f) => f.status === "ready");
-      return { ok: true, content: any ? "Nothing in the Library matches. Try other words, or read_file to read a file from the start." : "The Library is empty.", summary: "No matches" };
+      return { ok: true, content: any ? "No file matches. Try other words, or read_file to read a file from the start." : "No files yet.", summary: "No matches" };
     }
     const body = hits.map((h) => `### ${h.fileName} · ${h.label}\n${h.text}`).join("\n\n");
     return { ok: true, content: body, summary: `${hits.length} passage${hits.length === 1 ? "" : "s"}` };
@@ -89,7 +89,7 @@ export const readFileTool = defineTool({
   summarize: (a) => `Read “${a.file}”${a.from_page ? ` from page ${a.from_page}` : ""}`,
   async run(args, ctx) {
     const file = await findFile(ctx.db, ctx.bot.id, args.file);
-    if (!file) return { ok: false, error: `No file called “${args.file}” in the Library. Use list_files to see the names.` };
+    if (!file) return { ok: false, error: `No file called “${args.file}”. Use list_files to see the names.` };
     const r = await readPassages(ctx.db, file.id, { from: args.from_page, to: args.to_page, part: args.part });
     if (!r.parts) return { ok: true, content: `Nothing in “${file.name}”${args.from_page ? " on those pages" : ""}.`, summary: file.name };
     const more = r.part < r.parts ? `\n\n(Part ${r.part} of ${r.parts}. Read on with part ${r.part + 1}.)` : r.parts > 1 ? `\n\n(Part ${r.part} of ${r.parts}: the end.)` : "";
@@ -119,7 +119,7 @@ const SOURCE_HINT =
 
 const studyReply = (ctx: ToolContext, what: string) =>
   ctx.channelKind === "web"
-    ? `${what} The owner sees it as a card they can study right here (and on the Library page). Say what's in it in a sentence and invite them to try it. Don't list the items again.`
+    ? `${what} The owner sees it as a card they can study right here (and in Memory › Files). Say what's in it in a sentence and invite them to try it. Don't list the items again.`
     : `${what} On this channel there's no card: offer to go through it here one at a time (ask, wait for their answer, then say if it's right), or to study it at ${libraryUrl(ctx)}.`;
 
 export const makeFlashcardsTool = defineTool({

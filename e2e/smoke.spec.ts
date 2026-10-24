@@ -100,8 +100,17 @@ test("every dashboard page renders for a signed-in owner", async ({ page }) => {
   });
   expect(created.ok()).toBeTruthy();
   const { id } = await created.json();
-  for (const tab of ["", "/meetings", "/activity", "/tools", "/channels", "/routines", "/memory", "/settings"]) {
+  for (const tab of ["", "/meetings", "/memory", "/memory?tab=files", "/tools", "/tools?tab=channels", "/routines", "/settings", "/settings?tab=activity"]) {
     await visit(page, `/app/bots/${id}${tab}`);
+  }
+  // The tabs that moved: their old addresses land on the new ones, query and all.
+  for (const [from, to] of [
+    ["/library", "/memory?tab=files"],
+    ["/channels?slack=added", "/tools?tab=channels&slack=added"],
+    ["/activity?tab=deliveries", "/settings?tab=activity&view=deliveries"],
+  ]) {
+    await page.goto(`/app/bots/${id}${from}`);
+    await expect(page).toHaveURL(`/app/bots/${id}${to}`);
   }
   // A meeting: notes on, what the desktop app heard, stop; then the meeting page and the chat that got the notes.
   const meetingId = await recordMeeting(page, id);

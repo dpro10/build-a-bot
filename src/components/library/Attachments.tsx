@@ -81,7 +81,7 @@ export function AttachmentChips({ items, onRemove }: { items: Attachment[]; onRe
             ? a.error ?? "Couldn't read it"
             : a.phase === "ready"
               ? a.duplicate
-                ? "Already in the Library"
+                ? "Already added"
                 : a.file
                   ? pagesLabel(a.file.kind, a.file.pages)
                   : "Ready"

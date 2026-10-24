@@ -167,7 +167,7 @@ function PhoneActive({ channel, ctx, onChange }: { channel: ChannelView; ctx: Ch
         )}
       </InfoRow>
       {channel.simulated ? (
-        <DemoLine>Nothing is really {isVoice ? "dialed" : "texted"} in demo mode. {isVoice ? "Test calls" : "Test messages"} show up in Activity, so you can see exactly what would go out.</DemoLine>
+        <DemoLine>Nothing is really {isVoice ? "dialed" : "texted"} in demo mode. {isVoice ? "Test calls" : "Test messages"} show up in Settings › Activity, so you can see exactly what would go out.</DemoLine>
       ) : (
         <p className="text-[13px] text-muted-foreground">
           {isVoice

@@ -63,9 +63,9 @@ export function ChannelCard({
     if (!data) return;
     const simulated = data.status === "simulated";
     if (action === "test") {
-      toast.success(simulated ? `Test ${channel.kind === "voice" ? "call" : "message"} simulated. Nothing is really sent in demo mode; you can see it in Activity.` : `Sent! Check ${WHERE[channel.kind] ?? def.name}.`);
+      toast.success(simulated ? `Test ${channel.kind === "voice" ? "call" : "message"} simulated. Nothing is really sent in demo mode; you can see it in Settings › Activity.` : `Sent! Check ${WHERE[channel.kind] ?? def.name}.`);
     } else if (action === "call_me") {
-      toast.success(simulated ? "Call simulated. Nothing is really dialed in demo mode; you can see it in Activity." : `${ctx.botName} is calling you now.`);
+      toast.success(simulated ? "Call simulated. Nothing is really dialed in demo mode; you can see it in Settings › Activity." : `${ctx.botName} is calling you now.`);
     } else if (action === "disable") {
       toast.success(`${def.name} is off. ${ctx.botName} won't use it until you turn it back on.`);
     } else {
