@@ -6,14 +6,35 @@
  *                                              ├─ resume: they weren't done; drop the held reply
  *                                              └─ end: release the held reply at once (or hear and
  *                                                       answer now if there wasn't one)
- *   reply: Nemotron streams text → sentences → Magpie streams audio → the caller
+ *   reply: Nemotron writes a step → sentences → Magpie streams audio → the caller
  *   barge-in: the caller talks over the bot → stop mid-word, clear what hasn't played, listen
  *
- * The talker hands real work to the bot's agent in the app (ask_bot). Work that takes a while
- * keeps running; its result comes back as an <update> when the line is quiet.
+ * The talker hands real work to the bot's agent in the app (ask_bot). What it says alongside a
+ * hand-off is held back (it can't know yet how the job will go): the caller hears "Let me check."
+ * instead, and the talker answers from the job's real outcome. A reply that still claims what didn't
+ * happen is replaced by an honest line. Work that takes a while keeps running; its result comes back
+ * as an <update> when the line is quiet.
  */
 import type { AppApi, CallReport, CallTurn, SessionInfo } from "../brain/app.ts";
-import { ASK_BOT, END_CALL, talkerPrompt, talkerTools } from "../brain/talker.ts";
+import {
+  ASK_BOT,
+  END_CALL,
+  NOTHING_RAN,
+  UNREACHABLE,
+  WORKING,
+  claimsDone,
+  claimsWork,
+  honestLine,
+  jobDone,
+  jobFromAct,
+  jobResult,
+  jobUpdate,
+  lostLine,
+  notDoneLine,
+  talkerPrompt,
+  talkerTools,
+  type Job,
+} from "../brain/talker.ts";
 import type { ChatMessage, Llm, LlmUsage, ToolCall } from "../brain/llm.ts";
 import type { SpeechEngine, Heard } from "../speech/engine.ts";
 import { SentenceChunker } from "../speech/text.ts";
@@ -94,6 +115,8 @@ type Reply = {
   /** It has asked the bot's agent to do something: never dropped quietly after that. */
   toolsStarted: boolean;
   turnIndex: number | null;
+  /** What became of the last request it handed to the bot's agent (an update starts with its own). */
+  job: Job | null;
 };
 
 type Speculation = { id: number; samples: number; heard: Promise<Heard | null>; reply: Reply | null; pin: string | null };
@@ -143,7 +166,7 @@ export class CallSession {
   private turns: CallTurn[] = [];
   private latencies: number[] = [];
   private usage: LlmUsage = { inputTokens: 0, outputTokens: 0 };
-  private updates: string[] = [];
+  private updates: { text: string; job: Job }[] = [];
   private jobs = 0;
   private fillerTimer: ReturnType<typeof setTimeout> | null = null;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -420,7 +443,7 @@ export class CallSession {
 
   // ---- answering ----------------------------------------------------------------------------
 
-  private startReply(input: string, opts: { held: boolean; isUpdate?: boolean }): Reply {
+  private startReply(input: string, opts: { held: boolean; isUpdate?: boolean; job?: Job }): Reply {
     let commit!: (ok: boolean) => void;
     const committed = new Promise<boolean>((resolve) => (commit = resolve));
     const reply: Reply = {
@@ -441,6 +464,7 @@ export class CallSession {
       added: [],
       toolsStarted: false,
       turnIndex: null,
+      job: opts.job ?? null,
     };
     if (opts.held) this.speaker.hold();
     else {
@@ -448,11 +472,7 @@ export class CallSession {
       this.reply = reply;
     }
     this.transport.event({ type: "state", state: "thinking" });
-    reply.done = this.runReply(reply).catch((err: Error) => {
-      if (reply.ac.signal.aborted) return;
-      this.log("reply_error", { error: err.message });
-      if (!this.ended && !this.ending) this.speakNow("Sorry, I lost my train of thought. Could you say that again?");
-    });
+    reply.done = this.runReply(reply).catch((err: Error) => this.replyFailed(reply, err));
     return reply;
   }
 
@@ -460,16 +480,18 @@ export class CallSession {
     const messages: ChatMessage[] = [...this.history, { role: "user", content: reply.input }];
     reply.added.push({ role: "user", content: reply.input });
     const tools = talkerTools(this.info);
+    let nudged = false;
     for (let step = 0; step < 4; step++) {
       if (reply.ac.signal.aborted) return;
-      const chunker = new SentenceChunker();
-      let stepText = "";
+      // A step is heard whole before any of it is said (the talker's whole answer comes about a
+      // tenth of a second after its first word): words that come with a hand-off can't know yet
+      // how the job will go, and a claim can be checked before anyone hears it.
+      let text = "";
       const calls: { call: ToolCall; args: Record<string, unknown> | null }[] = [];
       for await (const ev of this.llm.stream({ system: talkerPrompt(this.info), messages, tools, signal: reply.ac.signal })) {
         if (reply.ac.signal.aborted) return;
         if (ev.type === "text") {
-          stepText += ev.delta;
-          for (const sentence of chunker.push(ev.delta)) this.queueSpeech(reply, sentence);
+          text += ev.delta;
         } else if (ev.type === "tool_call") {
           calls.push({ call: ev.call, args: ev.args });
         } else if (ev.type === "done") {
@@ -479,10 +501,25 @@ export class CallSession {
         }
       }
       if (reply.ac.signal.aborted) return;
-      for (const sentence of chunker.flush()) this.queueSpeech(reply, sentence);
+      text = text.trim();
+      const handsOff = calls.some((c) => c.call.function.name === ASK_BOT);
+      if (!handsOff) {
+        // After a job that didn't do it, or with no job at all: no saying it was done.
+        if (reply.job ? !jobDone(reply.job) && claimsDone(text) : claimsWork(text)) {
+          if (!reply.job && !nudged && step < 3) {
+            nudged = true;
+            this.log("claim_without_job", { reply: reply.id });
+            messages.push({ role: "assistant", content: text }, { role: "user", content: NOTHING_RAN });
+            continue;
+          }
+          this.log("claim_replaced", { reply: reply.id, status: reply.job?.status ?? "none" });
+          text = reply.job ? honestLine(reply.job, this.info) : notDoneLine(this.info);
+        }
+        this.speak(reply, text);
+      }
       if (!calls.length) {
-        if (stepText.trim()) {
-          const assistant: ChatMessage = { role: "assistant", content: stepText.trim() };
+        if (text) {
+          const assistant: ChatMessage = { role: "assistant", content: text };
           messages.push(assistant);
           reply.added.push(assistant);
         }
@@ -491,9 +528,11 @@ export class CallSession {
       // Tools run only for a reply the caller is really getting.
       if (!(await reply.committed) || reply.ac.signal.aborted) return;
       reply.toolsStarted = true;
-      const assistant: ChatMessage = { role: "assistant", content: stepText.trim(), tool_calls: calls.map((c) => c.call) };
+      // What came with a hand-off was never said, so the talker doesn't remember saying it.
+      const assistant: ChatMessage = { role: "assistant", content: handsOff ? "" : text, tool_calls: calls.map((c) => c.call) };
       messages.push(assistant);
       reply.added.push(assistant);
+      if (handsOff) this.queueFiller(reply, "Let me check.");
       let ending = false;
       for (const { call, args } of calls) {
         let result: string;
@@ -501,8 +540,8 @@ export class CallSession {
           ending = true;
           result = JSON.stringify({ status: "ending" });
         } else if (call.function.name === ASK_BOT && typeof args?.request === "string" && args.request.trim()) {
-          if (!stepText.trim()) this.queueFiller(reply, "Let me check.");
-          result = await this.askBot(args.request.trim(), reply);
+          reply.job = await this.askBot(args.request.trim(), reply);
+          result = jobResult(reply.job, this.info);
         } else {
           result = JSON.stringify({ status: "error", error: `unknown tool or missing request: ${call.function.name}` });
         }
@@ -512,11 +551,31 @@ export class CallSession {
       }
       if (ending) {
         this.hangupAfterSpeech = true;
-        if (!stepText.trim()) this.queueSpeech(reply, "Okay, bye!");
+        if (!text || handsOff) this.speak(reply, "Okay, bye!");
         break;
       }
     }
     if (reply.ac.signal.aborted || !(await reply.committed)) return;
+    this.afterReply(reply);
+  }
+
+  /** The talker failed (Token Factory down, too slow, or broken): say what's true, and carry on. */
+  private replyFailed(reply: Reply, err: Error): void {
+    if (reply.ac.signal.aborted || this.ended || this.ending) return;
+    this.log("reply_error", { error: err.message });
+    // A guess at a turn that may not be over: drop it, and the turn's end starts afresh.
+    if (reply.held) {
+      this.dropReply(reply);
+      return;
+    }
+    const line = lostLine(reply.job, this.info);
+    this.speak(reply, line);
+    reply.added.push({ role: "assistant", content: line });
+    this.afterReply(reply);
+  }
+
+  /** A reply is over: the talker remembers it, the transcript gets what was said, and a turn that waited goes next. */
+  private afterReply(reply: Reply): void {
     this.remember(reply.added);
     const said = reply.said.join(" ").trim();
     if (said) reply.turnIndex = this.recordTurn("bot", said);
@@ -537,6 +596,12 @@ export class CallSession {
   private remember(messages: ChatMessage[]): void {
     this.history = sanitizeHistory([...this.history, ...messages]).slice(-this.cfg.maxHistory);
     this.history = sanitizeHistory(this.history);
+  }
+
+  /** What the talker said, a sentence at a time. */
+  private speak(reply: Reply, text: string): void {
+    const chunker = new SentenceChunker();
+    for (const sentence of [...chunker.push(text), ...chunker.flush()]) this.queueSpeech(reply, sentence);
   }
 
   private queueSpeech(reply: Reply, sentence: string): void {
@@ -569,41 +634,37 @@ export class CallSession {
   }
 
   /** The bot's agent, in the app: wait a while for its answer, then let it finish in the background. */
-  private async askBot(request: string, reply: Reply): Promise<string> {
+  private async askBot(request: string, reply: Reply): Promise<Job> {
     this.jobs++;
     this.transport.event({ type: "task", state: "started", request });
-    const job = this.app
-      .act(this.info.callId, request)
-      .then((r) => ({ ok: true as const, r }))
-      .catch((err: Error) => ({ ok: false as const, err }));
-    const timer = new Promise<null>((resolve) => setTimeout(() => resolve(null), this.cfg.actWaitMs));
+    const job: Promise<Job> = this.app.act(this.info.callId, request).then(jobFromAct, (err: Error) => {
+      this.log("act_error", { error: err.message });
+      return UNREACHABLE;
+    });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const waited = new Promise<null>((resolve) => (timer = setTimeout(() => resolve(null), this.cfg.actWaitMs)));
     const aborted = new Promise<null>((resolve) => reply.ac.signal.addEventListener("abort", () => resolve(null), { once: true }));
-    const first = reply.ac.signal.aborted ? null : await Promise.race([job, timer, aborted]);
-    const finish = (out: Awaited<typeof job>) => {
+    const first = reply.ac.signal.aborted ? null : await Promise.race([job, waited, aborted]);
+    clearTimeout(timer);
+    const finish = (j: Job) => {
       this.jobs--;
-      this.transport.event({ type: "task", state: out.ok ? "done" : "failed", request, result: out.ok ? out.r.text : undefined });
+      this.transport.event({ type: "task", state: jobDone(j) ? "done" : "failed", request, status: j.status, result: j.text || undefined });
     };
     if (first) {
       finish(first);
-      if (!first.ok) return JSON.stringify({ status: "error", error: "The bot's agent couldn't be reached. Say so and offer to try again." });
-      return JSON.stringify({
-        status: first.r.status === "queued" ? "working" : "done",
-        answer: first.r.text,
-        ...(first.r.approvals.length ? { waiting_for_owner_ok: first.r.approvals.map((a) => a.title) } : {}),
-      });
+      return first;
     }
-    // Still going: say so now, and pass the answer on when it comes.
-    void job.then((out) => {
-      finish(out);
+    // Still going: the talker says so now, and the answer is passed on when it comes.
+    void job.then((j) => {
+      finish(j);
       if (this.ended || this.ending) return;
-      const text = out.ok ? out.r.text : "It couldn't finish that request.";
-      this.queueUpdate(`About "${request}": ${text}${out.ok && out.r.approvals.length ? ` (Waiting for the owner's OK: ${out.r.approvals.map((a) => a.title).join("; ")})` : ""}`);
+      this.queueUpdate(jobUpdate(request, j, this.info), j);
     });
-    return JSON.stringify({ status: "working", note: "Still working on it. Tell them you'll let them know when it's done, and carry on." });
+    return WORKING;
   }
 
-  private queueUpdate(text: string): void {
-    this.updates.push(text);
+  private queueUpdate(text: string, job: Job): void {
+    this.updates.push({ text, job });
     this.onQuiet();
   }
 
@@ -679,7 +740,7 @@ export class CallSession {
     }
     const update = this.updates.shift();
     if (update) {
-      this.startReply(`<update>${update}</update>`, { held: false, isUpdate: true });
+      this.startReply(`<update>${update.text}</update>`, { held: false, isUpdate: true, job: update.job });
       return;
     }
     this.armIdle();

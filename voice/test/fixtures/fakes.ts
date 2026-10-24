@@ -67,7 +67,10 @@ export class FakeEngine implements SpeechEngine {
   async close(): Promise<void> {}
 }
 
-export type LlmScript = (req: LlmRequest, n: number) => { text?: string; tools?: { name: string; args: Record<string, unknown> }[]; delayMs?: number };
+export type LlmScript = (
+  req: LlmRequest,
+  n: number,
+) => { text?: string; tools?: { name: string; args: Record<string, unknown> }[]; delayMs?: number; /** The request fails (Token Factory down). */ fail?: string };
 
 /** A model that answers from a script, streaming the text word by word. */
 export class FakeLlm implements Llm {
@@ -85,6 +88,7 @@ export class FakeLlm implements Llm {
     const plan = this.script(req, n);
     await sleep(plan.delayMs ?? 20);
     if (req.signal?.aborted) return;
+    if (plan.fail) throw new Error(plan.fail);
     for (const word of (plan.text ?? "").split(/(?<=\s)/)) {
       if (!word) continue;
       if (req.signal?.aborted) return;

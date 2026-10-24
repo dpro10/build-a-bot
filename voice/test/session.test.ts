@@ -20,6 +20,12 @@ function lastUser(req: LlmRequest): string {
   return m?.role === "user" ? m.content : "";
 }
 
+/** The tool result the talker got last, if its last message is one. */
+function lastTool(req: LlmRequest): Record<string, unknown> | null {
+  const m = req.messages[req.messages.length - 1];
+  return m?.role === "tool" ? (JSON.parse(m.content) as Record<string, unknown>) : null;
+}
+
 function setup(opts: { script: LlmScript; transcribe?: (ms: number) => string; info?: Partial<SessionInfo>; config?: Partial<SessionConfig>; speakFactor?: number }) {
   const engine = new FakeEngine({ transcribe: opts.transcribe, speakFactor: opts.speakFactor });
   const llm = new FakeLlm(opts.script);
@@ -271,6 +277,50 @@ test("PINs said out loud", () => {
   assert.equal(pinFromSpeech("book it for 4 people on 1234 Main"), null);
 });
 
+// ---- the talker failing ------------------------------------------------------------------------
+
+test("the talker fails after the bot did something: the caller hears what was done, and the call goes on", async () => {
+  let failed = false;
+  const t = setup({
+    script: (req) => {
+      if (lastTool(req) && !failed) {
+        failed = true;
+        return { fail: "model error 500" };
+      }
+      if (lastUser(req) === "Did it work?") return { text: "Yes, it's at Luigi's." };
+      return { tools: [{ name: "ask_bot", args: { request: "Book a table for two at seven" } }] };
+    },
+    transcribe: (ms) => (ms < 600 ? "Book a table for two at seven." : "Did it work?"),
+  });
+  t.app.actResult = () => ({ text: "Booked at Luigi's for 7 PM.", status: "ok", approvals: [] });
+  void t.session.start();
+  await t.greetedThenSays(400);
+  await until(() => t.transcript().includes("bot: Booked at Luigi's for 7 PM."), 4000, "what was done");
+  assert.ok(t.logs.some((l) => l.event === "reply_error"));
+  // Not "say that again": asking again could book it twice.
+  assert.ok(!t.engine.spoken.some((s) => /train of thought/.test(s)));
+  // The next turn is answered: the call isn't left silent.
+  await t.caller.silence(300);
+  await t.caller.talk(800);
+  await t.caller.silence(500);
+  await until(() => t.engine.spoken.includes("Yes, it's at Luigi's."), 4000, "next answer");
+  assert.deepEqual(t.app.acts, ["Book a table for two at seven"]);
+  await t.session.end("caller");
+});
+
+test("the talker fails before anything was done: it says so, and the call goes on", async () => {
+  let calls = 0;
+  const t = setup({ script: () => (calls++ === 0 ? { fail: "model error 503" } : { text: "Sure, here I am." }), transcribe: () => "Hello?", config: { speculate: false } });
+  void t.session.start();
+  await t.greetedThenSays(400);
+  await until(() => t.engine.spoken.includes("Sorry, I lost my train of thought."), 4000, "apology");
+  await t.caller.silence(300);
+  await t.caller.talk(400);
+  await t.caller.silence(500);
+  await until(() => t.engine.spoken.includes("Sure, here I am."), 4000, "next answer");
+  await t.session.end("caller");
+});
+
 // ---- hanging up early ------------------------------------------------------------------------
 
 test("a caller who hung up before the call started: it ends at once, with nothing to post", async () => {
@@ -328,4 +378,111 @@ test("a speech engine that keeps failing (though it says it's up) ends the call 
   }
   const report = await done;
   assert.equal(report.endedBy, "error");
+});
+
+// ---- what the bot really did ------------------------------------------------------------------
+
+test("words that come with a hand-off wait for the job, and the talker hears how it really went", async () => {
+  const t = setup({
+    script: (req) => (lastTool(req) ? { text: "Sorry, I couldn't book it: you're out of credit." } : { text: "Done! I've booked your table.", tools: [{ name: "ask_bot", args: { request: "Book a table for two at seven" } }] }),
+    transcribe: () => "Book a table for two at seven.",
+  });
+  t.app.actResult = () => ({ text: "You're out of credit. Add credit in the app.", status: "limited", approvals: [] });
+  void t.session.start();
+  await t.greetedThenSays();
+  await until(() => t.engine.spoken.some((s) => s.startsWith("Sorry, I couldn't book it")), 4000, "answer");
+  assert.ok(!t.engine.spoken.some((s) => /Done!|booked your table/.test(s)), `said before the job: ${JSON.stringify(t.engine.spoken)}`);
+  assert.ok(!t.transcript().some((l) => /booked your table/.test(l)));
+  const result = lastTool(t.llm.requests.at(-1)!)!;
+  assert.equal(result.status, "limited");
+  assert.equal(result.answer, "You're out of credit. Add credit in the app.");
+  assert.match(String(result.what_happened), /Nothing was done/);
+  assert.ok(t.transport.events.some((e) => e.type === "task" && e.state === "failed" && e.status === "limited"));
+  await t.session.end("caller");
+});
+
+test("a reply that still claims success after a job that didn't succeed is replaced with what really happened", async () => {
+  const t = setup({
+    script: (req) => (lastTool(req) ? { text: "All set, your table is booked!" } : { tools: [{ name: "ask_bot", args: { request: "Book a table for two at seven" } }] }),
+    transcribe: () => "Book a table for two at seven.",
+  });
+  t.app.actResult = () => ({ text: "You're out of credit. Add credit in the app.", status: "limited", approvals: [] });
+  void t.session.start();
+  await t.greetedThenSays();
+  await until(() => t.transcript().includes("bot: That didn't go through. You're out of credit. Add credit in the app."), 4000, "honest line");
+  await until(() => t.engine.spoken.includes("Add credit in the app."), 4000, "honest line spoken");
+  assert.ok(!t.engine.spoken.some((s) => /All set|table is booked/.test(s)));
+  assert.ok(t.logs.some((l) => l.event === "claim_replaced"));
+  await t.session.end("caller");
+});
+
+test("work waiting for the owner's OK isn't called done", async () => {
+  const t = setup({
+    script: (req) => (lastTool(req) ? { text: "Sent!" } : { tools: [{ name: "ask_bot", args: { request: "Email Maria that I'm running late" } }] }),
+    transcribe: () => "Email Maria that I'm running late.",
+  });
+  t.app.actResult = () => ({ text: "I drafted it. It needs your OK.", status: "ok", approvals: [{ title: "Send email to Maria" }] });
+  void t.session.start();
+  await t.greetedThenSays();
+  await until(() => t.transcript().includes("bot: That's waiting for your OK in the app, so it isn't done yet."), 4000, "honest line");
+  assert.ok(!t.engine.spoken.includes("Sent!"));
+  const result = lastTool(t.llm.requests.at(-1)!)!;
+  assert.deepEqual(result.waiting_for_owner_ok, ["Send email to Maria"]);
+  assert.match(String(result.what_happened), /waiting for Diego's OK/);
+  await t.session.end("caller");
+});
+
+test("a claim with nothing handed to the bot: the talker is told, and does it for real", async () => {
+  const t = setup({
+    script: (req) => {
+      if (lastTool(req)) return { text: "Okay, it's set for six." };
+      if (lastUser(req).includes("From the call system")) return { tools: [{ name: "ask_bot", args: { request: "Remind me to call mom at 6 PM" } }] };
+      return { text: "Sure, I've set a reminder for six." };
+    },
+    transcribe: () => "Remind me to call mom at six.",
+  });
+  t.app.actResult = () => ({ text: "Reminder set for 6 PM: call mom.", status: "ok", approvals: [] });
+  void t.session.start();
+  await t.greetedThenSays();
+  await until(() => t.engine.spoken.includes("Okay, it's set for six."), 4000, "answer");
+  assert.ok(!t.engine.spoken.some((s) => s.includes("I've set a reminder")));
+  assert.deepEqual(t.app.acts, ["Remind me to call mom at 6 PM"]);
+  assert.ok(t.logs.some((l) => l.event === "claim_without_job"));
+  await t.session.end("caller");
+});
+
+test("a talker that keeps claiming what it didn't do is never believed", async () => {
+  const t = setup({ script: () => ({ text: "Sure, I've set a reminder for six." }), transcribe: () => "Remind me to call mom at six." });
+  void t.session.start();
+  await t.greetedThenSays();
+  await until(() => t.engine.spoken.includes("Sorry, I haven't done that yet."), 4000, "honest line");
+  assert.ok(!t.engine.spoken.some((s) => s.includes("I've set a reminder")));
+  assert.deepEqual(t.app.acts, []);
+  await t.session.end("caller");
+});
+
+// ---- callers who haven't shown they're the owner ------------------------------------------------
+
+test("an unverified caller's message goes to the bot, and they hear how it really went", async () => {
+  const unverified = { speaker: "unverified" as const, pinAvailable: true, greeting: "Hi, it's Otto. To make sure it's you, say or type your phone PIN." };
+  const script: LlmScript = (req) => (lastTool(req) ? { text: "I've passed your message on to Diego." } : { tools: [{ name: "ask_bot", args: { request: "A caller says they'll be late for the gate" } }] });
+  // Today the app refuses everything from such a caller: they must not hear it was passed on.
+  const refused = setup({ script, transcribe: () => "Tell Diego I'll be late for the gate.", info: unverified });
+  refused.app.actResult = () => ({ text: "Nothing was done: the caller hasn't shown they're the owner (no PIN yet).", status: "refused", approvals: [] });
+  void refused.session.start();
+  await refused.greetedThenSays();
+  await until(() => refused.engine.spoken.includes("That didn't go through."), 4000, "honest line");
+  assert.deepEqual(refused.app.acts, ["A caller says they'll be late for the gate"]);
+  assert.match(refused.llm.requests[0].tools[0].description, /Pass a message from this caller on to Diego/);
+  assert.equal(lastTool(refused.llm.requests.at(-1)!)!.status, "refused");
+  assert.ok(!refused.engine.spoken.some((s) => s.includes("passed your message")));
+  await refused.session.end("caller");
+
+  // Once the app passes such a message on, the caller hears that.
+  const passed = setup({ script, transcribe: () => "Tell Diego I'll be late for the gate.", info: unverified });
+  passed.app.actResult = () => ({ text: "I passed your message to Diego.", status: "ok", approvals: [] });
+  void passed.session.start();
+  await passed.greetedThenSays();
+  await until(() => passed.engine.spoken.includes("I've passed your message on to Diego."), 4000, "passed on");
+  await passed.session.end("caller");
 });

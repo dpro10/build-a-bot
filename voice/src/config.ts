@@ -63,6 +63,8 @@ export function loadConfig(): VoiceConfig {
     ...(env("TTS_CFG") === "0" ? ["--no-cfg"] : []),
     ...(env("GPU") ? ["--gpu", env("GPU")!] : []),
   ];
+  // Reasoning stays off: it would add a second or two before every answer. What keeps the talker
+  // honest about the work is in brain/talker.ts and call/session.ts instead.
   let extraBody: Record<string, unknown> = { reasoning_effort: "none" };
   if (env("TALKER_EXTRA_BODY")) {
     try {
