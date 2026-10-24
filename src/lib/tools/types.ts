@@ -15,6 +15,8 @@ export type ToolContext = {
   demo: boolean;
   now: Date;
   signal?: AbortSignal;
+  /** This turn has read outside content (an email, a web page, someone else's message). */
+  tainted?: boolean;
 };
 
 export type ToolSource = { title: string; url: string };

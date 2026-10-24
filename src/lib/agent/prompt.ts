@@ -135,7 +135,7 @@ export function buildDynamicContext(ctx: PromptContext): string {
   return parts.filter(Boolean).join("\n\n");
 }
 
-export function greetingDirective(bot: Bot, owner: User, channelKind: string, starters: string[], appNames: string[]): string {
+export function greetingDirective(bot: Bot, owner: User, channelKind: string, starters: string[], appNames: string[], waiting: string[] = []): string {
   const avatar = isAvatarId(bot.avatar) ? AVATARS[bot.avatar] : AVATARS.blip;
   const role = roleOf(bot);
   if (role) {
@@ -152,6 +152,9 @@ export function greetingDirective(bot: Bot, owner: User, channelKind: string, st
   return [
     `This is your very first message to ${ownerName(owner)}, who just created you. Greet them ${avatar.personality.greetingStyle}.`,
     `In 2-4 short sentences: say hi as ${bot.name}, mention you're their AI assistant, and offer 2-3 concrete things you can do right now based on what they picked${appNames.length ? ` (connected: ${appNames.join(", ")})` : ""}. End with one easy question.`,
+    waiting.length
+      ? `Not signed in yet: ${waiting.join(", ")}. Don't offer anything that needs ${waiting.length === 1 ? "it" : "them"}; you may say you can help with ${waiting.length === 1 ? "it" : "them"} once they sign in (in Apps & trust).`
+      : "",
     starters.length ? `Ideas you can offer: ${starters.slice(0, 4).join(" | ")}` : "",
     channelKind === "web" ? "" : "Keep it under 300 characters.",
     "Don't use tools for this message.",

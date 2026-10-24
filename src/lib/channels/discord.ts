@@ -8,6 +8,7 @@ import crypto from "node:crypto";
 import type { Channel } from "@/lib/db/schema";
 import { config, live } from "@/lib/env";
 import type { ChannelAdapter, OutboundButton } from "./outbound";
+import { splitMessage } from "./telegram";
 
 const API = "https://discord.com/api/v10";
 
@@ -41,12 +42,17 @@ export const discordAdapter: ChannelAdapter = {
   },
   async send(_ctx, msg) {
     const dm = await discordCall<{ id: string }>("POST", "/users/@me/channels", { recipient_id: msg.to });
-    const sent = await discordCall<{ id: string }>("POST", `/channels/${dm.id}/messages`, {
-      content: msg.text.slice(0, 1990),
-      components: discordComponents(msg.buttons),
-      allowed_mentions: { parse: [] },
-    });
-    return { status: "sent", providerId: sent.id };
+    // Discord takes 2,000 characters a message: a long reply goes in parts, buttons on the last.
+    const parts = splitMessage(msg.text, 1990);
+    let sent: { id: string } | undefined;
+    for (let i = 0; i < parts.length; i++) {
+      sent = await discordCall<{ id: string }>("POST", `/channels/${dm.id}/messages`, {
+        content: parts[i],
+        components: i === parts.length - 1 ? discordComponents(msg.buttons) : undefined,
+        allowed_mentions: { parse: [] },
+      });
+    }
+    return { status: "sent", providerId: sent!.id };
   },
 };
 

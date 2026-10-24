@@ -55,9 +55,10 @@ export async function POST(req: Request) {
     await slackAppRemoved(db, teamId);
     return new Response("ok");
   }
-  if (ev.type !== "message" || ev.channel_type !== "im" || ev.bot_id || ev.subtype || !ev.user || !ev.text) return new Response("ok");
+  // A message with a file attached comes as "file_share": its words still get an answer.
+  if (ev.type !== "message" || ev.channel_type !== "im" || ev.bot_id || (ev.subtype && ev.subtype !== "file_share") || !ev.user) return new Response("ok");
   const from = ev.user;
-  const text = ev.text;
+  const text = ev.text?.trim() || "(I sent you a file.)";
 
   // Slack wants an answer within 3 seconds; the bot replies on its own time.
   after(async () => {

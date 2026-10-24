@@ -4,6 +4,7 @@ import { getDb, schema } from "@/lib/db";
 import { channelSecret } from "@/lib/channels/secrets";
 import { verifySlackSignature } from "@/lib/channels/slack";
 import { handleInbound, loadBotAndOwner, seenBefore } from "@/lib/channels/inbound";
+import { rateLimit } from "@/lib/safety/ratelimit";
 import type { RouteCtx } from "@/lib/api";
 
 export const maxDuration = 300;
@@ -39,15 +40,20 @@ export async function POST(req: Request, ctx: RouteCtx<{ channelId: string }>) {
   if (!verifySlackSignature(creds.signingSecret, raw, req.headers.get("x-slack-request-timestamp"), req.headers.get("x-slack-signature"))) {
     return new Response("bad signature", { status: 401 });
   }
+  // Turned off in the app: the bot doesn't answer anyone here.
+  if (channel.status === "disabled") return new Response("ok");
   if (await seenBefore(db, `slack-${channelId}`, body.event_id)) return new Response("ok");
   const ev = body.event;
-  if (!ev || ev.type !== "message" || ev.channel_type !== "im" || ev.bot_id || ev.subtype || !ev.user || !ev.text) return new Response("ok");
+  // A message with a file attached comes as "file_share": its words still get an answer.
+  if (!ev || ev.type !== "message" || ev.channel_type !== "im" || ev.bot_id || (ev.subtype && ev.subtype !== "file_share") || !ev.user) return new Response("ok");
+  if (!ev.text?.trim()) ev.text = "(I sent you a file.)";
 
   after(async () => {
     const loaded = await loadBotAndOwner(db, channel.botId);
     if (!loaded) return;
     const link = /^link\s+(\d{6})$/i.exec(ev.text!.trim());
-    if (link && !channel.ownerAddress) {
+    // A typed 6-digit code: only so many tries an hour, so it can't be guessed.
+    if (link && !channel.ownerAddress && (await rateLimit(db, `slack-link:${channel.id}`, 10, 3600)).ok) {
       const [code] = await db
         .select()
         .from(schema.pairingCodes)

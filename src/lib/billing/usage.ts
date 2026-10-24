@@ -5,9 +5,10 @@
 import { eq, sql } from "drizzle-orm";
 import { schema, type Db } from "@/lib/db";
 import type { User } from "@/lib/db/schema";
-import { creditOpen } from "@/lib/env";
+import { creditOpen, demoMode } from "@/lib/env";
 import { periodKey } from "@/lib/utils";
-import { hasCredit, outOfCreditMessage } from "./credit";
+import { SITE_BUDGET_MESSAGE, countSiteSpend, siteBudgetLeft } from "./ceiling";
+import { getCredit, outOfCreditMessage, signInForCreditMessage } from "./credit";
 import { ANONYMOUS_INCLUDED_MESSAGES, FAIR_USE } from "./prices";
 
 export { ANONYMOUS_INCLUDED_MESSAGES };
@@ -65,6 +66,8 @@ export async function recordUsage(db: Db, userId: string, delta: UsageDelta, whe
         updatedAt: new Date(),
       },
     });
+  // And toward today's budget for the whole site (ceiling.ts).
+  await countSiteSpend(db, d.costMicros);
 }
 
 export async function getUsage(db: Db, userId: string, when = new Date()) {
@@ -98,7 +101,7 @@ export async function getUsage(db: Db, userId: string, when = new Date()) {
  */
 export type SpendKind = "included" | "ownBrain" | "lookup" | "webTask" | "call";
 
-export type SpendCheck = { ok: true } | { ok: false; code: "no_credit" | "sign_in" | "fair_use"; message: string };
+export type SpendCheck = { ok: true } | { ok: false; code: "no_credit" | "sign_in" | "fair_use" | "site_budget"; message: string };
 
 /**
  * Messages on an included model an account gets before it signs in (this month), or null once
@@ -112,9 +115,11 @@ export async function freeMessagesLeft(db: Db, owner: Pick<User, "id" | "emailVe
 
 /**
  * Can this account do something that costs money? There are no plans: people pay for what they
- * use (prices.ts), so the answer is whether there's credit left. Two guard rails stay: an account
- * that hasn't confirmed an email gets a few messages on an included model, and messages on your own
- * AI key have a generous monthly fair-use limit (they're free here, but use our servers).
+ * use (prices.ts), so the answer is whether there's credit left, and room in today's budget for
+ * the whole site (ceiling.ts). Before signing in, an account gets a few messages on an included
+ * model and the web lookups they make, and nothing else that costs money: its credit opens up with
+ * an email. Messages on your own AI key have a generous monthly fair-use limit (they're free here,
+ * but use our servers).
  */
 export async function checkSpend(db: Db, owner: Pick<User, "id" | "emailVerifiedAt">, kind: SpendKind): Promise<SpendCheck> {
   if (kind === "ownBrain") {
@@ -126,16 +131,24 @@ export async function checkSpend(db: Db, owner: Pick<User, "id" | "emailVerified
       message: `You've sent ${FAIR_USE.ownBrainMessages.toLocaleString("en-US")} messages on your own AI this month, the fair-use limit. It resets on the 1st.`,
     };
   }
-  if (kind === "included" && !owner.emailVerifiedAt) {
-    const u = await getUsage(db, owner.id);
-    if (u.includedMessages >= ANONYMOUS_INCLUDED_MESSAGES) {
-      return {
-        ok: false,
-        code: "sign_in",
-        message: `You've used the ${ANONYMOUS_INCLUDED_MESSAGES} free messages you get before signing in. Sign in with your email (it's free) to keep going.`,
-      };
+  if (!(await siteBudgetLeft(db))) return { ok: false, code: "site_budget", message: SITE_BUDGET_MESSAGE };
+  if (!owner.emailVerifiedAt) {
+    if (kind === "included") {
+      const u = await getUsage(db, owner.id);
+      if (u.includedMessages >= ANONYMOUS_INCLUDED_MESSAGES) {
+        return {
+          ok: false,
+          code: "sign_in",
+          message: `You've used the ${ANONYMOUS_INCLUDED_MESSAGES} free messages you get before signing in. Sign in with your email (it's free) to keep going.`,
+        };
+      }
+      return { ok: true };
     }
+    // The lookups those messages make are on us too (today's share for guests bounds them, ceiling.ts).
+    if (kind === "lookup") return { ok: true };
+    // Calls and web tasks wait for an email (demo mode, where nothing real is charged, aside).
+    if (!demoMode) return { ok: false, code: "sign_in", message: signInForCreditMessage() };
   }
-  if (await hasCredit(db, owner.id)) return { ok: true };
+  if ((await getCredit(db, owner.id)).balanceMicros > 0) return { ok: true };
   return { ok: false, code: "no_credit", message: outOfCreditMessage({ canAdd: creditOpen, ownBrain: kind === "included" }) };
 }

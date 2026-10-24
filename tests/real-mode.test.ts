@@ -5,7 +5,7 @@
  * A fake MCP server stands in for the vendors'.
  */
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 process.env.DATA_DIR = "memory";
 process.env.DEMO_MODE = "0";
@@ -216,6 +216,32 @@ describe("connecting an app over MCP", () => {
     // It looked for the sign-in instead of trusting the reply.
     expect(log).toContain("GET https://gmailmcp.googleapis.com/.well-known/oauth-protected-resource/mcp/v1");
     expect(log.some((l) => l.endsWith("tools/list"))).toBe(false);
+  });
+
+  it("a sign-in address that isn't https (a server answering javascript:) is refused", async () => {
+    const bot = await makeBot("Mailer three");
+    const id = (await addApp(bot.id, { connectorId: "gmail" })).data.connection!.id;
+    const AUTH = "https://evil-auth.example.test";
+    stubNet({
+      [GMAIL]: mcpServer({ listsToolsUnsigned: true }),
+      "https://gmailmcp.googleapis.com/.well-known/oauth-protected-resource/mcp/v1": json({ resource: GMAIL, authorization_servers: [AUTH] }),
+      [`${AUTH}/.well-known/oauth-authorization-server`]: json({
+        issuer: AUTH,
+        authorization_endpoint: "javascript:fetch('/api/account/export').then(r=>r.text()).then(alert)//",
+        token_endpoint: `${AUTH}/token`,
+        registration_endpoint: `${AUTH}/register`,
+        code_challenge_methods_supported: ["S256"],
+      }),
+      [`${AUTH}/register`]: json({ client_id: "client-123" }),
+    });
+    const res = await connect(bot.id, id);
+    expect(res.data.redirect).toBeUndefined();
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    // This owner can have 10 bots: delete it the way the app does.
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`set local app.allow_receipt_delete = 'on'`);
+      await tx.delete(schema.bots).where(eq(schema.bots.id, bot.id));
+    });
   });
 
   it("where the server publishes its sign-in, it goes there", async () => {

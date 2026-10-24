@@ -1,15 +1,27 @@
 import { z } from "zod";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { schema } from "@/lib/db";
 import { newId } from "@/lib/utils";
 import { computeNextRun, describeSchedule, parseOwnerDateTime } from "@/lib/scheduler/time";
 import type { Schedule } from "@/lib/db/schema";
-import { defineTool } from "../types";
+import { defineTool, type ToolContext } from "../types";
 
 const deliverOn = z
   .enum(["auto", "web", "sms", "voice", "email", "telegram", "discord", "slack"])
   .optional()
   .describe("Where to deliver it. 'auto' = the owner's usual channel. 'voice' = a phone call.");
+
+/** Reminders and routines one bot can have waiting: plenty for a person, and no flood for the minute's tick. */
+const MAX_ACTIVE = 100;
+
+async function roomForAnother(ctx: ToolContext): Promise<boolean> {
+  const [{ n }] = await ctx.db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(schema.schedules)
+    .where(and(eq(schema.schedules.botId, ctx.bot.id), eq(schema.schedules.active, true)));
+  return n < MAX_ACTIVE;
+}
+const FULL = `There are already ${MAX_ACTIVE} reminders and routines waiting. Cancel some first.`;
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -56,6 +68,7 @@ export const createReminder = defineTool({
       if (at.getTime() < ctx.now.getTime() - 60_000) return { ok: false, error: "That time has already passed." };
       schedule = { type: "once", at: at.toISOString() };
     } else return { ok: false, error: "Tell me when: a time (at) or a daily time (daily_time)." };
+    if (!(await roomForAnother(ctx))) return { ok: false, error: FULL };
     const nextRunAt = computeNextRun(schedule, tz, new Date(ctx.now.getTime() - 1000));
     if (!nextRunAt) return { ok: false, error: "That schedule never comes up." };
     const id = newId("sch");
@@ -96,7 +109,9 @@ export const scheduleRoutine = defineTool({
   summarize: (a) => `Routine “${a.title}” at ${clockLabel(a.daily_time)}`,
   async run(args, ctx) {
     const tz = ctx.owner.timezone || "UTC";
-    const schedule: Schedule = { type: "daily", time: args.daily_time.padStart(5, "0"), days: args.days };
+    // Set up after reading an email or a page, the instruction may be someone else's: its runs stay careful (tick.ts).
+    const schedule: Schedule = { type: "daily", time: args.daily_time.padStart(5, "0"), days: args.days, ...(ctx.tainted ? { outside: true } : {}) };
+    if (!(await roomForAnother(ctx))) return { ok: false, error: FULL };
     const nextRunAt = computeNextRun(schedule, tz, ctx.now);
     if (!nextRunAt) return { ok: false, error: "That schedule never comes up." };
     const id = newId("sch");

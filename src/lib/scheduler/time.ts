@@ -168,14 +168,18 @@ export function formatNow(date: Date, timeZone: string): string {
   }).format(date);
 }
 
-/** Interpret a model-supplied datetime. Accepts ISO with offset, or a naive local time in the owner's tz. */
+/**
+ * Interpret a model-supplied datetime, which the tools ask for in the owner's local time. A clock
+ * time with seconds or a trailing Z ("…T18:00:00.000Z", a habit of models) is still the owner's
+ * clock: it's what the owner is shown. Only a numeric offset ("-05:00") says otherwise.
+ */
 export function parseOwnerDateTime(value: string, timeZone: string): Date | null {
-  const v = value.trim();
-  if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(v)) {
+  const v = value.trim().replace(/(\d)[zZ]$/, "$1");
+  if (/[+-]\d{2}:?\d{2}$/.test(v)) {
     const d = new Date(v);
     return Number.isNaN(d.getTime()) ? null : d;
   }
-  const m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{1,2}):(\d{2})(?::\d{2})?$/.exec(v);
+  const m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{1,2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$/.exec(v);
   if (m) return zonedToUtc(Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4]), Number(m[5]), timeZone);
   const d = new Date(v);
   return Number.isNaN(d.getTime()) ? null : d;

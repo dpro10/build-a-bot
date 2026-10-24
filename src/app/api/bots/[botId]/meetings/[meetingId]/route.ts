@@ -2,8 +2,9 @@ import { z } from "zod";
 import { after } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { schema } from "@/lib/db";
-import { apiError, json, parseJson, type RouteCtx } from "@/lib/api";
-import { deleteMeeting, deleteTranscript, getMeeting, getSegments, keepHearing, markNoticeCopied, meetingView, renameMeeting, segmentView, setActionItemDone, setPaused } from "@/lib/meetings";
+import { apiError, json, limitOr429, parseJson, type RouteCtx } from "@/lib/api";
+import { creditRefusal } from "@/lib/billing/credit";
+import { deleteMeeting, deleteTranscript, getMeeting, getSegments, keepHearing, markNoticeCopied, meetingView, notesCostCredit, renameMeeting, segmentView, setActionItemDone, setPaused } from "@/lib/meetings";
 import { meetingAuth } from "@/lib/meetings/auth";
 import { writeMeetingNotes } from "@/lib/meetings/notes";
 
@@ -60,6 +61,11 @@ export async function PATCH(req: Request, ctx: Ctx) {
   if (parsed.data.rewrite) {
     if (meeting.status === "recording" || meeting.status === "processing") return apiError(409, "The notes are already on their way.");
     if ((meeting.meta as { transcriptDeletedAt?: string } | null)?.transcriptDeletedAt) return apiError(409, "The transcript was deleted, so there's nothing to write new notes from.");
+    // Writing them costs what the bot's brain does: credit first, and only so many times an hour.
+    const refused = (await notesCostCredit(a.db, a.bot)) ? await creditRefusal(a.db, a.owner.id, { ownBrain: true }) : null;
+    if (refused) return apiError(402, refused, { code: "no_credit" });
+    const limited = await limitOr429(a.db, `notes-rewrite:${a.owner.id}`, 6, 3600, "That's a lot of rewrites in an hour. Try again a bit later.");
+    if (limited) return limited;
     const meta = { ...(meeting.meta ?? {}) } as Record<string, unknown>;
     delete meta.notesStartedAt;
     delete meta.notesVia;

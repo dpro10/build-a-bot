@@ -49,13 +49,18 @@ export async function sendTelegram(token: string, chatId: string, text: string, 
   const chunks = splitMessage(text, 3900);
   let last: { message_id: number } | undefined;
   for (let i = 0; i < chunks.length; i++) {
-    last = await telegramCall<{ message_id: number }>(token, "sendMessage", {
+    const rest = {
       chat_id: chatId,
-      text: toTelegramHtml(chunks[i]),
-      parse_mode: "HTML",
       link_preview_options: { is_disabled: true },
       ...(i === chunks.length - 1 && buttons?.length ? { reply_markup: inlineKeyboard(buttons) } : {}),
-    });
+    };
+    try {
+      last = await telegramCall<{ message_id: number }>(token, "sendMessage", { ...rest, text: toTelegramHtml(chunks[i]), parse_mode: "HTML" });
+    } catch (err) {
+      // Telegram refuses HTML it can't parse (code and bold nested, say): send the words plain rather than not at all.
+      if (!/can't parse entities|unsupported start tag|can't find end tag/i.test((err as Error).message)) throw err;
+      last = await telegramCall<{ message_id: number }>(token, "sendMessage", { ...rest, text: chunks[i] });
+    }
   }
   return last;
 }

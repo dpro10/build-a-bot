@@ -7,7 +7,7 @@ import { and, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import { schema, type Db } from "@/lib/db";
 import type { Bot, Channel, User } from "@/lib/db/schema";
 import { appUrl, config, demoMode, live } from "@/lib/env";
-import { numericCode, pairingCode } from "@/lib/crypto";
+import { numericCode, pairingCode, randomToken } from "@/lib/crypto";
 import { isEmail, isUsOrCanadaPhone, newId, normalizePhone, UnreachableError } from "@/lib/utils";
 import { botEmailAddress } from "@/lib/tools/builtin";
 import { CHANNEL_BY_KIND, channelUsable, comingSoonNote, type ChannelKind } from "./catalog";
@@ -215,7 +215,7 @@ export async function channelAction(
         // Pasted-token bot still waiting for its owner's /start: issue a fresh link (the old one isn't stored).
         const username = String((channel.config as { username?: string }).username ?? channel.address?.replace(/^@/, "") ?? "");
         if (!channel.credentialId || channel.ownerAddress || !username) return { ok: false, error: "There's nothing to link yet." };
-        const code = numericCode(6);
+        const code = randomToken(12); // in a link, never typed: long enough that it can't be guessed
         await db.insert(schema.pairingCodes).values({
           code: `tgo_${channel.id}_${code}`,
           purpose: "telegram_owner",

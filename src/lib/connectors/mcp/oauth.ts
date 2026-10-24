@@ -234,6 +234,8 @@ export async function startMcpOAuth(
   });
 
   const auth = new URL(as.authorization_endpoint);
+  // The browser is sent here, so it must be a web address (a server could answer "javascript:…").
+  if (auth.protocol !== "https:") throw new Error("This app's sign-in address isn't a secure web address (https).");
   auth.searchParams.set("response_type", "code");
   auth.searchParams.set("client_id", clientId);
   auth.searchParams.set("redirect_uri", redirectUri());

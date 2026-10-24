@@ -1,9 +1,10 @@
 import { after } from "next/server";
-import { and, eq, gt, isNull, like } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, like } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { config } from "@/lib/env";
 import { verifyDiscordSignature, discordComponents } from "@/lib/channels/discord";
 import { handleInbound, loadBotAndOwner } from "@/lib/channels/inbound";
+import { splitMessage } from "@/lib/channels/telegram";
 import { decideApproval, readApprovalButtonToken, resolveShortApprovalKey } from "@/lib/agent/approvals";
 import { rateLimit } from "@/lib/safety/ratelimit";
 import { normalizeLinkCode } from "@/lib/channels/setup";
@@ -24,9 +25,21 @@ type Interaction = {
   };
   user?: { id: string; username?: string };
   member?: { user: { id: string; username?: string } };
+  /** Set when the command was typed in a server rather than a DM. */
+  guild_id?: string;
 };
 
 const EPHEMERAL = 64;
+
+/** Edit or add to the interaction's reply (Discord keeps an interaction's token for 15 minutes). */
+function followUp(token: string, method: "PATCH" | "POST", body: Record<string, unknown>) {
+  const path = method === "PATCH" ? "/messages/@original" : "";
+  return fetch(`https://discord.com/api/v10/webhooks/${config.discord.applicationId}/${token}${path}`, {
+    method,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ allowed_mentions: { parse: [] }, ...body }),
+  }).catch(() => {});
+}
 
 /** Discord interactions: /ask, /link and approval buttons (HTTP only, serverless-friendly). */
 export async function POST(req: Request) {
@@ -64,11 +77,12 @@ export async function POST(req: Request) {
     return Response.json({ type: 4, data: { content: "Linked! Talk to your bot with /ask.", flags: EPHEMERAL } });
   }
 
-  // Which bot? The one this Discord user is the verified owner of (most recent).
+  // Which bot? The one this Discord user is the verified owner of (most recently linked).
   const [channel] = await db
     .select()
     .from(schema.channels)
     .where(and(eq(schema.channels.kind, "discord"), eq(schema.channels.ownerAddress, userId), eq(schema.channels.status, "active")))
+    .orderBy(desc(schema.channels.ownerVerifiedAt))
     .limit(1);
 
   if (i.type === 3 && i.data?.custom_id?.startsWith("ak:")) {
@@ -77,14 +91,21 @@ export async function POST(req: Request) {
     const parsed = signed ? readApprovalButtonToken(signed) : null;
     if (!parsed) return Response.json({ type: 4, data: { content: "That button expired.", flags: EPHEMERAL } });
     const [bot] = await db.select().from(schema.bots).where(eq(schema.bots.id, channel.botId)).limit(1);
-    const result = bot ? await decideApproval(db, { approvalId: parsed.approvalId, ownerId: bot.ownerId, decision: parsed.decision, via: "discord" }) : { ok: false as const, error: "Bot not found" };
-    return Response.json({ type: 7, data: { content: result.ok ? (parsed.decision === "approve" ? "✅ Approved" : "✖ Declined") : result.error, components: [] } });
+    if (!bot) return Response.json({ type: 4, data: { content: "Bot not found.", flags: EPHEMERAL } });
+    // Discord wants an answer within 3 seconds, and the approved action can take longer: decide after answering.
+    after(async () => {
+      const result = await decideApproval(db, { approvalId: parsed.approvalId, ownerId: bot.ownerId, decision: parsed.decision, via: "discord" });
+      await followUp(i.token, "PATCH", { content: result.ok ? (parsed.decision === "approve" ? "✅ Approved" : "✖ Declined") : result.error, components: [] });
+    });
+    return Response.json({ type: 6 }); // deferred update of the message the buttons are on
   }
 
   if (i.type === 2 && i.data?.name === "ask") {
     if (!channel) {
       return Response.json({ type: 4, data: { content: "You don't have a bot linked yet. In the app: your bot → Channels → Discord.", flags: EPHEMERAL } });
     }
+    // In a server, only the owner sees the bot's answer.
+    const flags = i.guild_id ? EPHEMERAL : undefined;
     const prompt = i.data.options?.find((o) => o.name === "prompt")?.value ?? "";
     const fileId = i.data.options?.find((o) => o.name === "file")?.value;
     const attachment = fileId ? i.data.resolved?.attachments?.[fileId] : undefined;
@@ -113,13 +134,15 @@ export async function POST(req: Request) {
         content = `${note}${out.replyText || "Done."}`;
         components = discordComponents(out.buttons);
       }
-      await fetch(`https://discord.com/api/v10/webhooks/${config.discord.applicationId}/${i.token}/messages/@original`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ content: content.slice(0, 1990), components: components ?? [], allowed_mentions: { parse: [] } }),
-      }).catch(() => {});
+      // Discord takes 2,000 characters a message: a long answer goes on in follow-ups, buttons on the last.
+      const parts = splitMessage(content, 1990);
+      for (let n = 0; n < parts.length; n++) {
+        const last = n === parts.length - 1;
+        // An edit keeps the reply's privacy; a follow-up states it again.
+        await followUp(i.token, n === 0 ? "PATCH" : "POST", { content: parts[n], components: last ? (components ?? []) : [], ...(n > 0 && flags ? { flags } : {}) });
+      }
     });
-    return Response.json({ type: 5 }); // deferred: "Bot is thinking…"
+    return Response.json({ type: 5, data: { flags } }); // deferred: "Bot is thinking…"
   }
   return Response.json({ type: 4, data: { content: "Unknown command.", flags: EPHEMERAL } });
 }

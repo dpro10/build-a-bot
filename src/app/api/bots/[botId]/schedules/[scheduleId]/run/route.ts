@@ -11,6 +11,9 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string; schedule
   const { botId, scheduleId } = await ctx.params;
   const a = await authedBot(botId);
   if (!a.ok) return a.res;
+  const [found] = await a.db.select({ kind: schema.schedules.kind }).from(schema.schedules).where(and(eq(schema.schedules.id, scheduleId), eq(schema.schedules.botId, botId))).limit(1);
+  // A routine is a turn paid from credit, which opens up with an email (tick.ts runs none before).
+  if (found?.kind === "routine" && !a.user.emailVerifiedAt) return apiError(403, "Routines run once you sign in with your email (it's free).");
   const due = new Date(Date.now() - 1000);
   const [row] = await a.db
     .update(schema.schedules)

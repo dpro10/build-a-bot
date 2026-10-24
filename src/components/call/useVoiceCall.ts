@@ -216,25 +216,36 @@ export function useVoiceCall(botId: string) {
     setLatency(null);
     setStartedAt(null);
     setStatus("starting");
+    // Hung up while we were still waiting on something: let go of what we have and stop there.
+    const hungUp = (stream?: MediaStream, ctx?: AudioContext) => {
+      if (!ended.current) return false;
+      stream?.getTracks().forEach((t) => t.stop());
+      void ctx?.close().catch(() => {});
+      return true;
+    };
     // The microphone first: no point ringing if we can't hear.
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } });
     } catch {
+      if (ended.current) return;
       setStatus("error");
       setError("Allow the microphone to talk to your bot.");
       return;
     }
+    if (hungUp(stream)) return;
     let res: Response;
     try {
       res = await fetch(`/api/bots/${botId}/calls`, { method: "POST" });
     } catch {
       stream.getTracks().forEach((t) => t.stop());
+      if (ended.current) return;
       setStatus("error");
       setError("Couldn't reach the app. Check your connection.");
       return;
     }
     const body = (await res.json().catch(() => ({}))) as { token?: string; wsUrl?: string; error?: string };
+    if (hungUp(stream)) return;
     if (!res.ok || !body.token || !body.wsUrl) {
       stream.getTracks().forEach((t) => t.stop());
       setStatus("error");
@@ -258,6 +269,7 @@ export function useVoiceCall(botId: string) {
     } finally {
       URL.revokeObjectURL(url);
     }
+    if (hungUp(stream, ctx)) return;
     const node = new AudioWorkletNode(ctx, "bab-capture");
     source.connect(node);
     capture.current = { ctx, stream, node };

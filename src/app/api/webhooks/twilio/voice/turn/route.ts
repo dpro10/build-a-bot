@@ -37,7 +37,9 @@ export async function POST(req: Request) {
   const resultId = newId("vr");
   await db.insert(schema.asyncResults).values({ id: resultId, kind: "voice_turn", expiresAt: new Date(Date.now() + 10 * 60_000) });
 
-  after(async () => {
+  // Start thinking now and let after() keep it alive past the response: a callback given to
+  // after() would only start once the answer below had gone out, so the wait could never end early.
+  const work = (async () => {
     try {
       const out = await handleInbound({
         db,
@@ -57,7 +59,8 @@ export async function POST(req: Request) {
     } catch (err) {
       await db.update(schema.asyncResults).set({ status: "error", result: { error: String(err) } }).where(eq(schema.asyncResults.id, resultId));
     }
-  });
+  })();
+  after(work);
 
   // Answer within the call's patience: wait a few seconds, then keep them company and poll.
   for (let i = 0; i < 16; i++) {

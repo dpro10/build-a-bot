@@ -26,6 +26,8 @@ import { meetingAppName } from "./apps";
 /** One call handles about an hour of talk; longer meetings are summarized in parts first. */
 const SINGLE_PASS_CHARS = 60_000;
 const PART_CHARS = 40_000;
+/** About four hours of talk: past it, the notes cover the first four hours (and say so). */
+const MAX_NOTES_CHARS = 400_000;
 const NOTES_STALE_MS = 15 * 60_000;
 
 export const NOTES_FORMAT = `Reply in exactly this format, with nothing before or after it:
@@ -185,28 +187,34 @@ export async function writeMeetingNotes(db: Db, meetingId: string): Promise<void
   const system = notesSystemPrompt(bot, owner, { inPerson: (meeting.meta as { inPerson?: boolean } | null)?.inPerson === true });
   const header = `Meeting: ${meeting.title} · ${meetingAppName(meeting.app)} · ${formatDuration(meeting.durationSec)} · ${meeting.startedAt.toISOString().slice(0, 10)}`;
   const maxTokens = Math.max(brain.maxTokens, 4096);
-  let inTok = 0;
-  let outTok = 0;
+  let costMicros = 0;
+  // Each call is paid as soon as it's answered: a long run cut off part-way still pays for what it used.
+  const charge = async (usage: { inputTokens: number; outputTokens: number }) => {
+    const c = brain.providerId === "demo" ? 0 : estimateCostMicros(brain.providerId, brain.model, usage);
+    costMicros += c;
+    await recordUsage(db, owner.id, { tokensIn: usage.inputTokens, tokensOut: usage.outputTokens, costMicros: brain.included ? c : 0 });
+  };
   try {
-    let body = lines.join("\n");
+    let kept = lines;
+    let chars = 0;
+    const cut = lines.findIndex((l) => (chars += l.length + 1) > MAX_NOTES_CHARS);
+    if (cut >= 0) kept = lines.slice(0, cut);
+    let body = kept.join("\n");
     if (body.length > SINGLE_PASS_CHARS) {
       // Long meeting: notes per part, then notes from the notes.
       const partials: string[] = [];
-      for (const [i, part] of splitParts(lines, PART_CHARS).entries()) {
+      for (const [i, part] of splitParts(kept, PART_CHARS).entries()) {
         const r = await complete(brain.provider, brain.model, PART_PROMPT, `Part ${i + 1}.\n<untrusted_transcript>\n${part}</untrusted_transcript>`, maxTokens);
-        inTok += r.usage.inputTokens;
-        outTok += r.usage.outputTokens;
+        await charge(r.usage);
         partials.push(`Part ${i + 1}:\n${r.text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim()}`);
       }
       body = partials.join("\n\n");
     }
-    const r = await complete(brain.provider, brain.model, system, `${header}\n<untrusted_transcript>\n${body}\n</untrusted_transcript>\nWrite the notes now.`, maxTokens);
-    inTok += r.usage.inputTokens;
-    outTok += r.usage.outputTokens;
+    const longer = cut >= 0 ? " (The transcript runs longer than four hours of talk: these notes cover the first four.)" : "";
+    const r = await complete(brain.provider, brain.model, system, `${header}${longer}\n<untrusted_transcript>\n${body}\n</untrusted_transcript>\nWrite the notes now.`, maxTokens);
+    await charge(r.usage);
     const parsed = parseNotes(r.text);
     if (!parsed.notes) throw new Error("The brain returned empty notes.");
-    const costMicros = brain.providerId === "demo" ? 0 : estimateCostMicros(brain.providerId, brain.model, { inputTokens: inTok, outputTokens: outTok });
-    await recordUsage(db, owner.id, { tokensIn: inTok, tokensOut: outTok, costMicros: brain.included ? costMicros : 0 });
     await finishNotes(db, bot, owner, meeting, { ...parsed, notesBy: brain.label }, null, brain.included ? costMicros : 0);
   } catch (err) {
     const reason = (err as { friendly?: string }).friendly ?? (err instanceof Error ? err.message : "unknown error");

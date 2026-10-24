@@ -2,7 +2,7 @@
  * The scheduler tick: runs due reminders and routines, and tidies up.
  * Called every minute by Vercel Cron (/api/cron/tick) or, locally, by the dev ticker.
  */
-import { and, asc, eq, lte, lt, sql } from "drizzle-orm";
+import { and, asc, eq, isNotNull, lte, lt, ne, or, sql } from "drizzle-orm";
 import { schema, type Db } from "@/lib/db";
 import { computeNextRun } from "./time";
 import { messageOwner, ensureConversation } from "@/lib/channels/outbound";
@@ -11,6 +11,12 @@ import { runTurn, receipt } from "@/lib/agent/run";
 import { truncate } from "@/lib/utils";
 
 const PROACTIVE_TURNS_PER_DAY = 24;
+/** A routine is a whole agent turn; one that runs longer is stopped and counts as not finished. */
+const ROUTINE_TIMEOUT_MS = 90_000;
+/** After this the tick starts nothing new (what's left runs next minute), so it ends well inside the function's 300 seconds. */
+const TICK_BUDGET_MS = 180_000;
+/** Reminders only deliver a line, so a minute takes many more of them than of routines. */
+const REMINDERS_PER_TICK = 200;
 
 /**
  * How one run went, so "Run now" can say so: ok, failed (the brain or the delivery had a
@@ -19,28 +25,47 @@ const PROACTIVE_TURNS_PER_DAY = 24;
 export type ScheduleOutcome = "ok" | "failed" | "skipped" | "paused";
 
 export async function runDueSchedules(db: Db, now = new Date(), limit = 25, only?: { scheduleId: string }) {
-  const due = await db
-    .select()
-    .from(schema.schedules)
-    .where(and(eq(schema.schedules.active, true), lte(schema.schedules.nextRunAt, now), only ? eq(schema.schedules.id, only.scheduleId) : undefined))
-    .orderBy(asc(schema.schedules.nextRunAt))
-    .limit(limit);
+  const started = Date.now();
+  const dueOf = (kind: "reminder" | "routine", max: number) =>
+    db
+      .select({ s: schema.schedules })
+      .from(schema.schedules)
+      .innerJoin(schema.bots, eq(schema.bots.id, schema.schedules.botId))
+      .innerJoin(schema.users, eq(schema.users.id, schema.bots.ownerId))
+      .where(
+        and(
+          eq(schema.schedules.active, true),
+          lte(schema.schedules.nextRunAt, now),
+          eq(schema.schedules.kind, kind),
+          // A routine is a turn paid from credit, which opens up with an email: an account that
+          // hasn't signed in keeps its routines for when it does (an abandoned one never runs them).
+          kind === "routine" ? isNotNull(schema.users.emailVerifiedAt) : undefined,
+          only ? eq(schema.schedules.id, only.scheduleId) : undefined,
+        ),
+      )
+      .orderBy(asc(schema.schedules.nextRunAt))
+      .limit(max);
+  const due = [...(await dueOf("reminder", only ? limit : Math.max(limit, REMINDERS_PER_TICK))), ...(await dueOf("routine", limit))].map((r) => r.s);
 
   let ran = 0;
   const runs: { scheduleId: string; outcome: ScheduleOutcome }[] = [];
   for (const s of due) {
+    if (Date.now() - started > TICK_BUDGET_MS) break;
     const next = computeNextRun(s.schedule, s.timezone, now);
-    // Claim it: only one tick moves this schedule forward.
+    // Claim it: only one tick moves this schedule forward, and one turned off (or cancelled) since
+    // the list was read stays off.
     const claimed = await db
       .update(schema.schedules)
       .set({ nextRunAt: next, active: next !== null, lastRunAt: now, runCount: sql`${schema.schedules.runCount} + 1`, updatedAt: now })
-      .where(and(eq(schema.schedules.id, s.id), eq(schema.schedules.nextRunAt, s.nextRunAt!)))
+      .where(and(eq(schema.schedules.id, s.id), eq(schema.schedules.active, true), eq(schema.schedules.nextRunAt, s.nextRunAt!)))
       .returning({ id: schema.schedules.id });
     if (!claimed.length) continue;
 
     const [bot] = await db.select().from(schema.bots).where(eq(schema.bots.id, s.botId)).limit(1);
     if (!bot) continue;
     if (bot.status === "paused") {
+      // STOP holds, but a reminder the owner set doesn't vanish without a word.
+      if (s.kind === "reminder") await receipt(db, bot, "tool", "blocked", `Reminder not sent (paused): ${truncate(s.prompt, 80)}`, { scheduleId: s.id });
       runs.push({ scheduleId: s.id, outcome: "paused" });
       continue;
     }
@@ -51,19 +76,34 @@ export async function runDueSchedules(db: Db, now = new Date(), limit = 25, only
     try {
       if (s.kind === "reminder") {
         const { channel: used, result } = await messageOwner(db, bot, owner, `⏰ Reminder: ${s.prompt}`, { channel });
-        await receipt(db, bot, "tool", result.status === "failed" ? "error" : "ok", `Reminder delivered via ${used}: ${truncate(s.prompt, 80)}`, {
+        // Asked for a channel the owner hasn't linked: it went to the web chat, and the receipt says so.
+        const wanted = channel !== "auto" && channel !== "web" ? channel : null;
+        const where =
+          result.status === "failed"
+            ? `Reminder couldn't be sent by ${used}`
+            : wanted && used !== wanted
+              ? `Reminder put in the web chat (no ${wanted} linked)`
+              : `Reminder delivered via ${used}`;
+        await receipt(db, bot, "tool", result.status === "failed" ? "error" : "ok", `${where}: ${truncate(s.prompt, 80)}`, {
           scheduleId: s.id,
           channel: used,
           status: result.status,
         });
         runs.push({ scheduleId: s.id, outcome: result.status === "failed" ? "failed" : "ok" });
       } else {
-        // Routines are real agent turns; cap proactive turns per day.
+        // Routines are real agent turns; cap proactive turns per day (runs, not the notes of skipped ones).
         const since = new Date(now.getTime() - 24 * 3600_000);
         const [{ n }] = await db
           .select({ n: sql<number>`count(*)::int` })
           .from(schema.receipts)
-          .where(and(eq(schema.receipts.botId, bot.id), eq(schema.receipts.kind, "routine"), sql`${schema.receipts.createdAt} > ${since}`));
+          .where(
+            and(
+              eq(schema.receipts.botId, bot.id),
+              eq(schema.receipts.kind, "routine"),
+              ne(schema.receipts.status, "blocked"),
+              sql`${schema.receipts.createdAt} > ${since}`,
+            ),
+          );
         const cap = PROACTIVE_TURNS_PER_DAY;
         if (n >= cap) {
           await receipt(db, bot, "routine", "blocked", `Skipped “${s.title}”: daily proactive limit reached`, { scheduleId: s.id, cap });
@@ -71,6 +111,7 @@ export async function runDueSchedules(db: Db, now = new Date(), limit = 25, only
           continue;
         }
         const conversation = await ensureConversation(db, bot.id, "web", "owner");
+        const signal = AbortSignal.timeout(ROUTINE_TIMEOUT_MS);
         const result = await runTurn({
           db,
           bot,
@@ -80,9 +121,12 @@ export async function runDueSchedules(db: Db, now = new Date(), limit = 25, only
           message: null,
           directive: `Run your scheduled routine “${s.title}” now: ${s.prompt}\nWrite the result as a message to the owner (it will be delivered${channel !== "auto" && channel !== "web" ? ` by ${channel}` : ""}). Keep it short and useful.`,
           trigger: s.kind === "reminder" ? "reminder" : "routine",
+          // Set up in a turn that had read an email or a page: its instruction may be someone else's.
+          startTainted: s.schedule.outside === true,
+          signal,
         });
-        // No answer (the brain failed, isn't set up, or hit today's ceiling): the chat already says why.
-        const failed = result.status !== "ok";
+        // No answer (the brain failed, isn't set up, hit today's ceiling, or ran out of time): the chat already says why.
+        const failed = result.status !== "ok" || signal.aborted;
         await receipt(
           db,
           bot,

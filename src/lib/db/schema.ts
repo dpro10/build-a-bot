@@ -64,11 +64,15 @@ export type ConnectionPermissions = {
   [capability: string]: "allow" | "ask" | "deny";
 };
 
-export type Schedule =
+export type Schedule = (
   | { type: "once"; at: string }
   | { type: "daily"; time: string; days?: number[] } // days: 0=Sun..6=Sat; omitted = every day
   | { type: "interval"; minutes: number }
-  | { type: "cron"; expr: string };
+  | { type: "cron"; expr: string }
+) & {
+  /** Set up in a turn that had read outside content (an email, a web page): each run counts as having read it too. */
+  outside?: boolean;
+};
 
 // ---------------------------------------------------------------------------
 // People & sessions

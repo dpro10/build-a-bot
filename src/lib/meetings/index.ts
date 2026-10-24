@@ -15,8 +15,8 @@ import { and, asc, desc, eq, gt, ilike, inArray, lt, ne, or, sql } from "drizzle
 import { schema, type Db } from "@/lib/db";
 import type { Bot, Meeting, MeetingSegment, User } from "@/lib/db/schema";
 import { recordUsage } from "@/lib/billing/usage";
-import { hasCredit, outOfCreditMessage } from "@/lib/billing/credit";
-import { config, creditOpen, demoMode, demoSpeech } from "@/lib/env";
+import { creditRefusal } from "@/lib/billing/credit";
+import { config, demoMode, demoSpeech } from "@/lib/env";
 import { receipt } from "@/lib/agent/run";
 import { transcribe, transcriptionAvailable, TranscriptionError } from "@/lib/transcribe";
 import { newId, sortableId, truncate } from "@/lib/utils";
@@ -207,9 +207,8 @@ export async function startMeeting(
     return { ok: false, status: 409, code: "meetings_off", error: `Turn on Meeting notes for ${bot.name} first.` };
   }
   // The call is heard on the computer (free); writing the notes costs what the bot's brain does.
-  if (!(await hasCredit(db, owner.id)) && (await notesCostCredit(db, bot))) {
-    return { ok: false, status: 402, code: "no_credit", error: outOfCreditMessage({ canAdd: creditOpen, ownBrain: true }) };
-  }
+  const refused = (await notesCostCredit(db, bot)) ? await creditRefusal(db, owner.id, { ownBrain: true }) : null;
+  if (refused) return { ok: false, status: 402, code: "no_credit", error: refused };
 
   // One recording per bot at a time. A leftover from the same recorder (crash, closed tab) is wrapped up instead.
   const active = await db
@@ -323,7 +322,8 @@ export async function addChunk(db: Db, input: ChunkInput): Promise<{ ok: true; s
   if (existing.length) return { ok: true, segments: existing.filter((s) => s.text), duplicate: true };
 
   // Audio heard here costs speech-to-text; lines heard on the computer are free.
-  if (toHear && !(await hasCredit(db, owner.id))) return { ok: false, status: 402, code: "no_credit", error: outOfCreditMessage({ canAdd: creditOpen }) };
+  const refused = toHear ? await creditRefusal(db, owner.id) : null;
+  if (refused) return { ok: false, status: 402, code: "no_credit", error: refused };
 
   let segments: { startMs: number; endMs: number; text: string }[] = [];
   let warning: string | undefined;
