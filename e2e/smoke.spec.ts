@@ -91,7 +91,7 @@ test("every dashboard page renders for a signed-in owner", async ({ page }) => {
       brain: { kind: "included", model: "nvidia/Nemotron-3_5-Lightning" },
       connectors: ["gmail", "google_calendar", "github"],
       trust: "trusted",
-      channels: ["telegram", "email"],
+      channels: ["discord", "email"],
       contact: { email: "owner@example.com" },
       ageConfirmed: true,
       timezone: "America/New_York",

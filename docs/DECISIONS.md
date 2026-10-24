@@ -1175,3 +1175,30 @@ Diego, after switching it on in Token Factory's settings (his screenshot shows "
   - Nebius says it may slow answers. The last live call before it (17:26 UTC) started its answer 2,677 ms after the caller stopped (Parakeet 398 ms, Nemotron's first token 625 ms). The live call check after each deploy keeps reporting it.
 - **Claims it makes true:** the promo's "zero data retention" line and footnote (`video/STORYBOARD.md`), and a new line in the write-up's "How we built it" (`docs/HACKATHON.md`).
 - **The repository page is filled in too:** the description is the Devpost elevator pitch, the website is https://build-a-bot.site, and the topics are set.
+
+## Decision: Telegram is on the waitlist (Diego, 2026-10-24)
+
+Diego, with a screenshot of the channel list (Telegram and Slack "Free", iMessage "Waitlist"): "i never set telegram up, find anywhere where it is an put waitlist like the other ones."
+
+- **Why it said Free:** owners could paste a token from BotFather, which needs nothing from us. The one-tap managed bot needs a manager bot (`TELEGRAM_MANAGER_BOT_*`), which build-a-bot.site never had.
+- **Now it's like WhatsApp and iMessage** (`availability: "waitlist"` in `src/lib/channels/catalog.ts`):
+  - the builder and a bot's Channels tab offer to join the waitlist, with the reason;
+  - the server turns down new Telegram setups;
+  - the landing page, recipe pages, the setup checklist, routines' suggestions and the site's description leave it out. A channel on a waitlist isn't named in "talk to it on…" sentences, so it isn't promised as coming soon either.
+  - The Telegram app connector (posting to groups through Composio) is "soon".
+- **Copy that named it:**
+  - the hero's morning-brief scene is on Discord (Slack where Discord isn't set up), and the texts and calls scenes fall back to Slack;
+  - "How it works" shows web chat in its place;
+  - recipes suggest Discord instead;
+  - pricing, the FAQ, the Library and Approvals pages, the meeting-notes section and the Library app's note say Discord or Slack;
+  - the README, the write-up and the deploy guide.
+- **Kept:** all the Telegram code and its tests, ready for when it opens, and the legal pages' list of services (it applies once a channel is on). A Telegram bot someone connected before keeps working; its card shows the waitlist.
+- **To offer it again:** set it back to `"available"` (and the connector's status), and decide on a manager bot for one tap.
+
+## Decision: fewer recipes (Diego, 2026-10-24)
+
+Diego: "theres too many recipes, lets get rid of meal planner, study buddy, habit coach, and travel planner, errand runner."
+
+- **Nine left:** tutor, job applier, inbox zero, language partner, meeting buddy, fitness coach, PR patrol, deep researcher and family hub.
+- **The Meal planner role goes with its recipe.** The builder's ready-made bots are the Tutor, Job applier, Language partner and Fitness coach. A bot made as a meal planner keeps its memories and works as a general assistant.
+- The removed recipes' pages are gone. A link to one shows the site's not-found page.

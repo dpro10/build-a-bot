@@ -5,7 +5,7 @@ import { Avatar } from "@/components/avatar";
 import { AVATARS, AVATAR_IDS, COLORWAYS, COLORWAY_IDS, type AvatarId, type ColorwayId } from "@/lib/avatars";
 import { cn } from "@/lib/utils";
 
-type ChannelKey = "slack" | "telegram" | "sms" | "voice" | "email";
+type ChannelKey = "slack" | "discord" | "sms" | "voice" | "email";
 
 type Scene = {
   name: string;
@@ -28,10 +28,11 @@ const SCENES: Record<AvatarId, Scene> = {
   },
   nimbus: {
     name: "Misty",
-    channel: "telegram",
+    channel: "discord",
     trust: { emoji: "✋", label: "Ask me first" },
     text: "Good morning! Three emails need you today. I drafted replies to two. Want a look before anything goes out?",
     activity: "2 drafts waiting for your OK",
+    instead: { channel: "slack" },
   },
   sprout: {
     name: "Fern",
@@ -39,7 +40,7 @@ const SCENES: Record<AvatarId, Scene> = {
     trust: { emoji: "🤝", label: "Trusted helper" },
     text: "Day 12 of your reading streak! Want your chapter 4 quiz tonight at 8:30?",
     activity: "Streak saved to your Habits note",
-    instead: { channel: "telegram" },
+    instead: { channel: "slack" },
   },
   ember: {
     name: "Blaze",
@@ -47,7 +48,7 @@ const SCENES: Record<AvatarId, Scene> = {
     trust: { emoji: "🚀", label: "Full faith" },
     text: "Saturday's sorted: pharmacy, groceries, then the post office. I just texted you the fastest route.",
     activity: "Route sent by text · receipt saved",
-    instead: { channel: "telegram", text: "Saturday's sorted: pharmacy, groceries, then the post office. Here's the fastest route.", activity: "Route planned · receipt saved" },
+    instead: { channel: "slack", text: "Saturday's sorted: pharmacy, groceries, then the post office. Here's the fastest route.", activity: "Route planned · receipt saved" },
   },
   otto: {
     name: "Inkwell",
@@ -61,7 +62,7 @@ const SCENES: Record<AvatarId, Scene> = {
 
 const CHANNEL_LABEL: Record<ChannelKey, string> = {
   slack: "in Slack",
-  telegram: "on Telegram",
+  discord: "on Discord",
   sms: "by text",
   voice: "on a call",
   email: "by email",

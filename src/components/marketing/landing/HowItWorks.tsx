@@ -101,7 +101,7 @@ function AppsVisual() {
 }
 
 function TalkVisual() {
-  const kinds = ["voice", "sms", "email", "telegram", "discord", "slack"] as const;
+  const kinds = ["web", "voice", "sms", "email", "discord", "slack"] as const;
   return (
     <Frame>
       <div className="grid grid-cols-3 gap-2">

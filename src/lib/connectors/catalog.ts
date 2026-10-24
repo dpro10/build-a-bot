@@ -289,9 +289,10 @@ export const CONNECTORS: ConnectorDef[] = [
       cap("send_message", "Send messages to groups", "send", "medium"),
       cap("post_to_channel", "Post to your channels", "send", "high"),
     ],
+    status: "soon",
     jobs: ["social", "other"],
     keywords: ["tg", "chat", "channels", "groups", "messenger"],
-    note: "For posting to groups and channels; chatting with your bot is set up separately",
+    note: "Comes with Telegram chat, which is on the waitlist for now",
   },
   {
     id: "google_chat",

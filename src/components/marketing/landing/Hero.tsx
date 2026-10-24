@@ -17,7 +17,7 @@ export function Hero() {
   const words = talkChannels(demoMode, live);
   const talk = words.soon.length ? `talk to it on the web, ${joinList(words.ready, "or")}. ${comingSoonLine(words.soon)}` : `talk to it anywhere: ${words.ready.join(", ")}.`;
   const tile = (kind: keyof typeof CHANNEL_BY_KIND) => <BrandTile icon={channelIcon(CHANNEL_BY_KIND[kind])} size={18} />;
-  const channelIcons = Object.fromEntries((["slack", "telegram", "sms", "voice", "email"] as const).filter((k) => ready.includes(k)).map((k) => [k, tile(k)]));
+  const channelIcons = Object.fromEntries((["slack", "discord", "sms", "voice", "email"] as const).filter((k) => ready.includes(k)).map((k) => [k, tile(k)]));
 
   return (
     <section className="relative overflow-hidden">

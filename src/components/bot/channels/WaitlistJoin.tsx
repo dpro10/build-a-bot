@@ -12,6 +12,7 @@ export const WAITLIST_WHY: Partial<Record<ChannelKind, string>> = {
     "Meta's rules block general-purpose AI assistants on WhatsApp in the US. We'll open it where it's allowed and tell you the moment it's ready.",
   imessage:
     "Apple doesn't offer an approved way for assistants like this to use iMessage. Today it only works through gateways Apple hasn't sanctioned, so we're waiting for a proper path instead of risking your Apple ID.",
+  telegram: "Telegram isn't switched on here yet. Join the waitlist and we'll tell you the moment it's ready.",
 };
 
 export function WaitlistJoin({

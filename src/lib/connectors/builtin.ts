@@ -152,7 +152,7 @@ export const BUILTIN_CONNECTORS: ConnectorDef[] = [
     popular: true,
     jobs: ["school", "research", "work"],
     keywords: ["files", "upload", "pdf", "documents", "slides", "powerpoint", "word", "syllabus", "notes", "study", "flashcards", "quiz", "anki", "quizlet", "homework", "class"],
-    note: "Add files with the paperclip in the chat, on the bot's Library page, or by sending them on Telegram. They're private to you, and the bot says which file and page it used.",
+    note: "Add files with the paperclip in the chat, on the bot's Library page, or by sending them on Discord. They're private to you, and the bot says which file and page it used.",
   },
   {
     id: "meetings",

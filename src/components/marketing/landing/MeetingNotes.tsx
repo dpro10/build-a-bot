@@ -8,7 +8,7 @@ import { Container, Section, SectionHeader } from "../ui";
 
 const POINTS = [
   { icon: <UserX />, title: "No bot joins the call", body: "It listens on your computer, so nobody has to let a stranger into the meeting." },
-  { icon: <NotebookPen />, title: "Notes, sent to you", body: "A summary, the decisions and who's doing what, in your chat, and on Telegram, Slack or Discord if you've linked one." },
+  { icon: <NotebookPen />, title: "Notes, sent to you", body: "A summary, the decisions and who's doing what, in your chat, and on Slack or Discord if you've linked one." },
   {
     icon: <ShieldCheck />,
     title: "Heard on your computer",

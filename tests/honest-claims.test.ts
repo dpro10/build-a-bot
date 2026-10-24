@@ -58,14 +58,14 @@ describe("the site's description", () => {
     const { siteDescription } = await import("@/lib/site-description");
     const d = siteDescription();
     expect(d).toContain("NVIDIA Nemotron and other open models on Nebius");
-    expect(d).toMatch(/talk to it on the web, Telegram or Slack\.$/);
+    expect(d).toMatch(/talk to it on the web or Slack\.$/);
     expect(d).not.toMatch(/Discord|call|text it|coming soon/);
   });
 
   it("adds Discord and calling once they're set up", async () => {
     setEnv({ DISCORD_APPLICATION_ID: "123", DISCORD_PUBLIC_KEY: "a".repeat(64), DISCORD_BOT_TOKEN: "bot", ...TWILIO });
     const { siteDescription } = await import("@/lib/site-description");
-    expect(siteDescription()).toMatch(/talk to it on the web, Telegram, Discord or Slack, or call it\.$/);
+    expect(siteDescription()).toMatch(/talk to it on the web, Discord or Slack, or call it\.$/);
   });
 });
 

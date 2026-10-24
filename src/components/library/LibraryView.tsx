@@ -498,7 +498,7 @@ function EmptyLibrary({ botId, bot, canAdd, onPick }: { botId: string; bot: { na
           <Link href={`/app/bots/${botId}`} className="font-medium text-primary hover:underline">
             chat
           </Link>{" "}
-          or send them to {bot.name} on Telegram. With the{" "}
+          or send them to {bot.name} on Discord. With the{" "}
           <Link href="/download" className="font-medium text-primary hover:underline">
             desktop app
           </Link>

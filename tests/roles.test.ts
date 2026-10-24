@@ -1,5 +1,5 @@
 /**
- * Ready-made roles: a tutor, a job applier, a language partner, a fitness coach, a meal planner.
+ * Ready-made roles: a tutor, a job applier, a language partner, a fitness coach.
  *
  * - A role is what the bot is: it introduces itself as "an AI tutor", works the way the role
  *   says, and its first message asks for the basics instead of offering generic ideas.
@@ -184,9 +184,9 @@ describe("in the app", () => {
     const bot = await makeBot("Switcher");
     const patch = (body: unknown) => botRoute.PATCH(json("PATCH", `http://localhost/api/bots/${bot.id}`, body), { params: Promise.resolve({ botId: bot.id }) });
 
-    const set = await patch({ role: "meal_planner", jobs: ["errands"] });
+    const set = await patch({ role: "fitness_coach", jobs: ["errands"] });
     expect(set.status).toBe(200);
-    expect((await set.json()).bot.role).toBe("meal_planner");
+    expect((await set.json()).bot.role).toBe("fitness_coach");
     const receipts = await db.select().from(schema.receipts).where(eq(schema.receipts.botId, bot.id));
     expect(receipts.some((r) => /role/.test(r.title))).toBe(true);
 
