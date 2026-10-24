@@ -202,3 +202,5 @@ jobs:
     needs: deploy
     if: needs.deploy.outputs.up == 'true'
     uses: ./.github/workflows/live-call.yml
+    # The check signs in with VOICE_SERVER_SECRET (calls need a signed-in account).
+    secrets: inherit

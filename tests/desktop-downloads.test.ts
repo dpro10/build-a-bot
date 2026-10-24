@@ -9,6 +9,7 @@ import {
   formatSize,
   latestDownload,
   parseReleases,
+  parseUpdateManifest,
   platformFromUserAgent,
   resetDesktopReleasesCache,
   updateFile,
@@ -90,8 +91,8 @@ describe("desktop downloads", () => {
   it("a failure after a good read keeps the list it had (and tries again a minute later)", async () => {
     const ok = (async () => Response.json(GITHUB)) as unknown as typeof fetch;
     let downCalls = 0;
-    const down = (async () => {
-      downCalls++;
+    const down = (async (url: string) => {
+      if (url.startsWith("https://api.github.com/")) downCalls++;
       return new Response("rate limited", { status: 403 });
     }) as unknown as typeof fetch;
     const t = 5_000_000;
@@ -102,6 +103,45 @@ describe("desktop downloads", () => {
     expect(downCalls).toBe(1);
     expect((await desktopReleases(down, t + 5 * 60_000 + 61_000)).length).toBe(2);
     expect(downCalls).toBe(2);
+  });
+
+  it("when the API says no and there's no list yet, the newest release comes from its updater files", async () => {
+    const MAC_YML = [
+      "version: 0.1.64",
+      "files:",
+      "  - url: Build-a-bot-0.1.64-mac-universal.zip",
+      "    sha512: qnbNkj4u==",
+      "    size: 230393576",
+      "  - url: Build-a-bot-0.1.64-mac-universal.dmg",
+      "    sha512: yZr73lSB==",
+      "    size: 231168542",
+      "path: Build-a-bot-0.1.64-mac-universal.zip",
+      "sha512: qnbNkj4u==",
+      "releaseDate: '2026-10-23T00:59:23.869Z'",
+    ].join("\n");
+    const WIN_YML = ["version: 0.1.64", "files:", "  - url: Build-a-bot-Setup-0.1.64.exe", "    sha512: P2vM4vpt==", "    size: 112677488", "path: Build-a-bot-Setup-0.1.64.exe", "releaseDate: '2026-10-23T00:57:13.064Z'"].join("\n");
+    const calls: string[] = [];
+    const github = (async (url: string) => {
+      calls.push(url);
+      if (url.startsWith("https://api.github.com/")) return new Response("rate limited", { status: 403 });
+      if (url.endsWith("/releases/latest/download/latest-mac.yml")) return new Response(MAC_YML);
+      if (url.endsWith("/releases/latest/download/latest.yml")) return new Response(WIN_YML);
+      return new Response("not found", { status: 404 });
+    }) as unknown as typeof fetch;
+    const releases = await desktopReleases(github);
+    expect(calls.filter((u) => u.startsWith("https://github.com/")).sort()).toEqual([
+      "https://github.com/dpro10/build-a-bot/releases/latest/download/latest-mac.yml",
+      "https://github.com/dpro10/build-a-bot/releases/latest/download/latest.yml",
+    ]);
+    const base = "https://github.com/dpro10/build-a-bot/releases/download/desktop-v0.1.64";
+    expect(latestDownload(releases, "mac")).toEqual({ version: "0.1.64", asset: { name: "Build-a-bot-0.1.64-mac-universal.dmg", url: `${base}/Build-a-bot-0.1.64-mac-universal.dmg`, size: 231168542 } });
+    expect(latestDownload(releases, "windows")).toEqual({ version: "0.1.64", asset: { name: "Build-a-bot-Setup-0.1.64.exe", url: `${base}/Build-a-bot-Setup-0.1.64.exe`, size: 112677488 } });
+    // The installed apps' updater gets its files the same way.
+    expect(updateFile(releases, "latest.yml")?.url).toBe(`${base}/latest.yml`);
+    expect(updateFile(releases, "Build-a-bot-0.1.64-mac-universal.zip")?.url).toBe(`${base}/Build-a-bot-0.1.64-mac-universal.zip`);
+    // A manifest that isn't one names nothing.
+    expect(parseUpdateManifest("<html>Not found</html>")).toBeNull();
+    expect(parseUpdateManifest("version: 0.1.64\nfiles:\n  - url: ../../evil.exe\n    size: 1")).toBeNull();
   });
 
   it("/download/<platform> and the update feed redirect to the files", async () => {

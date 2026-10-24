@@ -44,6 +44,65 @@ export function parseReleases(list: unknown): DesktopRelease[] {
     .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
 }
 
+/** The updater's own files, one per platform, in every release (electron-builder writes them). */
+const UPDATE_FILES = ["latest-mac.yml", "latest.yml"] as const;
+
+/** latest.yml or latest-mac.yml: the version, when it was built, and each file's name and size. */
+export function parseUpdateManifest(text: string): { version: string; releaseDate: string; files: { name: string; size: number }[] } | null {
+  let version = "";
+  let releaseDate = "";
+  let inFiles = false;
+  const files: { name: string; size: number }[] = [];
+  const unquote = (s: string) => s.trim().replace(/^['"]|['"]$/g, "");
+  for (const line of text.split(/\r?\n/)) {
+    const top = /^(\w+):\s*(.*)$/.exec(line);
+    if (top) {
+      inFiles = top[1] === "files";
+      if (top[1] === "version") version = unquote(top[2]);
+      if (top[1] === "releaseDate") releaseDate = unquote(top[2]);
+      continue;
+    }
+    if (!inFiles) continue;
+    const url = /^\s*-\s*url:\s*(.+)$/.exec(line);
+    if (url) files.push({ name: unquote(url[1]), size: 0 });
+    const size = /^\s+size:\s*(\d+)\s*$/.exec(line);
+    if (size && files.length) files[files.length - 1].size = Number(size[1]);
+  }
+  const named = files.filter((f) => /^[\w.-]+$/.test(f.name));
+  return /^\d+(\.\d+)*$/.test(version) && named.length ? { version, releaseDate, files: named } : null;
+}
+
+/**
+ * The newest release, read from its updater files on github.com itself (which hands release files
+ * out without the API's limit): for when the API says no and there's no list from before (a
+ * fresh deployment). Only that one release, with the files those name.
+ */
+async function fromUpdateFiles(fetchImpl: typeof fetch): Promise<DesktopRelease[] | null> {
+  const read = async (file: string) => {
+    try {
+      const res = await fetchImpl(`https://github.com/${REPO}/releases/latest/download/${file}`, {
+        headers: { "user-agent": "build-a-bot.site" },
+        cache: "no-store",
+        signal: AbortSignal.timeout(8000),
+      });
+      return res.ok ? parseUpdateManifest(await res.text()) : null;
+    } catch {
+      return null;
+    }
+  };
+  const found = (await Promise.all(UPDATE_FILES.map(async (file) => ({ file, manifest: await read(file) })))).flatMap((f) =>
+    f.manifest ? [{ file: f.file, ...f.manifest }] : [],
+  );
+  if (!found.length) return null;
+  const { version, releaseDate } = found[0];
+  const tag = `desktop-v${version}`;
+  const url = (name: string) => `https://github.com/${REPO}/releases/download/${tag}/${name}`;
+  const assets = found
+    .filter((f) => f.version === version)
+    .flatMap((f) => [{ name: f.file, url: url(f.file), size: 0 }, ...f.files.map((x) => ({ name: x.name, url: url(x.name), size: x.size }))]);
+  return [{ version, tag, publishedAt: releaseDate, assets }];
+}
+
 let cached: { at: number; releases: DesktopRelease[] } | null = null;
 /** The last list GitHub gave, kept through its hiccups (and its limit on calls without a token). */
 let lastGood: DesktopRelease[] | null = null;
@@ -51,8 +110,9 @@ let lastGood: DesktopRelease[] | null = null;
 /**
  * The releases, from GitHub, kept for five minutes. With GITHUB_TOKEN set the calls count against
  * that token (5,000 an hour) instead of the 60 an hour GitHub allows calls without one, shared
- * across Vercel. A failure keeps the last list it gave (and tries again in a minute); only with
- * none yet is it empty (the page then says "coming soon").
+ * across Vercel. When the API says no, the newest release is read from its updater files instead;
+ * when that fails too, the last list it gave is kept (and it tries again in a minute); only with
+ * none at all is it empty (the page then says "coming soon").
  */
 export async function desktopReleases(fetchImpl: typeof fetch = fetch, now = Date.now()): Promise<DesktopRelease[]> {
   if (cached && now - cached.at < CACHE_MS) return cached.releases;
@@ -74,6 +134,7 @@ export async function desktopReleases(fetchImpl: typeof fetch = fetch, now = Dat
   } catch (err) {
     console.error(`[desktop] GitHub releases: ${err instanceof Error ? err.message : err}`);
   }
+  if (!releases) releases = await fromUpdateFiles(fetchImpl);
   if (releases) {
     lastGood = releases;
     cached = { at: now, releases };

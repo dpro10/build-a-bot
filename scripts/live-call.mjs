@@ -7,8 +7,10 @@
 //   node scripts/live-call.mjs [APP_URL] [OUT_DIR]      (https://build-a-bot.site, live-call/)
 //
 // Run by .github/workflows/live-call.yml after each voice deploy, and by hand from Actions. Needs
-// Playwright's Chromium. A site without calls set up (VOICE_SERVER_URL, VOICE_SERVER_SECRET) is
-// reported and passes.
+// Playwright's Chromium, and VOICE_SERVER_SECRET: calls need a signed-in account, and the check signs
+// in as its own (POST /api/calls/check, signed like the voice server's requests). A site without
+// calls set up (VOICE_SERVER_URL, VOICE_SERVER_SECRET) is reported and passes.
+import { createHmac } from "node:crypto";
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { chromium } from "@playwright/test";
 
@@ -116,6 +118,21 @@ async function until(what, match, ms) {
 let botId = null;
 let code = 0;
 try {
+  // Calls need a signed-in account: the check's own, signed in with the voice server's secret.
+  const secret = process.env.VOICE_SERVER_SECRET;
+  if (!secret) throw new Error("VOICE_SERVER_SECRET isn't set: the check signs in with it, since calls need a signed-in account");
+  const body = JSON.stringify({ check: "live-call" });
+  const t = Math.floor(Date.now() / 1000);
+  const signature = `t=${t},v1=${createHmac("sha256", secret).update(`${t}.${body}`).digest("hex")}`;
+  const signedIn = await page.request.post("/api/calls/check", { data: body, headers: { "content-type": "application/json", "x-voice-signature": signature } });
+  if (signedIn.status() === 404) {
+    console.log(`::notice::${base} doesn't have calls set up yet (VOICE_SERVER_URL and VOICE_SERVER_SECRET in Vercel), so there's no call to make.`);
+    summary(`### Live call on ${base}\n\nNot made: the site doesn't have calls set up yet (\`VOICE_SERVER_URL\` and \`VOICE_SERVER_SECRET\` in Vercel).`);
+    await browser.close();
+    process.exit(0);
+  }
+  if (!signedIn.ok()) throw new Error(`couldn't sign in for the check: ${signedIn.status()} ${await signedIn.text()}`);
+
   const made = await page.request.post("/api/bots", {
     data: { avatar: "nimbus", color: "sky", name: "Otto", jobs: ["inbox", "reminders"], brain: { kind: "included", model: "nvidia/Nemotron-3_5-Lightning" }, connectors: [], trust: "ask", channels: [], contact: {}, ageConfirmed: true, timezone: "America/Chicago" },
   });
