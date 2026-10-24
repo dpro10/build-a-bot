@@ -3,6 +3,8 @@ import { eq } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { appUrl } from "@/lib/env";
 import { handleInbound, loadBotAndOwner } from "@/lib/channels/inbound";
+import { postToWebInbox } from "@/lib/channels/outbound";
+import { MAX_CALL_MINUTES } from "@/lib/calls";
 import { answerTwiml, gather, readTwilioForm, say, tierParam, twiml } from "@/lib/channels/twilio-inbound";
 import { escapeXml } from "@/lib/channels/twilio";
 import { newId, sleep } from "@/lib/utils";
@@ -29,6 +31,13 @@ export async function POST(req: Request) {
     return twiml(gather(channelId, "Sorry, I didn't catch that. What can I do for you?", attempt + 1, tier));
   }
   if (BYE.test(speech)) return twiml(`${say("Okay, bye!")}<Hangup/>`);
+  // The simpler line keeps to the same length as any call.
+  if (params.CallSid) {
+    const [call] = await db.select({ createdAt: schema.calls.createdAt }).from(schema.calls).where(eq(schema.calls.callSid, params.CallSid)).limit(1);
+    if (call && Date.now() - call.createdAt.getTime() > MAX_CALL_MINUTES.phone * 60_000) {
+      return twiml(`${say("We've been talking a while, so I'll let you go. Call back anytime. Bye!")}<Hangup/>`);
+    }
+  }
 
   const loaded = await loadBotAndOwner(db, channel.botId);
   if (!loaded) return twiml("<Hangup/>");
@@ -55,7 +64,13 @@ export async function POST(req: Request) {
         deliverReply: false,
         meta: { callSid: params.CallSid, confidence: params.Confidence },
       });
-      await db.update(schema.asyncResults).set({ status: "done", result: { text: out.replyText, approvals: out.approvals.length } }).where(eq(schema.asyncResults.id, resultId));
+      const [row] = await db
+        .update(schema.asyncResults)
+        .set({ status: "done", result: { text: out.replyText, approvals: out.approvals.length } })
+        .where(eq(schema.asyncResults.id, resultId))
+        .returning({ polls: schema.asyncResults.polls });
+      // The owner was told the answer would be in their chat (wait/route.ts): it is.
+      if (isOwner && (row?.polls ?? 0) >= 6 && out.replyText) await postToWebInbox(db, loaded.bot, `From your call: ${out.replyText}`);
     } catch (err) {
       await db.update(schema.asyncResults).set({ status: "error", result: { error: String(err) } }).where(eq(schema.asyncResults.id, resultId));
     }

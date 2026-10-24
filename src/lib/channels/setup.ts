@@ -116,8 +116,12 @@ async function codeLimit(db: Db, owner: User, destination: string, reallySent: b
   const byOwner = await rateLimit(db, `code:owner:${owner.id}`, reallySent ? 5 : 20, 3600);
   if (!byOwner.ok) return tooMany(byOwner.resetAt);
   if (reallySent) {
+    const what = `Too many codes to that ${destination.startsWith("+") ? "number" : "address"}`;
     const byDestination = await rateLimit(db, `code:dest:${destination}`, 3, 3600);
-    if (!byDestination.ok) return tooMany(byDestination.resetAt, `Too many codes to that ${destination.startsWith("+") ? "number" : "address"}`);
+    if (!byDestination.ok) return tooMany(byDestination.resetAt, what);
+    // And a few a day: nobody's phone gets called over and over.
+    const byDestinationToday = await rateLimit(db, `code:dest-day:${destination}`, 6, 86_400);
+    if (!byDestinationToday.ok) return tooMany(byDestinationToday.resetAt, what);
   }
   return null;
 }
@@ -245,6 +249,8 @@ export async function channelAction(
         if (!isUsOrCanadaPhone(phone)) return { ok: false, error: "Texts and calls work with US and Canada numbers for now." };
         const via = payload.via === "call" ? "call" : "sms";
         if (via === "sms" && live.twilio && !live.twilioTexting) return { ok: false, error: "Texts aren't set up here yet. Use Call me with a code." };
+        // Each code is a real call or text to a number someone typed: only from accounts that signed in.
+        if (live.twilio && !owner.emailVerifiedAt) return { ok: false, error: "Sign in with your email first (it's free), then link your phone." };
         const limited = await codeLimit(db, owner, phone, live.twilio, meta.ip);
         if (limited) return limited;
         const code = await saveCode(db, owner, bot, channel, "phone", "ph", { phone });
@@ -252,7 +258,7 @@ export async function channelAction(
           // A new number can't text US phones until it's registered (A2P 10DLC, or toll-free
           // verification), which takes days; a call reading the code works from the start.
           try {
-            if (via === "call") await placeCall(config.twilio.phoneNumber!, phone, codeCallTwiml(bot.name, code));
+            if (via === "call") await placeCall(config.twilio.phoneNumber!, phone, codeCallTwiml(code));
             else await sendSms(config.twilio.phoneNumber!, phone, `Your ${bot.name} verification code is ${code}. Reply STOP to opt out.`);
           } catch (err) {
             await refundCodeLimit(db, owner, phone, meta.ip);
@@ -267,6 +273,18 @@ export async function channelAction(
         const used = await useCode(db, channel, "phone", "ph", String(payload.code ?? ""));
         if (!used.ok) return { ok: false, error: used.error };
         const phone = String((used.row.data as { phone?: string }).phone);
+        // A phone is one account's: linked here, it's unlinked from anyone else's bots (a call from it
+        // reaches the owner's bot with the owner's trust, so it can't be two people's).
+        await db
+          .update(schema.channels)
+          .set({ ownerAddress: null, ownerVerifiedAt: null, status: "needs_setup", updatedAt: new Date() })
+          .where(
+            and(
+              inArray(schema.channels.kind, ["sms", "voice"]),
+              eq(schema.channels.ownerAddress, phone),
+              sql`${schema.channels.botId} in (select id from bots where owner_id <> ${owner.id})`,
+            ),
+          );
         // Verifying a phone covers both texting and calls.
         for (const k of ["sms", "voice"] as const) {
           const ch = k === kind ? channel : (await db.select().from(schema.channels).where(and(eq(schema.channels.botId, bot.id), eq(schema.channels.kind, k))).limit(1))[0];

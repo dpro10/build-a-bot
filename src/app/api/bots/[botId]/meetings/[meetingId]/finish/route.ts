@@ -4,7 +4,8 @@ import { finishMeeting, getMeeting, meetingView } from "@/lib/meetings";
 import { meetingAuth } from "@/lib/meetings/auth";
 import { writeMeetingNotes } from "@/lib/meetings/notes";
 import { receipt } from "@/lib/agent/run";
-import { formatDuration } from "@/lib/meetings";
+import { STOP_GRACE, formatDuration } from "@/lib/meetings";
+import { sleep } from "@/lib/utils";
 
 export const maxDuration = 300;
 
@@ -19,6 +20,8 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string; meetingI
   const done = await finishMeeting(a.db, meeting, { reason: "stopped" });
   await receipt(a.db, a.bot, "meeting", "ok", `Stopped listening after ${formatDuration(done.durationSec)}`, { meetingId: done.id });
   after(async () => {
+    // Stopped from the website: the app hears of it on its next check, and sends what it still had (addChunk takes it for a little while).
+    if (!a.device) await sleep(STOP_GRACE.notesDelayMs);
     const { getDb } = await import("@/lib/db");
     await writeMeetingNotes(await getDb(), done.id);
   });

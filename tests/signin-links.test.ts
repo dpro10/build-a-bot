@@ -169,7 +169,8 @@ describe("sign-in links", () => {
 
   it("one network can't send floods of sign-in emails", async () => {
     inBrowser("a script");
-    for (let i = 0; i < 30; i++) await askForLink(`flood-${i}@example.com`, "203.0.113.9");
+    // 20 an hour from one network (each is an email we send).
+    for (let i = 0; i < 20; i++) await askForLink(`flood-${i}@example.com`, "203.0.113.9");
     const res = await magic.POST(
       new Request("http://localhost/api/auth/magic", {
         method: "POST",

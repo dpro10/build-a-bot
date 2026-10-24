@@ -4,6 +4,7 @@ import { schema } from "@/lib/db";
 import { apiError, authedBot, json, parseJson, sameOrigin, type RouteCtx } from "@/lib/api";
 import { receipt } from "@/lib/agent/run";
 import { getConnector } from "@/lib/connectors";
+import { revokeComposioConnection } from "@/lib/connectors/composio";
 
 type Ctx = RouteCtx<{ botId: string; connectionId: string }>;
 
@@ -44,6 +45,8 @@ export async function DELETE(req: Request, ctx: Ctx) {
   if (!sameOrigin(req)) return apiError(403, "Bad origin");
   const l = await load(ctx);
   if (!l.ok) return l.res;
+  // Composio forgets the sign-in too, so the bot's access to the account ends there as well.
+  if (l.connection.mode === "composio") await revokeComposioConnection(l.connection);
   await l.db.delete(schema.connections).where(eq(schema.connections.id, l.connection.id));
   if (l.connection.credentialId) await l.db.delete(schema.credentials).where(eq(schema.credentials.id, l.connection.credentialId));
   await receipt(l.db, l.bot, "system", "ok", `Disconnected ${getConnector(l.connection.connectorId)?.name ?? l.connection.connectorId}`, { connectorId: l.connection.connectorId });

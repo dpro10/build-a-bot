@@ -6,7 +6,7 @@
  * API v3.1 (docs/research/integrations-2026-10-14.md §9).
  */
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import { schema, type Db } from "@/lib/db";
 import type { Connection } from "@/lib/db/schema";
 import { config } from "@/lib/env";
@@ -91,6 +91,16 @@ export async function completeComposioAuth(userId: string, sessionUri: string) {
   return call<{ connected_account_id?: string; toolkit_slug?: string }>("POST", "/connected_accounts/complete_auth", { user_id: userId, session_uri: sessionUri });
 }
 
+/**
+ * Disconnecting an app (or deleting its bot): Composio forgets the sign-in too, so the bot's access
+ * to the account ends there and not only here. Best effort: the app is gone here either way.
+ */
+export async function revokeComposioConnection(conn: Pick<Connection, "config">): Promise<void> {
+  const accountId = (conn.config as { accountId?: string }).accountId;
+  if (!accountId || !config.composio.apiKey) return;
+  await call("DELETE", `/connected_accounts/${encodeURIComponent(accountId)}`).catch((err) => console.warn("[composio] couldn't revoke a connection:", (err as Error).message));
+}
+
 export async function refreshComposioStatus(db: Db, conn: Connection): Promise<Connection["status"]> {
   const accountId = (conn.config as { accountId?: string }).accountId;
   if (!accountId) return conn.status;
@@ -153,7 +163,11 @@ export async function composioToolsForConnection(conn: Connection, def: Connecto
           ? async (args, c) => {
               const emails = extractEmails(args);
               if (!emails.length) return [{ address: `${def.name} audience`, kind: def.id, isOwner: false, isKnownContact: false }];
-              const known = await c.db.select({ address: schema.contacts.address }).from(schema.contacts).where(eq(schema.contacts.botId, c.bot.id));
+              // Approved ones only: someone who opted out isn't a known contact.
+              const known = await c.db
+                .select({ address: schema.contacts.address })
+                .from(schema.contacts)
+                .where(and(eq(schema.contacts.botId, c.bot.id), isNotNull(schema.contacts.approvedAt)));
               const knownSet = new Set(known.map((k) => k.address));
               return emails.map((address) => ({ address, kind: "email", isOwner: address === c.owner.email?.toLowerCase(), isKnownContact: knownSet.has(address) }));
             }

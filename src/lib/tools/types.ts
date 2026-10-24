@@ -17,6 +17,8 @@ export type ToolContext = {
   signal?: AbortSignal;
   /** This turn has read outside content (an email, a web page, someone else's message). */
   tainted?: boolean;
+  /** Someone other than the owner is talking to the bot (they only get to relay a message). */
+  fromContact?: boolean;
 };
 
 export type ToolSource = { title: string; url: string };

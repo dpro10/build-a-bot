@@ -8,7 +8,7 @@
  * anyone could ask for a link to someone else's email and, once it was opened, have that
  * person's verified email on their own anonymous account, or slip their bots into it.
  */
-import { and, eq, gt, isNull } from "drizzle-orm";
+import { and, eq, gt, isNull, ne } from "drizzle-orm";
 import { schema, type Db } from "@/lib/db";
 import type { User } from "@/lib/db/schema";
 import { randomToken, sha256, timingSafeEqualStr } from "@/lib/crypto";
@@ -88,13 +88,16 @@ export async function consumeLoginLink(db: Db, token: string, browser?: string |
         await tx.update(schema.users).set({ emailVerifiedAt: new Date() }).where(eq(schema.users.id, existing.id));
       }
       if (anon && anon.id !== existing.id && !anon.email) {
-        // Merge the anonymous account's bots and devices into the real one.
+        // Merge the anonymous account's bots into the real one. Not its desktop apps or their pairing
+        // codes: on a shared computer they could be someone else's, left to read the next person's
+        // bots. They go with the anonymous account, and the app pairs again in a minute.
         await tx.update(schema.bots).set({ ownerId: existing.id }).where(eq(schema.bots.ownerId, anon.id));
         await tx.update(schema.credentials).set({ ownerId: existing.id }).where(eq(schema.credentials.ownerId, anon.id));
         await tx.update(schema.approvals).set({ ownerId: existing.id }).where(eq(schema.approvals.ownerId, anon.id));
-        await tx.update(schema.bridgeDevices).set({ ownerId: existing.id }).where(eq(schema.bridgeDevices.ownerId, anon.id));
         await tx.update(schema.recipes).set({ authorId: existing.id }).where(eq(schema.recipes.authorId, anon.id));
-        await tx.update(schema.pairingCodes).set({ ownerId: existing.id }).where(eq(schema.pairingCodes.ownerId, anon.id));
+        await tx.update(schema.pairingCodes).set({ ownerId: existing.id }).where(and(eq(schema.pairingCodes.ownerId, anon.id), ne(schema.pairingCodes.purpose, "bridge")));
+        // Calls go with their bots (and a call still going is billed to the account it's now in).
+        await tx.update(schema.calls).set({ ownerId: existing.id }).where(eq(schema.calls.ownerId, anon.id));
         await tx.update(schema.waitlist).set({ userId: existing.id }).where(eq(schema.waitlist.userId, anon.id));
         await tx.update(schema.meetings).set({ ownerId: existing.id }).where(eq(schema.meetings.ownerId, anon.id));
         await tx.update(schema.dictionary).set({ ownerId: existing.id }).where(eq(schema.dictionary.ownerId, anon.id));
@@ -106,6 +109,10 @@ export async function consumeLoginLink(db: Db, token: string, browser?: string |
       }
       user = (await tx.select().from(schema.users).where(eq(schema.users.id, existing.id)).limit(1))[0];
     } else if (anon && !anon.email) {
+      // The anonymous account becomes the real one: a desktop app paired before signing in is
+      // unpaired all the same (on a shared computer it could be someone else's).
+      await tx.update(schema.bridgeDevices).set({ revokedAt: new Date() }).where(and(eq(schema.bridgeDevices.ownerId, anon.id), isNull(schema.bridgeDevices.revokedAt)));
+      await tx.delete(schema.pairingCodes).where(and(eq(schema.pairingCodes.ownerId, anon.id), eq(schema.pairingCodes.purpose, "bridge")));
       [user] = await tx
         .update(schema.users)
         .set({ email, emailVerifiedAt: new Date(), updatedAt: new Date() })

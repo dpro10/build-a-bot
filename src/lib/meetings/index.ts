@@ -28,6 +28,11 @@ export const CHUNK_MS = demoSpeech ? 6_000 : 20_000;
 export const CHUNK_MAX_BYTES = 8 * 1024 * 1024;
 export const CHUNK_MAX_MS = 5 * 60_000;
 export const MAX_MEETING_MS = 4 * 3600_000;
+/**
+ * Stopped from the website, the app may still be sending what it heard just before: those pieces
+ * still count for `chunkMs`, and the notes wait `notesDelayMs` for them.
+ */
+export const STOP_GRACE = { chunkMs: 30_000, notesDelayMs: 20_000 };
 /** No audio for this long: the recorder is gone (closed laptop, crashed app), so wrap the meeting up. */
 export const STALE_RECORDING_MS = 20 * 60_000;
 
@@ -303,7 +308,12 @@ export type ChunkInput = {
 export async function addChunk(db: Db, input: ChunkInput): Promise<{ ok: true; segments: MeetingSegment[]; duplicate?: boolean; warning?: string } | MeetingFailure> {
   const { meeting, owner, track, chunk } = input;
   const audio = input.heard ? null : (input.audio ?? new ArrayBuffer(0));
-  if (meeting.status !== "recording") return { ok: false, status: 409, code: "not_recording", error: "This meeting isn't recording anymore." };
+  const late =
+    meeting.status === "processing" &&
+    meeting.endedAt !== null &&
+    Date.now() - meeting.endedAt.getTime() < STOP_GRACE.chunkMs &&
+    !(meeting.meta as { notesStartedAt?: string } | null)?.notesStartedAt;
+  if (meeting.status !== "recording" && !late) return { ok: false, status: 409, code: "not_recording", error: "This meeting isn't recording anymore." };
   if (!Number.isInteger(chunk) || chunk < 0 || chunk > 5000) return { ok: false, status: 422, error: "Bad chunk number" };
   if (input.startMs < 0 || input.startMs > MAX_MEETING_MS) return { ok: false, status: 422, code: "too_long", error: "Meetings can be up to 4 hours." };
   if (input.durationMs < 1 || input.durationMs > CHUNK_MAX_MS) return { ok: false, status: 422, error: "Chunks must be under 5 minutes" };

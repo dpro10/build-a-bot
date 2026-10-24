@@ -4,6 +4,7 @@ import { loadBotAndOwner } from "@/lib/channels/inbound";
 import { gather, readTwilioForm, routeTwilio, say, twiml, unansweredCall } from "@/lib/channels/twilio-inbound";
 import { escapeXml } from "@/lib/channels/twilio";
 import { checkSpend } from "@/lib/billing/usage";
+import { rateLimit } from "@/lib/safety/ratelimit";
 import { callFirstName, lineCall, phoneSpeaker, startCall, voiceServerUp } from "@/lib/calls";
 
 /**
@@ -30,7 +31,11 @@ export async function POST(req: Request) {
   const { bot, owner } = loaded;
   // A call the bot turns away (paused, or out of credit) isn't kept, so it isn't charged (about a cent).
   if (bot.status === "paused") {
-    return twiml(`${say(`Hi, it's ${bot.name}. I'm paused right now. Text START to wake me up. Bye!`)}<Hangup/>`);
+    return twiml(`${say(`Hi, it's ${bot.name}. I'm paused right now. You can resume me in the Build-a-bot app. Bye!`)}<Hangup/>`);
+  }
+  // Only so many calls an hour from one phone, as from the web Call button.
+  if (params.From && !(await rateLimit(db, `call-in:${params.From}`, 20, 3600)).ok) {
+    return twiml(`${say(`Hi, it's ${bot.name}. That's a lot of calls in an hour. Please try again later. Bye!`)}<Hangup/>`);
   }
   const speaker = phoneSpeaker(routed.channel.ownerAddress, params.From, params.StirVerstat);
   const spend = await checkSpend(db, owner, "call");

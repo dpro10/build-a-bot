@@ -11,9 +11,10 @@ import { and, eq } from "drizzle-orm";
 import { schema, type Db } from "@/lib/db";
 import type { Approval, Bot, Channel, User } from "@/lib/db/schema";
 import { runTurn, type RunResult } from "@/lib/agent/run";
-import { approvalButtons, shortApprovalKey } from "@/lib/agent/approvals";
+import { approvalButtons, approvalLines, shortApprovalKey } from "@/lib/agent/approvals";
 import { isOptOut } from "@/lib/safety";
-import { newId } from "@/lib/utils";
+import { rateLimit, refundRateLimit } from "@/lib/safety/ratelimit";
+import { newId, sleep } from "@/lib/utils";
 import { deliver, ensureConversation, type OutboundButton } from "./outbound";
 import type { ChannelKind } from "./catalog";
 
@@ -78,6 +79,14 @@ export async function handleInbound(input: InboundInput): Promise<RunResult & { 
   }
 
   const conversation = await ensureConversation(db, bot.id, input.kind, input.threadId);
+  // One turn at a time per conversation: a second quick message waits for the first answer, so
+  // the two don't both act on the same request (two "call mom" reminders). A turn that's taking
+  // long (or never let go) is waited on for a minute at most.
+  const lock = `turn:${conversation.id}`;
+  for (let i = 0; i < 60 && !(await rateLimit(db, lock, 1, 300)).ok; i++) {
+    await refundRateLimit(db, lock);
+    await sleep(1000);
+  }
   const result = await runTurn({
     db,
     bot,
@@ -92,19 +101,22 @@ export async function handleInbound(input: InboundInput): Promise<RunResult & { 
       meta: input.meta,
     },
     startTainted: input.tainted,
-  });
+  }).finally(() => refundRateLimit(db, lock));
 
   const buttons = await channelButtons(db, owner.id, input.kind, result.approvals);
-  if (input.deliverReply !== false && result.text) {
+  // On a chat app the owner approves from the message itself: it says what the buttons approve.
+  const withButtons = input.kind === "telegram" || input.kind === "slack" || input.kind === "discord";
+  const replyText = withButtons && result.approvals.length && result.text ? `${result.text}\n\n${approvalLines(result.approvals)}` : result.text;
+  if (input.deliverReply !== false && replyText) {
     await deliver(
       db,
       bot,
       input.kind,
-      { to: input.replyTo, text: result.text, subject: input.subject, buttons, toOwner: input.isOwner },
+      { to: input.replyTo, text: replyText, subject: input.subject, buttons, toOwner: input.isOwner },
       { owner, channel },
     );
   }
-  return { ...result, replyText: result.text, buttons };
+  return { ...result, replyText, buttons };
 }
 
 /** Approval buttons sized for the channel (Telegram's callback_data is 64 bytes). */

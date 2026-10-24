@@ -34,7 +34,9 @@ vi.mock("next/server", async (importOriginal) => ({
 const { getDb, resetDbForTests, schema } = await import("@/lib/db");
 const { createBot } = await import("@/lib/bots/create");
 const { sha256 } = await import("@/lib/crypto");
-const { cleanHeard, HEARD_ON_DEVICE, staleRecordings } = await import("@/lib/meetings");
+const { cleanHeard, HEARD_ON_DEVICE, STOP_GRACE, staleRecordings } = await import("@/lib/meetings");
+// Stopped from the website, the notes wait for the app's last pieces: not in these tests.
+STOP_GRACE.notesDelayMs = 0;
 const meetingsRoute = await import("@/app/api/bots/[botId]/meetings/route");
 const meetingRoute = await import("@/app/api/bots/[botId]/meetings/[meetingId]/route");
 const audioRoute = await import("@/app/api/bots/[botId]/meetings/[meetingId]/audio/route");

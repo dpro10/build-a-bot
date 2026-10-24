@@ -285,9 +285,11 @@ describe("phone PINs", () => {
     const info = (await (await sessionRoute.POST(fromVoice("/api/calls/session", { callId: started!.call.id, kind: "phone" }))).json()) as { speaker: string; pinAvailable: boolean; greeting: string; context: string };
     expect(info).toMatchObject({ speaker: "unverified", pinAvailable: true, context: "" });
     expect(info.greeting).toMatch(/say or type your phone PIN/);
-    // Nothing is done for them before the PIN.
-    const early = (await (await actRoute.POST(fromVoice("/api/calls/act", { callId: started!.call.id, request: "Read my email" }))).json()) as { status: string };
-    expect(early.status).toBe("refused");
+    // Before the PIN they're anyone else: the bot only takes a message (nothing is read or done for them).
+    const early = await actRoute.POST(fromVoice("/api/calls/act", { callId: started!.call.id, request: "Read my email" }));
+    expect(early.status).toBe(200);
+    const asked = await db.select().from(schema.messages).where(eq(schema.messages.text, "Read my email"));
+    expect(asked.at(-1)?.author).toBe("contact");
     const wrong = await (await pinRoute.POST(fromVoice("/api/calls/pin", { callId: started!.call.id, pin: "4482" }))).json();
     expect(wrong).toEqual({ ok: false, remaining: 4, locked: false });
     const right = (await (await pinRoute.POST(fromVoice("/api/calls/pin", { callId: started!.call.id, pin: "4481" }))).json()) as { ok: boolean; firstName: string; context: string };

@@ -160,6 +160,25 @@ export async function housekeeping(db: Db, now = new Date()) {
   await db.delete(schema.pairingCodes).where(lt(schema.pairingCodes.expiresAt, weekAgo));
   await db.delete(schema.asyncResults).where(lt(schema.asyncResults.expiresAt, now));
   await db.delete(schema.inboundEvents).where(lt(schema.inboundEvents.createdAt, weekAgo));
+  // Sign-in links and rate-limit counts keep emails and addresses: none is needed past a few days
+  // (no limit counts over more than a day).
+  const twoDaysAgo = new Date(now.getTime() - 2 * 86400_000);
+  await db.delete(schema.loginTokens).where(lt(schema.loginTokens.expiresAt, twoDaysAgo));
+  await db.delete(schema.rateLimits).where(lt(schema.rateLimits.windowStart, twoDaysAgo));
+  // Library files whose reading was cut off (a 300-second limit, an upload that never finished) say
+  // so, and get a Try again, instead of "Reading…" forever.
+  await db
+    .update(schema.files)
+    .set({ status: "failed", error: "Reading it was cut off. Try again.", updatedAt: now })
+    .where(
+      or(
+        and(eq(schema.files.status, "reading"), lt(schema.files.updatedAt, new Date(now.getTime() - 10 * 60_000))),
+        and(eq(schema.files.status, "uploading"), lt(schema.files.updatedAt, new Date(now.getTime() - 60 * 60_000))),
+      ),
+    );
+  // Calls the voice server never reported the end of (it restarted mid-call) are closed.
+  const { closeStaleCalls } = await import("@/lib/calls");
+  await closeStaleCalls(db, now);
   // Meetings whose recorder vanished get wrapped up; notes that never finished get an honest ending.
   const { wrapUpStaleMeetings, rescueStuckNotes } = await import("@/lib/meetings/notes");
   await wrapUpStaleMeetings(db, now);

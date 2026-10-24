@@ -2,7 +2,7 @@
  * Tools from a connected remote MCP server, wrapped as policy-checked ToolSpecs.
  */
 import { z } from "zod";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { schema } from "@/lib/db";
 import type { Connection } from "@/lib/db/schema";
 import type { ConnectorDef } from "../types";
@@ -34,7 +34,8 @@ async function recipientsFor(args: Record<string, unknown>, ctx: ToolContext, de
   const known = await ctx.db
     .select({ address: schema.contacts.address })
     .from(schema.contacts)
-    .where(and(eq(schema.contacts.botId, ctx.bot.id), inArray(schema.contacts.address, emails)));
+    // Approved ones only: someone who opted out isn't a known contact.
+    .where(and(eq(schema.contacts.botId, ctx.bot.id), inArray(schema.contacts.address, emails), isNotNull(schema.contacts.approvedAt)));
   const knownSet = new Set(known.map((k) => k.address));
   return emails.map((address) => ({
     address,
@@ -76,7 +77,8 @@ export async function mcpToolsForConnection(conn: Connection, def: ConnectorDef,
       input: z.record(z.string(), z.unknown()),
       jsonSchema: schemaJson,
       connectorId: def.id,
-      capabilityId: def.capabilities.find((c) => c.effect === effect)?.id,
+      // A custom server has one rule for all its actions ("Use its action tools"): sends and deletes are actions too.
+      capabilityId: def.capabilities.find((c) => c.effect === effect)?.id ?? (effect !== "read" && def.category === "custom" ? "write" : undefined),
       effect,
       risk,
       sensitive: def.sensitive,

@@ -241,7 +241,9 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
     return finish(input, text, "limited", emit, { parts: action ? [{ type: "notice", ...action }] : [] });
   }
   // The whole site's daily ceiling on the included brain, and this account's share of it (billing/ceiling.ts).
-  const room: Room = brain.included ? await roomToday(db, "included", spenderOf(owner, input.network ?? null)) : "ok";
+  // Other people's messages have a share of their own: a stranger flooding the bot's Telegram can't use up the owner's.
+  const spender = input.message?.author === "contact" ? { ...spenderOf(owner), userId: `${owner.id}:others` } : spenderOf(owner, input.network ?? null);
+  const room: Room = brain.included ? await roomToday(db, "included", spender) : "ok";
   if (room !== "ok") {
     const forOwner = input.message?.author !== "contact";
     const text = forOwner ? CEILING_MESSAGES[room] : "I can't answer right now. Please try again later.";
@@ -262,6 +264,7 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
     demo: demoMode,
     now,
     signal: input.signal,
+    fromContact: input.message?.author === "contact",
   };
   const speakingWith = input.message?.author === "contact" ? "contact" : "owner";
   let toolset: Toolset = await buildToolset(toolCtx);
@@ -742,13 +745,17 @@ async function createApproval(ctx: ToolContext, spec: AnyToolSpec, args: Record<
   return row;
 }
 
-/** A readable preview of exactly what will happen (shown on the approval card). */
+/**
+ * A readable preview of exactly what will happen (shown on the approval card, which scrolls): all
+ * of it, since all of it is what gets sent, within a size no real email or message reaches.
+ */
 function approvalDetail(spec: AnyToolSpec, args: Record<string, unknown>): string {
   const lines: string[] = [];
+  const show = (x: unknown) => (x !== null && typeof x === "object" ? JSON.stringify(x) : String(x));
   for (const [k, v] of Object.entries(args)) {
     if (v === undefined || v === null || v === "") continue;
-    const value = Array.isArray(v) ? v.join(", ") : typeof v === "object" ? JSON.stringify(v) : String(v);
-    lines.push(`${k.replace(/_/g, " ")}: ${truncate(value, 1200)}`);
+    const value = Array.isArray(v) ? v.map(show).join(", ") : show(v);
+    lines.push(`${k.replace(/_/g, " ")}: ${truncate(value, 20_000)}`);
   }
   return lines.join("\n");
 }

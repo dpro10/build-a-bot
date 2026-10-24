@@ -19,8 +19,10 @@ export const messageOwnerTool = defineTool({
   outboundText: (a) => a.text,
   summarize: (a) => `Message you${a.channel && a.channel !== "auto" ? ` by ${a.channel}` : ""}`,
   async run(args, ctx) {
+    // Passing on someone else's message never rings the owner's phone: it goes where they read messages.
+    const asked = args.channel ?? "auto";
     const { channel, result } = await messageOwner(ctx.db, ctx.bot, ctx.owner, args.text, {
-      channel: args.channel ?? "auto",
+      channel: ctx.fromContact && asked === "voice" ? "auto" : asked,
       alsoWeb: false,
     });
     if (result.status === "failed") return { ok: false, error: `Couldn't reach the owner on ${channel}: ${result.error}` };
