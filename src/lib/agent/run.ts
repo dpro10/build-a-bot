@@ -187,8 +187,9 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
       .onConflictDoNothing();
   }
 
-  // 2. Owner commands work even when paused, and never touch the model.
-  if (input.message?.author === "owner") {
+  // 2. Owner commands work even when paused, and never touch the model. Not in a message that isn't
+  // the owner's own words (forwarded): someone else's "stop" doesn't pause the bot.
+  if (input.message?.author === "owner" && !input.startTainted) {
     const command = parseOwnerCommand(input.message.text);
     if (command) {
       const text = await handleCommand(db, bot, command, input.channelKind);
@@ -377,6 +378,10 @@ export async function runTurn(input: RunInput): Promise<RunResult> {
     } catch (err) {
       // Stopped (the owner's Stop, or a routine out of time): what it had said so far stands.
       if ((err as Error)?.name === "AbortError" || input.signal?.aborted) {
+        // The model still read everything and wrote what came out, and is paid for it, but a cut-off
+        // stream never reports it: it's counted the way a reply without a report is.
+        usage.inputTokens += Math.ceil((system.length + JSON.stringify(transcript).length + JSON.stringify(llmTools).length) / 4);
+        usage.outputTokens += Math.ceil(stepText.length / 4);
         const said = withoutAppNotes(stepText);
         if (said) finalText = finalText ? `${finalText}\n\n${said}` : said;
         break;

@@ -55,6 +55,12 @@ export function signInForCreditMessage(): string {
   return `Sign in with your email to do that (it's free)${starter > 0 ? `: your ${formatMicros(starter)} of starter credit comes with it` : ""}.`;
 }
 
+/** For an account that hasn't signed in, once the guests' share of today's budget is spent (ceiling.ts). */
+export function guestsBudgetMessage(): string {
+  const starter = starterCreditMicros();
+  return `So many people are trying Build-a-bot without signing in today that the free messages are used up until midnight UTC. Sign in with your email (it's free) to keep going${starter > 0 ? `: your ${formatMicros(starter)} of starter credit comes with it` : ""}.`;
+}
+
 /**
  * Why something that costs money can't run now, said for the owner, or null when it can. Credit
  * opens up with an email: before signing in, only the few free messages are on us (usage.ts), so

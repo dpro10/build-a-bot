@@ -424,7 +424,15 @@ export async function endCall(db: Db, call: Call, report: CallReportIn): Promise
   };
   const [ended] = await db
     .update(schema.calls)
-    .set({ status: "ended", endedAt: new Date(), durationS, transcript: turns, report: summary, costMicros: sql`${schema.calls.costMicros} + ${costMicros}` })
+    .set({
+      // A call that went on on the simpler line stays "failed": its minutes are charged at that line's price (twilio/voice/status).
+      status: sql`case when ${schema.calls.status} = 'failed' then 'failed' else 'ended' end`,
+      endedAt: new Date(),
+      durationS,
+      transcript: turns,
+      report: summary,
+      costMicros: sql`${schema.calls.costMicros} + ${costMicros}`,
+    })
     .where(and(eq(schema.calls.id, call.id), inArray(schema.calls.status, ["active", "failed"])))
     .returning();
   if (!ended || !loaded) return { costMicros: 0 };

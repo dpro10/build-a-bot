@@ -7,8 +7,8 @@ import { schema, type Db } from "@/lib/db";
 import type { User } from "@/lib/db/schema";
 import { creditOpen, demoMode } from "@/lib/env";
 import { periodKey } from "@/lib/utils";
-import { SITE_BUDGET_MESSAGE, countSiteSpend, siteBudgetLeft } from "./ceiling";
-import { getCredit, outOfCreditMessage, signInForCreditMessage } from "./credit";
+import { SITE_BUDGET_MESSAGE, countSiteSpend, siteBudget, siteDailyBudgetMicros } from "./ceiling";
+import { getCredit, guestsBudgetMessage, outOfCreditMessage, signInForCreditMessage } from "./credit";
 import { ANONYMOUS_INCLUDED_MESSAGES, FAIR_USE } from "./prices";
 
 export { ANONYMOUS_INCLUDED_MESSAGES };
@@ -66,8 +66,11 @@ export async function recordUsage(db: Db, userId: string, delta: UsageDelta, whe
         updatedAt: new Date(),
       },
     });
-  // And toward today's budget for the whole site (ceiling.ts).
-  await countSiteSpend(db, d.costMicros);
+  // And toward today's budget for the whole site, and the share of it for accounts that haven't signed in (ceiling.ts).
+  if (d.costMicros > 0 && siteDailyBudgetMicros()) {
+    const [user] = await db.select({ verified: schema.users.emailVerifiedAt }).from(schema.users).where(eq(schema.users.id, userId)).limit(1);
+    await countSiteSpend(db, d.costMicros, !user?.verified);
+  }
 }
 
 export async function getUsage(db: Db, userId: string, when = new Date()) {
@@ -131,7 +134,10 @@ export async function checkSpend(db: Db, owner: Pick<User, "id" | "emailVerified
       message: `You've sent ${FAIR_USE.ownBrainMessages.toLocaleString("en-US")} messages on your own AI this month, the fair-use limit. It resets on the 1st.`,
     };
   }
-  if (!(await siteBudgetLeft(db))) return { ok: false, code: "site_budget", message: SITE_BUDGET_MESSAGE };
+  // Today's budget for the whole site, and before signing in, the share of it for those accounts.
+  const budget = await siteBudget(db, !owner.emailVerifiedAt && !demoMode);
+  if (budget === "site") return { ok: false, code: "site_budget", message: SITE_BUDGET_MESSAGE };
+  if (budget === "guests") return { ok: false, code: "sign_in", message: guestsBudgetMessage() };
   if (!owner.emailVerifiedAt) {
     if (kind === "included") {
       const u = await getUsage(db, owner.id);

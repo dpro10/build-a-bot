@@ -375,6 +375,16 @@ export async function addChunk(db: Db, input: ChunkInput): Promise<{ ok: true; s
     }
   }
 
+  // A piece that arrived after the Stop (the app hadn't heard of it yet) is kept only up to the Stop,
+  // give or take the two clocks: nothing said after it is stored.
+  let pieceEndMs = input.startMs + input.durationMs;
+  if (late && meeting.endedAt) {
+    const stopMs = meeting.endedAt.getTime() - meeting.startedAt.getTime() + 2000;
+    segments = segments.filter((s) => input.startMs + s.startMs <= stopMs);
+    pieceEndMs = Math.min(pieceEndMs, stopMs);
+    heardMs = Math.max(0, Math.min(heardMs, pieceEndMs - input.startMs));
+  }
+
   const speaker = track === "mic" ? ((meeting.meta as { inPerson?: boolean } | null)?.inPerson ? "Room" : "You") : "Others";
   const rows = segments.length
     ? segments.map((s, i) => ({
@@ -399,7 +409,7 @@ export async function addChunk(db: Db, input: ChunkInput): Promise<{ ok: true; s
   // Meeting length follows wall-clock time, whichever track gets there first.
   // The timeline comes from the recorder, so it's also held to the audio each track really had
   // transcribed (a track never overlaps itself): restarting the timeline can't hide minutes.
-  const reach = Math.ceil((input.startMs + input.durationMs) / 1000);
+  const reach = Math.ceil(pieceEndMs / 1000);
   const heardSoFar = sql`coalesce((meetings.meta->'heardMs'->>${track}::text)::bigint, 0) + ${heardMs}::bigint`;
   let meta = provider ? sql`meetings.meta || jsonb_build_object('transcribedBy', ${provider}::text)` : sql`meetings.meta`;
   // Real audio means it's recording again; a tiny silent "still here" ping from a paused recorder doesn't.

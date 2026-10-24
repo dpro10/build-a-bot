@@ -5,7 +5,7 @@
  * the bill. INCLUDED_DAILY_LIMIT, SEARCH_DAILY_LIMIT and DICTATION_DAILY_LIMIT change them;
  * 0 turns a ceiling off. Each account, and the accounts that haven't signed in, get a share.
  */
-import { eq } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import { schema, type Db } from "@/lib/db";
 import { rateLimit, refundRateLimit } from "@/lib/safety/ratelimit";
 
@@ -83,10 +83,14 @@ export async function underDailyCeiling(db: Db, kind: Ceiling, uses = 1, who: Sp
  * And one in dollars, on everything we pay for (the models, web lookups, speech), per UTC day:
  * counting messages can't bound the bill on its own (a turn on the priciest model costs a hundred
  * of the default's). SITE_DAILY_USD changes it, $10 by default; 0 turns it off. When it's spent,
- * what costs money waits for tomorrow; people's own AI keys keep working.
+ * what costs money waits for tomorrow; people's own AI keys keep working. The accounts that haven't
+ * signed in (a cookie each) share at most GUESTS_SHARE of it: past that they're asked to sign in
+ * (it's free, and their own credit comes with it), so they can't use up the day for everyone.
  */
 const SITE_DAILY_USD_DEFAULT = 10;
 const SITE_SPEND_KEY = "ceiling:usd";
+const GUESTS_SHARE = 0.3;
+const GUESTS_SPEND_KEY = "ceiling:usd:guests";
 
 export function siteDailyBudgetMicros(): number {
   const raw = process.env.SITE_DAILY_USD?.trim();
@@ -97,18 +101,38 @@ export function siteDailyBudgetMicros(): number {
 export const SITE_BUDGET_MESSAGE =
   "So many people are trying Build-a-bot today that today's budget for the models and services we pay for is used up. It resets at midnight UTC. To keep going now, switch your bot to your own AI key in Settings → Brain.";
 
-/** Counts what something cost toward today's budget for the whole site. */
-export async function countSiteSpend(db: Db, micros: number): Promise<void> {
-  if (micros > 0 && siteDailyBudgetMicros()) await rateLimit(db, SITE_SPEND_KEY, Number.MAX_SAFE_INTEGER, 86_400, Math.round(micros));
+/** Counts what something cost toward today's budget for the whole site (and the guests' share, for a guest's). */
+export async function countSiteSpend(db: Db, micros: number, guest = false): Promise<void> {
+  if (!(micros > 0) || !siteDailyBudgetMicros()) return;
+  await rateLimit(db, SITE_SPEND_KEY, Number.MAX_SAFE_INTEGER, 86_400, Math.round(micros));
+  if (guest) await rateLimit(db, GUESTS_SPEND_KEY, Number.MAX_SAFE_INTEGER, 86_400, Math.round(micros));
+}
+
+/**
+ * What's left of today's budget: "ok"; "site", when the whole site's is spent; or, asked for an
+ * account that hasn't signed in, "guests", when their share is.
+ */
+export async function siteBudget(db: Db, guest = false, now = new Date()): Promise<"ok" | "site" | "guests"> {
+  const budget = siteDailyBudgetMicros();
+  if (!budget) return "ok";
+  const today = Math.floor(now.getTime() / 86_400_000) * 86_400_000;
+  const rows = await db
+    .select()
+    .from(schema.rateLimits)
+    .where(inArray(schema.rateLimits.key, guest ? [SITE_SPEND_KEY, GUESTS_SPEND_KEY] : [SITE_SPEND_KEY]));
+  const spent = (key: string) => rows.find((r) => r.key === key && r.windowStart.getTime() === today)?.count ?? 0;
+  if (spent(SITE_SPEND_KEY) >= budget) {
+    console.warn(`[ceiling] today's budget of $${(budget / 1_000_000).toFixed(2)} for the whole site is spent`);
+    return "site";
+  }
+  if (guest && spent(GUESTS_SPEND_KEY) >= Math.floor(budget * GUESTS_SHARE)) {
+    console.warn("[ceiling] the share of today's budget for accounts that haven't signed in is spent");
+    return "guests";
+  }
+  return "ok";
 }
 
 /** There's budget left today for the whole site. */
 export async function siteBudgetLeft(db: Db, now = new Date()): Promise<boolean> {
-  const budget = siteDailyBudgetMicros();
-  if (!budget) return true;
-  const today = Math.floor(now.getTime() / 86_400_000) * 86_400_000;
-  const [row] = await db.select().from(schema.rateLimits).where(eq(schema.rateLimits.key, SITE_SPEND_KEY)).limit(1);
-  if (!row || row.windowStart.getTime() !== today || row.count < budget) return true;
-  console.warn(`[ceiling] today's budget of $${(budget / 1_000_000).toFixed(2)} for the whole site is spent`);
-  return false;
+  return (await siteBudget(db, false, now)) === "ok";
 }

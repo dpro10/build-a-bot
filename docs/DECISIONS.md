@@ -1115,13 +1115,14 @@ Diego, on the audit's first two items: "Okay, fix the web search one and the Gma
 Diego, on the rest of the October 23 bug report: "ok, go ahead an just do the rest of the fixes, keep it simple yet correct. dont try and overengineer for small safety issues. Go over your work when your done. we need this to be great for the judges."
 
 **What changes for people (and the judges' guide says so):**
-- **Before signing in, it's chat:** the five free messages and the web lookups they make. Calls, routines, meeting notes, reading scanned pages, voice typing's AI cleanup and phone codes wait for an email. The $5 of starter credit comes with signing in (the app already said so). A guest's routines wait for the sign-in instead of running every day forever. Demo mode, where nothing real is charged, keeps credit open before signing in.
-- **A daily budget in dollars for the whole site:** `SITE_DAILY_USD`, $10 by default (0 turns it off), on everything we pay for. When it's spent, what costs money waits for midnight UTC; people's own AI keys keep working. Message counts alone couldn't bound the bill.
-- **Kimi K3 is only for accounts that have added credit** (it costs about 60 times what Lightning does). Every other included model stays open.
+- **Before signing in, it's chat:** the five free messages and the web lookups they make. Calls, routines, meeting notes, reading scanned pages, voice typing's AI cleanup and phone codes wait for an email. The $5 of starter credit comes with signing in (the app already said so). A guest's routines wait for the sign-in instead of running every day forever, and the bot and the Routines page say so. Demo mode, where nothing real is charged, keeps credit open before signing in.
+- **A daily budget in dollars for the whole site:** `SITE_DAILY_USD`, $10 by default (0 turns it off), on everything we pay for. When it's spent, what costs money waits for midnight UTC; people's own AI keys keep working. Message counts alone couldn't bound the bill. Accounts that haven't signed in share at most 30% of it: past that, they're asked to sign in (free, with their own $5), so a crowd of guests, or one person making guest accounts, can't stop the site for everyone. **Before judging (Dec 1–15), set `SITE_DAILY_USD` to what the Token Factory credit can take per day.**
+- **Kimi K3 is only for accounts that have added credit** (it costs about 60 times what Lightning does). Every other included model stays open. While credit can't be added (no Stripe), the brain pickers don't offer it; a bot already on it says how to switch. It's still there through your own OpenRouter key.
 - **A desktop app paired before signing in is unpaired by the sign-in** (on a shared computer it could be someone else's). It pairs again in a minute.
 - **Purchases always ask first.** No app says a price up front, so with a spending cap set, a purchase now asks instead of being refused, and the Limits card says so.
 - **A phone belongs to one account.** Linking it unlinks it from any other account's bots.
 - **Phone calls last up to 15 minutes**, on every line, and a phone can call 20 times an hour.
+- **Only the chat's Stop button stops an answer.** It asks the server to stop (`/chat/stop`), and the turn checks for that every second. A dropped connection (a phone locked mid-answer, a Wi-Fi blip) lets the answer finish, and the chat shows it when it's back. Stopping on any closed connection, as first built, cut those answers off.
 
 **Set in Vercel when convenient:** `GITHUB_TOKEN` (any read-only token) makes the download page's release check count against it instead of GitHub's 60 calls an hour. Without it, the page now keeps the last good list through GitHub's refusals.
 
@@ -1130,4 +1131,4 @@ Diego, on the rest of the October 23 bug report: "ok, go ahead an just do the re
 **Not changed:**
 - A link with a trailing backslash (`/pricing\`) still gives a 500 rather than a 404: it happens inside Next.js, before our code.
 - Next.js stays on 16.3.8: its advisories don't apply here, and a minor-version bump right before judging isn't worth the risk.
-- Turns cut off mid-way still aren't charged, and many messages sent at the same moment with a cent left can all run (small, and bounded by the daily budget).
+- Many messages sent at the same moment with a cent left can all run (small, and bounded by the daily budget). Turns cut off mid-way (Stop, a routine out of time) are now charged, from a count of what the model read and wrote, as for a reply without a usage report.

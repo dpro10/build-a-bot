@@ -8,6 +8,7 @@ import { networkOf } from "@/lib/tools/net";
 import { runTurn } from "@/lib/agent/run";
 import { ensureConversation } from "@/lib/channels/outbound";
 import { sseResponse } from "@/lib/sse";
+import { watchForStop } from "@/lib/agent/stop";
 
 export const maxDuration = 300;
 
@@ -43,17 +44,22 @@ export async function POST(req: Request, ctx: RouteCtx<{ botId: string }>) {
   }
   const conversation = await ensureConversation(a.db, botId, "web", "owner");
   return sseResponse(async (send, signal) => {
-    await runTurn({
-      db: a.db,
-      bot: a.bot,
-      owner: a.user,
-      conversation,
-      channelKind: "web",
-      message: { text: parsed.data.text, author: "owner", ...(files.length ? { meta: { files } } : {}) },
-      network: networkOf(clientIp(req)),
-      emit: send,
-      signal,
-    });
-    // The chat's Stop button lets go of the stream: the answer stops there, and isn't written (or billed) in full.
-  }, req.signal, { stopWhenClosed: true });
+    // The chat's Stop button stops the answer where it is (stop.ts); a dropped connection doesn't.
+    const stop = watchForStop(a.db, conversation.id, signal);
+    try {
+      await runTurn({
+        db: a.db,
+        bot: a.bot,
+        owner: a.user,
+        conversation,
+        channelKind: "web",
+        message: { text: parsed.data.text, author: "owner", ...(files.length ? { meta: { files } } : {}) },
+        network: networkOf(clientIp(req)),
+        emit: send,
+        signal: stop.signal,
+      });
+    } finally {
+      stop.done();
+    }
+  }, req.signal);
 }

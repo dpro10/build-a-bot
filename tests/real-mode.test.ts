@@ -388,6 +388,32 @@ describe("credit, before signing in and across the site", () => {
     }
   });
 
+  it("accounts that haven't signed in share 30% of the day's budget; past it they're asked to sign in, not everyone stopped", async () => {
+    const before = process.env.SITE_DAILY_USD;
+    process.env.SITE_DAILY_USD = "1"; // the guests' share: $0.30
+    try {
+      await db.delete(schema.rateLimits).where(sql`${schema.rateLimits.key} like 'ceiling:usd%'`);
+      const [guest] = await db.insert(schema.users).values({ id: "usr_guest_share", timezone: "UTC" }).returning();
+      const [other] = await db.insert(schema.users).values({ id: "usr_guest_share_2", timezone: "UTC" }).returning();
+      const [member] = await db.insert(schema.users).values({ id: "usr_member_share", email: "member@example.com", emailVerifiedAt: new Date(), timezone: "UTC" }).returning();
+      // What signed-in accounts spend doesn't count toward the guests' share.
+      await recordUsage(db, member.id, { costMicros: 400_000 });
+      expect(await checkSpend(db, other, "included")).toEqual({ ok: true });
+      await recordUsage(db, guest.id, { costMicros: 300_000 });
+      const refused = await checkSpend(db, other, "included");
+      expect(refused).toMatchObject({ ok: false, code: "sign_in" });
+      expect(!refused.ok && refused.message).toBe(
+        "So many people are trying Build-a-bot without signing in today that the free messages are used up until midnight UTC. Sign in with your email (it's free) to keep going: your $5.00 of starter credit comes with it.",
+      );
+      expect(await checkSpend(db, other, "lookup")).toMatchObject({ ok: false, code: "sign_in" });
+      // Signed in, there's the rest of the day's budget.
+      expect(await checkSpend(db, member, "included")).toEqual({ ok: true });
+    } finally {
+      if (before === undefined) delete process.env.SITE_DAILY_USD;
+      else process.env.SITE_DAILY_USD = before;
+    }
+  });
+
   it("Kimi K3 is the one included model that waits for credit you've added", async () => {
     const { INCLUDED_MODELS, needsAddedCredit } = await import("@/lib/models/catalog");
     expect(INCLUDED_MODELS.filter((m) => needsAddedCredit(m.id)).map((m) => m.label)).toEqual(["Kimi K3"]);

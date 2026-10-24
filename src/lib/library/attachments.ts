@@ -3,6 +3,7 @@
  * Library first; the message keeps a light copy (meta.files) to show them, and the model reads a
  * line saying they're there, then uses read_file or search_files like for any Library file.
  */
+import { defuse } from "@/lib/agent/frames";
 import { pagesLabel } from "./limits";
 
 export type AttachedFile = { id: string; name: string; kind: string; pages: number; status: string; note?: string | null };
@@ -22,9 +23,10 @@ export function withFiles(text: string, meta: unknown): string {
   if (!files.length) return text;
   const list = files
     .map((f) =>
+      // A file's name is whatever the sender called it: look-alike frames in it are defused too.
       f.status === "failed"
-        ? `${f.name} (couldn't be read: ${f.note ?? "unknown reason"})`
-        : `${f.name} (${f.kind === "image" ? "a photo; its text was already read, and read_file gives it to you" : pagesLabel(f.kind, f.pages)})`,
+        ? `${defuse(f.name)} (couldn't be read: ${defuse(f.note ?? "unknown reason")})`
+        : `${defuse(f.name)} (${f.kind === "image" ? "a photo; its text was already read, and read_file gives it to you" : pagesLabel(f.kind, f.pages)})`,
     )
     .join("; ");
   const ready = files.some((f) => f.status !== "failed");

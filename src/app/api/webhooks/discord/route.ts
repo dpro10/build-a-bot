@@ -1,5 +1,5 @@
 import { after } from "next/server";
-import { and, desc, eq, gt, isNull, like } from "drizzle-orm";
+import { and, eq, gt, isNull, like, sql } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { config } from "@/lib/env";
 import { verifyDiscordSignature, discordComponents } from "@/lib/channels/discord";
@@ -82,7 +82,8 @@ export async function POST(req: Request) {
     .select()
     .from(schema.channels)
     .where(and(eq(schema.channels.kind, "discord"), eq(schema.channels.ownerAddress, userId), eq(schema.channels.status, "active")))
-    .orderBy(desc(schema.channels.ownerVerifiedAt))
+    // Postgres puts nulls first when sorting down: an older link without the date would come first.
+    .orderBy(sql`${schema.channels.ownerVerifiedAt} desc nulls last`)
     .limit(1);
 
   if (i.type === 3 && i.data?.custom_id?.startsWith("ak:")) {

@@ -216,6 +216,23 @@ describe("meeting notes heard on the computer (no speech-to-text here)", () => {
 });
 
 describe("the website", () => {
+  it("stopped from the website, a piece already on its way keeps only what was said before the Stop", async () => {
+    const { meeting } = await startOnTheComputer();
+    const now = Date.now();
+    // 30 s in, the owner pressed Stop on the website; the app hasn't heard of it yet.
+    await db.update(schema.meetings).set({ startedAt: new Date(now - 30_000), endedAt: new Date(now), status: "processing" }).where(eq(schema.meetings.id, meeting.id));
+    const res = await heardReq(meeting.id, "track=system&chunk=1&startMs=20000&durationMs=20000", [
+      { startMs: 5000, endMs: 8000, text: "Before the stop." },
+      { startMs: 15_000, endMs: 18_000, text: "After the stop." },
+    ]);
+    expect(res.status).toBe(200);
+    const segments = await db.select().from(schema.meetingSegments).where(eq(schema.meetingSegments.meetingId, meeting.id));
+    expect(segments.map((s) => s.text).filter(Boolean)).toEqual(["Before the stop."]);
+    // Its length ends at the Stop too (with two seconds for the clocks).
+    const [row] = await db.select().from(schema.meetings).where(eq(schema.meetings.id, meeting.id));
+    expect(row.durationSec).toBe(32);
+  });
+
   it("can't start a meeting or send what was said, only the desktop app can", async () => {
     session.user = owner;
     try {

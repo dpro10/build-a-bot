@@ -127,7 +127,9 @@ export const scheduleRoutine = defineTool({
       nextRunAt,
     });
     const when = describeSchedule(schedule, tz);
-    return { ok: true, content: `Routine “${args.title}” scheduled (${id}) — ${when}.`, summary: when, data: { id } };
+    // Routines of accounts that haven't signed in wait for it (tick.ts): said now, not found out later.
+    const waits = ctx.owner.emailVerifiedAt ? "" : " It starts running once they sign in with their email (it's free); until then it waits. Tell them so.";
+    return { ok: true, content: `Routine “${args.title}” scheduled (${id}) — ${when}.${waits}`, summary: when, data: { id } };
   },
 });
 
