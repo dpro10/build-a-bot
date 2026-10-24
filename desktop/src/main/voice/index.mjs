@@ -78,6 +78,15 @@ export function setupVoice(o) {
     pushState();
     o.onChange();
   });
+  // It never manages to start here: said once, plainly, instead of "try again" on every dictation.
+  local.on("unavailable", (why) => {
+    const hears = serverHears();
+    o.notify({
+      title: "NVIDIA Parakeet can't run on this computer",
+      body: `${why.charAt(0).toUpperCase()}${why.slice(1)}. ${hears ? "Build-a-bot's servers hear you instead." : "Until it can, voice typing and meeting notes can't hear you here."} Voice typing settings can try again.`,
+      onClick: () => void showSettings(),
+    });
+  });
   // An engine the last run didn't get to stop (it was force-quit, or an update closed it) is
   // stopped now, rather than at the first dictation.
   if (local.supported() && !localOff) void local.reap();
@@ -145,11 +154,11 @@ export function setupVoice(o) {
     log,
   });
 
-  /** Parakeet can hear the next dictation on this computer: it's on, downloaded, and speaks the language picked. */
+  /** Parakeet can hear the next dictation on this computer: it's on, downloaded, able to run here, and speaks the language picked. */
   function parakeetHere() {
     const v = settings.get().voice;
     const lang = v.language || "auto";
-    return !localOff && v.onDevice !== false && local.isInstalled() && !local.blocked() && (lang === "auto" || LOCAL_LANGUAGES.has(lang));
+    return !localOff && v.onDevice !== false && local.isInstalled() && !local.blocked() && !local.unavailable() && (lang === "auto" || LOCAL_LANGUAGES.has(lang));
   }
 
   /** Speech-to-text runs on this computer for the next dictation: Parakeet can hear it, and the server takes text. */
@@ -177,6 +186,7 @@ export function setupVoice(o) {
     const fix = ["settings"];
     if (localOff || !local.supported()) return { code: "on-device", message: "Voice typing can't hear you on this computer yet: this server doesn't turn recordings into text.", actions: [] };
     if (local.blocked()) return { code: "on-device", message: "NVIDIA Parakeet can't run from this Windows account's folder, and this server doesn't turn recordings into text.", actions: fix };
+    if (local.unavailable()) return { code: "on-device", message: `NVIDIA Parakeet can't run on this computer (${local.unavailable()}), and this server doesn't turn recordings into text.`, actions: fix };
     if (v.onDevice === false) return { code: "on-device", message: "Turn on Private speech: NVIDIA Parakeet hears you on this computer, and this server doesn't turn recordings into text.", actions: fix };
     if (lang !== "auto" && !LOCAL_LANGUAGES.has(lang)) return { code: "on-device", message: "NVIDIA Parakeet doesn't speak the language you picked. Pick one it does, or “Detect it”, in settings.", actions: fix };
     // A server too old to take text heard on the computer.
@@ -468,10 +478,10 @@ export function setupVoice(o) {
    */
   function meetingParakeet() {
     const v = settings.get().voice;
-    return !localOff && v.onDevice !== false && local.supported() && !local.blocked();
+    return !localOff && v.onDevice !== false && local.supported() && !local.blocked() && !local.unavailable();
   }
 
-  /** How the next piece of a meeting is heard (meeting-speech.mjs). @returns {'local'|'server'|'wait'} */
+  /** How the next piece of a meeting is heard (meeting-speech.mjs). @returns {'local'|'server'|'wait'|'none'} */
   function meetingWay() {
     const m = account.session?.meetings;
     if (m?.local === true && meetingParakeet()) {
@@ -481,6 +491,9 @@ export function setupVoice(o) {
       return m.available === true ? "server" : "wait";
     }
     if (m?.available === true) return "server";
+    // NVIDIA Parakeet can't run on this computer and the server doesn't hear audio: nothing ever
+    // will hear these pieces, so they don't pile up waiting (the notes stop, and the owner is told).
+    if (m?.local === true && local.unavailable()) return "none";
     return "wait";
   }
 
@@ -490,6 +503,7 @@ export function setupVoice(o) {
     if (!m || m.available === true || (m.local === true && meetingParakeet())) return null;
     if (m.local !== true) return "Meeting notes aren't set up on this server";
     if (local.blocked()) return "NVIDIA Parakeet can't run from this Windows account's folder";
+    if (local.unavailable()) return "NVIDIA Parakeet can't run on this computer";
     if (localOff || !local.supported()) return "Meeting notes need NVIDIA Parakeet, which can't run here";
     return "Turn on Private speech to take notes";
   }
@@ -507,6 +521,7 @@ export function setupVoice(o) {
     const m = account.session?.meetings;
     if (!m) return null;
     const problem = meetingProblem();
+    if (problem && local.unavailable()) return `${problem} (${local.unavailable()}). Try again in Voice typing settings.`;
     if (problem) return `${problem}.`;
     const way = meetingWay();
     if (way === "server") {
@@ -703,7 +718,9 @@ export function setupVoice(o) {
     });
     ipcMain.handle("voice:local", async (e, action) => {
       fromWindow(e);
-      if (action === "retry") maybeInstall(true);
+      // It couldn't run here: one more try (the owner may have allowed it, or updated the system).
+      if (action === "retry" && local.unavailable()) local.tryAgain();
+      else if (action === "retry") maybeInstall(true);
       if (action === "remove") await local.remove();
       return state();
     });

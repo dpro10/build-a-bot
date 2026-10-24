@@ -354,7 +354,7 @@ test("downloads NVIDIA's runtime, its number rules and the model, checks them, a
   // The settings window heard about it as it went.
   assert.equal(states[0].state, "downloading");
   assert.equal(states.at(-1).state, "installed");
-  assert.deepEqual(local.status(), { state: "installed", supported: true, blocked: false, received: 0, total: 0, error: null, model: "NVIDIA Parakeet", bytes: 400_000 });
+  assert.deepEqual(local.status(), { state: "installed", supported: true, blocked: false, unavailable: null, received: 0, total: 0, error: null, model: "NVIDIA Parakeet", bytes: 400_000 });
 
   // Already here: nothing to download, and the next run of the app knows it.
   const before = server.requests.length;
@@ -620,9 +620,11 @@ test("stops after a while unused, so the model isn't in memory all day", async (
 // Apple silicon's runtime has a GPU (Metal): these run the engine as there.
 const APPLE_SILICON = { platform: "darwin", arch: "arm64" };
 
-test("a runtime that keeps crashing (on the GPU, then on the CPU) is given up on: the server hears the owner instead", async (t) => {
-  const { local, spawned } = await setup(t, { mode: "crash", ...APPLE_SILICON });
+test("a runtime that stops as it starts, every time (on the GPU, then on the CPU), is taken as unable to run here, and said why", async (t) => {
+  const { local, spawned, make, logs } = await setup(t, { mode: "crash", ...APPLE_SILICON, osRelease: "23.6.0" });
   await local.install();
+  const told = [];
+  local.on("unavailable", (why) => told.push(why));
   // The GPU, then at once the CPU; then the CPU again.
   for (let i = 0; i < 2; i++) await assert.rejects(local.ensureRunning(), (e) => e instanceof LocalSpeechError && e.code === "crashed");
   assert.deepEqual(
@@ -630,13 +632,59 @@ test("a runtime that keeps crashing (on the GPU, then on the CPU) is given up on
     ["auto", "cpu", "cpu"],
   );
   assert.equal(local.state, "installed");
-  assert.equal(local.crashing(), true, "meeting notes hear it too: their pieces go to a server that hears audio, or wait");
-  await assert.rejects(local.ensureRunning(), (e) => e instanceof LocalSpeechError && e.code === "crashing");
-  await assert.rejects(local.transcribe(wav()), (e) => e instanceof LocalSpeechError && e.code === "crashing");
+  assert.equal(local.crashing(), true);
+  assert.equal(local.unavailable(), "it stops every time it starts");
+  assert.deepEqual(told, ["it stops every time it starts"], "said once");
+  assert.equal(local.status().unavailable, "it stops every time it starts");
+  assert.ok(logs.some((m) => /it can't run on this computer \(it stops every time it starts\)/.test(m)), logs.join("\n"));
+  // Not tried again on every dictation, or every piece of a meeting.
+  await assert.rejects(local.ensureRunning(), (e) => e instanceof LocalSpeechError && e.code === "unavailable");
+  await assert.rejects(local.transcribe(wav()), (e) => e instanceof LocalSpeechError && e.code === "unavailable");
+  local.warm();
   assert.equal(spawned.length, 3, "it wasn't started a fourth time");
-  // Ten minutes on, it gets another try.
-  local.crashes = local.crashes.map((at) => at - 10 * 60_000);
-  assert.equal(local.crashing(), false);
+  // Nor in the next run of the app…
+  assert.equal(make({ osRelease: "23.6.0" }).unavailable(), "it stops every time it starts");
+  // …until the app, NVIDIA's runtime or the system is updated: then it gets another try.
+  assert.equal(make({ osRelease: "23.6.0", appVersion: "0.1.999" }).unavailable(), null);
+  assert.equal(make({ osRelease: "24.0.0" }).unavailable(), null);
+  // Settings' Try again: one more start, and it's marked again at once when that fails too.
+  local.tryAgain();
+  assert.equal(local.unavailable(), null);
+  await until(() => spawned.length === 4 && local.unavailable() !== null);
+  assert.deepEqual(told, ["it stops every time it starts", "it stops every time it starts"]);
+  // Removing it forgets it all.
+  await local.remove();
+  assert.equal(local.unavailable(), null);
+});
+
+test("why it can't run, when it can be told: macOS too old for NVIDIA's engine, or Windows not letting it run", async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bab-local-why-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const why = (o, spawnFailed) => new LocalSpeech({ dir, ...o }).whyCantRun(spawnFailed);
+  assert.equal(why({ platform: "darwin", arch: "arm64", osRelease: "22.3.0" }, false), "it needs macOS 13.3 or later", "macOS 13.2");
+  assert.equal(why({ platform: "darwin", arch: "x64", osRelease: "22.1.0" }, false), "it needs macOS 13.3 or later", "macOS 13.0");
+  assert.equal(why({ platform: "darwin", arch: "arm64", osRelease: "22.4.0" }, false), "it stops every time it starts", "macOS 13.3 runs it");
+  assert.equal(why({ platform: "win32", arch: "x64" }, true), "Windows won't let it run, perhaps because of Smart App Control or an antivirus");
+  assert.equal(why({ platform: "win32", arch: "x64" }, false), "it stops every time it starts");
+  assert.equal(why({ platform: "linux", arch: "x64" }, true), "this computer won't let it run");
+});
+
+test("an engine that couldn't start a couple of times, then did, isn't given up on", async (t) => {
+  let fails = 2;
+  const { local, logs } = await setup(t, {
+    spawnImpl: (cmd, args, opts) => {
+      if (path.basename(cmd) !== "nemo-speech") return spawn(cmd, args, opts);
+      if (fails-- > 0) return spawn(`${cmd}-missing`, args, opts);
+      return spawn(process.execPath, [cmd, ...args], { ...opts, env: { ...opts.env, FAKE_NEMO: "" } });
+    },
+  });
+  await local.install();
+  for (let i = 0; i < 2; i++) await assert.rejects(local.ensureRunning(), (e) => e.code === "crashed");
+  await local.ensureRunning();
+  assert.equal(local.state, "ready");
+  assert.equal(local.failedStarts, 0);
+  assert.equal(local.unavailable(), null);
+  assert.ok(!logs.some((m) => /can't run on this computer/.test(m)));
 });
 
 test("the GPU failing to load moves it to the CPU at once; a later run starts there only after it failed in two", async (t) => {

@@ -57,6 +57,7 @@ const STOP_NOTES = {
   not_recording: (bot) => `${bot} stopped: this meeting was ended somewhere else.`,
   gone: (bot) => `${bot} stopped: this meeting was ended somewhere else.`,
   mic_lost: (bot) => `${bot} stopped because it lost your microphone.`,
+  cant_hear: (bot) => `${bot} stopped taking notes: NVIDIA Parakeet can't run on this computer, so nothing here can hear the call.`,
 };
 
 /** A start error → words for the bubble, and what "Open" should open. */
@@ -825,6 +826,12 @@ export class Controller extends EventEmitter {
     }
     if (phase === "asking" && !this.hovering && this.askDeadline && now >= this.askDeadline) {
       this.dispatch({ type: "ask_timeout" });
+      return;
+    }
+    // Nothing here or on the server can hear this meeting (NVIDIA Parakeet turned out unable to run
+    // on this computer): the notes stop and say why, instead of recording what nobody will hear.
+    if (this.rec && (phase === "listening" || phase === "paused") && this.o.hearing?.way() === "none") {
+      this.dispatch({ type: "stop", reason: "cant_hear" });
       return;
     }
     if (!mustBeVisible(phase) || this.buddyPending) return;

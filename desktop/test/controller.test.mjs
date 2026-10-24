@@ -573,6 +573,21 @@ test("a call before NVIDIA Parakeet is here: it listens, says so, and makes sure
   env.c.dispose();
 });
 
+test("NVIDIA Parakeet turning out unable to run here (and a server that doesn't hear audio): the notes stop and say why, instead of piling up", async () => {
+  let way = "local";
+  const env = setup({ hearing: { way: () => way, waitNote: () => null, ensure() {}, warm() {} } });
+  await listening(env);
+  env.c.tick();
+  assert.equal(env.c.state.phase, "listening", "it can hear: the notes go on");
+  way = "none";
+  env.c.tick();
+  await flush();
+  assert.ok(env.calls.includes("capture.stop"));
+  assert.ok(env.calls.includes("api.finish"), "the meeting is finished with what was heard");
+  assert.ok(env.notes.some((n) => /stopped taking notes: NVIDIA Parakeet can't run on this computer/.test(n)), env.notes.join("\n"));
+  env.c.dispose();
+});
+
 test("while NVIDIA Parakeet downloads there are no captions: the bot says why now and then, and when it's caught up", async () => {
   let way = "wait";
   let note = "Getting NVIDIA Parakeet (10%). I'm listening, and I'll write your notes once it's here.";
