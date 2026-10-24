@@ -20,7 +20,7 @@ import { SentenceChunker } from "../speech/text.ts";
 import { TurnDetector, endDelayFor, type TurnEvent, type TurnOptions } from "../turn/detector.ts";
 import { VAD_RATE, VAD_WINDOW_MS, type Vad, type VadStream } from "../vad/vad.ts";
 import { concatPcm } from "../audio/pcm.ts";
-import { PhraseCache } from "./phrases.ts";
+import { ENGINE_TROUBLE, PhraseCache } from "./phrases.ts";
 import { pinFromSpeech } from "./pin.ts";
 import { Speaker, type SpeechPace } from "./speaker.ts";
 import type { CallTransport } from "./transport.ts";
@@ -115,7 +115,10 @@ export class CallSession {
   private readonly speaker: Speaker;
 
   private startedAt = 0;
+  /** The call is over: nothing more happens on it. */
   private ended = false;
+  /** The call is ending (a goodbye may still be playing): no new turns. */
+  private ending: Promise<CallReport> | null = null;
   private endedBy: CallReport["endedBy"] = "caller";
   private finished!: Promise<CallReport>;
   private resolveFinished!: (r: CallReport) => void;
@@ -152,6 +155,8 @@ export class CallSession {
   private pinTries = 0;
   /** The line is gone: nothing more can be said on it. */
   private hungUp = false;
+  /** The speech engine failed this many times in a row (it couldn't say or hear anything). */
+  private engineErrors = 0;
 
   constructor(deps: SessionDeps) {
     this.info = deps.info;
@@ -183,8 +188,14 @@ export class CallSession {
           this.transport.event({ type: "state", state: "listening" });
           this.onQuiet();
         },
-        onAudioStart: (piece) => this.onAudioStart(piece.id),
-        onError: (err) => this.log("tts_error", { error: err.message }),
+        onAudioStart: (piece) => {
+          if (piece.made) this.engineErrors = 0;
+          this.onAudioStart(piece.id);
+        },
+        onError: (err) => {
+          this.log("tts_error", { error: err.message });
+          this.engineTrouble();
+        },
       },
     });
     this.finished = new Promise((resolve) => (this.resolveFinished = resolve));
@@ -204,6 +215,13 @@ export class CallSession {
       this.log("transport_closed", { why });
       void this.end("caller");
     };
+    // They hung up while the call was being set up: nobody's there to talk to.
+    if (!this.transport.open) {
+      this.hungUp = true;
+      this.log("transport_closed", { why: "before the call started" });
+      void this.end("caller");
+      return this.finished;
+    }
     this.history = [];
     this.say(this.info.greeting, "bot");
     const maxMs = Math.max(1, this.info.maxMinutes) * 60_000;
@@ -220,7 +238,7 @@ export class CallSession {
   // ---- hearing ------------------------------------------------------------------------------
 
   private onAudio(pcm: Int16Array): void {
-    if (this.ended || !pcm.length) return;
+    if (this.ended || this.ending || !pcm.length) return;
     this.chunks.push({ start: this.samplesIn, pcm });
     this.samplesIn += pcm.length;
     this.trimAudio();
@@ -252,7 +270,7 @@ export class CallSession {
   }
 
   private onTurnEvent(e: TurnEvent): void {
-    if (this.ended) return;
+    if (this.ended || this.ending) return;
     switch (e.type) {
       case "barge_in": {
         this.log("barge_in");
@@ -291,11 +309,13 @@ export class CallSession {
     return this.engine
       .hear(pcm, VAD_RATE, { phrases: this.info.phrases, language: this.info.language })
       .then((h) => {
+        this.engineErrors = 0;
         this.log("heard", { audioMs: Math.round((pcm.length * 1000) / VAD_RATE), ms: Math.round(this.now() - t0) });
         return h;
       })
       .catch((err: Error) => {
         this.log("asr_error", { error: err.message });
+        this.engineTrouble();
         return null;
       });
   }
@@ -341,7 +361,7 @@ export class CallSession {
     } else {
       heard = await this.hear(this.turnAudio());
     }
-    if (this.ended) return;
+    if (this.ended || this.ending) return;
     const text = heard?.text.trim() ?? "";
     if (!text) {
       // Noise, a cough, or nothing recognizable.
@@ -431,7 +451,7 @@ export class CallSession {
     reply.done = this.runReply(reply).catch((err: Error) => {
       if (reply.ac.signal.aborted) return;
       this.log("reply_error", { error: err.message });
-      if (!this.ended) this.speakNow("Sorry, I lost my train of thought. Could you say that again?");
+      if (!this.ended && !this.ending) this.speakNow("Sorry, I lost my train of thought. Could you say that again?");
     });
     return reply;
   }
@@ -503,7 +523,7 @@ export class CallSession {
     if (this.reply === reply) this.reply = null;
     const next = this.pendingInput;
     this.pendingInput = null;
-    if (next && !this.ended) {
+    if (next && !this.ended && !this.ending) {
       const r = this.startReply(next.input, { held: false });
       r.speechEndedAt = next.speechEndedAt;
       r.heardMs = next.heardMs;
@@ -575,7 +595,7 @@ export class CallSession {
     // Still going: say so now, and pass the answer on when it comes.
     void job.then((out) => {
       finish(out);
-      if (this.ended) return;
+      if (this.ended || this.ending) return;
       const text = out.ok ? out.r.text : "It couldn't finish that request.";
       this.queueUpdate(`About "${request}": ${text}${out.ok && out.r.approvals.length ? ` (Waiting for the owner's OK: ${out.r.approvals.map((a) => a.title).join("; ")})` : ""}`);
     });
@@ -587,9 +607,9 @@ export class CallSession {
     this.onQuiet();
   }
 
-  /** Says something outside the talker (a fixed line), as its own reply. */
-  private speakNow(text: string): void {
-    this.speaker.say(text);
+  /** Says something outside the talker (a fixed line, or pre-made audio of it), as its own reply. */
+  private speakNow(text: string, audio?: Int16Array): void {
+    this.speaker.say(text, audio);
     this.recordTurn("bot", text);
   }
 
@@ -652,7 +672,7 @@ export class CallSession {
 
   /** The line went quiet: hang up if asked, pass on an update, or start the idle clock. */
   private onQuiet(): void {
-    if (this.ended || this.speaker.busy || this.detector.speaking || this.reply || this.spec) return;
+    if (this.ended || this.ending || this.speaker.busy || this.detector.speaking || this.reply || this.spec) return;
     if (this.hangupAfterSpeech) {
       void this.end(this.endedBy === "caller" ? "bot" : this.endedBy);
       return;
@@ -669,7 +689,7 @@ export class CallSession {
     this.clearIdle();
     this.idleTimer = setTimeout(() => {
       this.idleTimer = null;
-      if (this.ended || this.speaker.busy || this.reply || this.detector.speaking) return;
+      if (this.ended || this.ending || this.speaker.busy || this.reply || this.detector.speaking) return;
       if (this.jobs > 0) {
         this.armIdle();
         return;
@@ -688,6 +708,20 @@ export class CallSession {
     if (this.idleTimer) clearTimeout(this.idleTimer);
     this.idleTimer = null;
     this.askedStillThere = this.askedStillThere && this.detector.speaking ? false : this.askedStillThere;
+  }
+
+  /**
+   * The speech engine failed: a sentence it couldn't say, a turn it couldn't hear. Once it's down
+   * or restarting, or fails twice in a row, the caller would only get silence: say sorry (from
+   * audio made at start-up, if there is some) and end the call.
+   */
+  private engineTrouble(): void {
+    if (this.ended || this.ending) return;
+    this.engineErrors++;
+    if (this.engine.ready && this.engineErrors < 2) return;
+    this.log("engine_trouble", { errors: this.engineErrors, ready: this.engine.ready });
+    const audio = this.phrases.get(ENGINE_TROUBLE, this.voice, this.transport.outputRate);
+    void this.end("error", audio ? ENGINE_TROUBLE : undefined, audio);
   }
 
   // ---- PIN ----------------------------------------------------------------------------------
@@ -727,7 +761,7 @@ export class CallSession {
       this.speakNow("I couldn't check that just now. Try again in a moment.");
       return;
     }
-    if (this.ended) return;
+    if (this.ended || this.ending) return;
     if (result.ok) {
       this.info.speaker = "owner";
       this.info.owner.firstName = result.firstName || this.info.owner.firstName;
@@ -756,18 +790,26 @@ export class CallSession {
     return this.turns.length - 1;
   }
 
-  async end(endedBy: CallReport["endedBy"], goodbye?: string): Promise<CallReport> {
-    if (this.ended) return this.finished;
+  /**
+   * Ends the call (once: later calls get the same report): a goodbye if there's one and someone to
+   * hear it, then the report to the app, then the line closes.
+   */
+  end(endedBy: CallReport["endedBy"], goodbye?: string, goodbyeAudio?: Int16Array): Promise<CallReport> {
+    this.ending ??= this.finish(endedBy, goodbye, goodbyeAudio);
+    return this.ending;
+  }
+
+  private async finish(endedBy: CallReport["endedBy"], goodbye?: string, goodbyeAudio?: Int16Array): Promise<CallReport> {
     this.endedBy = endedBy;
     if (goodbye && !this.hungUp) {
       this.reply?.ac.abort();
+      this.spec?.reply?.ac.abort();
       this.speaker.stop();
-      this.speakNow(goodbye);
+      this.speakNow(goodbye, goodbyeAudio);
       // Let it play (a phone call keeps going until the stream closes).
       const until = this.now() + 8000;
       while (this.speaker.busy && !this.hungUp && this.now() < until) await new Promise((r) => setTimeout(r, 100));
     }
-    if (this.ended) return this.finished;
     this.ended = true;
     for (const t of [this.fillerTimer, this.idleTimer, this.limitTimer, this.dtmfTimer]) if (t) clearTimeout(t);
     this.reply?.ac.abort();
@@ -778,7 +820,8 @@ export class CallSession {
     const report: CallReport = {
       endedBy,
       durationS: Math.round((this.now() - this.startedAt) / 1000),
-      turns: this.turns,
+      // Nothing from the caller (they hung up at once, or never spoke): there's no conversation to keep.
+      turns: this.turns.some((t) => t.role === "caller") ? this.turns : [],
       latency: { turns: sorted.length, p50Ms: pct(0.5), p90Ms: pct(0.9), samples: this.latencies },
       usage: { ...this.usage, model: this.llm.model },
       engine: { version: this.engine.info.version },

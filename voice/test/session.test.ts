@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { CallSession, sanitizeHistory, type SessionConfig } from "../src/call/session.ts";
-import { PhraseCache } from "../src/call/phrases.ts";
+import { ENGINE_TROUBLE, PhraseCache } from "../src/call/phrases.ts";
 import { EnergyVad } from "../src/vad/vad.ts";
 import { pinFromSpeech } from "../src/call/pin.ts";
 import type { ChatMessage, LlmRequest } from "../src/brain/llm.ts";
@@ -25,13 +25,14 @@ function setup(opts: { script: LlmScript; transcribe?: (ms: number) => string; i
   const llm = new FakeLlm(opts.script);
   const app = new FakeApp();
   const transport = new FakeTransport();
+  const phrases = new PhraseCache(engine);
   const logs: { event: string; fields?: Record<string, unknown> }[] = [];
   const session = new CallSession({
     engine,
     vad: new EnergyVad(),
     llm,
     app,
-    phrases: new PhraseCache(engine),
+    phrases,
     transport,
     info: sessionInfo(opts.info),
     config: { ...FAST, ...opts.config, turn: { ...FAST.turn, ...opts.config?.turn } },
@@ -39,7 +40,14 @@ function setup(opts: { script: LlmScript; transcribe?: (ms: number) => string; i
   });
   const caller = new Caller(transport);
   const transcript = () => app.turns.map((t) => `${t.role}: ${t.text}${t.interrupted ? " [cut]" : ""}`);
-  return { engine, llm, app, transport, session, caller, logs, transcript };
+  /** The greeting has played, and the caller says something (talkMs of speech, then quiet). */
+  const greetedThenSays = async (talkMs = 400) => {
+    await until(() => transport.events.some((e) => e.type === "state" && e.state === "listening"), 3000, "greeting played");
+    await caller.silence(300);
+    await caller.talk(talkMs);
+    await caller.silence(800);
+  };
+  return { engine, llm, app, transport, phrases, session, caller, logs, transcript, greetedThenSays };
 }
 
 test("greets, hears a question, answers it, and reports the call", async () => {
@@ -261,4 +269,63 @@ test("PINs said out loud", () => {
   assert.equal(pinFromSpeech("call me at 5"), null);
   assert.equal(pinFromSpeech("one two three"), null);
   assert.equal(pinFromSpeech("book it for 4 people on 1234 Main"), null);
+});
+
+// ---- hanging up early ------------------------------------------------------------------------
+
+test("a caller who hung up before the call started: it ends at once, with nothing to post", async () => {
+  const t = setup({ script: () => ({ text: "x" }) });
+  t.transport.open = false;
+  const report = await t.session.start();
+  assert.equal(report.endedBy, "caller");
+  assert.equal(report.durationS, 0);
+  assert.deepEqual(report.turns, []);
+  assert.deepEqual(t.engine.spoken, [], "no greeting for nobody");
+  assert.equal(t.app.reports.length, 1);
+});
+
+test("a hang-up during the greeting ends the call at once, and a call the caller never spoke in has no transcript", async () => {
+  const t = setup({ script: () => ({ text: "x" }) });
+  const done = t.session.start();
+  await until(() => t.engine.spoken.length >= 1, 2000, "greeting");
+  const at = Date.now();
+  t.transport.hangUp();
+  const report = await done;
+  assert.ok(Date.now() - at < 1000, `took ${Date.now() - at} ms`);
+  assert.equal(report.endedBy, "caller");
+  assert.deepEqual(report.turns, []);
+});
+
+// ---- the speech engine failing ---------------------------------------------------------------
+
+test("the speech engine goes down mid-call: the caller hears sorry (made in advance) and the call ends", async () => {
+  const t = setup({ script: () => ({ text: "Sure." }), transcribe: () => "Hello?" });
+  await t.phrases.make(ENGINE_TROUBLE, "Aria", 8000); // as index.ts does at start-up
+  const done = t.session.start();
+  await until(() => t.transport.events.some((e) => e.type === "state" && e.state === "listening"), 3000, "greeting played");
+  t.engine.down = true;
+  t.engine.ready = false;
+  const sentBefore = t.transport.sentMs;
+  await t.caller.silence(300);
+  await t.caller.talk(400);
+  await t.caller.silence(500);
+  const report = await done;
+  assert.equal(report.endedBy, "error");
+  assert.ok(t.transcript().includes(`bot: ${ENGINE_TROUBLE}`), JSON.stringify(t.transcript()));
+  assert.ok(t.transport.sentMs > sentBefore, "the apology was played");
+  assert.ok(t.logs.some((l) => l.event === "engine_trouble"));
+});
+
+test("a speech engine that keeps failing (though it says it's up) ends the call instead of leaving silence", async () => {
+  const t = setup({ script: () => ({ text: "Sure." }), transcribe: () => "Hello?" });
+  const done = t.session.start();
+  await until(() => t.transport.events.some((e) => e.type === "state" && e.state === "listening"), 3000, "greeting played");
+  t.engine.down = true;
+  for (let i = 0; i < 2; i++) {
+    await t.caller.silence(300);
+    await t.caller.talk(400);
+    await t.caller.silence(500);
+  }
+  const report = await done;
+  assert.equal(report.endedBy, "error");
 });

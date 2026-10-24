@@ -19,6 +19,11 @@ function loudMs(pcm: Int16Array): number {
 
 export class FakeEngine implements SpeechEngine {
   info: EngineInfo = { version: "fake", asr: true, tts: true, voices: ["Aria"], voice: "Aria", sampleRate: 22050 };
+  ready = true;
+  /** Down: every hear and speak fails, as when the sidecar has crashed. */
+  down = false;
+  /** Hung: speak never answers (no audio, no result), as a stuck engine. */
+  hung = false;
   heard: { ms: number; opts?: HearOptions }[] = [];
   spoken: string[] = [];
   /** What the caller said, from how much they talked. */
@@ -34,6 +39,7 @@ export class FakeEngine implements SpeechEngine {
   }
 
   async hear(pcm: Int16Array, _rate: number, opts?: HearOptions): Promise<Heard> {
+    if (this.down) throw new Error("speech engine isn't running");
     const ms = loudMs(pcm);
     this.heard.push({ ms, opts });
     await sleep(this.hearDelayMs);
@@ -41,6 +47,8 @@ export class FakeEngine implements SpeechEngine {
   }
 
   async speak(text: string, opts: SpeakOptions, onAudio: (pcm: Int16Array) => void): Promise<Spoken> {
+    if (this.down) throw new Error("speech engine isn't running");
+    if (this.hung) return new Promise<Spoken>(() => {});
     this.spoken.push(text);
     // 60 ms of audio a word, made in 20 ms pieces.
     const words = text.split(/\s+/).filter(Boolean).length;
@@ -137,9 +145,17 @@ export class FakeTransport implements CallTransport {
   clears = 0;
   events: Record<string, unknown>[] = [];
   closed: string | null = null;
+  open = true;
 
   constructor(kind: "web" | "phone" = "phone") {
     this.kind = kind;
+  }
+
+  /** The far end hangs up. */
+  hangUp(): void {
+    if (!this.open) return;
+    this.open = false;
+    this.onClose?.("hung up");
   }
 
   sendAudio(pcm: Int16Array): void {
@@ -153,6 +169,7 @@ export class FakeTransport implements CallTransport {
     this.events.push(e);
   }
   close(reason?: string): void {
+    this.open = false;
     this.closed = reason ?? "closed";
   }
 }

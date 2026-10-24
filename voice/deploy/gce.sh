@@ -120,7 +120,11 @@ if [ -n "$CURRENT" ]; then
       ;;
   esac
   # A restart picks up the new image and settings (the app answers on its simpler line meanwhile).
-  gc compute instances reset "$NAME" --zone "$ZONE"
+  # Stop, then start: stopping shuts the VM down cleanly, so the server gets SIGTERM and ends each
+  # call properly (a short goodbye, then its transcript and bill sent to the app). A reset would cut
+  # every call off mid-word and leave it "active" in the app.
+  gc compute instances stop "$NAME" --zone "$ZONE"
+  gc compute instances start "$NAME" --zone "$ZONE"
 else
   # Default access scopes: enough to pull the image and write logs, and nothing else in the project.
   if ! OUT="$(gc compute instances create "$NAME" --zone "$ZONE" --machine-type "$MACHINE" \

@@ -25,7 +25,9 @@ write_files:
       [Unit]
       Description=Build-a-bot voice server
       Requires=voice-net.service
-      After=voice-net.service network-online.target
+      # Stopped before Caddy and the network (shutdown runs in reverse): calls still connected hear
+      # the server's goodbye, and their reports reach the app.
+      After=voice-net.service network-online.target caddy.service
       Wants=network-online.target
       [Service]
       Environment="HOME=/home/voice"

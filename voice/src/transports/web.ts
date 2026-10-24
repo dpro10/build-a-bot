@@ -76,6 +76,10 @@ export class WebTransport implements CallTransport {
     ws.on("error", () => this.finish("connection error"));
   }
 
+  get open(): boolean {
+    return !this.closed;
+  }
+
   /** The browser's opening message (with its call token). */
   waitForHello(timeoutMs = 10_000): Promise<WebHello> {
     const timer = setTimeout(() => this.rejectHello(new Error("no hello from the browser")), timeoutMs);

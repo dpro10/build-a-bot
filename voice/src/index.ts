@@ -6,7 +6,7 @@
 import { loadConfig } from "./config.ts";
 import { HttpApp } from "./brain/app.ts";
 import { OpenAiCompatibleLlm } from "./brain/llm.ts";
-import { PhraseCache, FILLERS } from "./call/phrases.ts";
+import { ENGINE_TROUBLE, PhraseCache, FILLERS } from "./call/phrases.ts";
 import { SpeechPace } from "./call/speaker.ts";
 import { createVoiceServer } from "./server.ts";
 import { HttpEngine } from "./speech/http.ts";
@@ -65,8 +65,9 @@ try {
   process.exit(1);
 }
 log("engine_ready", { ms: Math.round(performance.now() - t0), version: engine.info.version, voices: engine.info.voices });
-// Fillers in the default voice, at phone and browser rates, before the first call.
-for (const rate of [8000, config.webRate]) await phrases.warm(FILLERS, engine.info.voice || config.voice, rate);
+// Fillers in the default voice, at phone and browser rates, before the first call; and the apology
+// for when the engine fails mid-call (it can't be made then).
+for (const rate of [8000, config.webRate]) await phrases.warm([...FILLERS, ENGINE_TROUBLE], engine.info.voice || config.voice, rate);
 // How fast this machine makes speech, so the first call's sentences already play without gaps.
 await measurePace();
 ready = true;
@@ -99,13 +100,33 @@ async function measurePace(): Promise<void> {
   }
 }
 
+// A deploy or restart: every call hears a short goodbye and is reported to the app (its transcript
+// and bill), then the server stops. Never longer than SHUTDOWN_MS: Docker gives it 20 s
+// (deploy/cloud-init.yaml) before it kills the container.
+const SHUTDOWN_MS = 15_000;
+let stopping = false;
 for (const signal of ["SIGTERM", "SIGINT"] as const) {
   process.on(signal, () => {
+    if (stopping) {
+      // Ctrl+C again: don't wait. (A second SIGTERM changes nothing.)
+      if (signal === "SIGINT") process.exit(1);
+      return;
+    }
+    stopping = true;
     log("shutting_down", { signal, calls: voice.calls() });
     ready = false;
+    setTimeout(() => {
+      log("shutdown_timeout", { calls: voice.calls() });
+      process.exit(0);
+    }, SHUTDOWN_MS).unref();
     void voice
-      .close()
+      .close(SHUTDOWN_MS - 3000)
+      .catch((err: Error) => log("close_error", { error: err.message }))
       .then(() => engine.close())
-      .finally(() => process.exit(0));
+      .catch((err: Error) => log("close_error", { error: err.message }))
+      .finally(() => {
+        log("shut_down");
+        process.exit(0);
+      });
   });
 }

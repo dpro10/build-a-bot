@@ -59,6 +59,10 @@ export class TwilioTransport implements CallTransport {
     ws.on("error", () => this.finish("connection error"));
   }
 
+  get open(): boolean {
+    return !this.closed;
+  }
+
   /** Resolves with the stream's details once Twilio sends "start". */
   start(timeoutMs = 10_000): Promise<TwilioStart> {
     const timer = setTimeout(() => this.rejectStart(new Error("no start message from Twilio")), timeoutMs);
