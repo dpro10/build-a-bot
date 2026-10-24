@@ -58,6 +58,8 @@ export class Hotkey extends EventEmitter {
     this.timer = null;
     /** Key taps this app sends (paste, the Start-menu guard) aren't the owner's. */
     this.synthetic = new Map();
+    /** When Enter was last pressed (a new line, a command run, a message sent), or 0. Only the time. */
+    this.enterAt = 0;
     /** @type {null | { keys: Set<number>, held: Set<number>, resolve: (keys: number[] | null) => void, timer: any }} */
     this.recordingShortcut = null;
   }
@@ -195,6 +197,8 @@ export class Hotkey extends EventEmitter {
       }
       this.synthetic.delete(code);
     }
+    // Enter starts a new line: the next dictation doesn't follow the last one's words (spacing).
+    if (isDown && (code === KEY.Enter || code === KEY.NumpadEnter)) this.enterAt = this.now();
     // A key let go while the hook wasn't looking (the screen locked mid-press) would stay "down":
     // the modifier flags on each press say what's really held.
     if (isDown) {

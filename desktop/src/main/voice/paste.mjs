@@ -175,6 +175,8 @@ export class Paster {
    * @param {number} [o.catchUpMs]  how long after a paste the box may not show it yet (a box that
    *   doesn't is read again until it does, for that long)
    * @param {number} [o.lastMs]  how long the last dictation stands in for a box that can't be read
+   * @param {() => number} [o.enterAt]  when Enter was last pressed (0: not known): after it, the
+   *   cursor is at the start of a line, not after the last dictation
    * @param {() => number} [o.now]
    * @param {(msg: string) => void} [o.log]
    */
@@ -300,8 +302,11 @@ export class Paster {
       if (around) from = "the box";
     }
     if (!around && last && app && last.app === app && this.now() - last.at < this.lastMs) {
-      around = { before: last.text.slice(-4), after: "" };
-      from = "the last dictation";
+      // Enter since then (a command run in a terminal, a message sent, a new line): the words start
+      // a line, with no space before them (a shell leaves a command that starts with one out of its history).
+      const newLine = (Number(this.o.enterAt?.()) || 0) > last.at;
+      around = { before: newLine ? "\n" : last.text.slice(-4), after: "" };
+      from = newLine ? "a new line" : "the last dictation";
     }
     const out = spaceOut(text, around);
     if (out.before || out.after) this.log(`voice: spaced it (${[out.before ? "before" : "", out.after ? "after" : ""].filter(Boolean).join(" and ")}; from ${from})`);

@@ -242,6 +242,24 @@ test("a key let go while the hook wasn't looking doesn't stay stuck", async () =
   assert.equal(hk.pressed.has(KEY.CtrlRight), false);
 });
 
+test("the key listener notes when Enter was pressed (when, not what was typed), for spacing the next dictation", async () => {
+  const hook = fakeHook();
+  let now = 5;
+  const hk = new Hotkey({ loadHook: async () => hook, shortcut: defaultShortcut("linux"), platform: "linux", now: () => now });
+  await hk.enable();
+  assert.equal(hk.enterAt, 0);
+  now = 1000;
+  hook.press(KEY.Enter);
+  hook.release(KEY.Enter);
+  assert.equal(hk.enterAt, 1000);
+  now = 2000;
+  hook.press(KEY.NumpadEnter);
+  assert.equal(hk.enterAt, 2000);
+  now = 3000;
+  hook.press(30);
+  assert.equal(hk.enterAt, 2000, "other keys don't count");
+});
+
 test("Windows: pressing Ctrl+Win taps F24 so letting go doesn't open the Start menu", async () => {
   const hook = fakeHook();
   const hk = new Hotkey({ loadHook: async () => hook, shortcut: defaultShortcut("win32"), platform: "win32" });

@@ -139,6 +139,8 @@ export function setupVoice(o) {
     press: pressPaste({ platform, hook: () => hook?.hook ?? null, expectSynthetic: (c) => hook?.expectSynthetic(c) }),
     pressCopy: pressCopy({ platform, hook: () => hook?.hook ?? null, expectSynthetic: (c) => hook?.expectSynthetic(c) }),
     canPress: canPaste,
+    // After Enter the cursor is at the start of a line (a terminal's new prompt): no space before the words.
+    enterAt: () => hook?.enterAt ?? 0,
     // Paste only once the shortcut's keys are let go (⌥ still down would make ⌘V into ⌥⌘V).
     waitForRelease: async () => {
       if (!hook?.running) return;

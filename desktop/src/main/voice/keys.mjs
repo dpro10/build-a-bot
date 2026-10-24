@@ -11,6 +11,7 @@ export const KEY = Object.freeze({
   Backspace: 14,
   Tab: 15,
   Enter: 28,
+  NumpadEnter: 3612,
   Space: 57,
   CapsLock: 58,
   V: 47,
