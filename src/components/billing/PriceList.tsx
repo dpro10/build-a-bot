@@ -56,7 +56,7 @@ function groups(full: boolean): Group[] {
       hint: `Voice typing and meeting notes in the desktop app: NVIDIA Parakeet hears you on your computer${audioStays ? ", so the audio never leaves it" : ""}.`,
       price: "Free",
     },
-    { label: "Web chat, Telegram, Discord and Slack", hint: "Talking to your bot there costs only the thinking.", price: "Free" },
+    { label: "Web chat, Discord and Slack", hint: "Talking to your bot there costs only the thinking.", price: "Free" },
     { label: "Apps, reminders and routines", hint: "Connecting apps is free. A reminder or routine costs only the thinking it does.", price: "Free" },
   ];
   return [

@@ -1,6 +1,6 @@
 # Build-a-bot
 
-Anyone makes their own AI agent in about a minute: pick a face, give it a name, choose a brain (an open model we include, or their own API key), give it their apps, decide how much it can do on its own, and talk to it anywhere — calls, texts, email, Telegram, Discord, Slack. Call it, from the app or a phone, and it answers in its own voice and gets things done while you talk. It can also sit in on their calls and take the notes, and type for them by voice in any app.
+Anyone makes their own AI agent in about a minute: pick a face, give it a name, choose a brain (an open model we include, or their own API key), give it their apps, decide how much it can do on its own, and talk to it anywhere — calls, texts, email, Discord, Slack. Call it, from the app or a phone, and it answers in its own voice and gets things done while you talk. It can also sit in on their calls and take the notes, and type for them by voice in any app.
 
 - **Site:** [build-a-bot.site](https://build-a-bot.site), live on Vercel + Supabase since 2026-10-14, for real (no demo mode) since 2026-10-21. What's real there and what's still coming: [`docs/HACKATHON.md`](docs/HACKATHON.md#whats-real-on-build-a-botsite).
 - **Status (2026-10-17):** the whole product is built (the website, the dashboard, and a desktop app for meeting notes, voice typing and a bot's synced folder) and runs locally in demo mode with zero keys. Meeting notes and voice typing are only in the desktop app, which hears them on the user's own computer. Calls with a bot run on our voice server (`voice/`), live since 2026-10-17 with a real test call after every deploy, and phones reach bots through Twilio. The repository is public under Apache 2.0, and the desktop app downloads from build-a-bot.site/download: the Mac app signed with Developer ID and notarized, the Windows installer signed with Azure Artifact Signing (`docs/DEPLOY.md` §9). `docs/DEPLOY.md` lists what each integration needs.
@@ -47,7 +47,7 @@ Seven steps, with a live preview that assembles the bot as you go:
 
 Recipes prefill it (`/build?recipe=inbox-zero`, or any shared `/r/[slug]`). The account comes later: a bot works right away, and "Save your account" (a magic link) keeps it.
 
-**Or start with a ready-made bot:** a Tutor, a Job applier, a Language partner, a Fitness coach or a Meal planner. One tap fills in every step. Each one works the way its role should, and its first message asks what it needs to know: what you're learning and why, or the job you want and your résumé.
+**Or start with a ready-made bot:** a Tutor, a Job applier, a Language partner or a Fitness coach. One tap fills in every step. Each one works the way its role should, and its first message asks what it needs to know: what you're learning and why, or the job you want and your résumé.
 
 ### Brains
 
@@ -76,7 +76,7 @@ Recipes prefill it (`/build?recipe=inbox-zero`, or any shared `/r/[slug]`). The 
 
 ### Channels, several at once
 
-Web chat, phone calls and texts (Twilio), email (its own brand-free address), Telegram (a managed bot, or your own from BotFather), Discord (`/ask`) and Slack (one click, or the bot's own app). On build-a-bot.site, texts wait for carrier registration (A2P) and email for a mail domain; there, a Telegram bot comes from BotFather. WhatsApp and iMessage are on a waitlist.
+Web chat, phone calls and texts (Twilio), email (its own brand-free address), Discord (`/ask`) and Slack (one click, or the bot's own app). On build-a-bot.site, texts wait for carrier registration (A2P) and email for a mail domain. Telegram, WhatsApp and iMessage are on a waitlist. Telegram's code is all here (a managed bot, or your own from BotFather), switched off in the channel catalog.
 
 ### Calls
 
@@ -107,7 +107,7 @@ Web chat, phone calls and texts (Twilio), email (its own brand-free address), Te
 
 ### Your files, and studying from them
 
-- **Give your bot files:** drop them on the chat, use the paperclip or paste a screenshot, add them on the bot's **Library** tab, or send them on Telegram (or Discord's `/ask`). PDFs, Word, PowerPoint (with speaker notes), text and photos, up to 25 MB each and 500 MB in all.
+- **Give your bot files:** drop them on the chat, use the paperclip or paste a screenshot, add them on the bot's **Library** tab, or send them with Discord's `/ask`. PDFs, Word, PowerPoint (with speaker notes), text and photos, up to 25 MB each and 500 MB in all.
 - **Read once, cited always:** each file is read into passages with their page or slide, and searched with Postgres full-text search. The bot says which file and page it used. Photos and scanned pages are read by a vision model on Nebius Token Factory, paid from credit.
 - **Flashcards and practice quizzes** that work right in the chat: flip a card, mark *Got it* or *Again* (spaced repetition brings misses back sooner); answer a quiz one question at a time, see why, get a score, and send your mistakes back to the bot to go over. Each answer says where it's from: the file and page, or a web page the bot checked it against (only pages it really looked at). CSV export for Anki and Quizlet.
 - **Private:** files live in a private store, read back only for their owner; people who message the bot can't search them; deleting a bot or the account deletes them. A file's text is outside content to the model, never instructions.
@@ -118,7 +118,7 @@ It browses sites and fills in forms in a cloud browser (Browser Use Cloud). Befo
 
 ### It reaches out
 
-An optional morning brief (on by default), routines and reminders, on any channel. Its face follows it: Telegram profile photo, HTML emails.
+An optional morning brief (on by default), routines and reminders, on any channel. Its face follows it into HTML emails.
 
 ### It remembers
 

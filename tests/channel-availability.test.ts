@@ -13,14 +13,14 @@ import { FEATURED_RECIPES, findFeatured } from "@/lib/recipes";
 import { initialState, STEPS, stepError, usableChannels, withDraft, type BuilderContext } from "@/components/builder/state";
 import { templatesFor } from "@/components/bot/routines/schedule";
 
-/** The live site: Telegram's manager bot, Discord, a Resend key for sign-in, web search and speech-to-text; no Twilio, bot inboxes or Stripe. */
-const LIVE_SITE = { telegramManaged: true, discord: true, email: true, webSearch: true, transcription: true };
+/** The live site: Discord, a Resend key for sign-in, web search and speech-to-text; no Twilio, bot inboxes, Stripe or Telegram manager bot. */
+const LIVE_SITE = { discord: true, email: true, webSearch: true, transcription: true };
 
 describe("channel availability", () => {
   it("outside demo mode, a channel whose service isn't set up is coming soon", () => {
     for (const kind of ["sms", "voice", "email"] as const) expect(channelAvailability(CHANNEL_BY_KIND[kind], false, LIVE_SITE)).toBe("soon");
     expect(channelAvailability(CHANNEL_BY_KIND.discord, false, {})).toBe("soon");
-    for (const kind of ["web", "telegram", "discord", "slack"] as const) expect(channelUsable(CHANNEL_BY_KIND[kind], false, LIVE_SITE)).toBe(true);
+    for (const kind of ["web", "discord", "slack"] as const) expect(channelUsable(CHANNEL_BY_KIND[kind], false, LIVE_SITE)).toBe(true);
     // Twilio alone gives calls; texts also need a number registered to text US phones.
     expect(channelAvailability(CHANNEL_BY_KIND.voice, false, { ...LIVE_SITE, twilio: true })).toBe("available");
     expect(channelAvailability(CHANNEL_BY_KIND.sms, false, { ...LIVE_SITE, twilio: true })).toBe("soon");
@@ -41,12 +41,15 @@ describe("channel availability", () => {
       expect(channelAvailability(CHANNEL_BY_KIND.whatsapp, demo, { twilio: true })).toBe("waitlist");
       expect(channelAvailability(CHANNEL_BY_KIND.teams, demo, {})).toBe("soon");
       expect(channelUsable(CHANNEL_BY_KIND.whatsapp, demo, { twilio: true })).toBe(false);
+      // Telegram too (Diego, 2026-10-24), even with a manager bot set up.
+      expect(channelAvailability(CHANNEL_BY_KIND.telegram, demo, { telegramManaged: true })).toBe("waitlist");
+      expect(channelUsable(CHANNEL_BY_KIND.telegram, demo, { telegramManaged: true })).toBe(false);
     }
   });
 
-  it("public copy names what works and marks the rest coming soon", () => {
+  it("public copy names what works and marks the rest coming soon; a waitlist isn't named", () => {
     const here = talkChannels(false, LIVE_SITE);
-    expect(here).toEqual({ ready: ["Telegram", "Discord", "Slack"], soon: ["calls", "texts", "email"] });
+    expect(here).toEqual({ ready: ["Discord", "Slack"], soon: ["calls", "texts", "email"] });
     expect(comingSoonLine(here.soon)).toBe("Calls, texts and email are coming soon.");
     expect(comingSoonLine(["email"])).toBe("Email is coming soon.");
     expect(talkChannels(true, {}).soon).toEqual([]);
@@ -91,15 +94,17 @@ describe("recipes and drafts in the builder", () => {
       }
     }
     // Suggested: only channels that work here.
-    expect(initialState(findFeatured("study-buddy"), live).suggestedChannels).toEqual(["telegram"]);
-    expect(initialState(findFeatured("errand-runner"), live).suggestedChannels).toEqual([]);
+    expect(initialState(findFeatured("family-hub"), live).suggestedChannels).toEqual(["discord"]);
+    // None suggests a channel on a waitlist: picking it would only join the waitlist.
+    for (const recipe of FEATURED_RECIPES) for (const ctx of [live, demo]) expect(initialState(recipe, ctx).suggestedChannels, recipe.slug).not.toContain("telegram");
+    expect(initialState({ ...findFeatured("family-hub")!, channels: ["sms", "voice"] }, live).suggestedChannels).toEqual([]);
     expect(initialState(findFeatured("pr-patrol"), live).suggestedChannels).toEqual(["slack", "discord"]);
   });
 
   it("demo mode suggests them all, and a channel picked for texts still asks for the number", () => {
-    const state = initialState(findFeatured("study-buddy"), demo);
-    expect(state.suggestedChannels).toEqual(["telegram", "sms"]);
-    expect(stepError("channels", { ...state, channels: ["telegram", "sms"] }, noKey)).toBe("Add your mobile number for texts and calls");
+    const state = initialState(findFeatured("family-hub"), demo);
+    expect(state.suggestedChannels).toEqual(["sms", "discord"]);
+    expect(stepError("channels", { ...state, channels: ["sms", "discord"] }, noKey)).toBe("Add your mobile number for texts and calls");
   });
 
   it("the Inbox job brings its own inbox only when bots can have one", () => {
@@ -113,23 +118,23 @@ describe("recipes and drafts in the builder", () => {
   });
 
   it("a saved draft is checked the same way", () => {
-    const draft = withDraft(initialState(null, live), { name: "Juniper", email: "", channels: ["sms", "telegram", "email"], connectors: ["bot_inbox", "web_search"] }, live);
-    expect(draft).toMatchObject({ name: "Juniper", channels: ["telegram"], connectors: ["web_search"], email: "dana@example.com", ageConfirmed: false });
+    const draft = withDraft(initialState(null, live), { name: "Juniper", email: "", channels: ["sms", "discord", "email"], connectors: ["bot_inbox", "web_search"] }, live);
+    expect(draft).toMatchObject({ name: "Juniper", channels: ["discord"], connectors: ["web_search"], email: "dana@example.com", ageConfirmed: false });
     // Whatever was stored, the channels come back as a list of real ones.
     expect(withDraft(initialState(null, live), { channels: "sms" as never }, live).channels).toEqual([]);
     expect(withDraft(initialState(null, demo), { channels: ["sms", "web", "fax" as never] }, demo).channels).toEqual(["sms"]);
     // Suggestions too (and a draft from before them has none).
-    expect(withDraft(initialState(null, live), { suggestedChannels: ["sms", "telegram"] }, live).suggestedChannels).toEqual(["telegram"]);
+    expect(withDraft(initialState(null, live), { suggestedChannels: ["sms", "discord"] }, live).suggestedChannels).toEqual(["discord"]);
     expect(withDraft(initialState(null, live), { name: "Old" }, live).suggestedChannels).toEqual([]);
   });
 
   it("texts and calls come along once they're set up here (they're paid from credit, not a plan)", () => {
-    expect(usableChannels(["sms", "telegram", "whatsapp"], live)).toEqual(["telegram", "whatsapp"]);
+    expect(usableChannels(["sms", "discord", "whatsapp"], live)).toEqual(["discord", "whatsapp"]);
     // Calls come with Twilio; texts once the number is registered to text.
     const withTwilio = { ...live, live: { ...LIVE_SITE, twilio: true } };
-    expect(usableChannels(["sms", "voice", "telegram", "whatsapp"], withTwilio)).toEqual(["voice", "telegram", "whatsapp"]);
+    expect(usableChannels(["sms", "voice", "discord", "whatsapp"], withTwilio)).toEqual(["voice", "discord", "whatsapp"]);
     const withTexting = { ...live, live: { ...LIVE_SITE, twilio: true, twilioTexting: true } };
-    expect(usableChannels(["sms", "voice", "telegram", "whatsapp"], withTexting)).toEqual(["sms", "voice", "telegram", "whatsapp"]);
+    expect(usableChannels(["sms", "voice", "discord", "whatsapp"], withTexting)).toEqual(["sms", "voice", "discord", "whatsapp"]);
   });
 });
 

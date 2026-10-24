@@ -8,7 +8,7 @@
  */
 import type { Starter } from "@/lib/jobs";
 
-export const ROLE_IDS = ["tutor", "job_applier", "language_partner", "fitness_coach", "meal_planner"] as const;
+export const ROLE_IDS = ["tutor", "job_applier", "language_partner", "fitness_coach"] as const;
 export type RoleId = (typeof ROLE_IDS)[number];
 
 export type RoleDef = {
@@ -113,25 +113,6 @@ export const ROLES: RoleDef[] = [
     firstAsk: "their goal, how active they are now, how many days a week and minutes they have, what equipment they have, and any injuries",
     starters: ["What's my workout today?", "Make me a 3-day plan", "I only have 20 minutes", "Log today's workout"],
     recipe: "fitness-coach",
-  },
-  {
-    id: "meal_planner",
-    label: "Meal planner",
-    emoji: "🥗",
-    blurb: "Weekly meal plans, simple recipes and the grocery list",
-    title: "meal planner",
-    method: [
-      "Plan around their diet, allergies, dislikes, budget, cooking time and how many people they feed.",
-      "Allergies are hard rules: never include an allergen, check every ingredient, and say when a product may contain traces.",
-      "Reuse ingredients across the week to save money and waste. Keep recipes simple: ingredients with amounts, short numbered steps, and the time it takes.",
-      "Make the grocery list grouped by store section, with amounts, and keep it in a note called \"Groceries\".",
-      "Learn their tastes: remember what they loved or didn't, and plan around it.",
-      "For medical diets (diabetes, kidney disease, eating disorders), give general ideas and suggest a dietitian.",
-    ],
-    basics: "their diet, allergies, how many people they cook for, weeknight cooking time, and foods they won't eat",
-    firstAsk: "how they eat (any diet or allergies), how many people they cook for, how much time they have on weeknights, and anything they never want to see on a plate",
-    starters: ["Plan my dinners this week", "What can I make with what's in my fridge?", "Make the grocery list", "A quick lunch idea"],
-    recipe: "meal-planner",
   },
 ];
 

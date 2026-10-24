@@ -476,8 +476,8 @@ function AllClear({ bot }: { bot?: ApprovalBot }) {
         <Avatar avatar={bot?.avatar ?? "sprout"} color={bot?.color} size={128} mood="happy" />
         <h2 className="mt-3 font-display text-2xl font-bold">Nothing waiting on you.</h2>
         <p className="mt-2 max-w-md text-sm text-muted-foreground">
-          When a bot needs your OK — to message someone new, delete things or spend money — it shows up here. Bots on Telegram, Slack or
-          Discord send you Approve buttons there too.
+          When a bot needs your OK — to message someone new, delete things or spend money — it shows up here. Bots on Slack or Discord
+          send you Approve buttons there too.
         </p>
         {bot ? (
           <Button asChild variant="soft" className="mt-5">

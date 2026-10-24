@@ -39,9 +39,9 @@ async function buildBot(page: Page, name: string) {
   await expect(page.getByText(/prompt-injection/i).first()).toBeVisible();
   await footer(page).getByRole("button", { name: /Continue/ }).click();
 
-  // Channels: Telegram
+  // Channels: Slack
   await expect(page.getByRole("heading", { name: "How do you want to talk?" })).toBeVisible();
-  await page.getByRole("button", { name: /Telegram/ }).first().click();
+  await page.getByRole("button", { name: /Slack/ }).first().click();
   await footer(page).getByRole("button", { name: /Continue/ }).click();
 
   // Review: the morning brief is on by default; can't create before confirming age
@@ -150,12 +150,12 @@ test("a recipe brings its apps, its jobs' tools and its routines along", async (
 test("steps skipped with the step bar are still checked before the bot is made", async ({ page, isMobile }) => {
   test.skip(isMobile, "phones have no step bar to jump with");
   // A recipe opens every step. Texts picked on the Talk step need a phone number; jump past it without one.
-  await page.goto("/build?recipe=study-buddy");
+  await page.goto("/build?recipe=family-hub");
   const steps = page.getByRole("navigation", { name: "Builder steps" });
   await steps.getByRole("button", { name: /Talk/ }).click();
   await page.getByRole("button", { name: /Text messages/ }).click();
   await steps.getByRole("button", { name: /Go/ }).click();
-  await expect(page.getByRole("heading", { name: "Ready to meet Sprout?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Ready to meet Nimbus?" })).toBeVisible();
   await page.getByText("I'm 18 or older").click();
   await footer(page).getByRole("button", { name: /to life/ }).click();
   await expect(page.getByRole("heading", { name: "How do you want to talk?" })).toBeVisible();

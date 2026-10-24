@@ -5,7 +5,7 @@
  */
 import crypto from "node:crypto";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 process.env.DATA_DIR = "memory";
 process.env.DEMO_MODE = "0";
@@ -24,6 +24,7 @@ vi.mock("@/lib/auth/session", async (importOriginal) => ({
 const { getDb, resetDbForTests, schema } = await import("@/lib/db");
 const { createBot } = await import("@/lib/bots/create");
 const { channelAction } = await import("@/lib/channels/setup");
+const { connectTelegramToken } = await import("@/lib/channels/telegram-setup");
 const { buildToolset } = await import("@/lib/tools/registry");
 const { botEmailAddress } = await import("@/lib/tools/builtin");
 const { routeInboundEmail } = await import("@/lib/channels/email-inbound");
@@ -115,19 +116,33 @@ describe("the live site's channels", () => {
     expect(toolset.byName.has("read_inbox")).toBe(false);
   });
 
+  it("Telegram is on the waitlist: a pasted token is turned down before anything is sent, and the waitlist takes names", async () => {
+    const fetch = vi.fn(async () => Response.json({ ok: true, result: { id: 42, is_bot: true, username: "nimbus_bot" } }));
+    vi.stubGlobal("fetch", fetch);
+    expect(await channelAction(db, owner, bot, "telegram", "token", { token: `123456789:${"A".repeat(35)}` })).toEqual({ ok: false, error: "Telegram is coming soon." });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(await channelAction(db, owner, bot, "telegram", "waitlist", {})).toEqual({ ok: true, data: { message: "You're on the list for Telegram." } });
+  });
+
+  // Telegram's setup stays for when it opens.
+  const telegramChannel = async () => {
+    const [channel] = await db.select().from(schema.channels).where(and(eq(schema.channels.botId, bot.id), eq(schema.channels.kind, "telegram")));
+    return channel;
+  };
+
   it("when Telegram or Slack can't be reached, it says so instead of blaming the token", async () => {
     vi.stubGlobal("fetch", async () => {
       throw new TypeError("fetch failed");
     });
-    const telegram = await channelAction(db, owner, bot, "telegram", "token", { token: `123456789:${"A".repeat(35)}` });
-    expect(telegram).toEqual({ ok: false, error: "Couldn't reach Telegram. Try again in a moment." });
+    await expect(connectTelegramToken(db, bot, owner, await telegramChannel(), `123456789:${"A".repeat(35)}`)).rejects.toThrow("Couldn't reach Telegram. Try again in a moment.");
     const slack = await channelAction(db, owner, bot, "slack", "tokens", { botToken: "xoxb-test-token", signingSecret: "s".repeat(32) });
     expect(slack).toEqual({ ok: false, error: "Couldn't reach Slack. Try again in a moment." });
   });
 
   it("a token Telegram turns down reads as that", async () => {
     vi.stubGlobal("fetch", async () => Response.json({ ok: false, description: "Unauthorized" }, { status: 401 }));
-    const res = await channelAction(db, owner, bot, "telegram", "token", { token: `123456789:${"B".repeat(35)}` });
-    expect(res).toEqual({ ok: false, error: "Telegram didn't accept that token. Copy it again from BotFather." });
+    await expect(connectTelegramToken(db, bot, owner, await telegramChannel(), `123456789:${"B".repeat(35)}`)).rejects.toThrow(
+      "Telegram didn't accept that token. Copy it again from BotFather.",
+    );
   });
 });

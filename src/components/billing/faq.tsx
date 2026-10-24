@@ -36,7 +36,7 @@ export function billingFaq(where: "pricing" | "app"): BillingFaq[] {
     },
     {
       q: "What's free?",
-      a: `A bot on your own AI key: your provider bills you, and we add nothing (fair use: ${FAIR_USE.ownBrainMessages.toLocaleString("en-US")} messages a month). Speech heard on your computer by the desktop app, for voice typing and meeting notes. Chatting on the web, Telegram, Discord and Slack, and connecting apps. You pay only for what costs us money: thinking on the models we run, lookups, texts and calls.`,
+      a: `A bot on your own AI key: your provider bills you, and we add nothing (fair use: ${FAIR_USE.ownBrainMessages.toLocaleString("en-US")} messages a month). Speech heard on your computer by the desktop app, for voice typing and meeting notes. Chatting on the web, Discord and Slack, and connecting apps. You pay only for what costs us money: thinking on the models we run, lookups, texts and calls.`,
     },
     where === "pricing"
       ? {

@@ -98,11 +98,13 @@ export const CHANNELS: ChannelDef[] = [
     kind: "telegram",
     name: "Telegram",
     tagline: "Your own named bot",
-    description: "Get a Telegram bot with your bot's name. Free.",
+    description: "Get a Telegram bot with your bot's name.",
     icon: "telegram",
     brand: true,
     color: "#26A5E4",
-    availability: "available",
+    // Not switched on for build-a-bot.site (docs/DECISIONS.md, 2026-10-24). The code is all here:
+    // "available" offers it again.
+    availability: "waitlist",
     needs: "none",
     style: "rich",
   },
@@ -232,11 +234,14 @@ const CHANNEL_WORDS: [ChannelKind, string][] = [
   ["slack", "Slack"],
 ];
 
-/** For public copy: the talk-anywhere channels that work here, and the ones coming soon. */
+/** For public copy: the talk-anywhere channels that work here, and the ones coming soon. One on a waitlist isn't named. */
 export function talkChannels(demo: boolean, flags: LiveFlags): { ready: string[]; soon: string[] } {
   const ready: string[] = [];
   const soon: string[] = [];
-  for (const [kind, word] of CHANNEL_WORDS) (channelUsable(CHANNEL_BY_KIND[kind], demo, flags) ? ready : soon).push(word);
+  for (const [kind, word] of CHANNEL_WORDS) {
+    const def = CHANNEL_BY_KIND[kind];
+    if (def.availability !== "waitlist") (channelUsable(def, demo, flags) ? ready : soon).push(word);
+  }
   return { ready, soon };
 }
 

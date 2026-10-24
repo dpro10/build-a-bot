@@ -57,7 +57,7 @@ Nothing on the live site is simulated. Each service that isn't set up says "Comi
 | Memory, reminders, routines, approvals, receipts, STOP | **Real.** |
 | The Library (your files, for your bot) | **Real.** Files are stored privately and read into passages. Photos and scanned pages are read by a vision model on Token Factory. |
 | Calls | **Real**: the **Call** button in the app (your browser's microphone), or the bot's phone number. Both use our voice server on a Google Cloud machine, with NVIDIA Parakeet and Magpie. When it can't take a call, Twilio's own speech does. Answers usually start about 3 seconds after you stop talking, and you can cut in. Calls aren't recorded. |
-| Telegram | **Real**, with a bot you make in BotFather (the one-tap managed bot is on hold). |
+| Telegram | **Waitlist**, like WhatsApp and iMessage: not switched on for build-a-bot.site. The code is there. |
 | Discord and Slack | **Real.** |
 | Texts | **Coming soon**: the number waits for carrier registration (A2P). Phone codes come by call meanwhile. |
 | The email channel, and the bot's own inbox | **Coming soon**: they need a brand-free mail domain. |
@@ -109,7 +109,7 @@ The sections below fill in **About the project**.
 
 **What it does:** Build-a-bot lets anyone make a personal AI agent in about a minute.
 - **Make it:** pick one of five characters, name it, choose a brain and give it apps. Then decide how much it can do on its own.
-- **Talk to it** on the web, Slack, Discord or Telegram (texts and email are coming).
+- **Talk to it** on the web, Slack or Discord (texts and email are coming).
 - **Or just call it,** from the app or from your phone. It answers in its own voice, usually about three seconds after you stop talking, with your calendar, email and other apps behind it.
 - **It keeps up with you:** it remembers what matters, keeps reminders and routines, and reaches out first with a daily check-in.
 - **After a meeting, your action items are waiting.** On your computer, it takes notes in Zoom, Meet or Teams (it asks first). When the call ends it sends you the summary, the decisions and the action items: who does what, by when, as a checklist you tick off. Ask it to set reminders for yours, or to email everyone a recap.
