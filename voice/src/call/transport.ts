@@ -9,6 +9,8 @@ export interface CallTransport {
   readonly outputRate: number;
   /** Does the far end report marks as its playback reaches them? */
   readonly reportsMarks: boolean;
+  /** Still connected: false once the far end hung up or the line was closed. */
+  readonly open: boolean;
 
   /** Caller audio, 16 kHz mono. */
   onAudio: ((pcm: Int16Array) => void) | null;

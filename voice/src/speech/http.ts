@@ -15,6 +15,8 @@ export type HttpEngineOptions = {
 
 export class HttpEngine implements SpeechEngine {
   info: EngineInfo = { version: "", asr: false, tts: false, voices: [], voice: "", sampleRate: 22050 };
+  /** Set once start() has read the server's models (a server that goes away later shows as failed calls). */
+  ready = false;
   private readonly base: string;
   private readonly opts: HttpEngineOptions;
   private readonly fetchImpl: typeof fetch;
@@ -47,6 +49,7 @@ export class HttpEngine implements SpeechEngine {
       voice: this.opts.voice || speech?.voices?.[0] || "",
       sampleRate: 22050,
     };
+    this.ready = true;
   }
 
   async hear(pcm: Int16Array, sampleRate: number, opts: HearOptions = {}): Promise<Heard> {
@@ -96,5 +99,7 @@ export class HttpEngine implements SpeechEngine {
     return { status: "ok", ttfaMs, rtfx: audioS / (ttfaMs / 1000), audioS, elapsedS: ttfaMs / 1000 };
   }
 
-  async close(): Promise<void> {}
+  async close(): Promise<void> {
+    this.ready = false;
+  }
 }

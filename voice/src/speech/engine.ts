@@ -51,6 +51,8 @@ export type EngineInfo = {
 
 export interface SpeechEngine {
   readonly info: EngineInfo;
+  /** Loaded and answering: false while it starts, restarts after a crash, or is closed. */
+  readonly ready: boolean;
   hear(pcm: Int16Array, sampleRate: number, opts?: HearOptions): Promise<Heard>;
   /** Streams audio to onAudio as it's made; resolves when done, cancelled (signal) or failed. */
   speak(text: string, opts: SpeakOptions, onAudio: (pcm: Int16Array) => void): Promise<Spoken>;

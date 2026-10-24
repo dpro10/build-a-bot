@@ -20,12 +20,21 @@ export type VoiceConfig = {
   vadModel: string;
   /** Rate for browser calls (Magpie's own is 22050: no resampling). */
   webRate: number;
+  /** Settings that were set but couldn't be used, and what's used instead (logged at start). */
+  warnings: string[];
 };
 
 const env = (name: string) => {
   const v = process.env[name]?.trim();
   return v ? v : undefined;
 };
+
+/** Calls at once: a whole number, 1 or more. Anything else is 1, never "no limit". */
+export function parseMaxCalls(value: string | undefined): number | null {
+  if (value === undefined || !/^\d+$/.test(value.trim())) return null;
+  const n = Number(value.trim());
+  return Number.isSafeInteger(n) && n >= 1 ? n : null;
+}
 
 export function loadConfig(): VoiceConfig {
   const missing: string[] = [];
@@ -63,6 +72,8 @@ export function loadConfig(): VoiceConfig {
     ...(env("TTS_CFG") === "0" ? ["--no-cfg"] : []),
     ...(env("GPU") ? ["--gpu", env("GPU")!] : []),
   ];
+  // Reasoning stays off: it would add a second or two before every answer. What keeps the talker
+  // honest about the work is in brain/talker.ts and call/session.ts instead.
   let extraBody: Record<string, unknown> = { reasoning_effort: "none" };
   if (env("TALKER_EXTRA_BODY")) {
     try {
@@ -72,13 +83,17 @@ export function loadConfig(): VoiceConfig {
     }
   }
   const appOrigin = new URL(appUrl).origin;
+  const warnings: string[] = [];
+  const maxCalls = env("MAX_CALLS") === undefined ? 1 : parseMaxCalls(env("MAX_CALLS"));
+  if (maxCalls === null) warnings.push(`MAX_CALLS isn't a whole number of 1 or more, so it's 1`);
   return {
     port: Number(env("PORT") ?? 8080),
     host: env("HOST") ?? "0.0.0.0",
     appUrl,
     secret,
     allowedOrigins: [appOrigin, ...(env("ALLOWED_ORIGINS")?.split(",").map((o) => o.trim()).filter(Boolean) ?? [])],
-    maxCalls: Math.max(1, Number(env("MAX_CALLS") ?? 1)),
+    maxCalls: maxCalls ?? 1,
+    warnings,
     talker: {
       baseUrl: env("TOKEN_FACTORY_BASE_URL") ?? "https://api.tokenfactory.nebius.com/v1",
       apiKey,

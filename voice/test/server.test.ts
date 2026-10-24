@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { AddressInfo } from "node:net";
 import { WebSocket } from "ws";
-import { createVoiceServer, type ServerDeps } from "../src/server.ts";
+import { createVoiceServer, SHUTDOWN_GOODBYE, type ServerDeps } from "../src/server.ts";
 import { signCallToken } from "../src/auth.ts";
 import { PhraseCache } from "../src/call/phrases.ts";
 import { EnergyVad } from "../src/vad/vad.ts";
@@ -17,8 +17,11 @@ const ORIGIN = "https://build-a-bot.site";
 class SessionApp extends FakeApp {
   sessions: string[] = [];
   info: Partial<SessionInfo> = {};
+  /** How long the app takes to say who's calling. */
+  delayMs = 0;
   override async session(callId: string, kind: "web" | "phone"): Promise<SessionInfo> {
     this.sessions.push(callId);
+    await sleep(this.delayMs);
     return sessionInfo({ callId, kind, ...this.info });
   }
 }
@@ -49,6 +52,22 @@ async function start(over: Partial<ServerDeps> = {}) {
 
 function token(kind: "web" | "phone", extra: Record<string, string> = {}) {
   return signCallToken(SECRET, { kind, callId: `call_${kind}`, botId: "bot_1", exp: Math.floor(Date.now() / 1000) + 60, ...extra });
+}
+
+/** A browser call's socket: what it's been sent, and how it closed. */
+async function browser(port: number) {
+  const ws = new WebSocket(`ws://127.0.0.1:${port}/call`, { origin: ORIGIN });
+  const msgs: Record<string, unknown>[] = [];
+  ws.on("message", (d, bin) => {
+    if (bin) return;
+    const msg = JSON.parse(d.toString()) as Record<string, unknown>;
+    msgs.push(msg);
+    // Play back instantly: echo marks.
+    if (msg.type === "mark") ws.send(JSON.stringify({ type: "mark", name: msg.name }));
+  });
+  const closed = new Promise<number>((r) => ws.once("close", (c) => r(c)));
+  await new Promise((r) => ws.once("open", r));
+  return { ws, msgs, closed, hello: () => ws.send(JSON.stringify({ type: "hello", token: token("web"), sampleRate: 16000 })) };
 }
 
 /** Loud for `talkMs`, then quiet, as 16 kHz PCM16 frames. */
@@ -195,4 +214,84 @@ test("over capacity, the browser hears the line is busy", async () => {
   assert.match(String(msgs[0]?.message), /busy/);
   first.close();
   await s.voice.close();
+});
+
+test("two callers at once can't both take the last line", async () => {
+  const s = await start({ maxCalls: 1 });
+  s.app.delayMs = 300; // the app takes a moment to say who's calling
+  const a = await browser(s.port);
+  const b = await browser(s.port);
+  a.hello();
+  b.hello();
+  const code = await Promise.race([a.closed, b.closed, sleep(3000).then(() => "neither was turned away")]);
+  assert.equal(code, 4003);
+  assert.equal(s.app.sessions.length, 1, "both were let in");
+  assert.equal(s.voice.calls(), 1);
+  a.ws.close();
+  b.ws.close();
+  await s.voice.close();
+});
+
+test("health says no while the speech engine is down or restarting, and calls aren't taken", async () => {
+  const s = await start();
+  s.engine.ready = false;
+  const res = await fetch(`http://127.0.0.1:${s.port}/health`);
+  assert.equal(res.status, 503);
+  const body = (await res.json()) as { ok: boolean; engine: { ready: boolean } };
+  assert.equal(body.ok, false);
+  assert.equal(body.engine.ready, false);
+  const call = await browser(s.port);
+  call.hello();
+  assert.equal(await call.closed, 4003);
+  assert.match(String(call.msgs[0]?.message), /isn't available/);
+  assert.deepEqual(s.app.sessions, []);
+  s.engine.ready = true;
+  assert.equal((await fetch(`http://127.0.0.1:${s.port}/health`)).status, 200);
+  await s.voice.close();
+});
+
+test("a caller who hangs up while the call is being set up is reported at once, and frees the line", async () => {
+  const s = await start({ maxCalls: 1 });
+  s.app.delayMs = 300;
+  const call = await browser(s.port);
+  call.hello();
+  await until(() => s.app.sessions.length === 1, 2000, "session asked for");
+  call.ws.close();
+  await until(() => s.app.reports.length === 1, 2000, "report");
+  assert.equal(s.app.reports[0].endedBy, "caller");
+  assert.deepEqual(s.app.reports[0].turns, [], "nothing to post in the chat");
+  assert.equal(s.app.reports[0].durationS, 0);
+  assert.ok(!s.engine.spoken.includes("Hey Diego, it's Otto."), "greeted nobody");
+  await until(() => s.voice.calls() === 0, 2000, "line free");
+  await s.voice.close();
+});
+
+test("shutting down: a call hears a goodbye and is reported to the app before the server stops", async () => {
+  const s = await start();
+  const call = await browser(s.port);
+  call.hello();
+  await until(() => call.msgs.some((e) => e.type === "state" && e.state === "listening"), 3000, "greeting done");
+  for (const f of speech(500, 600)) {
+    call.ws.send(pcmToBytes(f));
+    await sleep(5);
+  }
+  await until(() => call.msgs.some((e) => e.type === "transcript" && e.role === "bot" && e.text === "Sunny and seventy."), 4000, "answer");
+  await s.voice.close();
+  assert.equal(s.app.reports.length, 1);
+  assert.equal(s.app.reports[0].endedBy, "error");
+  assert.ok(s.app.reports[0].turns.some((t) => t.role === "bot" && t.text === SHUTDOWN_GOODBYE));
+  assert.ok(s.engine.spoken.includes(SHUTDOWN_GOODBYE));
+  assert.equal(s.voice.calls(), 0);
+});
+
+test("shutting down: a call still being set up is ended and reported too", async () => {
+  const s = await start();
+  s.app.delayMs = 300;
+  const call = await browser(s.port);
+  call.hello();
+  await until(() => s.app.sessions.length === 1, 2000, "session asked for");
+  await s.voice.close();
+  assert.equal(s.app.reports.length, 1);
+  assert.equal(s.app.reports[0].endedBy, "error");
+  assert.equal(s.voice.calls(), 0);
 });

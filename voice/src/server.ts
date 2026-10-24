@@ -1,9 +1,12 @@
 /**
  * The voice server: HTTP for health, WebSockets for calls.
- *   GET /health   is it up, and are the speech models loaded? (the app checks before routing calls)
+ *   GET /health   can it take a call: everything loaded, the speech engine up, a line free? (the
+ *                 app checks before routing calls)
  *   WS  /twilio   a phone call, from Twilio Media Streams
  *   WS  /call     a call from the browser
- * Each call: check its token (minted by the app), ask the app who's calling, run a CallSession.
+ * Each call: check its token (minted by the app), take a line, ask the app who's calling, run a
+ * CallSession. A line is taken the moment a call is let in, before anything waits, so two callers
+ * at once can't both get the last one; it's given back however the call ends.
  */
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { Duplex } from "node:stream";
@@ -37,24 +40,40 @@ export type ServerDeps = {
   log?: (event: string, fields?: Record<string, unknown>) => void;
 };
 
-export type VoiceServer = { server: Server; calls: () => number; close: () => Promise<void> };
+export type VoiceServer = {
+  server: Server;
+  /** Lines in use: calls running, and calls being let in. */
+  calls: () => number;
+  /** Ends every call (a goodbye, then each one's report to the app), then stops; waits at most waitMs for calls to end. */
+  close: (waitMs?: number) => Promise<void>;
+};
+
+/** What a caller hears when the server is going away (a deploy, a restart). */
+export const SHUTDOWN_GOODBYE = "Sorry, I have to go. Please call back in a minute.";
 
 export function createVoiceServer(deps: ServerDeps): VoiceServer {
   const log = deps.log ?? (() => {});
   const live = new Set<CallSession>();
+  let lines = 0;
+  let closing = false;
   const wss = new WebSocketServer({ noServer: true, maxPayload: 1 << 20 });
+
+  /** Can calls be taken at all: loaded, the speech engine answering, not shutting down? */
+  function up(): boolean {
+    return deps.ready() && deps.engine.ready && !closing;
+  }
 
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://voice");
     if (req.method === "GET" && url.pathname === "/health") {
-      const ready = deps.ready();
-      res.writeHead(ready ? 200 : 503, { "content-type": "application/json", "cache-control": "no-store" });
+      const ok = up();
+      res.writeHead(ok ? 200 : 503, { "content-type": "application/json", "cache-control": "no-store" });
       res.end(
         JSON.stringify({
-          ok: ready,
-          engine: { version: deps.engine.info.version, voices: deps.engine.info.voices, asr: deps.engine.info.asr, tts: deps.engine.info.tts },
+          ok,
+          engine: { ready: deps.engine.ready, version: deps.engine.info.version, voices: deps.engine.info.voices, asr: deps.engine.info.asr, tts: deps.engine.info.tts },
           talker: deps.llm.model,
-          calls: live.size,
+          calls: lines,
           capacity: deps.maxCalls,
           // Seconds of speech made per second (under 1, sentences wait a little to play smoothly).
           ...(deps.pace ? { speechRate: Math.round(deps.pace.rate * 100) / 100 } : {}),
@@ -83,15 +102,26 @@ export function createVoiceServer(deps: ServerDeps): VoiceServer {
     });
   });
 
-  function full(): boolean {
-    return !deps.ready() || live.size >= deps.maxCalls;
+  /** Takes a line if one is free, right away (nothing awaited in between); null if not. */
+  function takeLine(): (() => void) | null {
+    if (!up() || lines >= deps.maxCalls) return null;
+    lines++;
+    let held = true;
+    return () => {
+      if (!held) return;
+      held = false;
+      lines--;
+    };
   }
 
   async function run(session: CallSession): Promise<void> {
     live.add(session);
-    log("call_started", { callId: session.info.callId, kind: session.info.kind, speaker: session.info.speaker, calls: live.size });
+    log("call_started", { callId: session.info.callId, kind: session.info.kind, speaker: session.info.speaker, calls: lines });
     try {
-      await session.start();
+      const done = session.start();
+      // The server began shutting down while this call was being set up.
+      if (closing) void session.end("error", SHUTDOWN_GOODBYE);
+      await done;
     } finally {
       live.delete(session);
     }
@@ -113,21 +143,26 @@ export function createVoiceServer(deps: ServerDeps): VoiceServer {
       transport.close();
       return;
     }
-    // Busy, or not ready: closing hands the call back to Twilio's next TwiML (the simpler line).
-    if (full()) {
-      log("busy", { callId: token.callId });
+    // Busy, or not up: closing hands the call back to Twilio's next TwiML (the simpler line).
+    const release = takeLine();
+    if (!release) {
+      log("busy", { callId: token.callId, up: up() });
       transport.close();
       return;
     }
-    let info;
     try {
-      info = await deps.app.session(token.callId, "phone");
-    } catch (err) {
-      log("session_error", { callId: token.callId, error: (err as Error).message });
-      transport.close();
-      return;
+      let info;
+      try {
+        info = await deps.app.session(token.callId, "phone");
+      } catch (err) {
+        log("session_error", { callId: token.callId, error: (err as Error).message });
+        transport.close();
+        return;
+      }
+      await run(new CallSession({ ...common(), transport, info }));
+    } finally {
+      release();
     }
-    await run(new CallSession({ ...common(), transport, info }));
   }
 
   async function webCall(ws: WebSocket): Promise<void> {
@@ -141,16 +176,21 @@ export function createVoiceServer(deps: ServerDeps): VoiceServer {
     }
     const token = verifyCallToken(deps.secret, hello.token);
     if (!token || token.kind !== "web") return transport.fail("This call link has expired. Start the call again.", 4001);
-    if (full()) return transport.fail(deps.ready() ? "All lines are busy right now. Try again in a minute." : "The voice line is starting up. Try again in a minute.", 4003);
-    let info;
+    const release = takeLine();
+    if (!release) return transport.fail(up() ? "All lines are busy right now. Try again in a minute." : "The voice line isn't available right now. Try again in a minute.", 4003);
     try {
-      info = await deps.app.session(token.callId, "web");
-    } catch (err) {
-      log("session_error", { callId: token.callId, error: (err as Error).message });
-      return transport.fail("Couldn't start the call. Try again in a moment.", 4002);
+      let info;
+      try {
+        info = await deps.app.session(token.callId, "web");
+      } catch (err) {
+        log("session_error", { callId: token.callId, error: (err as Error).message });
+        return transport.fail("Couldn't start the call. Try again in a moment.", 4002);
+      }
+      transport.ready({ callId: info.callId, bot: info.bot.name, voice: info.bot.voice || deps.engine.info.voice, engine: deps.engine.info.version, talker: deps.llm.model });
+      await run(new CallSession({ ...common(), transport, info }));
+    } finally {
+      release();
     }
-    transport.ready({ callId: info.callId, bot: info.bot.name, voice: info.bot.voice || deps.engine.info.voice, engine: deps.engine.info.version, talker: deps.llm.model });
-    await run(new CallSession({ ...common(), transport, info }));
   }
 
   function common() {
@@ -168,11 +208,17 @@ export function createVoiceServer(deps: ServerDeps): VoiceServer {
 
   return {
     server,
-    calls: () => live.size,
-    async close() {
-      await Promise.all([...live].map((s) => s.end("error", "Sorry, I have to go. Please call back in a minute.")));
+    calls: () => lines,
+    async close(waitMs = 12_000) {
+      closing = true;
+      // Each call says goodbye and reports to the app; one still being set up does too, once it starts (run()).
+      for (const session of live) void session.end("error", SHUTDOWN_GOODBYE);
+      const until = Date.now() + waitMs;
+      while (lines > 0 && Date.now() < until) await new Promise((r) => setTimeout(r, 50));
+      if (lines > 0) log("close_timeout", { calls: lines });
       for (const client of wss.clients) client.terminate();
       wss.close();
+      server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
     },
   };

@@ -7,6 +7,8 @@ import type { SpeechEngine } from "../speech/engine.ts";
 import { forSpeech } from "../speech/text.ts";
 
 export const FILLERS = ["Mm-hm.", "One sec.", "Let me check.", "Okay."] as const;
+/** Said from memory when the speech engine itself fails mid-call (index.ts makes it at start-up). */
+export const ENGINE_TROUBLE = "Sorry, I'm having technical trouble. Please call back in a few minutes.";
 
 export class PhraseCache {
   private readonly engine: SpeechEngine;
