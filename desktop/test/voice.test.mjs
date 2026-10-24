@@ -64,17 +64,24 @@ function run(events, timing) {
   return { effects: out, state: s };
 }
 
-test("hold to talk: recording starts on the press, and the release sends it", () => {
+test("hold to talk: recording starts once the hold is confirmed, and the release sends it", () => {
+  const confirmed = run([
+    { type: "down", at: 0 },
+    { type: "tick", at: 100 },
+  ]);
+  assert.deepEqual(confirmed.effects, [], "not yet: it might be a key combination");
   const { effects, state } = run([
     { type: "down", at: 0 },
-    { type: "tick", at: 250 },
+    { type: "tick", at: 200 },
     { type: "up", at: 1800 },
   ]);
   assert.deepEqual(effects, ["start", "stop"]);
   assert.equal(state.mode, "idle");
+  // A tick that ran late counts as if on time.
+  assert.deepEqual(run([{ type: "down", at: 0 }, { type: "up", at: 1800 }]).effects, ["start", "stop"]);
 });
 
-test("tap twice for hands-free, tap again to finish; a single tap does nothing", () => {
+test("tap twice for hands-free, tap again to finish; a single quick tap does nothing at all", () => {
   assert.deepEqual(
     run([
       { type: "down", at: 0 },
@@ -93,8 +100,10 @@ test("tap twice for hands-free, tap again to finish; a single tap does nothing",
     { type: "up", at: 100 },
     { type: "tick", at: 600 },
   ]);
-  assert.deepEqual(single.effects, ["start", "cancel"]);
+  assert.deepEqual(single.effects, [], "no mic, no chime, nothing to cancel");
   assert.equal(single.state.mode, "idle");
+  // A tap long enough to open the mic, and no second one: cancelled.
+  assert.deepEqual(run([{ type: "down", at: 0 }, { type: "tick", at: 200 }, { type: "up", at: 230 }, { type: "tick", at: 700 }]).effects, ["start", "cancel"]);
   // Too slow for a double tap: the second press is a new hold.
   assert.deepEqual(
     run([
@@ -104,11 +113,11 @@ test("tap twice for hands-free, tap again to finish; a single tap does nothing",
       { type: "down", at: 900 },
       { type: "up", at: 2000 },
     ]).effects,
-    ["start", "cancel", "start", "stop"],
+    ["start", "stop"],
   );
 });
 
-test("Esc cancels, and a key combination (⌥E, Ctrl+Win+D) isn't voice typing", () => {
+test("Esc cancels, and a key combination (⌥E, Ctrl+Win+→) isn't voice typing: before the mic opens, silently", () => {
   assert.deepEqual(
     run([
       { type: "down", at: 0 },
@@ -120,9 +129,15 @@ test("Esc cancels, and a key combination (⌥E, Ctrl+Win+D) isn't voice typing",
     ["start", "cancel", "start", "stop"],
     "after Esc it waits for the keys to be let go",
   );
-  assert.deepEqual(run([{ type: "down", at: 0 }, { type: "other", at: 150, modifier: false }, { type: "up", at: 400 }]).effects, ["start", "cancel"]);
-  // A modifier soon after is a combination; long after, it's a resting finger.
-  assert.deepEqual(run([{ type: "down", at: 0 }, { type: "other", at: 200, modifier: true }]).effects, ["start", "cancel"]);
+  // Another key before the hold is confirmed: a key combination, left to the app. Nothing at all.
+  const chord = run([{ type: "down", at: 0 }, { type: "other", at: 150, modifier: false }, { type: "tick", at: 250 }, { type: "up", at: 400 }]);
+  assert.deepEqual(chord.effects, []);
+  assert.equal(chord.state.mode, "idle");
+  assert.deepEqual(run([{ type: "down", at: 0 }, { type: "other", at: 120, modifier: true }]).effects, [], "a modifier too");
+  assert.deepEqual(run([{ type: "down", at: 0 }, { type: "escape", at: 100 }, { type: "up", at: 150 }]).effects, []);
+  // After it's confirmed: a key soon after (or a modifier soon after) still cancels; long after, it's a resting finger.
+  assert.deepEqual(run([{ type: "down", at: 0 }, { type: "tick", at: 200 }, { type: "other", at: 260, modifier: false }, { type: "up", at: 400 }]).effects, ["start", "cancel"]);
+  assert.deepEqual(run([{ type: "down", at: 0 }, { type: "tick", at: 200 }, { type: "other", at: 300, modifier: true }]).effects, ["start", "cancel"]);
   assert.deepEqual(run([{ type: "down", at: 0 }, { type: "other", at: 3000, modifier: true }, { type: "up", at: 4000 }]).effects, ["start", "stop"]);
   // The pill's Done button and the time limit finish it like a press would.
   assert.deepEqual(run([{ type: "down", at: 0 }, { type: "up", at: 100 }, { type: "down", at: 200 }, { type: "up", at: 260 }, { type: "finish", at: 5000 }]).effects, ["start", "handsfree", "stop"]);
@@ -150,13 +165,15 @@ test("the key listener turns real key presses into start, stop and cancel", asyn
   const seen = [];
   for (const ev of ["start", "stop", "cancel", "handsfree"]) hk.on(ev, () => seen.push(ev));
   assert.deepEqual(await hk.enable(), { ok: true });
-  // Ctrl, then Win: the shortcut is down only when both are.
+  // Ctrl, then Win: the shortcut is down only when both are, and the mic opens once it's held a moment.
   hook.press(KEY.Ctrl);
   assert.deepEqual(seen, []);
   hook.press(KEY.Meta, { ctrlKey: true });
-  assert.deepEqual(seen, ["start"]);
-  // Key repeat while held changes nothing.
+  assert.deepEqual(seen, []);
+  now = 300;
+  // Key repeat while held changes nothing (the moment has passed by then: it's recording).
   hook.press(KEY.Meta, { ctrlKey: true });
+  assert.deepEqual(seen, ["start"]);
   now = 2000;
   assert.equal(hk.modifiersHeld(), true);
   hook.release(KEY.Meta);
@@ -172,6 +189,47 @@ test("the key listener turns real key presses into start, stop and cancel", asyn
   hook.release(KEY.Ctrl);
   assert.equal(hk.modifiersHeld(), false);
   assert.deepEqual(seen, ["start", "stop"]);
+});
+
+test("a key combination that starts with the shortcut (⌥E, Ctrl+Win+→) never opens the mic; held on its own, it does, a moment later", async () => {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const timing = { confirmMs: 60, holdMs: 100 };
+  const mac = fakeHook();
+  const hk = new Hotkey({ loadHook: async () => mac, shortcut: defaultShortcut("darwin"), platform: "darwin", timing });
+  const seen = [];
+  for (const ev of ["start", "stop", "cancel", "handsfree"]) hk.on(ev, () => seen.push(ev));
+  await hk.enable();
+  // Right Option + E, typing an accented letter: nothing, then or later.
+  mac.press(KEY.AltRight);
+  mac.press(18, { altKey: true });
+  mac.release(18);
+  mac.release(KEY.AltRight);
+  await sleep(150);
+  assert.deepEqual(seen, []);
+  assert.equal(hk.isRecording(), false);
+  // Held on its own: recording starts after the moment, with no other key pressed.
+  mac.press(KEY.AltRight);
+  assert.deepEqual(seen, []);
+  await sleep(150);
+  assert.deepEqual(seen, ["start"]);
+  mac.release(KEY.AltRight);
+  assert.deepEqual(seen, ["start", "stop"]);
+
+  // Windows: Ctrl + Win + → switches desktops. The Start-menu guard still taps F24, and nothing else happens.
+  const win = fakeHook();
+  const wk = new Hotkey({ loadHook: async () => win, shortcut: defaultShortcut("win32"), platform: "win32", timing });
+  const wseen = [];
+  for (const ev of ["start", "stop", "cancel", "handsfree"]) wk.on(ev, () => wseen.push(ev));
+  await wk.enable();
+  win.press(KEY.Ctrl);
+  win.press(KEY.Meta, { ctrlKey: true });
+  win.press(57421, { ctrlKey: true, metaKey: true });
+  win.release(57421);
+  win.release(KEY.Meta);
+  win.release(KEY.Ctrl);
+  await sleep(150);
+  assert.deepEqual(wseen, []);
+  assert.deepEqual(win.taps, [[KEY.F24]]);
 });
 
 test("a key let go while the hook wasn't looking doesn't stay stuck", async () => {
@@ -214,13 +272,23 @@ test("Shift with the shortcut asks to edit by voice, and never counts as a key c
   hook.release(KEY.AltRight);
   hook.release(KEY.Shift);
   assert.deepEqual(seen, ["start:edit", "stop"]);
-  // Shift pressed right after the shortcut (inside the key-combination window) switches to editing, no cancel.
+  // Shift pressed right after the shortcut, before the mic opens: an edit from the start, no cancel.
   seen.length = 0;
   now = 5000;
   hook.press(KEY.AltRight);
   now = 5100;
   hook.press(KEY.ShiftRight, { altKey: true });
   now = 6000;
+  hook.release(KEY.ShiftRight);
+  hook.release(KEY.AltRight);
+  assert.deepEqual(seen, ["start:edit", "stop"]);
+  // Shift once it's listening (inside the key-combination window) switches to editing, no cancel.
+  seen.length = 0;
+  now = 8000;
+  hook.press(KEY.AltRight);
+  now = 8300;
+  hook.press(KEY.ShiftRight, { altKey: true });
+  now = 9000;
   hook.release(KEY.ShiftRight);
   hook.release(KEY.AltRight);
   assert.deepEqual(seen, ["start:type", "edit", "stop"]);
@@ -234,12 +302,15 @@ test("Shift with the shortcut asks to edit by voice, and never counts as a key c
 test("a shortcut that includes Shift can't also mean edit", async () => {
   const hook = fakeHook();
   const shortcut = resolveShortcut({ shortcut: "custom", customKeys: [KEY.CtrlRight, KEY.ShiftRight] }, "linux");
-  const hk = new Hotkey({ loadHook: async () => hook, shortcut, platform: "linux" });
+  let now = 0;
+  const hk = new Hotkey({ loadHook: async () => hook, shortcut, platform: "linux", now: () => now });
   const seen = [];
   hk.on("start", (o) => seen.push(`start:${o?.edit ? "edit" : "type"}`));
   hk.on("edit", () => seen.push("edit"));
   await hk.enable();
   hook.press(KEY.CtrlRight);
+  hook.press(KEY.ShiftRight, { ctrlKey: true });
+  now = 300;
   hook.press(KEY.ShiftRight, { ctrlKey: true });
   assert.deepEqual(seen, ["start:type"]);
   assert.equal(hk.editHeld(), false);
