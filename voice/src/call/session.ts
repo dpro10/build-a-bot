@@ -42,7 +42,7 @@ import { TurnDetector, endDelayFor, type TurnEvent, type TurnOptions } from "../
 import { VAD_RATE, VAD_WINDOW_MS, type Vad, type VadStream } from "../vad/vad.ts";
 import { concatPcm } from "../audio/pcm.ts";
 import { ENGINE_TROUBLE, PhraseCache } from "./phrases.ts";
-import { pinFromSpeech } from "./pin.ts";
+import { hasDigits, maskPin, pinFromSpeech } from "./pin.ts";
 import { Speaker, type SpeechPace } from "./speaker.ts";
 import type { CallTransport } from "./transport.ts";
 
@@ -354,11 +354,14 @@ export class CallSession {
     void heard.then((h) => {
       if (this.spec !== spec || !h) return;
       const text = h.text.trim();
-      this.detector.setEndMs(endDelayFor(text, this.detector.opts.endMs));
+      const pinNext = this.wantsPin() && hasDigits(text);
+      // Someone reading out digits may pause between them: give them longer.
+      this.detector.setEndMs(pinNext ? Math.round(this.detector.opts.endMs * 1.9) : endDelayFor(text, this.detector.opts.endMs));
       if (!text) return;
-      if (this.wantsPin()) {
+      if (pinNext) {
+        // Maybe a PIN, maybe one still being said: it waits for the turn's end, and never goes to the model.
         spec.pin = pinFromSpeech(text);
-        if (spec.pin) return; // a PIN never goes to the model
+        return;
       }
       // Don't hold a reply while the bot is still saying something else.
       if (this.speaker.busy || this.reply) return;
@@ -401,7 +404,9 @@ export class CallSession {
         return;
       }
     }
-    const input = this.withCarry(text);
+    // While a PIN is wanted, digits that could be one never reach the model or the transcript.
+    const said = this.wantsPin() ? maskPin(text) : text;
+    const input = this.withCarry(said);
     // They started talking again while this was being heard: answer it together with what follows.
     if (this.detector.speaking) {
       if (reply) this.dropReply(reply);
@@ -409,7 +414,7 @@ export class CallSession {
       return;
     }
     this.carry = "";
-    this.recordTurn("caller", text);
+    this.recordTurn("caller", said);
     if (this.reply && this.reply.toolsStarted && !this.reply.ac.signal.aborted) {
       // The bot's agent is still on the last request: answer this one right after.
       if (reply) this.dropReply(reply);

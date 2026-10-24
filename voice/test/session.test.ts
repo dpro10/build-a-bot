@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { CallSession, sanitizeHistory, type SessionConfig } from "../src/call/session.ts";
 import { ENGINE_TROUBLE, PhraseCache } from "../src/call/phrases.ts";
 import { EnergyVad } from "../src/vad/vad.ts";
-import { pinFromSpeech } from "../src/call/pin.ts";
+import { maskPin, pinFromSpeech } from "../src/call/pin.ts";
 import type { ChatMessage, LlmRequest } from "../src/brain/llm.ts";
 import { Caller, FakeApp, FakeEngine, FakeLlm, FakeTransport, sessionInfo, sleep, until, type LlmScript } from "./fixtures/fakes.ts";
 import type { SessionInfo } from "../src/brain/app.ts";
@@ -275,6 +275,26 @@ test("PINs said out loud", () => {
   assert.equal(pinFromSpeech("call me at 5"), null);
   assert.equal(pinFromSpeech("one two three"), null);
   assert.equal(pinFromSpeech("book it for 4 people on 1234 Main"), null);
+  // In a short sentence.
+  assert.equal(pinFromSpeech("Yes, 4481"), "4481");
+  assert.equal(pinFromSpeech("Hi Otto, it's four four eight one"), "4481");
+  assert.equal(pinFromSpeech("I think it's 4481."), "4481");
+  assert.equal(pinFromSpeech("Oh, it's 4481"), "4481");
+  assert.equal(pinFromSpeech("Okay so it's four four, uh, eight one"), "4481");
+  assert.equal(pinFromSpeech("Sure, 4,481"), "4481");
+  // Not PINs.
+  assert.equal(pinFromSpeech("Remind me at 11:30"), null);
+  assert.equal(pinFromSpeech("Remind me at 1130"), null);
+  assert.equal(pinFromSpeech("Hi, this is Diego calling from my cell, my PIN is 4481, can you check my calendar?"), null);
+});
+
+test("while a PIN is wanted, digits that could be one are taken out; times, amounts and phone numbers stay", () => {
+  assert.equal(maskPin("my PIN is 4481, can you check my calendar?"), "my PIN is (a number), can you check my calendar?");
+  assert.equal(maskPin("it's four four eight one"), "it's (a number)");
+  assert.equal(maskPin("my PIN is four four"), "my PIN is (a number)");
+  assert.equal(maskPin("call me at 4:30 about the $44.81"), "call me at 4:30 about the $44.81");
+  assert.equal(maskPin("my number is 555 123 4567"), "my number is 555 123 4567");
+  assert.equal(maskPin("Oh, one more thing: someone called"), "Oh, one more thing: someone called");
 });
 
 // ---- the talker failing ------------------------------------------------------------------------
@@ -485,4 +505,37 @@ test("an unverified caller's message goes to the bot, and they hear how it reall
   await passed.greetedThenSays();
   await until(() => passed.engine.spoken.includes("I've passed your message on to Diego."), 4000, "passed on");
   await passed.session.end("caller");
+});
+
+// ---- PINs in sentences ------------------------------------------------------------------------
+
+test("a PIN in a short sentence unlocks too, and its digits go nowhere", async () => {
+  const t = setup({
+    script: () => ({ text: "How can I help?" }),
+    transcribe: () => "Yes, 4481",
+    info: { speaker: "unverified", pinAvailable: true, greeting: "Hi, it's Otto. What's your PIN?" },
+  });
+  void t.session.start();
+  await t.greetedThenSays();
+  await until(() => t.engine.spoken.includes("Thanks, Diego. What can I do for you?"), 3000, "unlock");
+  assert.deepEqual(t.app.pins, ["4481"]);
+  for (const r of t.llm.requests) assert.ok(!JSON.stringify(r.messages).includes("4481"), "PIN went to the model");
+  assert.ok(!t.transcript().some((l) => l.includes("4481")), "PIN in the transcript");
+  await t.session.end("caller");
+});
+
+test("a PIN said in a long sentence never reaches the model or the transcript", async () => {
+  const t = setup({
+    script: () => ({ text: "Say just your PIN, and I'll unlock the call." }),
+    transcribe: () => "Hi, this is Diego calling from my cell, my PIN is 4481, can you check my calendar?",
+    info: { speaker: "unverified", pinAvailable: true, greeting: "Hi, it's Otto. What's your PIN?" },
+  });
+  void t.session.start();
+  await t.greetedThenSays();
+  await until(() => t.transcript().includes("bot: Say just your PIN, and I'll unlock the call."), 3000, "answer");
+  assert.ok(t.llm.requests.length > 0);
+  for (const r of t.llm.requests) assert.ok(!JSON.stringify(r.messages).includes("4481"), "PIN went to the model");
+  assert.ok(!t.transcript().some((l) => l.includes("4481")), "PIN in the transcript");
+  assert.ok(t.transcript().some((l) => l.startsWith("caller:") && l.includes("(a number)")));
+  await t.session.end("caller");
 });
