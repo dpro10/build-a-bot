@@ -57,6 +57,16 @@ win:
   icon: build/icon.png
   # Signed in CI with Azure Artifact Signing (azureSignOptions, from the repository's settings), or
   # a certificate (WIN_CSC_LINK / WIN_CSC_KEY_PASSWORD). Unsigned builds trigger SmartScreen.
+  # NVIDIA's runtime for Private speech (scripts/bundle-speech-runtime.mjs puts it in
+  # build/speech-runtime): in the installer, so it's signed with the app (afterSign, below).
+  extraResources:
+    - from: build/speech-runtime
+      to: speech-runtime
+
+# Windows: every program file in the app signed (Smart App Control checks each DLL and native
+# module as it loads). electron-builder signs the .exe files; this signs the rest it leaves
+# unsigned: NVIDIA's runtime, the keyboard hook, some of Electron's own DLLs.
+afterSign: build/sign-the-rest.cjs
 
 nsis:
   # One click: no questions, no admin, and it opens when it's done.

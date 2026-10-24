@@ -160,8 +160,8 @@ Meeting notes and voice typing live in the desktop app, so the site shows them a
 
 Secrets and variables go in GitHub: the repository's **Settings → Secrets and variables → Actions**.
 
-SmartScreen can still warn on a signed app's first downloads, until it has built up a reputation. Signing removes "Unknown publisher" and Smart App Control's block.
+SmartScreen can still warn on a signed app's first downloads, until it has built up a reputation. Signing removes "Unknown publisher" and Smart App Control's block: CI signs every program file in the app with this account, NVIDIA's speech runtime included (`desktop/build/sign-the-rest.cjs`), since Smart App Control checks each DLL as it loads.
 
-**4. Publish:** the next push to `main` that changes `desktop/`, or Actions → **Desktop app** → Run workflow, builds both apps, signs whichever has its keys, and publishes them as the release `desktop-v0.1.<run>`. The run's **Check it** (Mac: notarized Developer ID) and **Check the signature** (Windows) steps show it worked.
+**4. Publish:** the next push to `main` that changes `desktop/`, or Actions → **Desktop app** → Run workflow, builds both apps, signs whichever has its keys, and publishes them as the release `desktop-v0.1.<run>`. The run's **Check it** (Mac: notarized Developer ID) and **Check the signatures** (Windows: the installer and every program file in the app) steps show it worked.
 
 **5. That's it:** the site's own `/download` page lists the newest release, and every page that offers the desktop app (and with it meeting notes and voice typing) links there. Set `NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL` only to send people somewhere else.
