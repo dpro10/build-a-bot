@@ -1129,9 +1129,34 @@ Diego, on the rest of the October 23 bug report: "ok, go ahead an just do the re
 
 **Set in Vercel when convenient:** `GITHUB_TOKEN` (any read-only token) makes the download page's release check count against it instead of GitHub's 60 calls an hour. Without it, the page now keeps the last good list through GitHub's refusals.
 
-**For Diego to decide (from the desktop fixes):** if NVIDIA Parakeet can't run on a computer, voice typing still sends the recording to a server that has its own speech-to-text (the documented fallback from 2026-10-16). build-a-bot.site has none, so nothing is ever sent there; closing the fallback for other servers is a small change.
+**For Diego to decide (from the desktop fixes):** if NVIDIA Parakeet can't run on a computer, voice typing still sends the recording to a server that has its own speech-to-text (the documented fallback from 2026-10-16). build-a-bot.site has none, so nothing is ever sent there; closing the fallback for other servers is a small change. *(Diego, the same day: not for the first version; see "every program file in the Windows app is signed", below.)*
 
 **Not changed:**
 - A link with a trailing backslash (`/pricing\`) still gives a 500 rather than a 404: it happens inside Next.js, before our code.
 - Next.js stays on 16.3.8: its advisories don't apply here, and a minor-version bump right before judging isn't worth the risk.
 - Many messages sent at the same moment with a cent left can all run (small, and bounded by the daily budget). Turns cut off mid-way (Stop, a routine out of time) are now charged, from a count of what the model read and wrote, as for a reply without a usage report.
+
+## Decision: every program file in the Windows app is signed, NVIDIA's runtime included (Diego, 2026-10-24)
+
+Diego, asked whether NVIDIA's unsigned program could be signed and packaged with the signed app: "yes go ahead, do the signing first... im not sure about the serve step yet though, it seems to complicated for the first version of build a bot theres no way we need more langauges, and parakeet has never crashed when its been recording my meetings. One thing that we havent stressed enough in the right up is when you get action items after the meeting, I really like that. We need to think about parakeet being able to recognize other people on the meeting and name them based on the dictation, that could be cool, but maybe a later step. Also when deciding action items do we use tavily?"
+
+- **Why:**
+  - Windows 11's Smart App Control runs a program file only if Microsoft's cloud knows it is safe or it's signed with a certificate from a trusted authority (Microsoft's developer docs). It checks each DLL as it loads, not just the app.
+  - NVIDIA's Windows runtime has 10 unsigned files: `nemo-speech.exe` and 9 DLLs. Its Visual C++ DLLs are Microsoft's, and signed.
+  - On a PC with Smart App Control on, Parakeet couldn't start. build-a-bot.site has no speech-to-text of its own, so voice typing and meeting notes didn't work there at all.
+  - The keyboard hook (`uiohook-napi.node`) and four of Electron's DLLs (`ffmpeg`, `vulkan-1`, `vk_swiftshader`, `dxcompiler`) were unsigned too.
+- **What changed:**
+  - CI puts NVIDIA's runtime inside the Windows installer (`desktop/scripts/bundle-speech-runtime.mjs`): NVIDIA's release, checked against the hash the app pins, with its licenses and notices. It adds about 5 MB to the installer.
+  - `desktop/build/sign-the-rest.cjs` (electron-builder's `afterSign`) signs every `.exe`, `.dll` and `.node` file in the app that is still unsigned. It uses the same Azure Artifact Signing account and Public Trust profile as the app. Files already signed (Microsoft's) are left as they are.
+  - CI checks that every program file in the app is signed. Pull requests, which aren't signed, list what a signed build signs.
+  - The app copies the runtime from the installer instead of downloading it. The 0.7 GB model still downloads once, and an update that brings another runtime keeps it.
+  - Mac unchanged: the app clears the download's quarantine flag, so Gatekeeper doesn't stop NVIDIA's runtime.
+- **Still to check:** on a PC with Smart App Control on. GitHub's Windows machines don't have it, and some developers report signed files still blocked. Microsoft documents how to switch a test PC into enforcement mode.
+- **The server fallback stays as it is**, not for the first version. With Private speech on, a server with its own speech-to-text still hears what Parakeet can't (another language, an engine that keeps stopping). build-a-bot.site has none, so nothing is ever sent there.
+- **Action items don't use Tavily.**
+  - The notes come from one model call with no tools at all: a transcript is other people's words, and a line said in a meeting must not make the bot act.
+  - Reminders and recap emails come when the owner asks, through the normal agent and its approvals, which can search the web.
+- **The write-up leads meetings with the action items** (`docs/HACKATHON.md`): the pitch, "What it does", the judges' steps and "How we built it".
+- **Later:** telling the people on a call apart and naming them from what's said.
+  - NeMo-Speech.cpp has a diarization API (`diar.h` is in its Windows release).
+  - Today "Others" is everyone but the owner, whose own microphone is heard on its own track. A name is used only when someone says it.

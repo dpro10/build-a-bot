@@ -93,7 +93,7 @@ Nothing on the live site is simulated. Each service that isn't set up says "Comi
 6. **Meeting notes**, in the same app, with meeting notes on for the bot (its **Meetings** tab):
    - **Start a call** in Zoom, Meet or Teams, or choose **Take notes in the room** in the app's menu.
    - **The bot asks first.** While it listens, it sits at the bottom of the screen with live captions. Hide it to share your screen; the Build-a-bot icon then shows it's recording.
-   - **When you stop**, the notes (a summary, decisions, action items) are in the **Meetings** tab and in the chat. Ask the bot "what did we decide?".
+   - **When you stop**, the notes arrive in the chat and the **Meetings** tab: a summary, the decisions, and the action items, each with who and by when, as a checklist. Ask the bot to set reminders for your action items, or to draft a recap email for everyone, or "what did we decide?".
 
 ## Demo video
 
@@ -102,7 +102,7 @@ The cut, beat by beat, with where each claim is true and what Diego records: [`v
 ## Devpost write-up draft
 
 **For the form:**
-- **Elevator pitch** (192 of Devpost's 200 characters): `Your own AI agent in a minute: NVIDIA Nemotron on Nebius, your apps, approvals enforced in code. Chat with it or call it; it takes meeting notes and types by voice, heard on your own computer.`
+- **Elevator pitch** (195 of Devpost's 200 characters): `Your own AI agent in a minute: NVIDIA Nemotron on Nebius, your apps, approvals enforced in code. Call it or chat with it; it turns meetings into action items and types by voice, on your computer.`
 - **Try it out:** https://build-a-bot.site, https://github.com/dpro10/build-a-bot and https://build-a-bot.site/download
 - **Video:** the YouTube link, once it's up.
 - **Track:** Personal AI. Also enter **Best Use of Tavily**.
@@ -115,7 +115,8 @@ The sections below fill in **About the project**.
 - **Talk to it** on the web, Slack, Discord or Telegram (texts and email are coming).
 - **Or just call it,** from the app or from your phone. It answers in its own voice, usually about three seconds after you stop talking, with your calendar, email and other apps behind it.
 - **It keeps up with you:** it remembers what matters, keeps reminders and routines, and reaches out first with a daily check-in.
-- **On your computer,** it takes meeting notes and types for you by voice in any app.
+- **After a meeting, your action items are waiting.** On your computer, it takes notes in Zoom, Meet or Teams (it asks first). When the call ends it sends you the summary, the decisions and the action items: who does what, by when, as a checklist you tick off. Ask it to set reminders for yours, or to email everyone a recap.
+- **It types for you by voice** in any app on your computer.
 
 **How we built it:**
 - **NVIDIA Nemotron on Nebius Token Factory** runs the included brains.
@@ -123,9 +124,9 @@ The sections below fill in **About the project**.
   - There are no plans: people pay for what they use at Token Factory's price, with nothing added, and every account starts with $5 of credit.
   - Nemotron 3 Super and Ultra take the harder jobs.
 - **NVIDIA Parakeet TDT 0.6B v3 on the user's own computer** turns speech into text for voice typing and meeting notes.
-  - **Setup:** the desktop app downloads NVIDIA's NeMo-Speech.cpp runtime and the model once (about 0.7 GB, each checked against NVIDIA's published hash). It runs them on 127.0.0.1 behind a random key, on the GPU with Metal on Apple silicon and on the CPU elsewhere.
+  - **Setup:** the desktop app downloads the model once (about 0.7 GB, checked against NVIDIA's published hash) and runs it with NVIDIA's NeMo-Speech.cpp on 127.0.0.1 behind a random key, on the GPU with Metal on Apple silicon and on the CPU elsewhere. On the Mac the runtime is downloaded the same way. On Windows it comes inside our installer, and we sign NVIDIA's program files with our own certificate: Windows 11's Smart App Control won't run unsigned code it doesn't know.
   - **Voice typing:** only the words go to the server, to be cleaned up by Nemotron.
-  - **Meetings:** each piece of the call (about 20 seconds, ending at a pause) is heard with each word's time. Only the transcript lines go to the server, where Nemotron writes the notes.
+  - **Meetings:** each piece of the call (about 20 seconds, ending at a pause) is heard with each word's time. Only the transcript lines go to the server, where Nemotron writes the notes: a summary, decisions, open questions and the action items (who, what, by when), turned into a checklist. That call has no tools at all, so nothing said in a meeting can make the bot act. Reminders and recap emails come when you ask, through the bot's usual approvals.
   - On build-a-bot.site the audio never leaves the computer, and there's no speech server to pay for.
 - **Calls on NVIDIA's speech models, on our own server.**
   - **The server:** TypeScript on Node, plus a small C++ program on NeMo-Speech.cpp's C API. It keeps Parakeet and **NVIDIA Magpie TTS** loaded on a Google Cloud CPU machine, built from source for AVX-512 and AMX, with Magpie requantized to Q8_0.
@@ -136,7 +137,7 @@ The sections below fill in **About the project**.
   - **Phone calls** come in over Twilio Media Streams; when the voice server can't take one, Twilio's own speech does.
   - **Who's calling** decides what the bot will do. The owner is verified by the carrier or a spoken PIN; anyone else can only leave a message.
   - Calls aren't recorded.
-- **The same models in the cloud, as a fallback:** Parakeet and Nemotron 3.5 ASR on NeMo-Speech.cpp, in our own container for a Nebius Serverless AI endpoint, behind an OpenAI-compatible API, for computers that can't run Parakeet.
+- **Built, not switched on: the same models in the cloud.** Parakeet and Nemotron 3.5 ASR on NeMo-Speech.cpp, in our own container for a Nebius Serverless AI endpoint, behind an OpenAI-compatible API, for computers that can't run Parakeet and the languages it doesn't speak. build-a-bot.site doesn't run it: there, everything is heard on the user's own computer.
 - **Tavily** is the bots' web search and page reader, and the tutor's fact checker.
   - **Finding the course:** from a syllabus, the tutor finds the course online once: its pages on the school's site, and open textbooks on the subject. It keeps them in a note the student can edit.
   - **Checking answers:** before it saves flashcards or a quiz, it checks every answer that isn't from the student's files, one search per claim. It prefers the course's own sites and open textbooks, and leaves out homework-answer and pirated-book sites.
@@ -167,7 +168,7 @@ The sections below fill in **About the project**.
 - Calls heard and spoken on your own computer's GPU when it's on, with the server as the fallback.
 - Faster answers on calls: a bigger voice machine, and starting Nemotron while you're still talking.
 - Stream the audio while you talk, with NVIDIA's realtime WebSocket, for near-instant typing.
-- Telling the call's speakers apart, with NVIDIA's Sortformer in the same engine.
+- Telling the people on a call apart, with NVIDIA's Sortformer in the same engine, and naming each one from what's said ("Thanks, Maria"), so every action item has the right name.
 - A front desk for small businesses.
 
 ## Feedback for Nebius and NVIDIA (from building this)
