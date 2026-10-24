@@ -64,10 +64,12 @@ checks its work instead:
 - **The agent's real outcome**: `ask_bot`'s result carries the app's status (`ok`, `refused`,
   `limited`, `unavailable`, `error`, `paused`), the agent's own words, what waits for the owner's OK,
   and plainly what that means ("Nothing was done", "Not done yet: it's waiting for Diego's OK").
-- **Nothing said before the job is back**: a step of the talker's answer is heard whole before any
-  of it is spoken (it adds about a tenth of a second: the whole answer comes right after the first
-  word). Words that come with a hand-off ("Done! I've booked it") are never spoken: the caller hears
-  "Let me check." while the agent works, then the answer from the result.
+- **No claim before the job is back**: the talker's answer is spoken as it comes, a sentence at a
+  time, except a sentence that says something was done or will be ("Done! I've booked it"): that
+  one, and what follows it, waits for the end of the talker's step to be checked. With a hand-off
+  it's never spoken: the caller hears "Let me check." (or what the talker said first, like "One
+  moment") while the agent works, then the answer from the result. Waiting for each whole step
+  instead, as first built, made every answer 1.3 to 2 s slower.
 - **A claim that didn't happen is never spoken**: after a job that didn't succeed, a reply that
   still says it did is replaced by an honest line from the agent's own words ("That didn't go
   through. You're out of credit…"). A reply that says something was done when nothing was handed to

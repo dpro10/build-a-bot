@@ -6,14 +6,15 @@
  *                                              ├─ resume: they weren't done; drop the held reply
  *                                              └─ end: release the held reply at once (or hear and
  *                                                       answer now if there wasn't one)
- *   reply: Nemotron writes a step → sentences → Magpie streams audio → the caller
+ *   reply: Nemotron streams text → sentences → Magpie streams audio → the caller
  *   barge-in: the caller talks over the bot → stop mid-word, clear what hasn't played, listen
  *
- * The talker hands real work to the bot's agent in the app (ask_bot). What it says alongside a
- * hand-off is held back (it can't know yet how the job will go): the caller hears "Let me check."
- * instead, and the talker answers from the job's real outcome. A reply that still claims what didn't
- * happen is replaced by an honest line. Work that takes a while keeps running; its result comes back
- * as an <update> when the line is quiet.
+ * The talker hands real work to the bot's agent in the app (ask_bot). A sentence that says something
+ * was done (or will be) waits for the end of the talker's step, to be checked: with a hand-off it's
+ * never said (it can't know yet how the job will go), and the caller hears "Let me check." unless
+ * something else was said; the talker then answers from the job's real outcome. A reply that still
+ * claims what didn't happen is replaced by an honest line. Work that takes a while keeps running; its
+ * result comes back as an <update> when the line is quiet.
  */
 import type { AppApi, CallReport, CallTurn, SessionInfo } from "../brain/app.ts";
 import {
@@ -496,15 +497,27 @@ export class CallSession {
     let nudged = false;
     for (let step = 0; step < 4; step++) {
       if (reply.ac.signal.aborted) return;
-      // A step is heard whole before any of it is said (the talker's whole answer comes about a
-      // tenth of a second after its first word): words that come with a hand-off can't know yet
-      // how the job will go, and a claim can be checked before anyone hears it.
+      // Said as it comes, a sentence at a time, except a sentence that says something was done or
+      // will be: that one, and what follows it, waits for the end of the step, to be checked against
+      // what the bot's agent really did (with a hand-off it isn't said at all: the job's outcome isn't
+      // known yet). Waiting for whole steps made every answer 1.3 to 2 s slower on the live line.
       let text = "";
+      const chunker = new SentenceChunker();
+      const said: string[] = [];
+      const held: string[] = [];
+      const take = (sentence: string) => {
+        // Checked with what's already been said: a claim can span two pieces.
+        if (!held.length && !claimsDone([...said, sentence].join(" "))) {
+          said.push(sentence);
+          this.queueSpeech(reply, sentence);
+        } else held.push(sentence);
+      };
       const calls: { call: ToolCall; args: Record<string, unknown> | null }[] = [];
       for await (const ev of this.llm.stream({ system: talkerPrompt(this.info), messages, tools, signal: reply.ac.signal })) {
         if (reply.ac.signal.aborted) return;
         if (ev.type === "text") {
           text += ev.delta;
+          for (const sentence of chunker.push(ev.delta)) take(sentence);
         } else if (ev.type === "tool_call") {
           calls.push({ call: ev.call, args: ev.args });
         } else if (ev.type === "done") {
@@ -514,9 +527,11 @@ export class CallSession {
         }
       }
       if (reply.ac.signal.aborted) return;
+      for (const sentence of chunker.flush()) take(sentence);
       text = text.trim();
       const handsOff = calls.some((c) => c.call.function.name === ASK_BOT);
-      if (!handsOff) {
+      let rest = held.join(" ");
+      if (!handsOff && rest) {
         // After a job that didn't do it, or with no job at all: no saying it was done.
         if (reply.job ? !jobDone(reply.job) && claimsDone(text) : claimsWork(text)) {
           if (!reply.job && !nudged && step < 3) {
@@ -526,13 +541,16 @@ export class CallSession {
             continue;
           }
           this.log("claim_replaced", { reply: reply.id, status: reply.job?.status ?? "none" });
-          text = reply.job ? honestLine(reply.job, this.info) : notDoneLine(this.info);
+          rest = reply.job ? honestLine(reply.job, this.info) : notDoneLine(this.info);
         }
-        this.speak(reply, text);
+        this.speak(reply, rest);
       }
+      // What the caller heard: held words that came with a hand-off were never said, so the talker
+      // doesn't remember saying them.
+      const heard = [...said, ...(!handsOff && rest ? [rest] : [])].join(" ");
       if (!calls.length) {
-        if (text) {
-          const assistant: ChatMessage = { role: "assistant", content: text };
+        if (heard) {
+          const assistant: ChatMessage = { role: "assistant", content: heard };
           messages.push(assistant);
           reply.added.push(assistant);
         }
@@ -541,11 +559,10 @@ export class CallSession {
       // Tools run only for a reply the caller is really getting.
       if (!(await reply.committed) || reply.ac.signal.aborted) return;
       reply.toolsStarted = true;
-      // What came with a hand-off was never said, so the talker doesn't remember saying it.
-      const assistant: ChatMessage = { role: "assistant", content: handsOff ? "" : text, tool_calls: calls.map((c) => c.call) };
+      const assistant: ChatMessage = { role: "assistant", content: heard, tool_calls: calls.map((c) => c.call) };
       messages.push(assistant);
       reply.added.push(assistant);
-      if (handsOff) this.queueFiller(reply, "Let me check.");
+      if (handsOff && !said.length) this.queueFiller(reply, "Let me check.");
       let ending = false;
       for (const { call, args } of calls) {
         let result: string;
@@ -564,7 +581,7 @@ export class CallSession {
       }
       if (ending) {
         this.hangupAfterSpeech = true;
-        if (!text || handsOff) this.speak(reply, "Okay, bye!");
+        if (!heard) this.speak(reply, "Okay, bye!");
         break;
       }
     }

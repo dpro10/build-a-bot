@@ -428,6 +428,43 @@ test("words that come with a hand-off wait for the job, and the talker hears how
   await t.session.end("caller");
 });
 
+test("a reply is said as it comes, but a claim in it waits for the job", async () => {
+  const t = setup({
+    script: (req) =>
+      lastTool(req)
+        ? { text: "It's booked for seven." }
+        : { text: "Sure, one moment while I look into that for you. Done! I've booked your table.", tools: [{ name: "ask_bot", args: { request: "Book a table for two at seven" } }] },
+    transcribe: () => "Book a table for two at seven.",
+  });
+  // What the caller hears while the talker is still writing.
+  let streaming = 0;
+  const saidWhileStreaming: unknown[] = [];
+  const stream = t.llm.stream.bind(t.llm);
+  t.llm.stream = async function* (req) {
+    streaming++;
+    try {
+      yield* stream(req);
+    } finally {
+      streaming--;
+    }
+  };
+  const event = t.transport.event.bind(t.transport);
+  t.transport.event = (e) => {
+    if (e.type === "say" && streaming) saidWhileStreaming.push(e.text);
+    event(e);
+  };
+  void t.session.start();
+  await t.greetedThenSays();
+  await until(() => t.engine.spoken.includes("It's booked for seven."), 4000, "answer");
+  assert.deepEqual(saidWhileStreaming, ["Sure, one moment while I look into that for you."]);
+  assert.ok(!t.engine.spoken.some((s) => /Done!|booked your table/.test(s)), JSON.stringify(t.engine.spoken));
+  // The talker remembers saying what the caller heard, and nothing else.
+  const handOff = t.llm.requests[1].messages.find((m) => m.role === "assistant" && m.tool_calls?.length);
+  assert.equal(handOff?.content, "Sure, one moment while I look into that for you.");
+  await until(() => t.transcript().includes("bot: Sure, one moment while I look into that for you. It's booked for seven."), 2000, "transcript");
+  await t.session.end("caller");
+});
+
 test("a reply that still claims success after a job that didn't succeed is replaced with what really happened", async () => {
   const t = setup({
     script: (req) => (lastTool(req) ? { text: "All set, your table is booked!" } : { tools: [{ name: "ask_bot", args: { request: "Book a table for two at seven" } }] }),
