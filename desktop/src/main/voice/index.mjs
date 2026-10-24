@@ -143,18 +143,23 @@ export function setupVoice(o) {
     log,
   });
 
-  /**
-   * Speech-to-text runs on this computer for the next dictation: it's on, downloaded, the server
-   * takes text, and Parakeet speaks the language picked.
-   */
-  function onDevice() {
+  /** Parakeet can hear the next dictation on this computer: it's on, downloaded, and speaks the language picked. */
+  function parakeetHere() {
     const v = settings.get().voice;
     const lang = v.language || "auto";
-    return !localOff && v.onDevice !== false && local.isInstalled() && !local.blocked() && account.session?.voice?.local === true && (lang === "auto" || LOCAL_LANGUAGES.has(lang));
+    return !localOff && v.onDevice !== false && local.isInstalled() && !local.blocked() && (lang === "auto" || LOCAL_LANGUAGES.has(lang));
   }
 
-  /** This server turns recordings into text (it never makes words up; without that, only Parakeet hears). */
-  const serverHears = () => account.session?.voice?.available !== false;
+  /** Speech-to-text runs on this computer for the next dictation: Parakeet can hear it, and the server takes text. */
+  function onDevice() {
+    return parakeetHere() && account.session?.voice?.local === true;
+  }
+
+  /**
+   * This server turns recordings into text (it never makes words up; without that, only Parakeet
+   * hears). Not known without a session (the app started offline): then nothing is sent.
+   */
+  const serverHears = () => Boolean(account.session) && account.session?.voice?.available !== false;
 
   /**
    * Why nothing can hear the next dictation, for the pill and settings: this server doesn't turn
@@ -162,6 +167,8 @@ export function setupVoice(o) {
    * @returns {{ code: string, message?: string, actions?: string[] } | null}
    */
   function cantHear() {
+    // No session: whether the server takes words or hears audio isn't known, so nothing goes (Try again).
+    if (account.device && !account.session) return { code: "network", message: "Voice typing can't reach Build-a-bot right now. Check your internet." };
     if (serverHears() || onDevice()) return null;
     const v = settings.get().voice;
     const lang = v.language || "auto";
@@ -188,6 +195,10 @@ export function setupVoice(o) {
     use: onDevice,
     log,
     noServer: () => (serverHears() ? null : (cantHear() ?? { code: "on-device", message: "NVIDIA Parakeet couldn't hear that one. Try again.", actions: ["retry"] })),
+    // Without the session (still loading, or the app started offline) it's not known what the
+    // server takes: the session gets a moment to load, and without it nothing is sent.
+    session: () => Boolean(account.session) || !account.device,
+    waitForSession: () => account.refreshIfStale(0, 4000),
   });
 
   /**
@@ -217,6 +228,9 @@ export function setupVoice(o) {
     account,
     api: { ...api, dictate },
     localReady: onDevice,
+    // The pill hands over WAV whenever Parakeet could hear it here, even before the session says the
+    // server takes words (it's loading, or the app started offline), so Try again can use it.
+    wantWav: parakeetHere,
     // Pressed before Parakeet is here: say why, and make sure it's on its way.
     cantHear: () => {
       const why = cantHear();
@@ -304,6 +318,8 @@ export function setupVoice(o) {
 
   /** Open the connection to the server, and start Parakeet, while the owner talks, so sending is quick. */
   function warmUp() {
+    // No session yet (the app started offline): it loads while the owner talks, if it can.
+    if (account.device && !account.session) void account.refresh();
     if (onDevice()) {
       // A meeting's next piece waits until this dictation has been heard.
       local.expectForeground();

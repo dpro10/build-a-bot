@@ -544,6 +544,7 @@ function settingsStub(voice = {}) {
 function setupVoice(opts = {}) {
   const calls = [];
   const states = [];
+  const starts = [];
   const pill = {
     async show(s) {
       states.push(s);
@@ -556,6 +557,7 @@ function setupVoice(opts = {}) {
       calls.push("pill.hide");
     },
     async start(o) {
+      starts.push(o);
       calls.push(`mic.start:${o.micId}`);
       return opts.micError ? { ok: false, error: opts.micError } : { ok: true };
     },
@@ -629,12 +631,13 @@ function setupVoice(opts = {}) {
     canPaste: () => opts.canPaste !== false,
     ensureMic: async () => opts.micAllowed !== false,
     localReady: () => Boolean(opts.localReady),
+    ...(opts.wantWav !== undefined ? { wantWav: () => Boolean(opts.wantWav) } : {}),
     cantHear: opts.cantHear,
     open: (t, x) => opened.push([t, x]),
     platform: opts.platform ?? "darwin",
     limits: { doneMs: 30, noteMs: 30, errorMs: 30, replyMs: 60_000 },
   });
-  return { v, hotkey, calls, states, pasted, inserts, history, opened, phases: () => states.map((s) => s.phase) };
+  return { v, hotkey, calls, states, starts, pasted, inserts, history, opened, phases: () => states.map((s) => s.phase) };
 }
 
 test("hold, talk, let go: it's typed where the cursor is, in the app's style", async () => {
@@ -708,6 +711,29 @@ test("a server that doesn't hear recordings, and Parakeet not ready yet: the pil
 
   // The reasons the app gives keep their own words and buttons.
   assert.deepEqual(voiceError(why), { message: why.message, actions: ["settings"] });
+});
+
+test("started offline: the pill says it can't reach Build-a-bot, and Try again sends the same recording (with its WAV for Parakeet) once it can", async () => {
+  const offline = Object.assign(new Error("Can't reach Build-a-bot"), { code: "network", actions: ["retry"] });
+  const env = setupVoice({ wantWav: true, localReady: false, results: [offline, { kind: "text", text: "Back online.", words: 2 }] });
+  env.hotkey.emit("start");
+  await flush();
+  env.hotkey.emit("stop");
+  await flush(20);
+  assert.equal(env.starts[0].wav, true, "WAV for Parakeet, before the session says the server takes words");
+  const shown = env.states.at(-1);
+  assert.equal(shown.phase, "error");
+  assert.equal(shown.message, "I can't reach Build-a-bot. Check your internet.");
+  assert.deepEqual(shown.actions, ["retry"]);
+  assert.deepEqual(env.pasted, []);
+  await env.v.action("retry");
+  await flush(20);
+  assert.deepEqual(env.pasted, ["Back online."]);
+  // Without Parakeet here, no WAV is made.
+  const plain = setupVoice({ wantWav: false });
+  plain.hotkey.emit("start");
+  await flush();
+  assert.equal(plain.starts[0].wav, false);
 });
 
 test("an app it doesn't recognize is sent as 'other', without its name (kept only in local history)", async () => {

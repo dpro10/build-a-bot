@@ -105,6 +105,75 @@ test("account: out of credit, notes wait only for a bot whose notes cost it (its
   assert.equal(account.whyNot(), "Out of credit: add some to take notes");
 });
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function until(fn, ms = 3000) {
+  const end = Date.now() + ms;
+  while (!fn()) {
+    if (Date.now() > end) throw new Error("timed out waiting");
+    await sleep(5);
+  }
+}
+
+/** A paired account whose session loads through `responses`. */
+function pairedAccount(responses, o = {}) {
+  const f = fakeFetch(responses);
+  let saved = { server: "http://s", deviceId: "dev_1", token: "bab_dev_t", deviceName: "Mac", stored: "keychain" };
+  const tokens = { load: () => saved, save: () => ({ stored: "keychain" }), clear: () => (saved = null) };
+  const settings = { get: () => ({ server: "http://s", botId: null }), update: () => {} };
+  const api = createApi({ fetch: f.fn, server: () => saved?.server ?? null, token: () => saved?.token ?? null });
+  const account = new Account({ api, tokens, settings, retry: { firstMs: 60, maxMs: 400, onlineCheckMs: 10 }, ...o });
+  return { account, f };
+}
+
+const SESSION = { bots: [], meetings: { available: false, local: true, minutesLeft: 100, chunkMs: 20000 }, voice: { available: false, local: true } };
+
+test("account: a session that didn't load (the app started offline) is tried again, at once when the computer is back online", async () => {
+  let online = false;
+  const { account, f } = pairedAccount([{ throw: "fetch failed" }, { throw: "fetch failed" }, { status: 200, body: SESSION }], { isOnline: () => online });
+  account.load();
+  await until(() => f.seen.length === 1 && account.status === "offline");
+  assert.equal(account.session, null);
+  assert.equal(account.whyNot(), "Can't reach Build-a-bot");
+  // Tried again on its own, a little later.
+  await until(() => f.seen.length === 2);
+  assert.equal(account.status, "offline");
+  // The next wait is longer, but the Wi-Fi coming up doesn't wait for it.
+  const t0 = Date.now();
+  online = true;
+  await until(() => account.status === "ready");
+  assert.ok(Date.now() - t0 < 100, `took ${Date.now() - t0} ms`);
+  assert.equal(f.seen.length, 3);
+  assert.deepEqual(account.session, SESSION);
+  // Loaded: no more tries.
+  await sleep(150);
+  assert.equal(f.seen.length, 3);
+});
+
+test("account: waking from sleep tries a session that never loaded right away; unpaired, it stops trying", async () => {
+  const woke = pairedAccount([{ throw: "fetch failed" }, { status: 200, body: SESSION }], { retry: { firstMs: 60_000, maxMs: 60_000, onlineCheckMs: 60_000 } });
+  woke.account.load();
+  await until(() => woke.account.status === "offline");
+  woke.account.reconnect();
+  await until(() => woke.account.status === "ready");
+  assert.equal(woke.f.seen.length, 2);
+  woke.account.reconnect();
+  assert.equal(woke.f.seen.length, 2, "nothing to do once it has a session");
+
+  const gone = pairedAccount([{ throw: "fetch failed" }, { throw: "fetch failed" }]);
+  gone.account.load();
+  await until(() => gone.account.status === "offline");
+  gone.account.signOut(null);
+  await sleep(150);
+  assert.equal(gone.f.seen.length, 1, "no tries after unpairing");
+
+  // A page in place of the session (a captive portal's) is no session: it's tried again too.
+  const portal = pairedAccount([{ status: 200 }, { status: 200, body: SESSION }]);
+  portal.account.load();
+  await until(() => portal.f.seen.length === 1 && portal.account.status === "offline");
+  assert.equal(portal.account.session, null);
+  await until(() => portal.account.status === "ready");
+});
+
 test("api: errors keep the server's code; network failures are status 0", async () => {
   const f = fakeFetch([{ status: 409, body: { error: "Turn on Meeting notes for Inky first.", code: "meetings_off" } }, { throw: "ECONNREFUSED" }]);
   const api = createApi({ fetch: f.fn, server: () => "http://s", token: () => "bab_dev_t" });

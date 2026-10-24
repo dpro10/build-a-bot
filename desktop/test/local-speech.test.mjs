@@ -813,6 +813,25 @@ test("dictation goes through this computer's Parakeet first, and only the words 
   fail = null;
   assert.deepEqual(await parakeetOnly(rec, p), { kind: "text", text: "Hi there.", local: true });
 
+  // No session (the app started offline): what the server takes isn't known, so nothing goes, not
+  // even to a server that would hear audio. It waits a moment for the session first.
+  calls.length = 0;
+  fail = null;
+  let session = false;
+  let waits = 0;
+  const offline = localFirst({ local, api, use: () => session && use, session: () => session, waitForSession: async () => void waits++ });
+  await assert.rejects(offline(rec, p), (e) => e.code === "network" && e.actions[0] === "retry");
+  await assert.rejects(offline({ ...rec, wav: undefined }, p), (e) => e.code === "network");
+  assert.equal(waits, 2);
+  assert.deepEqual(calls, [], "neither the audio nor the words went anywhere");
+  // The session arrives while it waits (or before Try again): heard here, and only the words go.
+  const loads = localFirst({ local, api, use: () => session && use, session: () => session, waitForSession: async () => void (session = true) });
+  assert.deepEqual(await loads(rec, p), { kind: "text", text: "Hi there.", local: true });
+  assert.deepEqual(
+    calls.map((c) => c[0]),
+    ["local", "text"],
+  );
+
   // The server's own answer (out of words, unpaired…) stands: the audio isn't sent as well.
   calls.length = 0;
   fail = null;

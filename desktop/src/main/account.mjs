@@ -18,6 +18,13 @@ import { normalizeServer } from "./store.mjs";
  * @typedef {{ device: { id: string, name: string }, owner: { name: string | null, plan?: string }, credit?: { balanceMicros: number }, bots: SessionBot[], meetings: { available: boolean, local?: boolean, credit?: boolean, minutesLeft: number, chunkMs: number }, library?: { available: boolean }, appUrl: string, demo: boolean }} DesktopSession
  */
 
+/**
+ * A session that couldn't be loaded (the app started before the Wi-Fi was up, behind a captive
+ * portal, or during a server hiccup) is loaded again: first after this long, then twice as long
+ * each time, up to the longest wait; at once when the computer comes back online.
+ */
+export const SESSION_RETRY = Object.freeze({ firstMs: 5000, maxMs: 5 * 60_000, onlineCheckMs: 3000 });
+
 export function deviceName() {
   const host = os.hostname().replace(/\.(local|lan|home|localdomain)$/i, "").trim();
   return (host || "My computer").slice(0, 80);
@@ -41,6 +48,8 @@ export class Account extends EventEmitter {
    * @param {import('./store.mjs').TokenStore} o.tokens
    * @param {import('./store.mjs').Settings} o.settings
    * @param {(msg: string) => void} [o.log]
+   * @param {() => boolean} [o.isOnline]  whether the computer has a network connection (Electron's net.isOnline)
+   * @param {Partial<typeof SESSION_RETRY>} [o.retry]  shorter waits for tests
    */
   constructor(o) {
     super();
@@ -48,6 +57,11 @@ export class Account extends EventEmitter {
     this.tokens = o.tokens;
     this.settings = o.settings;
     this.log = o.log ?? (() => {});
+    this.isOnline = o.isOnline ?? null;
+    this.retry = { ...SESSION_RETRY, ...(o.retry ?? {}) };
+    /** The wait before the next try to load the session (0: it hasn't failed). */
+    this.retryDelay = 0;
+    this.retryTimer = null;
     /** @type {(import('./store.mjs').Device & { stored: string }) | null} */
     this.device = null;
     /** @type {DesktopSession | null} */
@@ -125,9 +139,12 @@ export class Account extends EventEmitter {
     this.refreshing = (async () => {
       try {
         const s = /** @type {DesktopSession} */ (await this.api.session());
+        // Something that isn't a session (a page in its place): no better than no answer.
+        if (!s || typeof s !== "object") throw new ApiError(0, "Not a session", "network", null);
         this.session = s;
         this.sessionAt = Date.now();
         this.status = "ready";
+        this.stopRetrying();
         this.pickDefaultBot();
       } catch (err) {
         const e = /** @type {ApiError} */ (err);
@@ -135,8 +152,9 @@ export class Account extends EventEmitter {
           this.signOut("This computer was unpaired. Pair it again to take notes.");
         } else {
           this.status = this.session ? "ready" : "offline";
-          if (!this.session) this.status = "offline";
           this.log(`account: session failed (${e.status ?? "?"} ${e.code ?? ""})`);
+          // Never loaded: without it nothing works (and nothing is sent), so it's tried again.
+          if (!this.session) this.retryLater();
         }
       } finally {
         this.refreshing = null;
@@ -150,7 +168,57 @@ export class Account extends EventEmitter {
   /** Refresh if the session is older than `maxAgeMs` (bounded by `timeoutMs`). */
   async refreshIfStale(maxAgeMs = 60_000, timeoutMs = 5000) {
     if (!this.device || Date.now() - this.sessionAt < maxAgeMs) return;
-    await Promise.race([this.refresh(), new Promise((r) => setTimeout(r, timeoutMs))]);
+    let timer;
+    await Promise.race([this.refresh(), new Promise((r) => (timer = setTimeout(r, timeoutMs)))]);
+    clearTimeout(timer);
+  }
+
+  /**
+   * The session couldn't be loaded and there's none from before: try again after `retryDelay`
+   * (5 s, then twice as long each time, up to 5 minutes), or at once when the computer comes back
+   * online (checked every few seconds meanwhile).
+   */
+  retryLater() {
+    if (!this.device || this.retryTimer) return;
+    this.retryDelay = Math.min(this.retryDelay ? this.retryDelay * 2 : this.retry.firstMs, this.retry.maxMs);
+    const due = Date.now() + this.retryDelay;
+    let wasOnline = this.online();
+    const check = () => {
+      this.retryTimer = null;
+      if (!this.device || this.session) return;
+      const online = this.online();
+      if (Date.now() >= due || (online === true && wasOnline === false)) {
+        void this.refresh();
+        return;
+      }
+      wasOnline = online;
+      this.retryTimer = setTimeout(check, Math.max(1, Math.min(this.retry.onlineCheckMs, due - Date.now())));
+      this.retryTimer.unref?.();
+    };
+    this.retryTimer = setTimeout(check, Math.min(this.retry.onlineCheckMs, this.retryDelay));
+    this.retryTimer.unref?.();
+  }
+
+  stopRetrying() {
+    clearTimeout(this.retryTimer);
+    this.retryTimer = null;
+    this.retryDelay = 0;
+  }
+
+  /** Whether the computer has a network connection: true, false, or null when it can't tell. */
+  online() {
+    try {
+      return this.isOnline ? Boolean(this.isOnline()) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** The computer woke up (or came back online): a session that never loaded is tried now, and soon again. */
+  reconnect() {
+    if (!this.device || this.session) return;
+    this.stopRetrying();
+    void this.refresh();
   }
 
   /**
@@ -176,6 +244,7 @@ export class Account extends EventEmitter {
 
   /** @param {string | null} reason */
   signOut(reason = null) {
+    this.stopRetrying();
     this.tokens.clear();
     this.device = null;
     this.session = null;

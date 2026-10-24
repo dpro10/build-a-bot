@@ -823,7 +823,10 @@ export class LocalSpeech extends EventEmitter {
  * the server. If it can't (not ready, failed), the recording goes to the server, when the server
  * turns recordings into text; `noServer` says when it doesn't, and why (that's thrown, for the
  * pill). Errors from the server itself (out of words, unpaired…) are the server's answer either way.
- * @param {{ local: { transcribe(wav: Uint8Array, o?: { durationMs?: number }): Promise<string> }, api: { dictate: Function, dictateText: Function }, use: () => boolean, noServer?: () => ({ code: string, message?: string, actions?: string[] } | null), log?: (m: string) => void }} o
+ * Without the session (`session`: it's still loading, or the app started offline), what the server
+ * takes isn't known: it gets a moment to load (`waitForSession`), and without it nothing is sent,
+ * neither the audio nor the words; Try again sends the same recording once it's there.
+ * @param {{ local: { transcribe(wav: Uint8Array, o?: { durationMs?: number }): Promise<string> }, api: { dictate: Function, dictateText: Function }, use: () => boolean, noServer?: () => ({ code: string, message?: string, actions?: string[] } | null), session?: () => boolean, waitForSession?: () => Promise<unknown>, log?: (m: string) => void }} o
  */
 export function localFirst(o) {
   const log = o.log ?? (() => {});
@@ -834,6 +837,13 @@ export function localFirst(o) {
     return o.api.dictate(audio, p);
   };
   return async function dictate(audio, p) {
+    if (o.session && !o.session()) {
+      await Promise.resolve(o.waitForSession?.()).catch(() => {});
+      if (!o.session()) {
+        log("voice: no session yet (Build-a-bot can't be reached); nothing sent");
+        throw Object.assign(new Error("Can't reach Build-a-bot"), { code: "network", actions: ["retry"] });
+      }
+    }
     if (audio?.wav && o.use()) {
       const t = Date.now();
       let heard = null;

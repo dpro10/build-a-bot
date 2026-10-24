@@ -79,7 +79,8 @@ export class VoiceTyping extends EventEmitter {
    * @param {() => boolean} o.canPaste
    * @param {() => Promise<boolean>} [o.ensureMic]
    * @param {() => void} [o.warmUp]
-   * @param {() => boolean} [o.localReady]  speech-to-text runs on this computer: ask the pill for WAV too
+   * @param {() => boolean} [o.localReady]  speech-to-text runs on this computer
+   * @param {() => boolean} [o.wantWav]  ask the pill for WAV too (Parakeet could hear it here); defaults to localReady
    * @param {() => ({ code: string, message?: string, actions?: string[] } | null)} [o.cantHear]  why nothing can hear the next dictation
    * @param {(target: string, extra?: any) => void} [o.open]  'pair' | 'settings' | 'upgrade' | 'chat' | 'mic-settings' | 'accessibility'
    * @param {string} [o.platform]
@@ -244,7 +245,7 @@ export class VoiceTyping extends EventEmitter {
       return;
     }
     const v = this.voice();
-    rec.started = this.pill.start({ micId: v.micId, sounds: v.sounds, wav: Boolean(this.o.localReady?.()) });
+    rec.started = this.pill.start({ micId: v.micId, sounds: v.sounds, wav: Boolean((this.o.wantWav ?? this.o.localReady)?.()) });
     const res = await rec.started;
     if (this.rec !== rec) return;
     if (!res?.ok) {
