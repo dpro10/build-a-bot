@@ -104,14 +104,16 @@ test("every dashboard page renders for a signed-in owner", async ({ page }) => {
     await visit(page, `/app/bots/${id}${tab}`);
   }
   // The tabs that moved: their old addresses land on the new ones, query and all.
-  for (const [from, to] of [
-    ["/library", "/memory?tab=files"],
-    ["/channels?slack=added", "/tools?tab=channels&slack=added"],
-    ["/activity?tab=deliveries", "/settings?tab=activity&view=deliveries"],
-  ]) {
-    await page.goto(`/app/bots/${id}${from}`);
-    await expect(page).toHaveURL(`/app/bots/${id}${to}`);
-  }
+  await page.goto(`/app/bots/${id}/library`);
+  await expect(page).toHaveURL(`/app/bots/${id}/memory?tab=files`);
+  await expect(page.getByRole("tab", { name: /^Files/ })).toHaveAttribute("aria-selected", "true");
+  await page.goto(`/app/bots/${id}/activity?tab=deliveries`);
+  await expect(page).toHaveURL(`/app/bots/${id}/settings?tab=activity&view=deliveries`);
+  await expect(page.getByRole("tab", { name: /^Deliveries/ })).toHaveAttribute("aria-selected", "true");
+  // Back from Add to Slack at the old address: the notice still shows, then Channels tidies the address.
+  await page.goto(`/app/bots/${id}/channels?slack=added`);
+  await expect(page.getByText("Smokey is in Slack! It just sent you a message there.")).toBeVisible();
+  await expect(page).toHaveURL(`/app/bots/${id}/tools?tab=channels`);
   // A meeting: notes on, what the desktop app heard, stop; then the meeting page and the chat that got the notes.
   const meetingId = await recordMeeting(page, id);
   await visit(page, `/app/bots/${id}/meetings`);
