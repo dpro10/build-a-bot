@@ -10,7 +10,7 @@ Diego (2026-10-15): "im in the nvidia x nebius hackathon and the more we create 
 
 | Rule | Build-a-bot |
 | - | - |
-| Runs on Nebius Token Factory or Nebius AI Cloud (a runtime call to Token Factory, or deployed on Serverless AI) | Yes. Every included brain, the talker on calls, the meeting notes, voice typing's cleanup and the Library's reading of photos are Token Factory calls. The optional speech server (for computers that can't run Parakeet) is built to run as a Nebius Serverless AI endpoint (`speech/README.md`). |
+| Runs on Nebius Token Factory or Nebius AI Cloud (a runtime call to Token Factory, or deployed on Serverless AI) | Yes. Every included brain, the talker on calls, the meeting notes, voice typing's cleanup and reading photos of pages in a bot's files are Token Factory calls. The optional speech server (for computers that can't run Parakeet) is built to run as a Nebius Serverless AI endpoint (`speech/README.md`). |
 | Uses at least one NVIDIA open model | Yes: Nemotron 3.5 Lightning (the default brain, and the talker on calls), Nemotron 3 Super and Nemotron 3 Ultra (harder jobs), Parakeet TDT 0.6B v3 (speech to text on the user's own computer, and on calls) and Magpie TTS Multilingual (the bot's voice on calls), both on NVIDIA NeMo-Speech.cpp, and Nemotron 3.5 ASR in the optional speech server. |
 | New, or "significantly updated" during the submission period (from August 26) | New: the first commit is 2026-10-13. |
 | More than one entry | Not needed: Build-a-bot is Diego's only entry (Diego, 2026-10-16: "we're only going to enter build a bot. Not chef."). |
@@ -74,7 +74,7 @@ Nothing on the live site is simulated. Each service that isn't set up says "Comi
    - Add a couple of apps (Gmail and Google Calendar), and choose **Ask me first**.
    - Finish, and the bot greets you. Then sign in to the apps you added, with one click each, in its **Apps & channels** tab.
 
-   Your first five messages are free. Then sign in with your email (it's free, and the link comes back to the same chat): your $5 of credit comes with it, and so do calls, routines, meeting notes and the desktop app. **Sign in before steps 4 to 6.** Each message's cost is on its receipt in **Activity**, at Token Factory's price; **Credit & usage** has the totals.
+   Your first five messages are free. Then sign in with your email (it's free, and the link comes back to the same chat): your $5 of credit comes with it, and so do calls, routines, meeting notes and the desktop app. **Sign in before steps 4 to 6.** Each message's cost is on its receipt in **Settings › Activity**, at Token Factory's price; **Credit & usage** has the totals.
 3. **Try it:** ask something that needs the web ("what's the weather in Austin this weekend and anything fun to do?"). Then, with Gmail added, ask for something that needs a yes from you ("email Sam that I'm running late"): it shows you the email and asks first.
 4. **Call it:** click **Call** in the bot's header and allow the microphone.
    - NVIDIA Parakeet hears you and NVIDIA Magpie answers, both on our own server.
