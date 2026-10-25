@@ -30,6 +30,6 @@ export function withFiles(text: string, meta: unknown): string {
     )
     .join("; ");
   const ready = files.some((f) => f.status !== "failed");
-  const line = `[Attached to this message${ready ? ", and now in your Library" : ""}: ${list}.${ready ? " Read them with read_file or search_files before answering about them." : ""}]`;
+  const line = `[Attached to this message${ready ? ", and now in your files" : ""}: ${list}.${ready ? " Read them with read_file or search_files before answering about them." : ""}]`;
   return text.trim() ? `${text}\n\n${line}` : `(Sent ${files.length === 1 ? "a file" : "files"}, no message.)\n\n${line}`;
 }

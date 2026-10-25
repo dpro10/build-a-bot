@@ -177,7 +177,8 @@ describe("Add to Slack", () => {
     session.user = owner;
     const res = await back(state, "error=access_denied");
     const location = new URL(res.headers.get("location")!);
-    expect(location.pathname).toBe(`/app/bots/${bot.id}/channels`);
+    expect(location.pathname).toBe(`/app/bots/${bot.id}/tools`);
+    expect(location.searchParams.get("tab")).toBe("channels");
     expect(location.searchParams.get("channel_error")).toBe("Slack wasn't added: it was canceled in Slack.");
   });
 
@@ -188,7 +189,8 @@ describe("Add to Slack", () => {
     session.user = owner;
     const res = await back(state, "code=T1:U_DANA");
     const location = new URL(res.headers.get("location")!);
-    expect(location.pathname).toBe(`/app/bots/${bot.id}/channels`);
+    expect(location.pathname).toBe(`/app/bots/${bot.id}/tools`);
+    expect(location.searchParams.get("tab")).toBe("channels");
     expect(location.searchParams.get("slack")).toBe("added");
     expect(location.hash).toBe("#slack");
 

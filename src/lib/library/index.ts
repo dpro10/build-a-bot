@@ -83,8 +83,8 @@ export async function uploadRefusal(db: Db, ownerId: string, size: number): Prom
   if (size <= 0) return "That file is empty.";
   if (size > MAX_FILE_BYTES) return `That file is ${formatBytes(size)}. Files can be up to ${formatBytes(MAX_FILE_BYTES)}.`;
   const used = await ownerUsage(db, ownerId);
-  if (used.files >= MAX_OWNER_FILES) return `Your Library is full (${MAX_OWNER_FILES} files). Delete a few to make room.`;
-  if (used.bytes + size > MAX_OWNER_BYTES) return `Your Library is full (${formatBytes(used.bytes)} of ${formatBytes(MAX_OWNER_BYTES)}). Delete a few files to make room.`;
+  if (used.files >= MAX_OWNER_FILES) return `You've reached the limit of ${MAX_OWNER_FILES} files. Delete a few to make room.`;
+  if (used.bytes + size > MAX_OWNER_BYTES) return `Your files are using all your room (${formatBytes(used.bytes)} of ${formatBytes(MAX_OWNER_BYTES)}). Delete a few to make room.`;
   return null;
 }
 
@@ -271,8 +271,8 @@ export async function findFile(db: Db, botId: string, ref: string): Promise<Libr
 
 /** How to use the Library and the study tools (in the system prompt when the bot has them). */
 export const LIBRARY_GUIDANCE = [
-  "Files and studying: the owner's files are in your Library (list_files shows them all).",
-  "- Every file is already turned into text for you, photos and scanned pages included (their words were read when they were added). read_file gives you a photo's text like any other file's. Never say you can't see or read an image in the Library.",
+  "Files and studying: the owner gave you files (they see them in Memory › Files; list_files shows them all).",
+  "- Every file is already turned into text for you, photos and scanned pages included (their words were read when they were added). read_file gives you a photo's text like any other file's. Never say you can't see or read an image they gave you.",
   "- Before answering from them, look it up with search_files (or read_file for a whole file, chapter or set of slides), and say which file and page you used. Don't guess what a file says.",
   "- When they ask for flashcards, a quiz, a practice test or practice questions, read the material first, then call make_flashcards or make_quiz. Never write flashcards or a quiz out as text: the tools turn them into something they can study and get scored on. (Only a casual \"quiz me\", or any quiz on a call, means asking one question at a time.)",
   "- Good cards hold one idea each, with a short front and an exact back. Good quizzes mix multiple choice, true/false and short answer, with an explanation for each answer.",
@@ -287,5 +287,5 @@ export async function libraryPrompt(db: Db, botId: string): Promise<string | nul
   const shown = files.slice(0, 25);
   const lines = shown.map((f) => `- ${f.name} (${f.kind === "image" ? "photo, its text already read" : pagesLabel(f.kind, f.pages)})`);
   if (files.length > shown.length) lines.push(`- …and ${files.length - shown.length} more (list_files shows them all)`);
-  return `Your Library (files the owner gave you; read them with search_files and read_file, and say which file and page you used):\n${lines.join("\n")}`;
+  return `Your files (the owner gave you these; read them with search_files and read_file, and say which file and page you used):\n${lines.join("\n")}`;
 }

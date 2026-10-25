@@ -59,7 +59,7 @@ Recipes prefill it (`/build?recipe=inbox-zero`, or any shared `/r/[slug]`). The 
 
 - A searchable catalog of ~190 apps (110+ connectable today): Gmail, Outlook, Google Calendar/Drive/Docs/Sheets, GitHub, GitLab, Notion, Slack, Linear, Jira, Todoist, Spotify, Stripe and more.
 - Connected through official MCP servers (OAuth 2.1), Composio, or any MCP URL.
-- Built-ins need no sign-in. Every bot has web search, the page reader, memory, reminders, weather, math and its Library; notes, its own inbox and meeting notes can be added.
+- Built-ins need no sign-in. Every bot has web search, the page reader, memory, reminders, weather, math and its files; notes, its own inbox and meeting notes can be added.
 
 ### Trust
 
@@ -107,7 +107,7 @@ Web chat, phone calls and texts (Twilio), email (its own brand-free address), Di
 
 ### Your files, and studying from them
 
-- **Give your bot files:** drop them on the chat, use the paperclip or paste a screenshot, add them on the bot's **Library** tab, or send them with Discord's `/ask`. PDFs, Word, PowerPoint (with speaker notes), text and photos, up to 25 MB each and 500 MB in all.
+- **Give your bot files:** drop them on the chat, use the paperclip or paste a screenshot, add them in the bot's **Memory › Files**, or send them with Discord's `/ask`. PDFs, Word, PowerPoint (with speaker notes), text and photos, up to 25 MB each and 500 MB in all.
 - **Read once, cited always:** each file is read into passages with their page or slide, and searched with Postgres full-text search. The bot says which file and page it used. Photos and scanned pages are read by a vision model on Nebius Token Factory, paid from credit.
 - **Flashcards and practice quizzes** that work right in the chat: flip a card, mark *Got it* or *Again* (spaced repetition brings misses back sooner); answer a quiz one question at a time, see why, get a score, and send your mistakes back to the bot to go over. Each answer says where it's from: the file and page, or a web page the bot checked it against (only pages it really looked at). CSV export for Anki and Quizlet.
 - **Private:** files live in a private store, read back only for their owner; people who message the bot can't search them; deleting a bot or the account deletes them. A file's text is outside content to the model, never instructions.
@@ -128,7 +128,7 @@ An optional morning brief (on by default), routines and reminders, on any channe
 
 ### The dashboard (`/app`)
 
-- **For each bot:** Chat with inline approvals and file attachments, Library (files, flashcards, quizzes), Meetings, Activity (receipts), Apps & trust, Channels, Routines, Memory, Settings (look, personality, brain, recipes, MCP access).
+- **For each bot, six tabs:** Chat (with inline approvals and file attachments), Meetings, Memory (what it remembers, its files with their flashcards and quizzes, its notes, the people it knows), Apps & channels (trust, apps, the ways to talk), Routines, and Settings (look, personality, brain, recipes, MCP access, and Activity: every receipt).
 - **For the account:** Approvals inbox, Voice typing, Desktop app (download and pairing), Credit & usage, Account (export, delete).
 
 ### The business side

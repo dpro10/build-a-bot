@@ -108,7 +108,7 @@ export default async function AccountPage() {
                 Your chats, memories and files aren&apos;t used to train AI models.
               </Assurance>
               <Assurance icon={<Receipt className="size-4" />} title="A receipt for everything">
-                Every action a bot takes is logged in its Activity tab, with what it did and what it cost.
+                Every action a bot takes is logged in its Settings, under Activity, with what it did and what it cost.
               </Assurance>
               <Assurance icon={<OctagonX className="size-4" />} title="You can always stop it">
                 STOP pauses a bot instantly, and you can download or delete everything right here.

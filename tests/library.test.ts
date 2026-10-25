@@ -278,7 +278,7 @@ describe("the Library", () => {
     expect(await searchLibrary(db, otherBot.id, "final exam")).toEqual([]);
     expect(await lib.findFile(db, otherBot.id, "Bio 101 Syllabus.pdf")).toBeNull();
     const r = await tool("search_files").run({ query: "final exam" }, { ...ctxFor(otherBot), owner: other });
-    expect(r).toMatchObject({ ok: true, content: expect.stringMatching(/empty/i) });
+    expect(r).toMatchObject({ ok: true, content: expect.stringMatching(/^No files yet/) });
   });
 
   it("the same bytes again don't make a second copy", async () => {
@@ -292,7 +292,7 @@ describe("the Library", () => {
     expect(await lib.uploadRefusal(db, owner.id, 26 * 1024 * 1024)).toMatch(/up to 25 MB/);
     expect(await lib.uploadRefusal(db, owner.id, 0)).toMatch(/empty/);
     await db.insert(schema.files).values({ id: "file_huge", botId: bot.id, ownerId: owner.id, name: "huge.pdf", size: 499 * 1024 * 1024, storageKey: "library/x", status: "ready" });
-    expect(await lib.uploadRefusal(db, owner.id, 2 * 1024 * 1024)).toMatch(/Library is full/);
+    expect(await lib.uploadRefusal(db, owner.id, 2 * 1024 * 1024)).toMatch(/using all your room/);
     await db.delete(schema.files).where(eq(schema.files.id, "file_huge"));
     expect(await lib.uploadRefusal(db, owner.id, 2 * 1024 * 1024)).toBeNull();
   });
@@ -340,7 +340,7 @@ describe("the Library", () => {
     expect(prompt).toMatch(/Bio 101 Syllabus\.pdf \(2 pages\)/);
     expect(prompt).not.toMatch(/grades\.xlsx/);
     expect(withFiles("Quiz me", { files: [{ id: "f", name: "Bio.pdf", kind: "pdf", pages: 6, status: "ready" }] })).toBe(
-      "Quiz me\n\n[Attached to this message, and now in your Library: Bio.pdf (6 pages). Read them with read_file or search_files before answering about them.]",
+      "Quiz me\n\n[Attached to this message, and now in your files: Bio.pdf (6 pages). Read them with read_file or search_files before answering about them.]",
     );
     expect(withFiles("", { files: [{ id: "f", name: "x.zip", kind: "unknown", pages: 0, status: "failed", note: "Unzip it" }] })).toMatch(/^\(Sent a file, no message\.\)\n\n\[Attached to this message: x\.zip \(couldn't be read: Unzip it\)\.\]$/);
   });

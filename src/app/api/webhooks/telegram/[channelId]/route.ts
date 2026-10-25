@@ -143,7 +143,7 @@ export async function POST(req: Request, ctx: RouteCtx<{ channelId: string }>) {
             return;
           }
         } else if (sent.size && sent.size > 20 * 1024 * 1024) {
-          await sendTelegram(token, String(msg.chat.id), `${sent.name} is too big for Telegram to hand me (bots get files up to 20 MB). Add it on the website instead: your bot → Library.`).catch(() => {});
+          await sendTelegram(token, String(msg.chat.id), `${sent.name} is too big for Telegram to hand me (bots get files up to 20 MB). Add it on the website instead: your bot → Memory → Files.`).catch(() => {});
           if (!text) return;
         } else {
           const got = await takeChannelFile(db, {

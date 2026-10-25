@@ -31,12 +31,14 @@ export type ChannelsProps = {
   slackOneClick: boolean;
   /** Back from Slack's "Allow" page: ?slack=added (&moved=…) or ?channel_error=… */
   flash: { slackAdded: boolean; movedFrom: string | null; error: string | null };
+  /** The Apps & channels heading and its tabs. */
+  intro: React.ReactNode;
 };
 
 const POLL_MS = 4000;
 const EXPECT_MS = 4 * 60_000;
 
-export function ChannelsView({ bot, channels: initial, demo, ownerEmail, botEmail, availability, joined: initialJoined, slackOneClick, flash }: ChannelsProps) {
+export function ChannelsView({ bot, channels: initial, demo, ownerEmail, botEmail, availability, joined: initialJoined, slackOneClick, flash, intro }: ChannelsProps) {
   const router = useRouter();
   const [channels, setChannels] = React.useState<ChannelView[]>(() => sortChannels(initial));
   const [joined, setJoined] = React.useState<Set<ChannelKind>>(() => new Set(initialJoined));
@@ -172,34 +174,36 @@ export function ChannelsView({ bot, channels: initial, demo, ownerEmail, botEmai
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-10 px-4 py-6 sm:px-6 sm:py-8">
-        <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div className="flex flex-col gap-1">
-            <h1 className="font-display text-2xl font-bold sm:text-3xl">Channels</h1>
-            <p className="max-w-2xl text-muted-foreground">Where you and {bot.name} talk. Turn on as many as you like; web chat is always on.</p>
-          </div>
-          <div className="flex items-center gap-2.5 rounded-full border border-border bg-card py-1.5 pr-3.5 pl-1.5 shadow-soft">
-            <div className="flex -space-x-1.5">
-              {liveOn.slice(0, 6).map((c) => {
-                const def = channelDef(c.kind);
-                return (
-                  <Tooltip key={c.kind} content={`${def.name}${c.simulated ? " (simulated)" : ""}`}>
-                    <span className="inline-flex rounded-[30%] ring-2 ring-card">
-                      <BrandTile icon={channelIcon(def)} size={26} label={def.name} />
-                    </span>
-                  </Tooltip>
-                );
-              })}
-            </div>
-            <span className="text-sm font-semibold whitespace-nowrap">
-              Live on {liveOn.length} {liveOn.length === 1 ? "channel" : "channels"}
-            </span>
-          </div>
-        </header>
+        {intro}
 
-        <Section id="your-channels" title="Your channels" icon={<Radio />} description="Finish setup where it's needed, send yourself a test, or turn one off anytime.">
+        <Section
+          id="your-channels"
+          title="Your channels"
+          icon={<Radio />}
+          description={`Where you and ${bot.name} talk; web chat is always on. Finish setup where it's needed, send yourself a test, or turn one off anytime.`}
+          action={
+            <div className="flex items-center gap-2.5 rounded-full border border-border bg-card py-1.5 pr-3.5 pl-1.5 shadow-soft">
+              <div className="flex -space-x-1.5">
+                {liveOn.slice(0, 6).map((c) => {
+                  const def = channelDef(c.kind);
+                  return (
+                    <Tooltip key={c.kind} content={`${def.name}${c.simulated ? " (simulated)" : ""}`}>
+                      <span className="inline-flex rounded-[30%] ring-2 ring-card">
+                        <BrandTile icon={channelIcon(def)} size={26} label={def.name} />
+                      </span>
+                    </Tooltip>
+                  );
+                })}
+              </div>
+              <span className="text-sm font-semibold whitespace-nowrap">
+                Live on {liveOn.length} {liveOn.length === 1 ? "channel" : "channels"}
+              </span>
+            </div>
+          }
+        >
           {simulatedCount ? (
             <Note tone="primary" icon={<FlaskConical />} className="mb-4">
-              <strong className="font-semibold">Simulated</strong> channels work here in demo mode, but nothing is really sent: codes show on screen, and test messages land in Activity so you can see exactly what would go out.
+              <strong className="font-semibold">Simulated</strong> channels work here in demo mode, but nothing is really sent: codes show on screen, and test messages land in Settings › Activity so you can see exactly what would go out.
             </Note>
           ) : null}
           <div className="flex flex-col gap-4">

@@ -21,7 +21,7 @@ const POINTS = [
   {
     icon: <FolderSync />,
     title: "Gives your bot a folder",
-    body: "Pick one folder: its files go to your bot's Library and stay in step. Nothing else on your computer is read.",
+    body: "Pick one folder: its files go to your bot's Memory › Files and stay in step. Nothing else on your computer is read.",
   },
   {
     icon: <ShieldCheck />,
@@ -38,7 +38,6 @@ export function DesktopAppSection({ app, bot }: { app: DesktopApp; bot?: { id: s
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <Badge tone="primary">Mac and Windows</Badge>
-              <Badge tone="outline">Beta</Badge>
             </div>
             <h2 id="desktop-title" className="mt-3 font-display text-2xl font-bold">
               The desktop app

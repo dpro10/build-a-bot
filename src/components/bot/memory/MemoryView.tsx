@@ -5,46 +5,54 @@ import { ArrowRight, Lock, Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { AvatarId, ColorwayId } from "@/lib/avatars";
+import { cn } from "@/lib/utils";
 import { useNow } from "@/components/bot/activity/time";
+import { LibraryView } from "@/components/library/LibraryView";
 import { MemoriesPanel } from "./MemoriesPanel";
 import { NotesPanel } from "./NotesPanel";
 import { PeoplePanel } from "./PeoplePanel";
 import { matches, type ContactItem, type MemoryItem, type NoteItem } from "./types";
 
-type Tab = "memories" | "notes" | "people";
+export type MemoryTab = "memories" | "files" | "notes" | "people";
 
 export function MemoryView({
   botId,
   botName,
   avatar,
   color,
+  role,
   trust,
   serverNow,
   initialTab,
   initialImport = false,
   initial,
+  library,
 }: {
   botId: string;
   botName: string;
   avatar: AvatarId;
   color: ColorwayId;
+  role: string | null;
   trust: string;
   serverNow: string;
-  initialTab: Tab;
+  initialTab: MemoryTab;
   /** Opened from a "Bring my memories" link (?import=1). */
   initialImport?: boolean;
   initial: { memories: MemoryItem[]; notes: NoteItem[]; contacts: ContactItem[] };
+  /** The Files tab: the bot's Library. */
+  library: Omit<React.ComponentProps<typeof LibraryView>, "botId" | "bot" | "onCountChange">;
 }) {
   const now = useNow(serverNow);
-  const [tab, setTab] = React.useState<Tab>(initialImport ? "memories" : initialTab);
+  const [tab, setTab] = React.useState<MemoryTab>(initialImport ? "memories" : initialTab);
   const [importOpen, setImportOpen] = React.useState(initialImport);
   const [query, setQuery] = React.useState("");
   const [memories, setMemories] = React.useState(initial.memories);
   const [notes, setNotes] = React.useState(initial.notes);
   const [contacts, setContacts] = React.useState(initial.contacts);
+  const [fileCount, setFileCount] = React.useState(library.initialFiles.length);
 
   const choose = (value: string) => {
-    const t = value as Tab;
+    const t = value as MemoryTab;
     setTab(t);
     const url = new URL(window.location.href);
     if (t === "memories") url.searchParams.delete("tab");
@@ -64,7 +72,7 @@ export function MemoryView({
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1">
         <h2 className="font-display text-2xl font-bold sm:text-3xl">Memory</h2>
-        <p className="text-muted-foreground">What {botName} knows about you, its notebook, and the people it can talk to.</p>
+        <p className="text-muted-foreground">What {botName} knows: what it remembers about you, the files you gave it, its notebook, and the people it can talk to.</p>
       </div>
 
       <div className="flex items-start gap-3 rounded-3xl border border-border bg-card p-4 shadow-soft sm:items-center sm:gap-4 sm:p-5">
@@ -88,6 +96,9 @@ export function MemoryView({
             <TabsTrigger value="memories">
               Memories <span className="ml-1 text-muted-foreground tabular-nums">{counts.memories}</span>
             </TabsTrigger>
+            <TabsTrigger value="files">
+              Files <span className="ml-1 text-muted-foreground tabular-nums">{fileCount}</span>
+            </TabsTrigger>
             <TabsTrigger value="notes">
               Notes <span className="ml-1 text-muted-foreground tabular-nums">{counts.notes}</span>
             </TabsTrigger>
@@ -95,7 +106,7 @@ export function MemoryView({
               People <span className="ml-1 text-muted-foreground tabular-nums">{counts.people}</span>
             </TabsTrigger>
           </TabsList>
-          <div className="relative sm:w-72">
+          <div className={cn("relative sm:w-72", tab === "files" && "hidden")}>
             <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
             <label htmlFor="memory-search" className="sr-only">
               Search memory
@@ -144,6 +155,9 @@ export function MemoryView({
               }
             }}
           />
+        </TabsContent>
+        <TabsContent value="files" forceMount className="data-[state=inactive]:hidden">
+          <LibraryView botId={botId} bot={{ name: botName, avatar, color, role }} onCountChange={setFileCount} {...library} />
         </TabsContent>
         <TabsContent value="notes" forceMount className="data-[state=inactive]:hidden">
           <NotesPanel botId={botId} botName={botName} items={notes} setItems={setNotes} query={q} now={now} />

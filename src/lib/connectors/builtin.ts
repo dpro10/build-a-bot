@@ -140,9 +140,9 @@ export const BUILTIN_CONNECTORS: ConnectorDef[] = [
   },
   {
     id: "library",
-    name: "Library",
+    name: "Files",
     category: "files",
-    description: "Reads the files you give it (syllabi, slides, notes, photos of pages) and makes flashcards and quizzes from them",
+    description: "Reads the files you give it (documents, PDFs, slides, notes, photos of pages), answers from them, and makes flashcards and quizzes",
     icon: { lucide: "LibraryBig", color: "8B5CF6" },
     via: [{ kind: "builtin" }],
     capabilities: [
@@ -152,7 +152,7 @@ export const BUILTIN_CONNECTORS: ConnectorDef[] = [
     popular: true,
     jobs: ["school", "research", "work"],
     keywords: ["files", "upload", "pdf", "documents", "slides", "powerpoint", "word", "syllabus", "notes", "study", "flashcards", "quiz", "anki", "quizlet", "homework", "class"],
-    note: "Add files with the paperclip in the chat, on the bot's Library page, or by sending them on Discord. They're private to you, and the bot says which file and page it used.",
+    note: "Add files with the paperclip in the chat, in Memory › Files, or by sending them on Discord. They're private to you, and the bot says which file and page it used.",
   },
   {
     id: "meetings",

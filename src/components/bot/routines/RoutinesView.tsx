@@ -154,7 +154,7 @@ export function RoutinesView({
       await refresh();
       const reminder = s.kind === "reminder";
       const openChat = { label: "Open chat", onClick: () => router.push(`/app/bots/${botId}`) };
-      const seeActivity = { label: "See activity", onClick: () => router.push(`/app/bots/${botId}/activity`) };
+      const seeActivity = { label: "See activity", onClick: () => router.push(`/app/bots/${botId}/settings?tab=activity`) };
       if (live.paused || res.outcome === "paused") toast(`${botName} is paused`, { description: "Resume it to run routines." });
       else if (res.outcome === "failed")
         toast.error(reminder ? "Couldn't send the reminder" : `“${s.title}” didn't finish`, {

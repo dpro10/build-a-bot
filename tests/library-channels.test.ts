@@ -105,6 +105,6 @@ describe("files on Telegram", () => {
   it("a file over Telegram's 20 MB gets a plain answer and a pointer to the website", async () => {
     sent.length = 0;
     await deliver({ from: { id: 42 }, document: { file_id: "f3", file_name: "huge.pdf", file_size: 22 * 1024 * 1024 } });
-    expect(sent[0]).toMatch(/too big for Telegram.*Library/);
+    expect(sent[0]).toMatch(/too big for Telegram.*Memory → Files/);
   });
 });

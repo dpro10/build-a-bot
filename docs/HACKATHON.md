@@ -55,7 +55,7 @@ Nothing on the live site is simulated. Each service that isn't set up says "Comi
 | Apps | **Real** wherever there's a way to sign in: about 100 apps, Gmail, Google Calendar and Drive among them: about 60 through Composio's one-click sign-in and about 40 through the app's own MCP sign-in. The rest say "Coming soon". |
 | Your own MCP server | **Real.** Private addresses are refused. |
 | Memory, reminders, routines, approvals, receipts, STOP | **Real.** |
-| The Library (your files, for your bot) | **Real.** Files are stored privately and read into passages. Photos and scanned pages are read by a vision model on Token Factory. |
+| Files for your bot (Memory › Files) | **Real.** Files are stored privately and read into passages. Photos and scanned pages are read by a vision model on Token Factory. |
 | Calls | **Real**: the **Call** button in the app (your browser's microphone), or the bot's phone number. Both use our voice server on a Google Cloud machine, with NVIDIA Parakeet and Magpie. When it can't take a call, Twilio's own speech does. Answers usually start about 3 seconds after you stop talking, and you can cut in. Calls aren't recorded. |
 | Telegram | **Waitlist**, like WhatsApp and iMessage: not switched on for build-a-bot.site. The code is there. |
 | Discord and Slack | **Real.** |
@@ -72,7 +72,7 @@ Nothing on the live site is simulated. Each service that isn't set up says "Comi
    - Pick a face and a name.
    - Keep **Nemotron 3.5 Lightning** as the brain.
    - Add a couple of apps (Gmail and Google Calendar), and choose **Ask me first**.
-   - Finish, and the bot greets you. Then sign in to the apps you added, with one click each, in its **Apps & trust** tab.
+   - Finish, and the bot greets you. Then sign in to the apps you added, with one click each, in its **Apps & channels** tab.
 
    Your first five messages are free. Then sign in with your email (it's free, and the link comes back to the same chat): your $5 of credit comes with it, and so do calls, routines, meeting notes and the desktop app. **Sign in before steps 4 to 6.** Each message's cost is on its receipt in **Activity**, at Token Factory's price; **Credit & usage** has the totals.
 3. **Try it:** ask something that needs the web ("what's the weather in Austin this weekend and anything fun to do?"). Then, with Gmail added, ask for something that needs a yes from you ("email Sam that I'm running late"): it shows you the email and asks first.

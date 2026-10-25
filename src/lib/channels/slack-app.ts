@@ -47,7 +47,7 @@ export async function startSlackInstall(db: Db, owner: User, bot: Bot, channel: 
     botId: bot.id,
     kind: "slack",
     data: { channelId: channel.id },
-    redirectTo: `/app/bots/${bot.id}/channels`,
+    redirectTo: `/app/bots/${bot.id}/tools?tab=channels`,
     expiresAt: new Date(Date.now() + 15 * 60_000),
   });
   const url = new URL("https://slack.com/oauth/v2/authorize");
@@ -228,7 +228,7 @@ export async function slackAppNotHere(db: Db, teamId: string, slackUser: string,
   let token: string | null = null;
   if (channel) {
     const [bot] = await db.select({ name: schema.bots.name }).from(schema.bots).where(eq(schema.bots.id, channel.botId)).limit(1);
-    text = `Slack is turned off for ${bot?.name ?? "your bot"}. Turn it back on in Channels: ${appUrl()}/app/bots/${channel.botId}/channels`;
+    text = `Slack is turned off for ${bot?.name ?? "your bot"}. Turn it back on in Apps & channels: ${appUrl()}/app/bots/${channel.botId}/tools?tab=channels`;
     token = slackBotToken(await channelSecret(db, channel));
   } else {
     text = `Hi! I'm an AI assistant that people make for themselves, and you don't have one here yet. Make your own for free at ${appUrl()}, then add it to Slack.`;

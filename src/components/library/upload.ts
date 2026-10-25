@@ -57,7 +57,7 @@ export async function waitUntilRead(botId: string, fileId: string, onUpdate: (u:
     const { file } = await api<{ file: FileView }>(`/api/bots/${botId}/files/${fileId}`);
     if (file.status === "ready" || file.status === "failed") return file;
     onUpdate({ phase: "reading", file });
-    if (Date.now() - t0 > 8 * 60_000) throw new UploadError("Reading this file is taking too long. It'll show up in the Library when it's done.");
+    if (Date.now() - t0 > 8 * 60_000) throw new UploadError("Reading this file is taking too long. It'll show up in Memory › Files when it's done.");
   }
 }
 

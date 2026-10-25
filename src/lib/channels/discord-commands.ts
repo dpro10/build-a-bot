@@ -14,7 +14,7 @@ export const DISCORD_COMMANDS = [
   },
   {
     name: "link",
-    description: "Link your bot with the code from its Channels page",
+    description: "Link your bot with the code from its Apps & channels page",
     type: 1,
     integration_types: [0, 1],
     contexts: [0, 1, 2],
