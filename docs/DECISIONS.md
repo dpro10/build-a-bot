@@ -403,7 +403,7 @@ Diego: "yes, lets start on the voice typing. I like how you said we can beat wis
 Built (Claude; Diego to confirm the details):
 - **What it does:** hold a key in any app and talk; let go, and what you meant is typed where the cursor is. Tap twice for hands-free, tap again to finish; Esc cancels.
   - In the desktop app (`desktop/src/main/voice/`), and on a new Voice typing page in the web app (`/app/voice`), which has a try-it box that works in the browser.
-  - The shortcut: Right Option on a Mac, Ctrl + Windows on Windows, Right Ctrl on Linux, or keys the owner picks.
+  - The shortcut: Right Option on a Mac, Ctrl + Windows on Windows, Right Ctrl on Linux, or keys the owner picks. *(Windows has used Right Ctrl, one key, since 2026-10-25: "voice typing on Windows is one key" below.)*
 - **How it beats Wispr Flow:**
   - **Your bot is in it.** "Hey Otto, remind me to call Mom at 5" asks the bot instead of typing. The answer shows in the pill with Paste, Copy, Reply and Open chat, and it's in the chat later. "Type it instead" covers the times it wasn't meant for the bot.
   - **It knows your world.** Speech-to-text and the cleanup get the owner's dictionary, their name, their bots' names and the names their bots remember (Ana, Austin…), so names come out right without setup.
@@ -1217,3 +1217,12 @@ Diego: "Honestly, on the website, I feel like the desktop app shouldn't be marke
 - **The Files wording is general:** "Give {bot} files to work from", with reports, contracts, decks, notes and manuals as examples. A tutor's empty Files keeps the class-files version.
 - **The desktop app isn't marked Beta** anywhere: the Meetings tab, its card and the voice typing page.
 - **Still to do:** the 2:48 demo video's recordings show the old nine tabs. Re-record them so the video matches the site.
+
+## Decision: voice typing on Windows is one key, Right Ctrl (Diego, 2026-10-25)
+
+Diego: "Yeah, on Windows the default should just be at one button. No one's gonna want to press two."
+
+- **The default on Windows is Right Ctrl** (it was Ctrl + Windows). Like Right Option on a Mac, it does nothing held on its own, in any app or keyboard language. Linux already used it.
+- **Ctrl + Windows stays as a choice,** for keyboards without a Right Ctrl, and the settings say so. Anyone who picked a shortcut keeps it; anyone on the default gets Right Ctrl with the update.
+- **Not Right Alt:** let go on its own, Alt opens or focuses the menu in Chrome, Firefox and VS Code, and on many keyboards outside the US it types accents (AltGr).
+- **Tests:** the Windows CI holds the real Right Ctrl for voice typing, and still holds Ctrl + Windows (picked in settings) in the learn-from-fixes run, so the guard that keeps the Start menu shut stays checked.

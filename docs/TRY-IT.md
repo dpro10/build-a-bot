@@ -153,7 +153,7 @@ It happens in the desktop app, like Wispr Flow; the website has no voice typing,
 **In the desktop app** (paired as in step 4):
 
 1. In the tray menu, choose **Set up voice typing…** and turn it on. NVIDIA Parakeet downloads (about 0.7 GB, once; the settings window shows its progress). On a Mac, allow the **Microphone** and **Accessibility** when asked, so it can hear the key in any app and paste for you; run from source, macOS asks for the app you started it from (Terminal, VS Code…), and the settings window names it.
-2. Click into any text field (Notes, Slack, a browser), then hold **Right Option** (Mac), **Ctrl + Windows** (Windows) or **Right Ctrl** (Linux) and talk. Before Parakeet is ready, the pill says so ("Getting NVIDIA Parakeet: 45%…") rather than typing anything.
+2. Click into any text field (Notes, Slack, a browser), then hold **Right Option** (Mac) or **Right Ctrl** (Windows and Linux) and talk. No Right Ctrl on your keyboard? Pick Ctrl + Windows in **Voice typing settings…**. Before Parakeet is ready, the pill says so ("Getting NVIDIA Parakeet: 45%…") rather than typing anything.
 3. **Expect:** a small pill at the bottom of the screen with a waveform while you hold; let go and what you said is typed where your cursor is (the pill says *private*: it was heard on your computer), and your clipboard is put back as it was.
 4. Tap the key twice for hands-free, and press **Esc** while it listens to cancel.
 5. Select some text, then hold **Shift** with your key: the pill turns pink ("Say what to change"). Let go and the selection is replaced; your app's Undo takes it back. With nothing selected, it writes what you asked for. Starting with "Hey Otto" instead sends Otto the request with what you selected ("Hey Otto, remind me about this tomorrow"); open its chat to see both.
@@ -198,7 +198,7 @@ Without Accessibility on a Mac it still works: press **⌘ Shift Space** to star
 
 **Voice typing:**
 - It's in the desktop app only; the website has no voice typing. NVIDIA Parakeet hears you on your computer, so no speech-to-text key is needed.
-- Tested end to end on Linux, and in CI on real Windows (the installer, Ctrl + Windows, Parakeet, pasting into another app). Not yet on a real Mac.
+- Tested end to end on Linux, and in CI on real Windows (the installer, Right Ctrl and Ctrl + Windows, Parakeet, pasting into another app). Not yet on a real Mac.
 - Later: the Fn (Globe) key on a Mac.
 
 **Web actions:** they need `BROWSER_USE_API_KEY`, and haven't been tried on real forms yet.

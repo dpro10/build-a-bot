@@ -17,7 +17,7 @@ export const metadata: Metadata = { title: "Voice typing" };
 
 const SHORTCUTS = [
   { os: "Mac", keys: "Right Option (⌥)" },
-  { os: "Windows", keys: "Ctrl + Windows" },
+  { os: "Windows", keys: "Right Ctrl" },
   { os: "Linux", keys: "Right Ctrl" },
 ];
 

@@ -2,8 +2,10 @@
  * Learning from a fix, end to end, on a real Windows computer (CI's windows-latest), in the app
  * as installed by its installer (BAB_E2E_APP; or from source without it):
  *
- *  - the real shortcut, Ctrl + Windows, held with SendInput (e2e/fixtures/winkey.py) while a
- *    sentence plays into Chromium's fake microphone (BAB_E2E_SPEECH_WAV), another app in front;
+ *  - the real Ctrl + Windows, held with SendInput (e2e/fixtures/winkey.py) while a sentence plays
+ *    into Chromium's fake microphone (BAB_E2E_SPEECH_WAV), another app in front. It's the two-key
+ *    choice, picked in settings here (the default, Right Ctrl, is held in windows-voice.e2e.mjs), so
+ *    the F24 tap that keeps the Start menu shut when the Windows key is let go is checked for real;
  *  - the server "mishears" a name ("Meet pro zee at the lab."), and the app types that;
  *  - the owner fixes it right there, with real key presses: selects "pro zee", types "Prozzi";
  *  - the app sees the fix (UI Automation) and adds "Prozzi" to the owner's dictionary, as a
@@ -139,6 +141,8 @@ test("Windows: a name fixed right where it was typed is learned, as the owner's 
   const { _electron: electron } = await import("playwright");
   server = await fakeServer(["Meet pro zee at the lab.", "Call Mark tomorrow about the lab.", "Meet at the lab.", "Bring the slides.", "great"]);
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), "bab-learn-e2e-"));
+  // The owner picked Ctrl + Windows in Voice typing settings.
+  fs.writeFileSync(path.join(userData, "settings.json"), JSON.stringify({ voice: { shortcut: "ctrl-meta" } }));
 
   app = await electron.launch({
     executablePath: APP ?? electronBin(),
@@ -209,6 +213,7 @@ test("Windows: a name fixed right where it was typed is learned, as the owner's 
 
   // ---- the server mishears a name; the owner fixes it right there
   await dictate("Meet pro zee at the lab.");
+  assert.equal(await winkey("front"), "Target app", "letting go of the Windows key didn't open the Start menu");
   // Give the app a moment to find its words in the box, as a person reads what was typed.
   await sleep(1500);
   await targetDo({ cmd: "select", text: "pro zee" });

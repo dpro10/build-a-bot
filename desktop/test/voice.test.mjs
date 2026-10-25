@@ -29,13 +29,22 @@ const flush = async (n = 8) => {
 // The shortcut
 // ---------------------------------------------------------------------------
 
-test("each platform's default shortcut is a key that types nothing on its own", () => {
+/** Windows' two-key shortcut, for keyboards without a Right Ctrl (the default is one key). */
+const CTRL_WIN = presetsFor("win32").find((p) => p.id === "ctrl-meta");
+
+test("each platform's default shortcut is one key that types nothing on its own", () => {
   assert.equal(defaultShortcut("darwin").label, "Right Option (⌥)");
-  assert.equal(defaultShortcut("win32").label, "Ctrl + Windows");
+  assert.equal(defaultShortcut("win32").label, "Right Ctrl");
   assert.equal(defaultShortcut("linux").label, "Right Ctrl");
-  const ctrlWin = defaultShortcut("win32");
-  assert.equal(shortcutDown(ctrlWin, new Set([KEY.Ctrl])), false);
-  assert.equal(shortcutDown(ctrlWin, new Set([KEY.CtrlRight, KEY.Meta])), true);
+  for (const platform of ["darwin", "win32", "linux"]) assert.equal(defaultShortcut(platform).slots.length, 1, `one key on ${platform}`);
+  assert.equal(shortcutDown(defaultShortcut("win32"), new Set([KEY.Ctrl])), false, "only the right Ctrl key");
+  assert.equal(shortcutDown(defaultShortcut("win32"), new Set([KEY.CtrlRight])), true);
+  // Ctrl + Windows is still there, for keyboards without a Right Ctrl.
+  assert.equal(CTRL_WIN.label, "Ctrl + Windows");
+  assert.equal(shortcutDown(CTRL_WIN, new Set([KEY.Ctrl])), false);
+  assert.equal(shortcutDown(CTRL_WIN, new Set([KEY.CtrlRight, KEY.Meta])), true);
+  assert.equal(resolveShortcut({ shortcut: "ctrl-meta" }, "win32").label, "Ctrl + Windows", "an owner who picked it keeps it");
+  assert.equal(resolveShortcut({ shortcut: null }, "win32").label, "Right Ctrl", "an owner who never picked one gets the default");
   assert.equal(inShortcut(defaultShortcut("darwin"), KEY.Alt), false, "only the right Option key");
   assert.equal(resolveShortcut({ shortcut: "meta-right" }, "darwin").label, "Right Command (⌘)");
   assert.equal(resolveShortcut({ shortcut: "nope" }, "darwin").id, "alt-right");
@@ -161,7 +170,7 @@ function fakeHook() {
 test("the key listener turns real key presses into start, stop and cancel", async () => {
   const hook = fakeHook();
   let now = 0;
-  const hk = new Hotkey({ loadHook: async () => hook, shortcut: defaultShortcut("win32"), platform: "linux", now: () => now });
+  const hk = new Hotkey({ loadHook: async () => hook, shortcut: CTRL_WIN, platform: "linux", now: () => now });
   const seen = [];
   for (const ev of ["start", "stop", "cancel", "handsfree"]) hk.on(ev, () => seen.push(ev));
   assert.deepEqual(await hk.enable(), { ok: true });
@@ -217,7 +226,7 @@ test("a key combination that starts with the shortcut (⌥E, Ctrl+Win+→) never
 
   // Windows: Ctrl + Win + → switches desktops. The Start-menu guard still taps F24, and nothing else happens.
   const win = fakeHook();
-  const wk = new Hotkey({ loadHook: async () => win, shortcut: defaultShortcut("win32"), platform: "win32", timing });
+  const wk = new Hotkey({ loadHook: async () => win, shortcut: CTRL_WIN, platform: "win32", timing });
   const wseen = [];
   for (const ev of ["start", "stop", "cancel", "handsfree"]) wk.on(ev, () => wseen.push(ev));
   await wk.enable();
@@ -260,9 +269,29 @@ test("the key listener notes when Enter was pressed (when, not what was typed), 
   assert.equal(hk.enterAt, 2000, "other keys don't count");
 });
 
+test("Windows: the default, Right Ctrl, starts and stops on its own and taps nothing", async () => {
+  const hook = fakeHook();
+  let now = 0;
+  const hk = new Hotkey({ loadHook: async () => hook, shortcut: defaultShortcut("win32"), platform: "win32", now: () => now });
+  const seen = [];
+  for (const ev of ["start", "stop", "cancel"]) hk.on(ev, () => seen.push(ev));
+  await hk.enable();
+  hook.press(KEY.Ctrl);
+  hook.release(KEY.Ctrl);
+  assert.deepEqual(seen, [], "the left Ctrl isn't the shortcut");
+  hook.press(KEY.CtrlRight);
+  now = 300;
+  hook.press(KEY.CtrlRight, { ctrlKey: true });
+  assert.deepEqual(seen, ["start"]);
+  now = 2000;
+  hook.release(KEY.CtrlRight);
+  assert.deepEqual(seen, ["start", "stop"]);
+  assert.deepEqual(hook.taps, [], "no Windows key, so no F24 to keep the Start menu shut");
+});
+
 test("Windows: pressing Ctrl+Win taps F24 so letting go doesn't open the Start menu", async () => {
   const hook = fakeHook();
-  const hk = new Hotkey({ loadHook: async () => hook, shortcut: defaultShortcut("win32"), platform: "win32" });
+  const hk = new Hotkey({ loadHook: async () => hook, shortcut: CTRL_WIN, platform: "win32" });
   await hk.enable();
   hook.press(KEY.Ctrl);
   hook.press(KEY.Meta, { ctrlKey: true });

@@ -97,7 +97,7 @@ Web chat, phone calls and texts (Twilio), email (its own brand-free address), Di
 
 ### Voice typing (beta)
 
-- **Hold a key in any app and talk** (desktop app: Right Option on a Mac, Ctrl + Windows on Windows, Right Ctrl on Linux). Let go, and what you meant is typed where your cursor is. Tap twice to keep talking hands-free.
+- **Hold a key in any app and talk** (desktop app: Right Option on a Mac, Right Ctrl on Windows and Linux). Let go, and what you meant is typed where your cursor is. Tap twice to keep talking hands-free.
 - **Cleaned up:** no ums or repeats, the right punctuation, your corrections kept ("at 2, no, 3" → "at 3"), "new line" and "scratch that". Casual in chats, proper in email, exact in code.
 - **Your words:** names and terms spelled your way, what speech-to-text writes instead, snippets ("my booking link" types the link), and the names your bots already remember. Fix a dictation and it learns.
 - **Edit by voice:** select text, hold Shift with your key, and say what to change ("make it friendlier", "turn it into a list", "translate it to Spanish"). With nothing selected, it writes what you ask for. "Hey Otto, add this to my calendar" sends your bot what you selected, treated as outside content so it asks before sending anything to someone new.
