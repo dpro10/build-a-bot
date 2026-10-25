@@ -48,7 +48,9 @@ const ALT = [KEY.Alt, KEY.AltRight];
  * @typedef {{ id: string, label: string, slots: number[][], hint?: string }} Shortcut
  * Ready-made shortcuts. The first is the default on that platform. Keys that do nothing on their
  * own, so holding them never types or opens anything: Right Option on a Mac (Fn can't be seen by
- * apps), Ctrl + Windows on Windows (what most dictation apps use), Right Ctrl on Linux.
+ * apps), Right Ctrl on Windows and Linux. One key, not two (Diego, 2026-10-25); Windows keeps
+ * Ctrl + Windows, what most dictation apps there use, for keyboards without a Right Ctrl. Right Alt
+ * isn't the default: let go on its own, Alt opens or focuses the menu in Chrome, Firefox and VS Code.
  */
 export const PRESETS = Object.freeze({
   darwin: [
@@ -58,8 +60,8 @@ export const PRESETS = Object.freeze({
     { id: "ctrl-right", label: "Right Control (⌃)", slots: [[KEY.CtrlRight]], hint: "Only on keyboards that have one." },
   ],
   win32: [
-    { id: "ctrl-meta", label: "Ctrl + Windows", slots: [CTRL, META] },
     { id: "ctrl-right", label: "Right Ctrl", slots: [[KEY.CtrlRight]] },
+    { id: "ctrl-meta", label: "Ctrl + Windows", slots: [CTRL, META], hint: "For keyboards without a Right Ctrl." },
     { id: "ctrl-alt", label: "Ctrl + Alt", slots: [CTRL, ALT] },
     { id: "alt-right", label: "Right Alt", slots: [[KEY.AltRight]], hint: "Not on keyboards where Right Alt types accents (AltGr)." },
   ],

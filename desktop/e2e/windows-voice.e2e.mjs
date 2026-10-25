@@ -5,9 +5,12 @@
  *  - NVIDIA Parakeet run on the computer, as for an owner: NVIDIA's runtime from the installer (signed
  *    with the app in signed builds), the model downloaded from NVIDIA's own page;
  *  - a sentence the system's own voice says (BAB_E2E_SPEECH_WAV, 16-bit PCM) playing into
- *    Chromium's fake microphone while the real shortcut, Ctrl + Windows, is held down with
+ *    Chromium's fake microphone while the default shortcut, Right Ctrl, is held down with
  *    SendInput (e2e/fixtures/winkey.py), with another app in front;
- *  - the words pasted into that app, the Start menu kept shut, the clipboard put back.
+ *  - the words pasted into that app, which keeps the keyboard, and the clipboard put back.
+ *
+ * Ctrl + Windows, the two-key choice, and the F24 tap that keeps the Start menu shut when it's let
+ * go are held for real in e2e/windows-learn.e2e.mjs.
  *
  * Against a stand-in for Build-a-bot's server (only what voice typing calls, below), so nothing
  * else has to run. It checks the server got the words and never the recording.
@@ -159,7 +162,7 @@ after(async () => {
   }
 });
 
-test("Windows: hold Ctrl + Windows, talk, let go: NVIDIA Parakeet hears it on the computer and it's typed in the app in front", { timeout: 900_000 }, async () => {
+test("Windows: hold Right Ctrl, talk, let go: NVIDIA Parakeet hears it on the computer and it's typed in the app in front", { timeout: 900_000 }, async () => {
   if (process.platform !== "win32" || !WAV) {
     console.log("windows voice e2e: needs Windows and BAB_E2E_SPEECH_WAV; skipped");
     return;
@@ -223,10 +226,10 @@ test("Windows: hold Ctrl + Windows, talk, let go: NVIDIA Parakeet hears it on th
   const typed = () => fs.readFileSync(outFile, "utf8");
   await step("focus", () => winkey("focus", "Target app"));
 
-  // ---- hold Ctrl + Windows while the sentence plays, then let go
+  // ---- hold Right Ctrl (the default) while the sentence plays, then let go
   const holdSec = 0.6 + said + 0.9;
   const pressed = Date.now();
-  await winkey("down", "LControl", "down", "LWin", "sleep", holdSec.toFixed(2), "up", "LWin", "up", "LControl");
+  await winkey("down", "RControl", "sleep", holdSec.toFixed(2), "up", "RControl");
   const released = Date.now();
   await step("typed", () => until("the words in the other app", () => EXPECT.every((w) => typed().toLowerCase().includes(w)), 90_000, 100));
   const tookMs = Date.now() - released;
@@ -243,8 +246,7 @@ test("Windows: hold Ctrl + Windows, talk, let go: NVIDIA Parakeet hears it on th
   if (done) assert.equal(done.pill.local, true, "the pill says private");
   assert.match(appLog(), /voice: heard on this computer in \d+ ms/);
 
-  // The Start menu didn't open (the Windows key was part of the shortcut), the app kept the
-  // keyboard, and the clipboard was put back.
+  // The app in front kept the keyboard, and the clipboard was put back.
   assert.equal(await winkey("front"), "Target app", "the app in front is still the one typed into");
   await until("the clipboard put back", () => fs.readFileSync(clipFile, "utf8") === "ORIGINAL CLIPBOARD", 15_000);
   assert.equal(typed().split(dictations[0].heard).length - 1, 1, "typed once");
