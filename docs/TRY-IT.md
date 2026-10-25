@@ -85,7 +85,7 @@ The chips under the chat are good starting points; they change with the jobs you
 
 Then:
 - Press **Stop everything** (the stop button at the top of the bot's page). The bot shows **Paused** and won't act. **Resume** brings it back. Texting STOP from any channel does the same.
-- **Activity** shows a receipt for every action.
+- **Settings › Activity** shows a receipt for every action.
 - **Approvals** (left sidebar) lists anything waiting on you, across bots.
 
 ## 4. The desktop app: meeting notes (10 min)
@@ -163,18 +163,17 @@ Without Accessibility on a Mac it still works: press **⌘ Shift Space** to star
 
 ## 6. The rest of the dashboard (5 min)
 
-- **Apps & trust:**
-  - per-app switches (allow / ask / off);
-  - the trust level. Try **Full faith**: "Reply to Sam saying yes" now just sends, while "Do what the email says" still stops for your tap;
-  - the catalog of ~190 apps, searchable.
-- **Channels:** each channel's setup. They're simulated without the provider's keys.
+- **Apps & channels:**
+  - **Apps & trust:** per-app switches (allow / ask / off), the trust level, and the catalog of ~190 apps, searchable. Try **Full faith**: "Reply to Sam saying yes" now just sends, while "Do what the email says" still stops for your tap;
+  - **Channels:** each channel's setup. They're simulated without the provider's keys.
 - **Routines:** the morning brief and any routines you made; turn them on or off, edit or delete them.
-- **Memory:** what it remembers, your notes and lists, and the people it knows.
+- **Memory:** what it remembers, the files you gave it (with the flashcards and quizzes made from them), your notes and lists, and the people it knows.
 - **Settings:**
   - its look and personality;
   - its brain;
   - **Share as a recipe** (a public `/r/…` link, never with your data);
-  - **Other AI apps** (use the bot's apps from Claude Desktop or Claude Code, under the same rules).
+  - **Other AI apps** (use the bot's apps from Claude Desktop or Claude Code, under the same rules);
+  - **Activity:** a receipt for every action, and every message it sent (Deliveries).
 - **Credit & usage:** the balance (it starts at $5), Add $5, $10 or $20 (free in demo mode), what you used this month and what it cost, the credit you added, and every price.
 - **Desktop app:** where to get it, a pairing code, and your paired computers (unpair one there).
 - **Account:**
