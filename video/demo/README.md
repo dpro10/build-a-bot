@@ -2,7 +2,7 @@
 
 A walkthrough of the real product for the hackathon (Devpost and YouTube, under 3 minutes): a real call with Juno, signing in and building it, files into flashcards, a web search, the call again, voice typing and meeting notes in the desktop app, and how it's built. The script, the shot list and where every claim is true: [`SCRIPT.md`](SCRIPT.md). The promo, its one-minute sibling, is one folder up ([`../README.md`](../README.md)); this video reuses its reveal and end card.
 
-There are two cuts of it. The narrated one (`edit.mjs`, 2:52) has a narrator throughout. The one without a narrator (`edit-voiceover.mjs`, 2:44), for Diego's own voice-over, opens on the landing page and the recipe gallery, then shows the builder in a window with its seven steps beside it (what each one asks) and a stopwatch of the real build time; small notes say what the later scenes are. His script, with where each line plays: [`SCRIPT-VOICEOVER.md`](SCRIPT-VOICEOVER.md).
+There are two cuts of it. The narrated one (`edit.mjs`, 2:52) has a narrator throughout. The one without a narrator (`edit-voiceover.mjs`, 2:49), for Diego's own voice-over, opens on the landing page and the recipe gallery, signs in, then shows the builder in a window with its seven steps beside it (what each one asks): every brain there is, and Gmail, Google Docs and Meeting notes picked by hand. Small notes say what the later scenes are. His script, with where each line plays: [`SCRIPT-VOICEOVER.md`](SCRIPT-VOICEOVER.md).
 
 Everything is rebuilt from here, and the media lands in `video/out/demo/` (gitignored):
 
@@ -10,7 +10,7 @@ Everything is rebuilt from here, and the media lands in `video/out/demo/` (gitig
 | - | - | - |
 | Class files | `node video/demo/props/build.mjs` | a syllabus PDF, a lecture PDF, a photo of handwritten notes (made up for the video) |
 | An account | `BAB_VIDEO_EMAIL=… node video/demo/record/signin.mjs` | records the sign-in, waits for the link in `signin-link.txt`, saves the session |
-| Web scenes | `node video/demo/record/<scene>.mjs` | `clips/<scene>.mp4` + markers, in this order: `builder` (makes Juno), `files`, `web`, `call`, then `pages` (after the meeting); `site` (the landing page and recipes, signed out) any time |
+| Web scenes | `node video/demo/record/<scene>.mjs` | `clips/<scene>.mp4` + markers, in this order: `builder` (makes Juno), `files`, `web`, `call`, then `pages` (after the meeting); `site` (the landing page and recipes, signed out, ending on Sign in) any time; `builder2` (the builder for the cut without a narrator, on a second account: `BAB_VIDEO_TAKE=signin2 BAB_VIDEO_ACCOUNT=account2.json` for `signin.mjs` first, so the first account's Juno stays) |
 | Desktop scenes | `BAB_SPEECH_FILES=… node video/demo/record/desktop.mjs voice` (then `meeting`) | the real desktop app, paired to the account: voice typing, and meeting notes |
 | Narration | one take as a WAV, then `vo/split.py` (below) | `vo2/S01.wav` … one file per sentence |
 | Brand pieces | `npx tsx video/scripts/export-assets.tsx` | the app's characters, icons and fonts for the cards |

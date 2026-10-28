@@ -1247,3 +1247,14 @@ Diego: "I think that it is probably better if it is my voice doing the voice ove
 - **Diego's script** is `video/demo/SCRIPT-VOICEOVER.md`: lines to read in one take, with where each one plays and where not to talk. Claude splits the take into sentences and places them.
 - **The music** sits about 3 dB under the call while there's no narrator. When his lines go in, it goes back down to a bed under his voice.
 - **Mixing:** the sound now gets one gain for the whole video plus a limiter, instead of loudnorm. With music-only stretches, loudnorm had turned into an automatic gain: the music came up as loud as the call, then dropped about 5 dB near the end.
+
+## Decision: the cut without a narrator, take two: every brain, apps picked by hand, no stopwatch, the sign-in back (Diego, 2026-10-28)
+
+Diego: "Ok the one thing is, you didn't show all the models/brains that could be used that frame needs to be redone, also get rid of that timer when setting up the bot. Also when you were setting up the bot you didn't click specific apps just groups at the top, how about you click Gmail, docs, and meeting notes to start. Also keep that composio sign in scene, that was really good."
+
+- **Every brain:** the Brain step opens "Your own API key" first: Anthropic, OpenAI, Google Gemini, OpenRouter, Groq, Mistral, xAI, DeepSeek, Together AI, Fireworks, Cerebras, or a custom endpoint. It then goes back to the open models on Nebius and scrolls through all 12 (Fast, Balanced, Smart; three of them NVIDIA Nemotron). Nemotron 3.5 Lightning stays picked.
+- **Apps picked by hand:** Gmail, Google Docs and Meeting notes, from the app grid, with no "what should it help with" groups. Then what every bot always has (web search, files and the rest) and Your own MCP servers. The Trust step now spells out what Juno does on its own in Gmail and Docs, and what it asks first.
+- **No stopwatch:** the builder's frame keeps the seven steps and what each one asks.
+- **The sign-in is back:** the landing take ends on Sign in, in the header, and the email sign-in from the first cut follows on from the same frame. Claude took "the composio sign in scene" to be this one, the only sign-in in either cut; connecting Gmail through Composio has not been filmed.
+- **A second demo account** (`record/builder2.mjs`, `account2.json`) builds this Juno, so the first account's Juno keeps the files, flashcards and meeting the later scenes show. The builder ends on "Say hi to Juno!": the second Juno's first message differs from the one in the files scene.
+- 2:49 long.

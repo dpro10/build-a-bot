@@ -63,7 +63,7 @@
   #caption .line { left: 1000px; top: 380px; width: 800px; font-family: var(--display); font-weight: 650; font-size: 52px; line-height: 1.16; letter-spacing: -0.015em; color: var(--ink); }
   #caption .line.long { font-size: 42px; }
 
-  /* ---- Building a bot: the recording in a window, the seven steps beside it, and a stopwatch ---- */
+  /* ---- Building a bot: the recording in a window, the seven steps beside it (and a stopwatch, if asked) ---- */
   #builderframe .win { border-radius: 22px; background: #fff; box-shadow: 0 2px 8px rgb(32 24 12 / 0.10), 0 40px 90px rgb(32 24 12 / 0.20); }
   #builderframe .side { left: 62px; top: 128px; width: 352px; }
   #builderframe .kicker { font-weight: 700; letter-spacing: 0.22em; font-size: 20px; color: var(--primary); }
@@ -72,6 +72,8 @@
   #builderframe .clock b { font-family: var(--display); font-size: 84px; font-weight: 750; letter-spacing: -0.03em; line-height: 1; font-variant-numeric: tabular-nums; }
   #builderframe .clocklabel { margin-top: 6px; font-size: 19px; color: var(--muted); }
   #builderframe .clocklabel b { color: var(--ink); font-weight: 650; }
+  #builderframe.noclock .clock, #builderframe.noclock .clocklabel { display: none; }
+  #builderframe.noclock ol { margin-top: 30px; }
   #builderframe ol { list-style: none; margin: 40px 0 0; padding: 0; }
   #builderframe li { position: relative; display: flex; gap: 18px; padding: 11px 0; }
   #builderframe li i { flex: none; width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-style: normal; font-weight: 700; font-size: 19px; color: var(--muted); background: #fff; border: 2px solid var(--border); }
@@ -268,12 +270,14 @@
     },
     /**
      * The builder's frame: where the recording shows (`win`), the seven steps with what each one
-     * asks, and a stopwatch of the recording's own time. `spans` map the segment's time back to the
-     * recording (sped-up pieces, held moments); `steps` say when each step starts, in the recording;
-     * the clock runs from `clock.from` and stops at `clock.stop` (the click that brings the bot to life).
+     * asks, and (with `clock`) a stopwatch of the recording's own time. `spans` map the segment's time
+     * back to the recording (sped-up pieces, held moments); `steps` say when each step starts, in the
+     * recording, and `doneAt` when it's all done (the click that brings the bot to life). The clock
+     * runs from `clock.from` and stops at `clock.stop`.
      */
-    builderframe(t, { win, spans, steps, clock, done }) {
+    builderframe(t, { win, spans, steps, clock, doneAt, done }) {
       const root = document.getElementById("builderframe");
+      root.classList.toggle("noclock", !clock);
       Object.assign(root.querySelector(".win").style, { left: `${win.x}px`, top: `${win.y}px`, width: `${win.w}px`, height: `${win.h}px` });
       // The moment in the recording on screen now.
       let src = spans[0].from ?? spans[0].freeze;
@@ -298,7 +302,7 @@
         return next ? next.at : 0;
       };
       const active = steps.reduce((k, st, i) => (src >= st.src ? i : k), -1);
-      const finished = src >= clock.stop;
+      const finished = src >= (doneAt ?? clock?.stop ?? Infinity);
       [...ol.children].forEach((li, i) => {
         const isDone = i < active || (finished && i === active);
         const isOn = i === active && !isDone;
@@ -314,6 +318,7 @@
           p.style.transform = `translateY(${(1 - k) * 8}px)`;
         }
       });
+      if (!clock) return;
       const secs = Math.max(0, Math.min(src, clock.stop) - clock.from);
       root.querySelector(".clock b").textContent = `${Math.floor(secs / 60)}:${String(Math.floor(secs % 60)).padStart(2, "0")}`;
       const label = root.querySelector(".clocklabel");

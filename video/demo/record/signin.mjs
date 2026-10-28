@@ -6,6 +6,9 @@
  * for every later scene (video/out/demo/account.json).
  *
  *   BAB_VIDEO_EMAIL=you+demo@example.com node video/demo/record/signin.mjs
+ *
+ * A second account (record/builder2.mjs builds on its own) signs in the same way with its own take
+ * and file: BAB_VIDEO_TAKE=signin2 BAB_VIDEO_ACCOUNT=account2.json.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -13,6 +16,8 @@ import { ACCOUNT, OUT, SITE, Take, actor, launch, sleep } from "./recorder.mjs";
 
 const EMAIL = process.env.BAB_VIDEO_EMAIL;
 if (!EMAIL) throw new Error("Set BAB_VIDEO_EMAIL to the demo account's address.");
+const TAKE = process.env.BAB_VIDEO_TAKE ?? "signin";
+const SAVE = process.env.BAB_VIDEO_ACCOUNT ? path.join(OUT, process.env.BAB_VIDEO_ACCOUNT) : ACCOUNT;
 const LINK = path.join(OUT, "signin-link.txt");
 fs.rmSync(LINK, { force: true });
 
@@ -21,7 +26,7 @@ const a = actor(page, 5);
 try {
   await page.goto(`${SITE}/login`, { waitUntil: "networkidle" });
   await a.place(900, 520);
-  const take = await new Take(page, "signin").start();
+  const take = await new Take(page, TAKE).start();
   await sleep(900);
   await a.click(page.getByPlaceholder("you@example.com"), { pause: 200 });
   await a.type(EMAIL, { min: 30, max: 70 });
@@ -49,8 +54,8 @@ try {
     await page.waitForURL((u) => !u.pathname.startsWith("/auth/"), { timeout: 30000 });
   }
   if (!(await signedIn())) throw new Error(`Not signed in (at ${page.url()})`);
-  fs.writeFileSync(ACCOUNT, JSON.stringify({ site: SITE, email: EMAIL, storage: await context.storageState(), at: new Date().toISOString() }, null, 2));
-  console.log(`Signed in as ${EMAIL} → ${ACCOUNT} (now at ${page.url()})`);
+  fs.writeFileSync(SAVE, JSON.stringify({ site: SITE, email: EMAIL, storage: await context.storageState(), at: new Date().toISOString() }, null, 2));
+  console.log(`Signed in as ${EMAIL} → ${SAVE} (now at ${page.url()})`);
 } finally {
   await browser.close();
 }

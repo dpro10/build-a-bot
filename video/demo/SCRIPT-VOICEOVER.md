@@ -1,6 +1,6 @@
 # Diego's voice-over: the script
 
-For the cut without a narrator (`edit-voiceover.mjs`, 2:44, rendered to `video/out/demo/build-a-bot-demo-voiceover.mp4`). The picture, the music and the app's own sounds (the call, voice typing, the meeting) are done; this is what you say over it.
+For the cut without a narrator (`edit-voiceover.mjs`, 2:49, rendered to `video/out/demo/build-a-bot-demo-voiceover.mp4`). The picture, the music and the app's own sounds (the call, voice typing, the meeting) are done; this is what you say over it.
 
 ## How to record it (about 10 minutes)
 
@@ -17,26 +17,25 @@ The times say where each line will play. The lengths are a guide for a relaxed p
 
 | Time | On screen | You say |
 | - | - | - |
-| 0:00–0:16 | The landing page, the five choices, the recipes, then the recipe gallery and "Start from scratch". | "This is Build-a-bot. You can make your own AI assistant in about a minute." · "Start from a ready-made recipe, like a tutor or a job applier, or start from scratch. That's what I'll do." |
-| 0:16–0:23 | **Step 1, Face.** The cloud, in grape. | "First, pick a face. I'll take the cloud." |
-| 0:23–0:28 | **Step 2, Name.** "Juno", and "Diego". | "Name it, and tell it what to call you." |
-| 0:28–0:35 | **Step 3, Brain.** Open models on Nebius; $5.00 of credit; Nemotron 3.5 Lightning. | "Its brain is NVIDIA Nemotron, running on Nebius Token Factory, at cost. Every account starts with five dollars." |
-| 0:35–0:40 | **Step 4, Apps.** School, Meetings, Research. | "Tell it what to help with, and it picks apps." |
-| 0:40–0:46 | **Step 5, Trust.** Ask me first; enforced in code. | "On Ask me first, it waits for my OK, and that's enforced in code." |
-| 0:46–0:51 | **Step 6, Talk.** Web, phone calls, Discord, Slack. | "Talk to it on the web, by phone, Discord or Slack." |
-| 0:51–0:59 | **Step 7, Go.** Bring Juno to life; the stopwatch stops at 52 seconds. | "Bring it to life. That took fifty-two seconds." |
-| 0:59–1:10 | Files dropped on the chat; flashcards; a card's answer with its source. | "Give Juno your files, even a photo of handwritten notes. It makes flashcards that show where each answer came from." |
-| 1:10–1:16 | A web search, with sources. | "It searches the web with Tavily, and shows its sources." |
-| 1:16–1:20 | "Just call it." The call opens. | "And you can just call it." |
-| 1:20–1:47 | **The call plays. Don't talk.** | (nothing) |
-| 1:47–1:53 | The desktop app: an email to the lab group. | "The desktop app types for you, in any app. Hold one key, and talk." |
-| 1:53–2:00 | **The dictation plays. Don't talk.** | (nothing) |
-| 2:00–2:06 | The words land, cleaned up. | "NVIDIA Parakeet runs right on your computer, so your voice never leaves it." |
-| 2:06–2:10 | A meeting starts; Juno asks. | "In a meeting, Juno asks before it takes notes." |
-| 2:10–2:15 | **The meeting plays. Don't talk.** | (nothing) |
-| 2:15–2:24 | "Writing your notes…", then the notes. | "Parakeet hears the call on my computer, and Nemotron writes up what was decided, and who's doing what." |
-| 2:24–2:35 | Under the hood: four columns. | "Under the hood: NVIDIA Nemotron on Nebius does the thinking. NVIDIA Parakeet and Magpie hear and speak. Tavily searches the web. And every line of Build-a-bot is open source." |
-| 2:35–2:44 | The end card. | "Build-a-bot. Your own AI, built in a minute, that you can just call. Try it free at build-a-bot dot site." |
+| 0:00–0:18 | The landing page, the five choices, the recipes, the recipe gallery, "Start from scratch", then Sign in. | "This is Build-a-bot. You can make your own AI assistant in about a minute." · "Start from a ready-made recipe, like a tutor or a job applier, or start from scratch. That's what I'll do." |
+| 0:18–0:23 | Signing in with an email. | "I sign in with just my email. No password." |
+| 0:23–0:31 | **Steps 1 and 2, Face and Name.** The cloud, in grape; "Juno", and "Diego". | "Pick a face, name it Juno, and tell it what to call you." |
+| 0:31–0:45 | **Step 3, Brain.** Your own API key (Anthropic, OpenAI, Google Gemini and more), then the 12 open models on Nebius. | "For its brain, I can bring my own API key, from Anthropic, OpenAI, Google and more. Or use the open models on Nebius Token Factory, like NVIDIA Nemotron, at cost. Every account starts with five dollars." |
+| 0:45–0:54 | **Step 4, Apps.** Gmail, Google Docs and Meeting notes; web search and files are always included. | "Then the apps it can use: Gmail, Google Docs and meeting notes. Web search and files come with every bot." |
+| 0:54–0:59 | **Step 5, Trust.** Ask me first; what it does on its own in Gmail and Docs, and what it asks first. | "On Ask me first, it waits for my OK, and that's enforced in code." |
+| 0:59–1:07 | **Steps 6 and 7, Talk and Go.** Web, phone calls, Discord, Slack; then "Bring Juno to life". | "Talk to it on the web, by phone, Discord or Slack. Then bring it to life." |
+| 1:07–1:18 | Files dropped on the chat; flashcards; a card's answer with its source. | "Give Juno your files, even a photo of handwritten notes. It makes flashcards that show where each answer came from." |
+| 1:18–1:25 | A web search, with sources. | "It searches the web with Tavily, and shows its sources." |
+| 1:25–1:28 | "Just call it." The call opens. | "And you can just call it." |
+| 1:28–1:55 | **The call plays. Don't talk.** | (nothing) |
+| 1:55–2:01 | The desktop app: an email to the lab group. | "The desktop app types for you, in any app. Hold one key, and talk." |
+| 2:01–2:08 | **The dictation plays. Don't talk.** | (nothing) |
+| 2:08–2:14 | The words land, cleaned up. | "NVIDIA Parakeet runs right on your computer, so your voice never leaves it." |
+| 2:14–2:18 | A meeting starts; Juno asks. | "In a meeting, Juno asks before it takes notes." |
+| 2:18–2:23 | **The meeting plays. Don't talk.** | (nothing) |
+| 2:23–2:32 | "Writing your notes…", then the notes. | "Parakeet hears the call on my computer, and Nemotron writes up what was decided, and who's doing what." |
+| 2:32–2:41 | Under the hood: four columns. | "Under the hood: NVIDIA Nemotron on Nebius does the thinking. NVIDIA Parakeet and Magpie hear and speak. Tavily searches the web. And Build-a-bot is open source." |
+| 2:41–2:49 | The end card. | "Build-a-bot. Your own AI, built in a minute, that you can just call. Try it free at build-a-bot dot site." |
 
 ## Saying it your way
 

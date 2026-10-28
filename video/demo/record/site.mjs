@@ -1,7 +1,8 @@
 /**
  * The website as a first-time visitor sees it (signed out): the landing page's hero, "How it works"
- * (the five choices), the brain (NVIDIA Nemotron on Nebius), its recipes, then the recipe gallery
- * and "Start from scratch → Build your bot". One take, marked for the edit.
+ * (the five choices), the brain (NVIDIA Nemotron on Nebius), its recipes, then the recipe gallery,
+ * "Start from scratch", and Sign in (the sign-in take, record/signin.mjs, picks up from there). One
+ * take, marked for the edit.
  *   node video/demo/record/site.mjs
  */
 import { SITE, Take, actor, launch, sleep } from "./recorder.mjs";
@@ -110,11 +111,17 @@ try {
   await scrollTo(await scratch.evaluate((el) => Math.round(el.getBoundingClientRect().top + scrollY) - 300), 1500);
   take.mark("scratch");
   await sleep(700);
-  const build = (await scratch.getByText("Build your bot").count()) ? scratch.getByText("Build your bot").first() : scratch;
-  await a.click(build, { pause: 450 });
-  take.mark("build");
-  await page.waitForURL(/\/build/).catch(() => {});
-  await sleep(1800);
+  await glance(scratch.getByText("Start from scratch").first(), { ms: 600 });
+  await sleep(1000);
+  // Sign in first, from the header (it stays at the top).
+  take.mark("signin");
+  await a.click(page.locator("header").getByRole("link", { name: "Sign in" }), { pause: 350 });
+  await page.waitForURL(/\/login/);
+  await page.waitForLoadState("networkidle").catch(() => {});
+  take.mark("login");
+  // Where the sign-in take starts, so the two join up.
+  await a.moveTo(900, 520, 800);
+  await sleep(1500);
   await take.stop();
 } finally {
   await browser.close();

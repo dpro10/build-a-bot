@@ -434,11 +434,11 @@ function writeWav(file, samples, rate) {
   fs.writeFileSync(file, buf);
 }
 
-/** The signed-in demo account (record/signin.mjs). */
+/** The signed-in demo account (record/signin.mjs); a second one can sign in to another file. */
 export const ACCOUNT = path.join(OUT, "account.json");
-export function loadAccount() {
-  if (!fs.existsSync(ACCOUNT)) throw new Error("Sign in first (BAB_VIDEO_EMAIL=… node video/demo/record/signin.mjs).");
-  return JSON.parse(fs.readFileSync(ACCOUNT, "utf8"));
+export function loadAccount(file = ACCOUNT) {
+  if (!fs.existsSync(file)) throw new Error(`Sign in first (BAB_VIDEO_EMAIL=… node video/demo/record/signin.mjs): no ${path.basename(file)}.`);
+  return JSON.parse(fs.readFileSync(file, "utf8"));
 }
 
 /** The bot, the account it belongs to, and its cookies, shared by the scenes. */
