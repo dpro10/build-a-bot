@@ -39,7 +39,15 @@ export const PROXY = process.env.HTTPS_PROXY ? { server: process.env.HTTPS_PROXY
 const DISPLAY = process.env.BAB_VIDEO_DISPLAY ?? ":99";
 const SCREEN = { width: 2560, height: 2200 };
 function ensureDisplay() {
-  const sock = `/tmp/.X11-unix/X${DISPLAY.replace(/^:/, "").split(".")[0]}`;
+  const n = DISPLAY.replace(/^:/, "").split(".")[0];
+  const sock = `/tmp/.X11-unix/X${n}`;
+  // A socket left by a display that's gone (the machine restarted) would fool the check below.
+  let alive = false;
+  try {
+    execFileSync("xdotool", ["getdisplaygeometry"], { env: { ...process.env, DISPLAY }, stdio: "ignore" });
+    alive = true;
+  } catch {}
+  if (!alive) for (const f of [sock, `/tmp/.X${n}-lock`]) fs.rmSync(f, { force: true });
   if (!fs.existsSync(sock)) {
     spawn("Xvfb", [DISPLAY, "-screen", "0", `${SCREEN.width}x${SCREEN.height}x24`, "-nolisten", "tcp"], { stdio: "ignore", detached: true }).unref();
     for (let i = 0; i < 50 && !fs.existsSync(sock); i++) execFileSync("sleep", ["0.1"]);

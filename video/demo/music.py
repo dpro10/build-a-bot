@@ -3,7 +3,7 @@ The demo video's score: the promo's world (F major, 96 BPM, one bar per 2.5 seco
 synthesized instruments from video/audio/music.py) arranged under the demo's beats. No samples, no
 loops, nothing copyrighted.
 
-  video/out/venv/bin/python video/demo/music.py       -> video/out/demo/music.wav
+  python3 video/demo/music.py [folder]       -> <folder>/music.wav (video/out/demo by default)
 
 It follows video/out/demo/timeline.json (written by assemble.mjs), so run the assembler once first:
   silent under the cold-open call -> a bright reveal -> a light groove under the walkthrough ->
@@ -24,10 +24,13 @@ from synth import SR, highpass, lowpass, make_room, peaking, pingpong, reverb, s
 from music import (BAR, BEAT, CH, THEME_A, THEME_B, THEME_END, bass_note, bell, clap, hat, impact, keys_note, kick,  # noqa: E402
                    pad_chord, pluck, riser, shaker)
 
-OUT = os.path.join(HERE, "..", "out", "demo")
+# The edit's own folder (assemble.mjs writes timeline.json there): video/out/demo, or a named cut's.
+OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "..", "out", "demo")
 TL = json.load(open(os.path.join(OUT, "timeline.json")))
 SEG = {s["id"]: s for s in TL["segments"]}
 TOTAL = TL["total"]
+# Where the sections turn: segment ids from the edit (its SCORE), or the first cut's.
+SCORE = TL.get("score") or {"t0": "reveal", "revealEnd": "signin", "callFrom": "call-start", "callTo": "voice", "buildFrom": "built", "endFrom": "end"}
 DUR = TOTAL + 3.0
 
 
@@ -52,11 +55,11 @@ class Track:
 
 
 # Sections by time: (from, to, kind). Bars start at the reveal's first downbeat.
-T0 = start("reveal")
-REVEAL_END = start("signin")
-CALL_FROM, CALL_TO = start("call-start"), start("voice")
-BUILD_FROM = start("built")
-END_FROM = start("end")
+T0 = start(SCORE["t0"])
+REVEAL_END = start(SCORE["revealEnd"])
+CALL_FROM, CALL_TO = start(SCORE["callFrom"]), start(SCORE["callTo"])
+BUILD_FROM = start(SCORE["buildFrom"])
+END_FROM = start(SCORE["endFrom"])
 
 LOOP = ["Bbmaj9", "F/A", "Gm9", "Csus4"]
 LOOP_2 = ["Bbmaj9", "C", "Am7", "Dm9"]
@@ -92,7 +95,7 @@ def build():
             continue
         k = i - end_bar
         if sec == "reveal":
-            name = ["Fadd9", "C/E", "Bbmaj9"][min(i, 2)]
+            name = ["Fadd9", "C/E", "Bbmaj9", "Csus4"][i % 4]
         elif sec == "end":
             name = ["Bbmaj9", "C69", "Fmaj9", "Fmaj9"][min(max(k, 0), 3)]
         elif sec == "hush":
@@ -207,6 +210,11 @@ def build():
     mix = peaking(mix, 300, -1.5, 0.8)
     mix = shelf(mix, 7000, 2.0)
     mix = highpass(mix, 28)
+
+    # The end card's swell, lower when no narration sits over it (the edit's SCORE endLevel).
+    level_end = SCORE.get("endLevel", 1.0)
+    if level_end != 1.0:
+        mix *= 1 + (level_end - 1) * np.clip((secs(mix.shape[1]) - (END_FROM - 0.4)) / 0.4, 0, 1)
 
     # Silence before the reveal's riser; a long tail after the last chord.
     lead = int((T0 - 2 * BEAT - 0.05) * SR)

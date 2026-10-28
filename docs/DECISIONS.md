@@ -1237,3 +1237,13 @@ Diego: "I think it should start with me just logging in and creating a bot. I'll
 - **NVIDIA and Nebius are named aloud and on screen**, as the rules ask: Nemotron on Nebius Token Factory (thinking), Parakeet and Magpie (calls, on our voice server), Parakeet on the computer (voice typing and meetings), and Tavily (search).
 - **Cut for time:** the receipts beat ("every action leaves a receipt"). The activity log now holds an earlier take's reminder, and receipts can't be deleted.
 - **Known bug, seen in the call:** after a cut-in, the call panel keeps only the sentence that was cut. The voice server forgets sentences already played (`voice/src/call/speaker.ts`, `played()`), so `heard` and the saved turn lose them. Not fixed here; it's in the follow-ups.
+
+## Decision: a second cut with no narrator, for Diego's own voice-over (Diego, 2026-10-28)
+
+Diego: "I think that it is probably better if it is my voice doing the voice over, could you make another video that shows everything but has no voice. it should show the landing page then some of our recipes, but then it should show the steps to build a bot and what they entail and how easy it is. I really liked the meeting and voice typing clips you had though those were awesome."
+
+- **The cut** (`video/demo/edit-voiceover.mjs`, 2:44, `build-a-bot-demo-voiceover.mp4`): the landing page and the recipe gallery (signed out, `record/site.mjs`), then "Start from scratch" into the builder. The builder plays in a window with its seven steps beside it, each with a line on what it asks, and a stopwatch of the real time on the clock: Juno was built in 52 seconds. Then files, web search, the call, and the same voice typing and meeting clips as the narrated cut, how it's built, and the end card.
+- **No narrator, nothing else lost:** the app's own sounds stay (the call, the dictation, the meeting), with the music. Small notes on screen say what the later scenes are, so the cut also works with the sound off.
+- **Diego's script** is `video/demo/SCRIPT-VOICEOVER.md`: lines to read in one take, with where each one plays and where not to talk. Claude splits the take into sentences and places them.
+- **The music** sits about 3 dB under the call while there's no narrator. When his lines go in, it goes back down to a bed under his voice.
+- **Mixing:** the sound now gets one gain for the whole video plus a limiter, instead of loudnorm. With music-only stretches, loudnorm had turned into an automatic gain: the music came up as loud as the call, then dropped about 5 dB near the end.

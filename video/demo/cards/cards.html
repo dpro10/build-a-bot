@@ -63,6 +63,37 @@
   #caption .line { left: 1000px; top: 380px; width: 800px; font-family: var(--display); font-weight: 650; font-size: 52px; line-height: 1.16; letter-spacing: -0.015em; color: var(--ink); }
   #caption .line.long { font-size: 42px; }
 
+  /* ---- Building a bot: the recording in a window, the seven steps beside it, and a stopwatch ---- */
+  #builderframe .win { border-radius: 22px; background: #fff; box-shadow: 0 2px 8px rgb(32 24 12 / 0.10), 0 40px 90px rgb(32 24 12 / 0.20); }
+  #builderframe .side { left: 62px; top: 128px; width: 352px; }
+  #builderframe .kicker { font-weight: 700; letter-spacing: 0.22em; font-size: 20px; color: var(--primary); }
+  #builderframe .clock { margin-top: 18px; display: flex; align-items: center; gap: 14px; }
+  #builderframe .clock .ic { width: 46px; height: 46px; color: var(--primary); }
+  #builderframe .clock b { font-family: var(--display); font-size: 84px; font-weight: 750; letter-spacing: -0.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+  #builderframe .clocklabel { margin-top: 6px; font-size: 19px; color: var(--muted); }
+  #builderframe .clocklabel b { color: var(--ink); font-weight: 650; }
+  #builderframe ol { list-style: none; margin: 40px 0 0; padding: 0; }
+  #builderframe li { position: relative; display: flex; gap: 18px; padding: 11px 0; }
+  #builderframe li i { flex: none; width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-style: normal; font-weight: 700; font-size: 19px; color: var(--muted); background: #fff; border: 2px solid var(--border); }
+  #builderframe li i .ic { width: 20px; height: 20px; }
+  #builderframe li.done i { background: var(--primary); border-color: var(--primary); color: #fff; }
+  #builderframe li.on i { background: var(--primary-soft); border-color: var(--primary); color: var(--primary); box-shadow: 0 0 0 6px rgb(91 60 240 / 0.12); }
+  #builderframe li b { display: block; padding-top: 5px; font-size: 28px; font-weight: 700; color: var(--muted); }
+  #builderframe li.on b { color: var(--ink); }
+  #builderframe li.done b { color: var(--ink); opacity: 0.75; }
+  #builderframe li p { margin: 8px 0 4px; font-size: 20px; line-height: 1.42; color: var(--muted); overflow: hidden; }
+
+  /* ---- A note beside the app (in its empty sidebar) or over a desktop's wallpaper ---- */
+  #sidenote .note { width: 372px; padding: 26px 26px 28px; border-radius: 26px; background: rgb(255 255 255 / 0.97); border: 1px solid var(--border); box-shadow: 0 2px 6px rgb(32 24 12 / 0.06), 0 22px 54px rgb(32 24 12 / 0.16); }
+  #sidenote .note.dark { background: rgb(16 13 28 / 0.80); border-color: rgb(255 255 255 / 0.10); box-shadow: 0 2px 8px rgb(0 0 0 / 0.18), 0 26px 60px rgb(0 0 0 / 0.28); }
+  #sidenote .k { display: flex; align-items: center; gap: 9px; font-size: 16px; font-weight: 700; letter-spacing: 0.18em; color: var(--primary); }
+  #sidenote .k .ic { width: 20px; height: 20px; }
+  #sidenote .dark .k { color: #c9bcff; }
+  #sidenote .t { margin-top: 12px; font-family: var(--display); font-size: 36px; font-weight: 700; line-height: 1.08; letter-spacing: -0.02em; color: var(--ink); }
+  #sidenote .dark .t { color: #fff; }
+  #sidenote .x { margin-top: 12px; font-size: 20px; line-height: 1.45; color: var(--muted); }
+  #sidenote .dark .x { color: rgb(255 255 255 / 0.74); }
+
   /* ---- A subtitle over the desktop scenes: who's talking and what they said ---- */
   #subtitle .box { left: 0; right: 0; margin: 0 auto; width: fit-content; max-width: 1480px; padding: 18px 34px 24px; border-radius: 26px; background: rgb(16 13 28 / 0.82); box-shadow: 0 2px 8px rgb(0 0 0 / 0.18), 0 26px 60px rgb(0 0 0 / 0.28); text-align: center; }
   #subtitle .who { font-size: 18px; font-weight: 700; letter-spacing: 0.18em; margin-bottom: 8px; }
@@ -137,6 +168,21 @@
     <div class="abs line"></div>
   </div>
 
+  <div class="card-stage" id="builderframe">
+    <div class="bg-light"></div>
+    <div class="abs win"></div>
+    <div class="abs side">
+      <div class="kicker">BUILD A BOT</div>
+      <div class="clock"><span class="ic" data-icon="Timer"></span><b>0:00</b></div>
+      <div class="clocklabel">on the clock, in real time</div>
+      <ol class="steps"></ol>
+    </div>
+  </div>
+
+  <div class="card-stage" id="sidenote">
+    <div class="abs note"><div class="k"><span class="ic"></span><span class="kt"></span></div><div class="t"></div><div class="x"></div></div>
+  </div>
+
   <div class="card-stage" id="subtitle">
     <div class="abs box"><div class="who"></div><div class="text"></div></div>
   </div>
@@ -173,8 +219,9 @@
   window.BUILT_TIMES = [1.3, 5.4, 12.2, 14.0];
 
   const CARDS = {
-    built(t) {
+    built(t, { times } = {}) {
       const root = document.getElementById("built");
+      const at = times ?? window.BUILT_TIMES;
       show(root.querySelector(".kicker"), (t - 0.05) / 0.5, 16);
       show(root.querySelector(".headline"), (t - 0.15) / 0.6, 24);
       const bot = root.querySelector(".bot");
@@ -182,12 +229,11 @@
       bot.style.opacity = String(op);
       bot.style.transform = `translateY(${(1 - easeOut(op)) * 40 + Math.sin(t * 2.2) * 6}px) rotate(${Math.sin(t * 1.3) * 3}deg)`;
       root.querySelectorAll(".col").forEach((col, i) => {
-        const at = window.BUILT_TIMES[i];
-        const p = (t - at) / 0.7;
+        const p = (t - at[i]) / 0.7;
         col.style.opacity = String(easeOut(p));
         col.style.transform = `translateY(${(1 - easeOut(p)) * 70}px) scale(${0.96 + 0.04 * easeOut(p)})`;
         const chip = col.querySelector(".chip");
-        const c = (t - at - 0.45) / 0.45;
+        const c = (t - at[i] - 0.45) / 0.45;
         chip.style.opacity = String(clamp(c * 1.4));
         chip.style.transform = `scale(${0.7 + 0.3 * back(c)})`;
       });
@@ -219,6 +265,73 @@
       line.classList.toggle("long", text.length > 110);
       line.innerHTML = "";
       line.append(document.createTextNode(bot ? text : `“${text}”`));
+    },
+    /**
+     * The builder's frame: where the recording shows (`win`), the seven steps with what each one
+     * asks, and a stopwatch of the recording's own time. `spans` map the segment's time back to the
+     * recording (sped-up pieces, held moments); `steps` say when each step starts, in the recording;
+     * the clock runs from `clock.from` and stops at `clock.stop` (the click that brings the bot to life).
+     */
+    builderframe(t, { win, spans, steps, clock, done }) {
+      const root = document.getElementById("builderframe");
+      Object.assign(root.querySelector(".win").style, { left: `${win.x}px`, top: `${win.y}px`, width: `${win.w}px`, height: `${win.h}px` });
+      // The moment in the recording on screen now.
+      let src = spans[0].from ?? spans[0].freeze;
+      for (const s of spans) {
+        if (t < s.at) break;
+        src = s.freeze !== undefined ? s.freeze : s.from + Math.min(t - s.at, s.len) * (s.speed ?? 1);
+      }
+      const ol = root.querySelector("ol");
+      if (!ol.children.length) {
+        for (const [i, st] of steps.entries()) {
+          const li = document.createElement("li");
+          li.innerHTML = `<i>${i + 1}</i><div><b></b><p></p></div>`;
+          li.querySelector("b").textContent = st.name;
+          li.querySelector("p").textContent = st.desc;
+          ol.append(li);
+        }
+      }
+      // When a moment of the recording comes up in the segment (for easing a step in).
+      const segOf = (x) => {
+        for (const s of spans) if (s.freeze === undefined && x >= s.from && x <= s.from + s.len * (s.speed ?? 1)) return s.at + (x - s.from) / (s.speed ?? 1);
+        const next = spans.find((s) => s.freeze === undefined && s.from > x);
+        return next ? next.at : 0;
+      };
+      const active = steps.reduce((k, st, i) => (src >= st.src ? i : k), -1);
+      const finished = src >= clock.stop;
+      [...ol.children].forEach((li, i) => {
+        const isDone = i < active || (finished && i === active);
+        const isOn = i === active && !isDone;
+        li.classList.toggle("done", isDone);
+        li.classList.toggle("on", isOn);
+        li.querySelector("i").innerHTML = isDone ? window.BAB_ICONS.Check : String(i + 1);
+        // The active step's description opens; the others stay one line.
+        const p = li.querySelector("p");
+        p.style.display = isOn ? "block" : "none";
+        if (isOn) {
+          const k = easeOut((t - segOf(steps[i].src)) / 0.45);
+          p.style.opacity = String(k);
+          p.style.transform = `translateY(${(1 - k) * 8}px)`;
+        }
+      });
+      const secs = Math.max(0, Math.min(src, clock.stop) - clock.from);
+      root.querySelector(".clock b").textContent = `${Math.floor(secs / 60)}:${String(Math.floor(secs % 60)).padStart(2, "0")}`;
+      const label = root.querySelector(".clocklabel");
+      if (finished) label.innerHTML = `<b>${done ?? "Built"} in ${Math.floor(clock.stop - clock.from)} seconds</b>`;
+      else label.textContent = "on the clock, in real time";
+    },
+    /** A note card at (x, y): a kicker with an icon, a title, a line or two. `dark` for a desktop's wallpaper. */
+    sidenote(t, { kicker, icon, title, text, x = 24, y = 330, w = 372, dark = false }) {
+      const root = document.getElementById("sidenote");
+      const note = root.querySelector(".note");
+      Object.assign(note.style, { left: `${x}px`, top: `${y}px`, width: `${w}px` });
+      note.classList.toggle("dark", dark);
+      root.querySelector(".k .ic").innerHTML = icon ? window.BAB_ICONS[icon] ?? "" : "";
+      root.querySelector(".k .ic").style.display = icon ? "block" : "none";
+      root.querySelector(".kt").textContent = kicker ?? "";
+      root.querySelector(".t").textContent = title ?? "";
+      root.querySelector(".x").textContent = text ?? "";
+      root.querySelector(".x").style.display = text ? "block" : "none";
     },
     /** A subtitle box over a desktop scene (transparent PNG): a speaker label in its colour, then the words. */
     subtitle(t, { who, color, text, y = 770 }) {

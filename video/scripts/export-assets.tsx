@@ -40,7 +40,7 @@ const tree = createElement(
 const html = renderToStaticMarkup(tree);
 
 // Interface icons, from the same set the app uses (lucide).
-const ICONS = ["Check", "Cake", "User", "Footprints", "Mail", "Leaf", "Lock", "Download", "Trash2", "Pencil", "Eye", "KeyRound", "Laptop", "Cpu", "ShieldCheck", "Code2", "Mic", "CloudOff", "Database", "Sparkles", "MessageCircle", "Brain", "Puzzle", "Repeat", "Paperclip", "ArrowUp", "ArrowRight", "FileJson", "CircleCheck", "Ban", "EyeOff", "Server", "Search", "Globe", "Phone", "BookOpen", "Receipt", "Keyboard"];
+const ICONS = ["Check", "Cake", "User", "Footprints", "Mail", "Leaf", "Lock", "Download", "Trash2", "Pencil", "Eye", "KeyRound", "Laptop", "Cpu", "ShieldCheck", "Code2", "Mic", "CloudOff", "Database", "Sparkles", "MessageCircle", "Brain", "Puzzle", "Repeat", "Paperclip", "ArrowUp", "ArrowRight", "FileJson", "CircleCheck", "Ban", "EyeOff", "Server", "Search", "Globe", "Phone", "BookOpen", "Receipt", "Keyboard", "Timer", "Video"];
 const icons: Record<string, string> = {};
 for (const name of ICONS) {
   const C = (Lucide as unknown as Record<string, ComponentType<{ size?: number; strokeWidth?: number }>>)[name];
