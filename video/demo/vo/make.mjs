@@ -1,12 +1,13 @@
 /**
- * Otto's narration for the demo video, in its own voice: NVIDIA Magpie TTS (voice Sofia, guidance on,
- * as on calls) through NeMo-Speech.cpp, on this computer. Several takes of each line; NVIDIA
- * Parakeet transcribes every take, and the pick is the one that matches the script word for word,
- * at a natural pace, heard with the most confidence. Then a light polish (EQ, de-essing, gentle
- * compression) so it sits well over music.
+ * The demo video's narration in an NVIDIA voice instead of a person's (optional): the lines of
+ * vo/lines.json read by NVIDIA Magpie TTS (voice Sofia, guidance on, as on calls) through
+ * NeMo-Speech.cpp, on this computer. Several takes of each line; NVIDIA Parakeet transcribes every
+ * take, and the pick is the one that matches the script word for word, at a natural pace, heard with
+ * the most confidence. Then a light polish (EQ, de-essing, gentle compression) so it sits well over
+ * music. To use it, set VO_DIR in edit.mjs to video/out/demo/vo.
  *
  *   node video/demo/vo/make.mjs                 all lines, 5 takes each
- *   node video/demo/vo/make.mjs --takes 8 --only V05a,V11
+ *   node video/demo/vo/make.mjs --takes 8 --only S07,S25
  *
  * Needs NeMo-Speech.cpp (the desktop app's copy is used by default; NEMO_SPEECH_BIN to change it)
  * and Parakeet's GGUF (PARAKEET_GGUF). Magpie downloads itself the first time (about 650 MB).

@@ -30,7 +30,7 @@ const FPS = 60;
 // Installed Chrome cuts screenshots to its real window, so the window is sized to 1920×1080 itself.
 let browser, page;
 for (let top = 87, i = 0; ; i++) {
-  browser = await chromium.launch({ channel: process.env.PW_CHANNEL ?? "chrome", args: ["--force-color-profile=srgb", "--font-render-hinting=none", "--disable-lcd-text", "--hide-scrollbars", `--window-size=1920,${1080 + top}`, "--force-device-scale-factor=1"] });
+  browser = await chromium.launch({ channel: process.env.PW_CHANNEL || undefined, args: ["--force-color-profile=srgb", "--font-render-hinting=none", "--disable-lcd-text", "--hide-scrollbars", `--window-size=1920,${1080 + top}`, "--force-device-scale-factor=1"] });
   page = await browser.newPage({ viewport: null });
   const h = await page.evaluate(() => innerHeight);
   if (h === 1080 || i > 2) break;

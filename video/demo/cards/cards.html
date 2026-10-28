@@ -34,18 +34,18 @@
   .svgfill > svg { width: 100%; height: 100%; display: block; overflow: visible; }
 
   /* ---- How it's built ---- */
-  #built .kicker { left: 0; right: 0; top: 150px; text-align: center; font-weight: 700; letter-spacing: 0.22em; font-size: 22px; color: var(--primary); }
-  #built .headline { left: 0; right: 0; top: 190px; text-align: center; font-family: var(--display); font-weight: 700; font-size: 84px; letter-spacing: -0.03em; }
-  #built .cols { left: 150px; right: 150px; top: 370px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 44px; }
-  #built .col { position: relative; background: var(--card); border: 1px solid var(--border); border-radius: 36px; padding: 44px 40px 40px; box-shadow: var(--shadow-lift); min-height: 470px; will-change: transform, opacity; }
-  #built .icon { width: 76px; height: 76px; border-radius: 24px; display: flex; align-items: center; justify-content: center; color: #fff; }
-  #built .icon .ic { width: 38px; height: 38px; }
-  #built .label { margin-top: 28px; font-size: 19px; font-weight: 700; letter-spacing: 0.16em; color: var(--muted); }
-  #built .name { margin-top: 10px; font-family: var(--display); font-size: 46px; font-weight: 700; line-height: 1.04; letter-spacing: -0.02em; }
-  #built .where { margin-top: 14px; font-size: 25px; line-height: 1.35; color: var(--muted); }
-  #built .chip { position: absolute; left: 40px; right: 40px; bottom: 36px; display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-radius: 18px; font-size: 21px; font-weight: 600; will-change: transform, opacity; }
-  #built .chip .ic { width: 24px; height: 24px; flex: none; }
-  #built .otto { left: 1640px; top: 116px; width: 150px; height: 150px; }
+  #built .kicker { left: 0; right: 0; top: 165px; text-align: center; font-weight: 700; letter-spacing: 0.22em; font-size: 22px; color: var(--primary); }
+  #built .headline { left: 0; right: 0; top: 205px; text-align: center; font-family: var(--display); font-weight: 700; font-size: 80px; letter-spacing: -0.03em; }
+  #built .cols { left: 110px; right: 110px; top: 368px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 30px; }
+  #built .col { position: relative; background: var(--card); border: 1px solid var(--border); border-radius: 34px; padding: 38px 32px 34px; box-shadow: var(--shadow-lift); min-height: 560px; will-change: transform, opacity; }
+  #built .icon { width: 72px; height: 72px; border-radius: 22px; display: flex; align-items: center; justify-content: center; color: #fff; }
+  #built .icon .ic { width: 36px; height: 36px; }
+  #built .label { margin-top: 26px; font-size: 18px; font-weight: 700; letter-spacing: 0.16em; color: var(--muted); }
+  #built .name { margin-top: 10px; font-family: var(--display); font-size: 40px; font-weight: 700; line-height: 1.06; letter-spacing: -0.02em; }
+  #built .where { margin-top: 14px; font-size: 23px; line-height: 1.38; color: var(--muted); }
+  #built .chip { position: absolute; left: 28px; right: 28px; bottom: 30px; display: flex; align-items: center; gap: 10px; padding: 13px 16px; border-radius: 16px; font-size: 19px; font-weight: 600; line-height: 1.25; will-change: transform, opacity; }
+  #built .chip .ic { width: 22px; height: 22px; flex: none; }
+  #built .bot { left: 1660px; top: 128px; width: 150px; height: 150px; }
 
   /* ---- The call, shown as a panel with captions: the frame around it, and the captions ---- */
   #callframe .bgmask { position: absolute; inset: 0; }
@@ -62,6 +62,11 @@
   #caption .who .me { width: 54px; height: 54px; border-radius: 50%; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 24px; letter-spacing: 0; }
   #caption .line { left: 1000px; top: 380px; width: 800px; font-family: var(--display); font-weight: 650; font-size: 52px; line-height: 1.16; letter-spacing: -0.015em; color: var(--ink); }
   #caption .line.long { font-size: 42px; }
+
+  /* ---- A subtitle over the desktop scenes: who's talking and what they said ---- */
+  #subtitle .box { left: 0; right: 0; margin: 0 auto; width: fit-content; max-width: 1480px; padding: 18px 34px 24px; border-radius: 26px; background: rgb(16 13 28 / 0.82); box-shadow: 0 2px 8px rgb(0 0 0 / 0.18), 0 26px 60px rgb(0 0 0 / 0.28); text-align: center; }
+  #subtitle .who { font-size: 18px; font-weight: 700; letter-spacing: 0.18em; margin-bottom: 8px; }
+  #subtitle .text { font-family: var(--display); font-size: 40px; font-weight: 600; line-height: 1.22; letter-spacing: -0.01em; color: #fff; white-space: pre-line; }
 
   /* ---- A desktop app window, floating ---- */
   #window .win { left: 50%; top: 50%; border-radius: 26px; overflow: hidden; box-shadow: 0 2px 8px rgb(32 24 12 / 0.12), 0 50px 110px rgb(32 24 12 / 0.28); background: #fff; }
@@ -82,30 +87,37 @@
 <body>
   <div class="card-stage" id="built">
     <div class="bg-light"></div>
-    <div class="abs kicker">HOW IT'S BUILT</div>
-    <div class="abs headline">NVIDIA's open models, end to end</div>
-    <div class="abs otto svgfill" data-asset="otto-happy"></div>
+    <div class="abs kicker">UNDER THE HOOD</div>
+    <div class="abs headline">Built on NVIDIA's open models</div>
+    <div class="abs bot svgfill" data-asset="juno-happy"></div>
     <div class="abs cols">
       <div class="col" data-col="0">
         <div class="icon" style="background: linear-gradient(135deg, #7c5cff, #5136d9)"><span class="ic" data-icon="Brain"></span></div>
         <div class="label">THINKS</div>
         <div class="name">NVIDIA Nemotron 3.5 Lightning</div>
-        <div class="where">on Nebius Token Factory, at cost: no plans, nothing added</div>
-        <div class="chip" style="background: var(--primary-soft); color: var(--primary)"><span class="ic" data-icon="Sparkles"></span>About 2,400 messages for $1</div>
+        <div class="where">on Nebius Token Factory, at cost, with nothing added</div>
+        <div class="chip" style="background: var(--primary-soft); color: var(--primary)"><span class="ic" data-icon="Sparkles"></span>$5 to start: about 12,000 messages</div>
       </div>
       <div class="col" data-col="1">
         <div class="icon" style="background: linear-gradient(135deg, #22c38e, #0b7f53)"><span class="ic" data-icon="Mic"></span></div>
         <div class="label">HEARS AND SPEAKS</div>
         <div class="name">NVIDIA Parakeet and Magpie</div>
-        <div class="where">on NeMo-Speech.cpp, on our own server and right on your computer</div>
-        <div class="chip" style="background: var(--success-soft); color: var(--success)"><span class="ic" data-icon="Laptop"></span>Voice typing stays on-device</div>
+        <div class="where">on our own voice server for calls, and Parakeet right on your computer</div>
+        <div class="chip" style="background: var(--success-soft); color: var(--success)"><span class="ic" data-icon="Laptop"></span>Voice typing and meetings stay on-device</div>
       </div>
       <div class="col" data-col="2">
-        <div class="icon" style="background: linear-gradient(135deg, #ff9a6b, #ff6f59)"><span class="ic" data-icon="Code2"></span></div>
+        <div class="icon" style="background: linear-gradient(135deg, #ffb547, #f08a24)"><span class="ic" data-icon="Search"></span></div>
+        <div class="label">SEARCHES</div>
+        <div class="name">Tavily</div>
+        <div class="where">web search for every bot, 0.8&#162; a lookup</div>
+        <div class="chip" style="background: #fff4e0; color: #b5600c"><span class="ic" data-icon="Globe"></span>Answers show their sources</div>
+      </div>
+      <div class="col" data-col="3">
+        <div class="icon" style="background: linear-gradient(135deg, #ff8a7a, #e5484d)"><span class="ic" data-icon="Code2"></span></div>
         <div class="label">OPEN SOURCE</div>
         <div class="name">Every line of it</div>
         <div class="where">Apache 2.0: the web app, the desktop app and the voice server</div>
-        <div class="chip" style="background: #fff1e8; color: #c4462f"><span class="ic" data-icon="Code2"></span>github.com/dpro10/build-a-bot</div>
+        <div class="chip" style="background: #ffeceb; color: #c4362f"><span class="ic" data-icon="Code2"></span><span>github.com/<wbr><span style="white-space: nowrap">dpro10/build-a-bot</span></span></div>
       </div>
     </div>
   </div>
@@ -117,12 +129,16 @@
     <div class="abs tag"><span class="dot"></span>A REAL CALL</div>
     <div class="abs ctitle"></div>
     <div class="abs csub"></div>
-    <div class="abs models"><span>NVIDIA Parakeet hears</span><span>NVIDIA Magpie speaks</span><span>Nemotron 3.5 Lightning talks</span><span>Otto's own agent does the work</span></div>
+    <div class="abs models"><span>NVIDIA Parakeet hears</span><span>NVIDIA Magpie speaks</span><span>NVIDIA Nemotron thinks</span><span>Juno's own agent does the work</span></div>
   </div>
 
   <div class="card-stage" id="caption">
-    <div class="abs who"><span class="av svgfill" data-asset="otto-happy-sm"></span><span class="me">D</span><span class="name">OTTO</span></div>
+    <div class="abs who"><span class="av svgfill" data-asset="juno-happy-sm"></span><span class="me">Y</span><span class="name">JUNO</span></div>
     <div class="abs line"></div>
+  </div>
+
+  <div class="card-stage" id="subtitle">
+    <div class="abs box"><div class="who"></div><div class="text"></div></div>
   </div>
 
   <div class="card-stage" id="window">
@@ -153,18 +169,18 @@
     el.style.transform = `translateY(${(1 - easeOut(p)) * dy}px) scale(${scale})`;
   };
 
-  // When each column of "How it's built" arrives (seconds), to land with the voice.
-  window.BUILT_TIMES = [0.45, 3.85, 10.35];
+  // When each column of "How it's built" arrives (seconds), to land with the voice (edit.mjs).
+  window.BUILT_TIMES = [1.3, 5.4, 12.2, 14.0];
 
   const CARDS = {
     built(t) {
       const root = document.getElementById("built");
       show(root.querySelector(".kicker"), (t - 0.05) / 0.5, 16);
       show(root.querySelector(".headline"), (t - 0.15) / 0.6, 24);
-      const otto = root.querySelector(".otto");
+      const bot = root.querySelector(".bot");
       const op = clamp((t - 0.6) / 0.5);
-      otto.style.opacity = String(op);
-      otto.style.transform = `translateY(${(1 - easeOut(op)) * 40 + Math.sin(t * 2.2) * 6}px) rotate(${Math.sin(t * 1.3) * 3}deg)`;
+      bot.style.opacity = String(op);
+      bot.style.transform = `translateY(${(1 - easeOut(op)) * 40 + Math.sin(t * 2.2) * 6}px) rotate(${Math.sin(t * 1.3) * 3}deg)`;
       root.querySelectorAll(".col").forEach((col, i) => {
         const at = window.BUILT_TIMES[i];
         const p = (t - at) / 0.7;
@@ -192,17 +208,26 @@
     /** One line of the call, big, beside the panel: who's talking and what they said. */
     caption(t, { who, text, cut }) {
       const root = document.getElementById("caption");
-      const otto = who === "otto";
-      root.querySelector(".av").style.display = otto ? "block" : "none";
-      root.querySelector(".me").style.display = otto ? "none" : "flex";
+      const bot = who === "juno";
+      root.querySelector(".av").style.display = bot ? "block" : "none";
+      root.querySelector(".me").style.display = bot ? "none" : "flex";
       const name = root.querySelector(".name");
-      // A line that interrupts Otto says so where the speaker's name is.
-      name.textContent = otto ? "OTTO" : cut ? "DIEGO · CUTS IN" : "DIEGO";
-      name.style.color = otto ? "var(--primary)" : "var(--ink)";
+      // A line that interrupts Juno says so where the speaker's name is.
+      name.textContent = bot ? "JUNO" : cut ? "YOU · CUT IN" : "YOU";
+      name.style.color = bot ? "var(--primary)" : "var(--ink)";
       const line = root.querySelector(".line");
-      line.classList.toggle("long", text.length > 120);
+      line.classList.toggle("long", text.length > 110);
       line.innerHTML = "";
-      line.append(document.createTextNode(otto ? text : `“${text}”`));
+      line.append(document.createTextNode(bot ? text : `“${text}”`));
+    },
+    /** A subtitle box over a desktop scene (transparent PNG): a speaker label in its colour, then the words. */
+    subtitle(t, { who, color, text, y = 770 }) {
+      const root = document.getElementById("subtitle");
+      root.querySelector(".box").style.top = `${y}px`;
+      const w = root.querySelector(".who");
+      w.textContent = who ?? "";
+      w.style.color = color ?? "#c9bcff";
+      root.querySelector(".text").textContent = text;
     },
     /** A screenshot of the desktop app in a window, drifting in. */
     window(t, { src, width, say, sub }) {

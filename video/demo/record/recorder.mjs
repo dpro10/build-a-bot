@@ -1,14 +1,15 @@
 /**
- * Records the real product for the demo video: Chrome's own screencast at 2× (2560×1440 for a
- * 1280×720 page), a visible cursor with click ripples, human-paced mouse moves and typing, and
- * markers ("waiting for the model") the edit uses to tighten long waits.
+ * Records the real product for the demo video the way a screen recorder does: a real browser
+ * window on a virtual screen (Xvfb), captured at 60 frames a second at 2× (2560×1440 for a
+ * 1280×720 page), with a visible cursor that glides along gentle curves and ripples on clicks,
+ * typing at a human pace, and markers ("waiting for the model") the edit uses to tighten waits.
  *
  * With `mic: true`, the page also gets a microphone we can make talk (`say(wavPath)`), and a copy of
  * what the voice server sends back, so a real call is recorded with both voices (callAudio()).
  *
- * Output: video/out/demo/clips/<name>.mp4 (60 fps, H.264 CRF 15) and <name>.json (duration, marks).
+ * Output: video/out/demo/clips/<name>.mp4 (60 fps, H.264 CRF 14) and <name>.json (duration, marks).
  */
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -27,8 +28,30 @@ fs.mkdirSync(CLIPS, { recursive: true });
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /**
+ * The browser: Playwright's own Chromium, or installed Chrome with PW_CHANNEL=chrome. Through the
+ * HTTPS proxy when there is one (a cloud computer; Node's own requests then need
+ * NODE_EXTRA_CA_CERTS for its certificate).
+ */
+const CHANNEL = process.env.PW_CHANNEL || undefined;
+export const PROXY = process.env.HTTPS_PROXY ? { server: process.env.HTTPS_PROXY } : undefined;
+
+/** The virtual screen: big enough for the tallest window (1280×960 + the tab strip, at 2×). */
+const DISPLAY = process.env.BAB_VIDEO_DISPLAY ?? ":99";
+const SCREEN = { width: 2560, height: 2200 };
+function ensureDisplay() {
+  const sock = `/tmp/.X11-unix/X${DISPLAY.replace(/^:/, "").split(".")[0]}`;
+  if (!fs.existsSync(sock)) {
+    spawn("Xvfb", [DISPLAY, "-screen", "0", `${SCREEN.width}x${SCREEN.height}x24`, "-nolisten", "tcp"], { stdio: "ignore", detached: true }).unref();
+    for (let i = 0; i < 50 && !fs.existsSync(sock); i++) execFileSync("sleep", ["0.1"]);
+  }
+  return DISPLAY;
+}
+
+/**
  * The cursor, and what's hidden while recording: the demo-mode strip and "Save your account"
- * (a guest account's nudge; real owners sign in and never see it).
+ * (a guest account's nudge; real owners sign in and never see it). The cursor is drawn by the page
+ * and glides on its own clock (window.__cursor.go), so it moves at the screen's frame rate however
+ * slowly the browser takes input; the real mouse follows it, so hovers and clicks land.
  */
 const OVERLAY = `(() => {
   if (window.top !== window) return;
@@ -43,16 +66,45 @@ const OVERLAY = `(() => {
     .c{position:fixed;left:0;top:0;width:30px;height:30px;will-change:transform}
     .c svg{display:block;filter:drop-shadow(0 2px 3px rgba(20,16,40,.32));transform-origin:5px 4px;transition:transform .12s ease}
     .c.down svg{transform:scale(.84)}
+    .c.off{display:none}
     .r{position:fixed;width:46px;height:46px;margin:-23px 0 0 -23px;border-radius:50%;border:3px solid rgba(109,77,255,.6);background:rgba(109,77,255,.14);animation:r .55s ease-out forwards}
     @keyframes r{from{transform:scale(.25);opacity:1}to{transform:scale(1.3);opacity:0}}
   </style><div class="c"><svg width="30" height="30" viewBox="0 0 30 30"><path d="M5 3.5 L5 23.5 L10.2 18.6 L13.9 26.6 L17.6 25 L13.9 17.1 L21 17.1 Z" fill="#14121f" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/></svg></div>\`;
   const cur = root.querySelector(".c");
-  const place = () => { cur.style.transform = "translate(" + (pos.x - 5) + "px," + (pos.y - 4) + "px)"; };
+  const place = () => {
+    cur.style.transform = "translate(" + (pos.x - 5) + "px," + (pos.y - 4) + "px)";
+    try { sessionStorage.setItem(KEY, JSON.stringify(pos)); } catch {}
+  };
   place();
-  addEventListener("mousemove", (e) => { pos = { x: e.clientX, y: e.clientY }; place(); try { sessionStorage.setItem(KEY, JSON.stringify(pos)); } catch {} }, true);
-  addEventListener("mousedown", (e) => {
+  const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+  let anim = 0;
+  window.__cursor = {
+    get: () => pos,
+    set(x, y) { anim++; pos = { x, y }; place(); },
+    hide(on) { cur.classList.toggle("off", !!on); },
+    /** Glide to (x, y) in ms along a bow of arc px; resolves when there. */
+    go(x, y, ms, arc) {
+      const id = ++anim;
+      const from = { ...pos };
+      const dist = Math.hypot(x - from.x, y - from.y) || 1;
+      const nx = -(y - from.y) / dist, ny = (x - from.x) / dist;
+      const t0 = performance.now();
+      return new Promise((done) => {
+        const step = (now) => {
+          if (id !== anim) return done();
+          const t = Math.min(1, (now - t0) / ms);
+          const e = ease(t), bow = Math.sin(Math.PI * t) * arc;
+          pos = { x: from.x + (x - from.x) * e + nx * bow, y: from.y + (y - from.y) * e + ny * bow };
+          place();
+          if (t < 1) requestAnimationFrame(step); else done();
+        };
+        requestAnimationFrame(step);
+      });
+    },
+  };
+  addEventListener("mousedown", () => {
     cur.classList.add("down");
-    const r = document.createElement("div"); r.className = "r"; r.style.left = e.clientX + "px"; r.style.top = e.clientY + "px";
+    const r = document.createElement("div"); r.className = "r"; r.style.left = pos.x + "px"; r.style.top = pos.y + "px";
     root.appendChild(r); setTimeout(() => r.remove(), 650);
   }, true);
   addEventListener("mouseup", () => cur.classList.remove("down"), true);
@@ -66,6 +118,7 @@ const OVERLAY = `(() => {
   // After hydration (React owns <html> and <body> in the app router), and again if anything removes it.
   addEventListener("load", () => { mount(); new MutationObserver(mount).observe(document.documentElement, { childList: true }); });
   if (document.readyState === "complete") mount();
+  else document.addEventListener("DOMContentLoaded", mount);
 })();`;
 
 /** A microphone that says what we tell it, and a copy of everything the voice server sends. */
@@ -106,33 +159,44 @@ const MIC = `(() => {
 })();`;
 
 /**
- * Chrome's screencast captures the real window, not Playwright's emulated viewport, so the window
- * itself is sized to 1280×720 at 2× (headless Chrome keeps an invisible toolbar's height on top).
+ * The browser window: its page is exactly `view` (1280×720 by default) at 2×, below the tab strip,
+ * which the recording leaves out. No window manager, so the window sits at the screen's top left.
  */
-let chromeTop = 87;
+const TAB_STRIP = 87;
 export async function launch({ mic = false, storageState, view = VIEW } = {}) {
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const browser = await chromium.launch({
-      channel: "chrome",
-      args: ["--autoplay-policy=no-user-gesture-required", "--hide-scrollbars", `--window-size=${view.width},${view.height + chromeTop}`, `--force-device-scale-factor=${SCALE}`],
-    });
-    const context = await browser.newContext({ viewport: null, colorScheme: "light", storageState, locale: "en-US", timezoneId: "America/Chicago" });
-    await context.addInitScript(OVERLAY);
-    if (mic) await context.addInitScript(MIC);
-    const page = await context.newPage();
-    await page.goto("about:blank");
-    const [w, h, dpr] = await page.evaluate(() => [innerWidth, innerHeight, devicePixelRatio]);
-    if (w === view.width && h === view.height && dpr === SCALE) {
-      page.__view = view;
-      return { browser, context, page };
-    }
-    chromeTop += view.height - h;
+  const display = ensureDisplay();
+  const browser = await chromium.launch({
+    headless: false,
+    channel: CHANNEL,
+    proxy: PROXY,
+    env: { ...process.env, DISPLAY: display },
+    args: [
+      "--window-position=0,0",
+      `--window-size=${view.width},${view.height + TAB_STRIP + 1}`,
+      `--force-device-scale-factor=${SCALE}`,
+      "--autoplay-policy=no-user-gesture-required",
+      "--hide-scrollbars",
+      "--disable-infobars",
+      "--no-first-run",
+      "--no-default-browser-check",
+    ],
+  });
+  const context = await browser.newContext({ viewport: null, colorScheme: "light", storageState, locale: "en-US", timezoneId: "America/Chicago" });
+  await context.addInitScript(OVERLAY);
+  if (mic) await context.addInitScript(MIC);
+  const page = await context.newPage();
+  await page.goto("about:blank");
+  const [w, h, top, dpr] = await page.evaluate(() => [innerWidth, innerHeight, outerHeight - innerHeight, devicePixelRatio]);
+  if (w !== view.width || h < view.height || dpr !== SCALE) {
     await browser.close();
+    throw new Error(`The window came out ${w}×${h} at ${dpr}×, not ${view.width}×${view.height} at ${SCALE}×`);
   }
-  throw new Error("Couldn't size the browser window to 1280×720");
+  page.__view = view;
+  page.__grab = { display, x: 0, y: top * SCALE, width: view.width * SCALE, height: view.height * SCALE };
+  return { browser, context, page };
 }
 
-/** One recording: start(), mark("…"), stop() → the MP4 and its markers. */
+/** One recording of the screen: start(), mark("…"), stop() → the MP4 and its markers. */
 export class Take {
   constructor(page, name) {
     this.page = page;
@@ -141,25 +205,28 @@ export class Take {
   }
 
   async start() {
-    this.dir = path.join(CLIPS, `${this.name}.frames`);
-    fs.rmSync(this.dir, { recursive: true, force: true });
-    fs.mkdirSync(this.dir, { recursive: true });
-    this.frames = [];
-    this.pending = [];
-    this.client = await this.page.context().newCDPSession(this.page);
-    this.stopped = false;
-    this.client.on("Page.screencastFrame", ({ data, metadata, sessionId }) => {
-      if (this.stopped) return;
-      this.client.send("Page.screencastFrameAck", { sessionId }).catch(() => {});
-      const file = path.join(this.dir, `${String(this.frames.length).padStart(6, "0")}.jpg`);
-      this.frames.push({ t: metadata.timestamp ?? Date.now() / 1000, file });
-      this.pending.push(fs.promises.writeFile(file, Buffer.from(data, "base64")));
-    });
+    const g = this.page.__grab;
     this.view = this.page.__view ?? VIEW;
-    await this.client.send("Page.startScreencast", { format: "jpeg", quality: 92, maxWidth: this.view.width * SCALE, maxHeight: this.view.height * SCALE, everyNthFrame: 1 });
-    this.startedAt = Date.now() / 1000;
-    // Make sure there's a first frame even on a still page.
-    await this.page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))).catch(() => {});
+    this.raw = path.join(CLIPS, `${this.name}.raw.mkv`);
+    this.ff = spawn("ffmpeg", ["-hide_banner", "-y", "-f", "x11grab", "-framerate", "60", "-video_size", `${g.width}x${g.height}`, "-draw_mouse", "0", "-i", `${g.display}+${g.x},${g.y}`, "-c:v", "libx264", "-preset", "ultrafast", "-crf", "10", "-pix_fmt", "yuv420p", this.raw], { stdio: ["pipe", "ignore", "pipe"] });
+    let err = "";
+    this.closed = new Promise((r) => this.ff.on("close", r));
+    // A script that dies mid-take mustn't leave the grab running (the next take reuses the path).
+    const ff = this.ff;
+    process.once("exit", () => ff.exitCode === null && ff.kill("SIGKILL"));
+    // x11grab stamps frames with the wall clock: the first one's time is the clip's zero.
+    this.t0 = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`${this.name}: the screen recorder didn't start\n${err}`)), 10000);
+      this.ff.stderr.on("data", (d) => {
+        err += d;
+        const m = /start: (\d+\.\d+)/.exec(err);
+        if (m && this.t0 === undefined) {
+          clearTimeout(timer);
+          resolve(Number(m[1]));
+        }
+      });
+    });
+    await sleep(150);
     return this;
   }
 
@@ -177,21 +244,16 @@ export class Take {
 
   async stop() {
     const end = Date.now() / 1000;
-    this.stopped = true;
-    await this.client.send("Page.stopScreencast").catch(() => {});
-    await Promise.all(this.pending);
-    if (!this.frames.length) throw new Error(`${this.name}: no frames`);
-    const t0 = this.frames[0].t;
-    const list = this.frames.map((f, i) => `file '${f.file}'\nduration ${Math.max(0.001, (this.frames[i + 1]?.t ?? end) - f.t).toFixed(4)}`);
-    list.push(`file '${this.frames.at(-1).file}'`);
-    const listFile = path.join(this.dir, "list.txt");
-    fs.writeFileSync(listFile, list.join("\n") + "\n");
+    this.ff.stdin.write("q");
+    this.ff.stdin.end();
+    await this.closed;
     const mp4 = path.join(CLIPS, `${this.name}.mp4`);
-    execFileSync("ffmpeg", ["-v", "error", "-y", "-f", "concat", "-safe", "0", "-i", listFile, "-vf", "fps=60,format=yuv420p", "-c:v", "libx264", "-preset", "medium", "-crf", "15", "-movflags", "+faststart", mp4]);
-    const info = { name: this.name, t0, duration: end - t0, size: [this.view.width * SCALE, this.view.height * SCALE], frames: this.frames.length, marks: this.marks.map((m) => ({ label: m.label, t: Number((m.t - t0).toFixed(3)) })), ...this.extra };
+    execFileSync("ffmpeg", ["-v", "error", "-y", "-i", this.raw, "-c:v", "libx264", "-preset", "veryfast", "-crf", "14", "-pix_fmt", "yuv420p", "-movflags", "+faststart", mp4]);
+    fs.rmSync(this.raw, { force: true });
+    const g = this.page.__grab;
+    const info = { name: this.name, t0: this.t0, duration: end - this.t0, size: [g.width, g.height], marks: this.marks.map((m) => ({ label: m.label, t: Number((m.t - this.t0).toFixed(3)) })), ...this.extra };
     fs.writeFileSync(path.join(CLIPS, `${this.name}.json`), JSON.stringify(info, null, 2));
-    fs.rmSync(this.dir, { recursive: true, force: true });
-    console.log(`${this.name}: ${info.duration.toFixed(1)} s, ${info.frames} frames (${(info.frames / info.duration).toFixed(1)} fps) → ${path.relative(ROOT, mp4)}`);
+    console.log(`${this.name}: ${info.duration.toFixed(1)} s → ${path.relative(ROOT, mp4)}`);
     return info;
   }
 }
@@ -206,24 +268,24 @@ function rng(seed) {
 export function actor(page, seed = 7) {
   const rand = rng(seed);
   let pos = { x: VIEW.width / 2, y: VIEW.height / 2 };
-  const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
+  /** The drawn cursor glides there on the page's clock; the real mouse follows in a few steps. */
   async function moveTo(x, y, ms) {
+    const at = await page.evaluate(() => window.__cursor?.get()).catch(() => null);
+    if (at) pos = at;
     const dist = Math.hypot(x - pos.x, y - pos.y);
     if (dist < 1) return;
-    const dur = ms ?? Math.min(950, 260 + dist * 0.65);
-    const steps = Math.max(8, Math.round(dur / 16));
-    const nx = -(y - pos.y) / dist;
-    const ny = (x - pos.x) / dist;
-    const arc = Math.min(36, dist * 0.07) * (rand() < 0.5 ? -1 : 1);
+    const dur = ms ?? Math.min(900, 280 + dist * 0.6);
+    const arc = Math.min(30, dist * 0.06) * (rand() < 0.5 ? -1 : 1);
+    const glide = page.evaluate(([x, y, dur, arc]) => window.__cursor?.go(x, y, dur, arc), [x, y, dur, arc]).catch(() => {});
     const from = { ...pos };
+    const steps = 5;
     for (let i = 1; i <= steps; i++) {
-      const t = i / steps;
-      const e = ease(t);
-      const bow = Math.sin(Math.PI * t) * arc;
-      await page.mouse.move(from.x + (x - from.x) * e + nx * bow, from.y + (y - from.y) * e + ny * bow);
       await sleep(dur / steps);
+      const t = i / steps;
+      await page.mouse.move(from.x + (x - from.x) * t, from.y + (y - from.y) * t).catch(() => {});
     }
+    await glide;
     pos = { x, y };
   }
 
@@ -241,6 +303,12 @@ export function actor(page, seed = 7) {
     },
     sleep,
     moveTo,
+    /** Put the cursor somewhere without a glide (before a take starts). */
+    async place(x, y) {
+      pos = { x, y };
+      await page.mouse.move(x, y).catch(() => {});
+      await page.evaluate(([x, y]) => window.__cursor?.set(x, y), [x, y]).catch(() => {});
+    },
     async hover(target, opts) {
       const p = await point(target, opts);
       await moveTo(p.x, p.y);
@@ -261,16 +329,34 @@ export function actor(page, seed = 7) {
         await sleep(min + rand() * (max - min) + (/[ ,.!?]/.test(ch) ? 45 : 0));
       }
     },
-    /** A smooth scroll of the element under the cursor. */
+    /**
+     * A smooth scroll of whatever scrolls under the cursor (the page or an inner panel), eased in
+     * the page at the display's frame rate. Small wheel steps get eaten by some inner panels.
+     */
     async scroll(dy, ms = 700) {
-      const steps = Math.max(10, Math.round(ms / 16));
-      let done = 0;
-      for (let i = 1; i <= steps; i++) {
-        const target = Math.round(dy * ease(i / steps));
-        await page.mouse.wheel(0, target - done);
-        done = target;
-        await sleep(ms / steps);
-      }
+      await page.evaluate(
+        ([x, y, dy, ms]) =>
+          new Promise((done) => {
+            let el = document.elementFromPoint(x, y);
+            const scrolls = (e) => {
+              const o = getComputedStyle(e).overflowY;
+              return (o === "auto" || o === "scroll") && e.scrollHeight > e.clientHeight + 1;
+            };
+            while (el && el !== document.body && !scrolls(el)) el = el.parentElement;
+            if (!el || el === document.body) el = document.scrollingElement;
+            const from = el.scrollTop;
+            const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+            const t0 = performance.now();
+            const step = (now) => {
+              const t = Math.min(1, (now - t0) / ms);
+              el.scrollTop = from + dy * ease(t);
+              if (t < 1) requestAnimationFrame(step);
+              else done();
+            };
+            requestAnimationFrame(step);
+          }),
+        [pos.x, pos.y, dy, ms],
+      );
     },
   };
 }
@@ -280,7 +366,7 @@ export async function callAudio(page, take, sayFiles) {
   const log = await page.evaluate(() => window.__callLog);
   const ready = log.events.map((e) => ({ ...e, j: JSON.parse(e.data) })).find((e) => e.j.type === "ready");
   const rate = ready?.j.outputRate ?? 22050;
-  const t0 = take.frames[0].t * 1000;
+  const t0 = take.t0 * 1000;
   const lastAudio = log.audio.at(-1)?.t ?? t0;
   const total = Math.ceil(((Math.max(lastAudio, Date.now()) - t0) / 1000 + 10) * rate);
   const bot = new Float32Array(total);
@@ -313,7 +399,7 @@ export async function callAudio(page, take, sayFiles) {
   // The caller's lines at the moments they were said.
   const said = log.said.map((s, i) => ({ at: (s.t - t0) / 1000, file: sayFiles[i] })).filter((s) => s.file);
   const inputs = said.flatMap((s) => ["-i", s.file]);
-  const delays = said.map((s, i) => `[${i + 1}:a]aresample=48000,adelay=${Math.round(s.at * 1000)}:all=1[c${i}]`);
+  const delays = said.map((s, i) => `[${i + 1}:a]aresample=48000,adelay=${Math.max(0, Math.round(s.at * 1000))}:all=1[c${i}]`);
   const mixIn = ["[0:a]aresample=48000[b]", ...delays].join(";");
   const labels = ["[b]", ...said.map((_, i) => `[c${i}]`)].join("");
   const wav = path.join(CLIPS, `${take.name}.wav`);
@@ -340,25 +426,31 @@ function writeWav(file, samples, rate) {
   fs.writeFileSync(file, buf);
 }
 
-/** The bot, the guest account it belongs to, and its cookies, shared by the scenes. */
+/** The signed-in demo account (record/signin.mjs). */
+export const ACCOUNT = path.join(OUT, "account.json");
+export function loadAccount() {
+  if (!fs.existsSync(ACCOUNT)) throw new Error("Sign in first (BAB_VIDEO_EMAIL=… node video/demo/record/signin.mjs).");
+  return JSON.parse(fs.readFileSync(ACCOUNT, "utf8"));
+}
+
+/** The bot, the account it belongs to, and its cookies, shared by the scenes. */
 export const SESSION = path.join(OUT, "session.json");
 export function loadSession() {
-  if (!fs.existsSync(SESSION)) throw new Error("Record the builder first (node video/demo/record/builder.mjs): it makes Otto.");
+  if (!fs.existsSync(SESSION)) throw new Error("Record the builder first (node video/demo/record/builder.mjs): it makes Juno.");
   return JSON.parse(fs.readFileSync(SESSION, "utf8"));
 }
 
-/** Delete the Otto an earlier run of these scripts made (its guest account's cookies are in the session file). */
+/** Delete the bot an earlier run of the builder made (its account's cookies are in the session file). */
 export async function deletePreviousBot() {
   if (!fs.existsSync(SESSION)) return;
   const old = JSON.parse(fs.readFileSync(SESSION, "utf8"));
   if (!old.botId || old.site !== SITE) return;
-  const ctx = await request.newContext({ baseURL: SITE, storageState: old.storage, extraHTTPHeaders: { origin: SITE } });
+  const ctx = await request.newContext({ baseURL: SITE, proxy: PROXY, storageState: old.storage, extraHTTPHeaders: { origin: SITE } });
   const res = await ctx.delete(`/api/bots/${old.botId}`).catch(() => null);
-  console.log(`deleted the last run's Otto (${old.botId}): ${res?.status() ?? "unreachable"}`);
+  console.log(`deleted the last run's bot (${old.botId}): ${res?.status() ?? "unreachable"}`);
   await ctx.dispose();
   fs.rmSync(SESSION, { force: true });
 }
 
 /** The chat's message box (its placeholder changes once files are attached). */
 export const composer = (page) => page.locator("main textarea").last();
-

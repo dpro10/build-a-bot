@@ -1226,3 +1226,14 @@ Diego: "Yeah, on Windows the default should just be at one button. No one's gonn
 - **Ctrl + Windows stays as a choice,** for keyboards without a Right Ctrl, and the settings say so. Anyone who picked a shortcut keeps it; anyone on the default gets Right Ctrl with the update.
 - **Not Right Alt:** let go on its own, Alt opens or focuses the menu in Chrome, Firefox and VS Code, and on many keyboards outside the US it types accents (AltGr).
 - **Tests:** the Windows CI holds the real Right Ctrl for voice typing, and still holds Ctrl + Windows (picked in settings) in the learn-from-fixes run, so the guard that keeps the Start menu shut stays checked.
+
+## Decision: the demo video starts with a call, then Diego builds his own bot (Diego, 2026-10-28)
+
+Diego: "I think it should start with me just logging in and creating a bot. I'll show the custom recipes, but then I'm actually gonna just custom configure my own and I'll call it something". Then: "could you make the 3 minute video. I am not good at making these videos.. I trust that you can make a good video I need your best work."
+
+- **The cut** (`video/demo`, about 2:50, under YouTube's 3 minutes for the hackathon): a 17-second cold open of a real call (the hook), then Diego signs in, glances at the ready-made recipes and makes his own bot, **Juno** (Nimbus the cloud, in grape). It then shows files into flashcards with sources, a Tavily web search, the call again with a cut-in and a reminder, voice typing and meeting notes in the desktop app, how it's built, and the promo's end card.
+- **Recorded on the live site** with a fresh account (signed in by email), and the real desktop app paired to it. Nothing is simulated. The edit trims waits: lookups, the Magpie server's pauses between sentences, and the notes being written.
+- **Stand-in voices:** a narrator, Diego's half of the call, and the people in the meeting are synthesized voices. The call and the desktop app hear them through a microphone like any voice. Diego can swap in his own narration in one take (`video/demo/README.md`).
+- **NVIDIA and Nebius are named aloud and on screen**, as the rules ask: Nemotron on Nebius Token Factory (thinking), Parakeet and Magpie (calls, on our voice server), Parakeet on the computer (voice typing and meetings), and Tavily (search).
+- **Cut for time:** the receipts beat ("every action leaves a receipt"). The activity log now holds an earlier take's reminder, and receipts can't be deleted.
+- **Known bug, seen in the call:** after a cut-in, the call panel keeps only the sentence that was cut. The voice server forgets sentences already played (`voice/src/call/speaker.ts`, `played()`), so `heard` and the saved turn lose them. Not fixed here; it's in the follow-ups.

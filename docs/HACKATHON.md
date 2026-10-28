@@ -16,7 +16,7 @@ Diego (2026-10-15): "im in the nvidia x nebius hackathon and the more we create 
 | More than one entry | Not needed: Build-a-bot is Diego's only entry (Diego, 2026-10-16: "we're only going to enter build a bot. Not chef."). |
 | Public repository with an open-source license shown on the repo page | Yes: `dpro10/build-a-bot` is public under Apache 2.0 since 2026-10-17, its history scanned for keys first. |
 | A working demo URL, free to use for judges until judging ends | [build-a-bot.site](https://build-a-bot.site), in real mode (nothing simulated). Every account starts with $5 of credit, about 12,000 messages on Nemotron 3.5 Lightning, and no card is needed. |
-| A public YouTube video under 3 minutes, no copyrighted music | Cut: `video/demo`, 2:48 of the real product, narrated by Otto in its own Magpie voice over an original score (`video/demo/SCRIPT.md`). To upload. The one-minute promo in `video/` can go alongside it. |
+| A public YouTube video under 3 minutes, no copyrighted music | Cut: `video/demo`, 2:52 of the real product recorded on 2026-10-28: a real call, Diego building his bot Juno, files and web search, the desktop app, and how NVIDIA and Nebius are used, named aloud and on screen, over an original score (`video/demo/SCRIPT.md`). To upload. The one-minute promo in `video/` can go alongside it. |
 | README with setup steps and how NVIDIA models, Token Factory and Nebius were used | Done: README → *Built on NVIDIA and Nebius*. |
 | Feedback on Token Factory, AI Cloud and NVIDIA tools | Below. |
 
@@ -40,7 +40,7 @@ Diego (2026-10-15): "im in the nvidia x nebius hackathon and the more we create 
 4. **The repository page:** **done** on 2026-10-24. The description is the elevator pitch (below), the website is `https://build-a-bot.site`, and the topics are set.
 
    The old "Desktop app (test build)" pre-release goes on its own: the desktop workflow removes it now that both apps are signed.
-5. **The video:** the 2:48 cut is ready (`video/demo`, rendered on Diego's Mac to `video/out/demo/build-a-bot-demo.mp4`). Optionally record your half of the call and the two screen recordings first (`video/demo/SCRIPT.md`, "What Diego records", about 20 minutes), and Claude re-cuts it. Then put it on YouTube as a public video and paste the link into Devpost.
+5. **The video:** the 2:52 cut is ready (`video/demo`, rendered to `video/out/demo/build-a-bot-demo.mp4`). The narrator, the caller and the meeting voices are synthesized stand-ins; optionally read the script yourself in one take and Claude swaps it in (`video/demo/README.md`). Then put it on YouTube as a public video (not made for kids) and paste the link into Devpost.
 6. **Submit on Devpost** by October 30, 10:00 am Pacific.
 
 ## What's real on build-a-bot.site
@@ -94,7 +94,39 @@ Nothing on the live site is simulated. Each service that isn't set up says "Comi
 
 ## Demo video
 
-The cut, beat by beat, with where each claim is true and what Diego records: [`video/demo/SCRIPT.md`](../video/demo/SCRIPT.md). How it's built and rebuilt: [`video/demo/README.md`](../video/demo/README.md).
+The cut, beat by beat, with where each claim is true: [`video/demo/SCRIPT.md`](../video/demo/SCRIPT.md). How it's recorded and rebuilt, and how to swap in Diego's own voice: [`video/demo/README.md`](../video/demo/README.md).
+
+**For YouTube** (Public; Audience: "No, it's not made for kids"; Category: Science & Technology; Language: English):
+
+- **Title:** `Build-a-bot: your own AI, built in a minute, that you can just call (NVIDIA × Nebius demo)`
+- **Description:**
+
+  ```text
+  Build-a-bot lets anyone make a personal AI assistant in about a minute, then call it, give it files, have it search the web, type for you by voice, and take meeting notes. Everything in this video is the real product: build-a-bot.site and its desktop app, recorded on October 28, 2026.
+
+  How it uses NVIDIA and Nebius
+  • Thinking: NVIDIA Nemotron 3.5 Lightning, served from Nebius Token Factory at cost. Every account starts with $5 of credit, about 12,000 messages.
+  • Calls: NVIDIA Parakeet (speech to text) and NVIDIA Magpie (text to speech) on our own voice server.
+  • Desktop app: NVIDIA Parakeet runs on your computer for voice typing and meeting notes, so your voice never leaves it.
+  • Web search: Tavily, with sources.
+
+  0:00 A real call with Juno
+  0:17 Sign in and build a bot
+  0:36 Its brain: NVIDIA Nemotron on Nebius Token Factory
+  0:47 Apps and "Ask me first"
+  1:04 Files, flashcards and web search (Tavily)
+  1:22 Call it: NVIDIA Parakeet + Magpie
+  1:50 Voice typing on your computer
+  2:09 Meeting notes
+  2:27 Under the hood
+
+  Try it: https://build-a-bot.site
+  Open source (Apache 2.0): https://github.com/dpro10/build-a-bot
+
+  About this video: the narrator, the caller and the people in the meeting are synthesized stand-in voices. Waiting (lookups, notes being written) is trimmed; the call panel shows the real response times.
+  ```
+
+- **Thumbnail:** `video/out/demo/thumbnail.jpg` (the cold open: the call panel and Juno's answer), or a frame YouTube offers.
 
 ## Devpost write-up draft
 

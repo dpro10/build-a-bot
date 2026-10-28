@@ -7,8 +7,8 @@ loops, nothing copyrighted.
 
 It follows video/out/demo/timeline.json (written by assemble.mjs), so run the assembler once first:
   silent under the cold-open call -> a bright reveal -> a light groove under the walkthrough ->
-  a hushed pad under the call -> the groove again -> a build into "how it's built" -> the theme
-  returns for the end card and resolves on Fmaj9.
+  a hushed pad under "just call it" -> the groove again under the desktop app -> a build into
+  "how it's built" -> the theme returns for the end card and resolves on Fmaj9.
 The assembler ducks it under every voice, so it can stay musical without fighting the words.
 """
 import json
@@ -53,7 +53,7 @@ class Track:
 
 # Sections by time: (from, to, kind). Bars start at the reveal's first downbeat.
 T0 = start("reveal")
-REVEAL_END = start("builder-a")
+REVEAL_END = start("signin")
 CALL_FROM, CALL_TO = start("call-start"), start("voice")
 BUILD_FROM = start("built")
 END_FROM = start("end")
