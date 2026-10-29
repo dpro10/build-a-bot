@@ -61,7 +61,7 @@ function ensureDisplay() {
  * and glides on its own clock (window.__cursor.go), so it moves at the screen's frame rate however
  * slowly the browser takes input; the real mouse follows it, so hovers and clicks land.
  */
-const OVERLAY = `(() => {
+export const OVERLAY = `(() => {
   if (window.top !== window) return;
   const KEY = "__videoCursor";
   let pos = { x: ${VIEW.width / 2}, y: ${VIEW.height / 2} };
@@ -79,9 +79,11 @@ const OVERLAY = `(() => {
     @keyframes r{from{transform:scale(.25);opacity:1}to{transform:scale(1.3);opacity:0}}
   </style><div class="c"><svg width="30" height="30" viewBox="0 0 30 30"><path d="M5 3.5 L5 23.5 L10.2 18.6 L13.9 26.6 L17.6 25 L13.9 17.1 L21 17.1 Z" fill="#14121f" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/></svg></div>\`;
   const cur = root.querySelector(".c");
+  // Kept for the next page, unless the recorder moves the cursor itself every frame (frames.mjs:
+  // writing storage moves the page's virtual clock on).
   const place = () => {
     cur.style.transform = "translate(" + (pos.x - 5) + "px," + (pos.y - 4) + "px)";
-    try { sessionStorage.setItem(KEY, JSON.stringify(pos)); } catch {}
+    if (!window.__cursorNoStore) try { sessionStorage.setItem(KEY, JSON.stringify(pos)); } catch {}
   };
   place();
   const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
@@ -167,11 +169,30 @@ const MIC = `(() => {
 })();`;
 
 /**
- * The browser window: its page is exactly `view` (1280×720 by default) at 2×, below the tab strip,
- * which the recording leaves out. No window manager, so the window sits at the screen's top left.
+ * Lighter drawing for a take recorded in real time (the call): the frosted-glass blur behind bars
+ * and dialogs costs Chromium most of its frames at 2×, so it's turned off, and the bars get a
+ * little more opaque to look the same.
+ */
+const LIGHT = `(() => {
+  const s = document.createElement("style");
+  s.textContent = \`
+    *, *::before, *::after { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+    [class*="backdrop-blur"][class*="bg-background/"] { background-color: color-mix(in oklab, var(--background) 96%, transparent) !important; }
+    [class*="backdrop-blur"][class*="bg-card/"] { background-color: color-mix(in oklab, var(--card) 96%, transparent) !important; }
+    [class*="backdrop-blur"][class*="bg-primary-soft/"] { background-color: color-mix(in oklab, var(--primary-soft) 94%, transparent) !important; }
+  \`;
+  const add = () => { if (!s.isConnected) (document.head || document.documentElement)?.appendChild(s); };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", add); else add();
+  addEventListener("load", add);
+})();`;
+
+/**
+ * The browser window: its page is exactly `view` (1280×720 by default) at `scale` (2×), below the
+ * tab strip, which the recording leaves out. No window manager, so the window sits at the screen's
+ * top left. `region` (CSS px of the page) records only that part; `light` turns the blur off.
  */
 const TAB_STRIP = 87;
-export async function launch({ mic = false, storageState, view = VIEW } = {}) {
+export async function launch({ mic = false, storageState, view = VIEW, scale = SCALE, light = false, region } = {}) {
   const display = ensureDisplay();
   const browser = await chromium.launch({
     headless: false,
@@ -181,7 +202,7 @@ export async function launch({ mic = false, storageState, view = VIEW } = {}) {
     args: [
       "--window-position=0,0",
       `--window-size=${view.width},${view.height + TAB_STRIP + 1}`,
-      `--force-device-scale-factor=${SCALE}`,
+      `--force-device-scale-factor=${scale}`,
       "--autoplay-policy=no-user-gesture-required",
       "--hide-scrollbars",
       "--disable-infobars",
@@ -191,16 +212,21 @@ export async function launch({ mic = false, storageState, view = VIEW } = {}) {
   });
   const context = await browser.newContext({ viewport: null, colorScheme: "light", storageState, locale: "en-US", timezoneId: "America/Chicago" });
   await context.addInitScript(OVERLAY);
+  if (light) await context.addInitScript(LIGHT);
   if (mic) await context.addInitScript(MIC);
   const page = await context.newPage();
   await page.goto("about:blank");
   const [w, h, top, dpr] = await page.evaluate(() => [innerWidth, innerHeight, outerHeight - innerHeight, devicePixelRatio]);
-  if (w !== view.width || h < view.height || dpr !== SCALE) {
+  if (w !== view.width || h < view.height || dpr !== scale) {
     await browser.close();
-    throw new Error(`The window came out ${w}×${h} at ${dpr}×, not ${view.width}×${view.height} at ${SCALE}×`);
+    throw new Error(`The window came out ${w}×${h} at ${dpr}×, not ${view.width}×${view.height} at ${scale}×`);
   }
+  const r = region ?? { x: 0, y: 0, width: view.width, height: view.height };
+  const even = (n) => Math.round(n / 2) * 2;
   page.__view = view;
-  page.__grab = { display, x: 0, y: top * SCALE, width: view.width * SCALE, height: view.height * SCALE };
+  page.__scale = scale;
+  page.__region = r;
+  page.__grab = { display, x: even(r.x * scale), y: Math.round(top * scale) + even(r.y * scale), width: even(r.width * scale), height: even(r.height * scale) };
   return { browser, context, page };
 }
 
@@ -216,7 +242,8 @@ export class Take {
     const g = this.page.__grab;
     this.view = this.page.__view ?? VIEW;
     this.raw = path.join(CLIPS, `${this.name}.raw.mkv`);
-    this.ff = spawn("ffmpeg", ["-hide_banner", "-y", "-f", "x11grab", "-framerate", "60", "-video_size", `${g.width}x${g.height}`, "-draw_mouse", "0", "-i", `${g.display}+${g.x},${g.y}`, "-c:v", "libx264", "-preset", "ultrafast", "-crf", "10", "-pix_fmt", "yuv420p", this.raw], { stdio: ["pipe", "ignore", "pipe"] });
+    // Below the browser in priority: it's Chromium's frames that have to keep up.
+    this.ff = spawn("nice", ["-n", "10", "ffmpeg", "-hide_banner", "-y", "-f", "x11grab", "-framerate", "60", "-video_size", `${g.width}x${g.height}`, "-draw_mouse", "0", "-i", `${g.display}+${g.x},${g.y}`, "-c:v", "libx264", "-preset", "ultrafast", "-crf", "10", "-pix_fmt", "yuv420p", this.raw], { stdio: ["pipe", "ignore", "pipe"] });
     let err = "";
     this.closed = new Promise((r) => this.ff.on("close", r));
     // A script that dies mid-take mustn't leave the grab running (the next take reuses the path).
@@ -259,7 +286,7 @@ export class Take {
     execFileSync("ffmpeg", ["-v", "error", "-y", "-i", this.raw, "-c:v", "libx264", "-preset", "veryfast", "-crf", "14", "-pix_fmt", "yuv420p", "-movflags", "+faststart", mp4]);
     fs.rmSync(this.raw, { force: true });
     const g = this.page.__grab;
-    const info = { name: this.name, t0: this.t0, duration: end - this.t0, size: [g.width, g.height], marks: this.marks.map((m) => ({ label: m.label, t: Number((m.t - this.t0).toFixed(3)) })), ...this.extra };
+    const info = { name: this.name, t0: this.t0, duration: end - this.t0, size: [g.width, g.height], scale: this.page.__scale, region: this.page.__region, marks: this.marks.map((m) => ({ label: m.label, t: Number((m.t - this.t0).toFixed(3)) })), ...this.extra };
     fs.writeFileSync(path.join(CLIPS, `${this.name}.json`), JSON.stringify(info, null, 2));
     console.log(`${this.name}: ${info.duration.toFixed(1)} s → ${path.relative(ROOT, mp4)}`);
     return info;
@@ -434,15 +461,18 @@ function writeWav(file, samples, rate) {
   fs.writeFileSync(file, buf);
 }
 
-/** The signed-in demo account (record/signin.mjs); a second one can sign in to another file. */
-export const ACCOUNT = path.join(OUT, "account.json");
+/**
+ * The signed-in demo account (record/site.mjs signs in) and its bot (record/builder.mjs makes it),
+ * in video/out/demo; another account keeps its own files (BAB_VIDEO_ACCOUNT, BAB_VIDEO_SESSION).
+ */
+export const ACCOUNT = path.join(OUT, process.env.BAB_VIDEO_ACCOUNT ?? "account.json");
 export function loadAccount(file = ACCOUNT) {
-  if (!fs.existsSync(file)) throw new Error(`Sign in first (BAB_VIDEO_EMAIL=… node video/demo/record/signin.mjs): no ${path.basename(file)}.`);
+  if (!fs.existsSync(file)) throw new Error(`Sign in first (BAB_VIDEO_EMAIL=… node video/demo/record/site.mjs): no ${path.basename(file)}.`);
   return JSON.parse(fs.readFileSync(file, "utf8"));
 }
 
 /** The bot, the account it belongs to, and its cookies, shared by the scenes. */
-export const SESSION = path.join(OUT, "session.json");
+export const SESSION = path.join(OUT, process.env.BAB_VIDEO_SESSION ?? "session.json");
 export function loadSession() {
   if (!fs.existsSync(SESSION)) throw new Error("Record the builder first (node video/demo/record/builder.mjs): it makes Juno.");
   return JSON.parse(fs.readFileSync(SESSION, "utf8"));

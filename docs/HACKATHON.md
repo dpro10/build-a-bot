@@ -16,7 +16,7 @@ Diego (2026-10-15): "im in the nvidia x nebius hackathon and the more we create 
 | More than one entry | Not needed: Build-a-bot is Diego's only entry (Diego, 2026-10-16: "we're only going to enter build a bot. Not chef."). |
 | Public repository with an open-source license shown on the repo page | Yes: `dpro10/build-a-bot` is public under Apache 2.0 since 2026-10-17, its history scanned for keys first. |
 | A working demo URL, free to use for judges until judging ends | [build-a-bot.site](https://build-a-bot.site), in real mode (nothing simulated). Every account starts with $5 of credit, about 12,000 messages on Nemotron 3.5 Lightning, and no card is needed. |
-| A public YouTube video under 3 minutes, no copyrighted music | Cut: `video/demo`, 2:52 of the real product recorded on 2026-10-28: a real call, Diego building his bot Juno, files and web search, the desktop app, and how NVIDIA and Nebius are used, named aloud and on screen, over an original score (`video/demo/SCRIPT.md`). A second cut, 2:49 with no narrator, is for Diego's own voice-over (`video/demo/SCRIPT-VOICEOVER.md`). To upload. The one-minute promo in `video/` can go alongside it. |
+| A public YouTube video under 3 minutes, no copyrighted music | Cut: `video/demo`, 2:55 of the real product recorded on 2026-10-28 and 29: the website and its recipes, signing in, Diego building his bot Juno (every brain there is, three apps picked by hand), files and web search, a real call with a cut-in, the desktop app, and how NVIDIA and Nebius are used, named aloud and on screen, over an original score (`video/demo/SCRIPT.md`). To upload. The one-minute promo in `video/` can go alongside it. |
 | README with setup steps and how NVIDIA models, Token Factory and Nebius were used | Done: README → *Built on NVIDIA and Nebius*. |
 | Feedback on Token Factory, AI Cloud and NVIDIA tools | Below. |
 
@@ -40,7 +40,7 @@ Diego (2026-10-15): "im in the nvidia x nebius hackathon and the more we create 
 4. **The repository page:** **done** on 2026-10-24. The description is the elevator pitch (below), the website is `https://build-a-bot.site`, and the topics are set.
 
    The old "Desktop app (test build)" pre-release goes on its own: the desktop workflow removes it now that both apps are signed.
-5. **The video:** two cuts are ready (`video/demo`). The narrated one is 2:52 (`video/out/demo/build-a-bot-demo.mp4`; the narrator is a synthesized stand-in). The other is 2:49 with no narrator (`video/out/demo/build-a-bot-demo-voiceover.mp4`), for your own voice: read `video/demo/SCRIPT-VOICEOVER.md` in one take and send it, and Claude mixes it in. In both, the caller and the meeting voices are synthesized stand-ins. Then put it on YouTube as a public video (not made for kids) and paste the link into Devpost.
+5. **The video:** the final cut is ready: `video/out/demo/build-a-bot-demo.mp4`, 2:55, narrated. The narrator, the caller and the meeting voices are synthesized stand-ins; to read the narration yourself instead, `video/demo/README.md` says how. Put it on YouTube as a public video (not made for kids), with the title, description and chapters below, and paste the link into Devpost.
 6. **Submit on Devpost** by October 30, 10:00 am Pacific.
 
 ## What's real on build-a-bot.site
@@ -102,7 +102,7 @@ The cut, beat by beat, with where each claim is true: [`video/demo/SCRIPT.md`](.
 - **Description:**
 
   ```text
-  Build-a-bot lets anyone make a personal AI assistant in about a minute, then call it, give it files, have it search the web, type for you by voice, and take meeting notes. Everything in this video is the real product: build-a-bot.site and its desktop app, recorded on October 28, 2026.
+  Build-a-bot lets anyone make a personal AI assistant in about a minute, then call it, give it files, have it search the web, type for you by voice, and take meeting notes. Everything in this video is the real product: build-a-bot.site and its desktop app, recorded on October 28 and 29, 2026.
 
   How it uses NVIDIA and Nebius
   • Thinking: NVIDIA Nemotron 3.5 Lightning, served from Nebius Token Factory at cost. Every account starts with $5 of credit, about 12,000 messages.
@@ -110,15 +110,15 @@ The cut, beat by beat, with where each claim is true: [`video/demo/SCRIPT.md`](.
   • Desktop app: NVIDIA Parakeet runs on your computer for voice typing and meeting notes, so your voice never leaves it.
   • Web search: Tavily, with sources.
 
-  0:00 A real call with Juno
-  0:17 Sign in and build a bot
-  0:36 Its brain: NVIDIA Nemotron on Nebius Token Factory
-  0:47 Apps and "Ask me first"
-  1:04 Files, flashcards and web search (Tavily)
-  1:22 Call it: NVIDIA Parakeet + Magpie
-  1:50 Voice typing on your computer
-  2:09 Meeting notes
-  2:27 Under the hood
+  0:00 Build-a-bot: the website and its recipes
+  0:17 Sign in and build a bot: a face and a name
+  0:32 Its brain: your own key, or 12 open models on Nebius (NVIDIA Nemotron)
+  0:46 Apps, "Ask me first", and where you talk to it
+  1:10 Files into flashcards, and web search with Tavily
+  1:31 Just call it: NVIDIA Parakeet + Magpie
+  2:03 Voice typing on your computer
+  2:20 Meeting notes
+  2:36 Under the hood
 
   Try it: https://build-a-bot.site
   Open source (Apache 2.0): https://github.com/dpro10/build-a-bot
@@ -126,25 +126,7 @@ The cut, beat by beat, with where each claim is true: [`video/demo/SCRIPT.md`](.
   About this video: the narrator, the caller and the people in the meeting are synthesized stand-in voices. Waiting (lookups, notes being written) is trimmed; the call panel shows the real response times.
   ```
 
-- **For the cut without a narrator** (with Diego's voice), the same title and description, with these chapters and this last line (the times move only if his lines need a part held longer):
-
-  ```text
-  0:00 The landing page and recipes
-  0:18 Sign in and build a bot: a face and a name
-  0:31 Its brain: your own key, or 12 open models on Nebius (NVIDIA Nemotron)
-  0:45 Apps (Gmail, Google Docs, Meeting notes) and "Ask me first"
-  1:07 Files, flashcards and web search (Tavily)
-  1:25 Call it: NVIDIA Parakeet + Magpie
-  1:55 Voice typing on your computer
-  2:14 Meeting notes
-  2:32 Under the hood
-  ```
-
-  ```text
-  About this video: the caller and the people in the meeting are synthesized stand-in voices. Waiting (lookups, notes being written) is trimmed; the call panel shows the real response times.
-  ```
-
-- **Thumbnail:** `video/out/demo/thumbnail.jpg` (the cold open: the call panel and Juno's answer), or a frame YouTube offers.
+- **Thumbnail:** `video/out/demo/thumbnail.jpg` ("Just call it.": Juno's call panel picking up), or a frame YouTube offers.
 
 ## Devpost write-up draft
 

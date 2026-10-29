@@ -13,7 +13,7 @@
  *   node video/demo/record/desktop.mjs voice|meeting
  *
  * Needs NVIDIA's files (nemo-speech-0.2.0-linux-x86_64-cpu.tar.gz, itn_configs.tar.bz2,
- * parakeet-tdt-0.6b-v3.q8_0.gguf) in BAB_SPEECH_FILES, the sign-in (record/signin.mjs) and Juno
+ * parakeet-tdt-0.6b-v3.q8_0.gguf) in BAB_SPEECH_FILES, the sign-in (record/site.mjs) and Juno
  * (record/builder.mjs). The dictation and the meeting are video/out/demo/el/desk/*.wav.
  */
 import { execFile, execFileSync, spawn } from "node:child_process";

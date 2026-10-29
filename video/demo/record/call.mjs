@@ -26,8 +26,12 @@ const LINE = (n) => {
 };
 const s = loadSession();
 
-// Taller than 16:9, so the whole call panel fits with its work list; the edit shows the panel itself.
-const { browser, page } = await launch({ mic: true, storageState: s.storage, view: { width: 1280, height: 960 } });
+// Taller than 16:9, so the whole call panel fits with its work list; the edit shows the panel
+// itself, so only the column around it is recorded (at 1.5×, with the blur off: Chromium keeps up
+// with 60 frames a second, and the panel still has more pixels than the edit shows).
+const SCALE = 1.5;
+const REGION = { x: 300, y: 0, width: 680, height: 960 };
+const { browser, page } = await launch({ mic: true, storageState: s.storage, view: { width: 1280, height: 960 }, scale: SCALE, light: true, region: REGION });
 const a = actor(page, 41);
 const log = () => page.evaluate(() => ({ events: window.__callLog.events.map((e) => ({ t: e.t, ...JSON.parse(e.data) })), audio: window.__callLog.audio.map((x) => ({ t: x.t, n: Math.floor((x.b64.length * 3) / 4 / 2) })) }));
 const events = async () => (await log()).events;
@@ -176,8 +180,8 @@ try {
   await sleep(2500);
 
   await track();
-  // In video pixels (2×), the panel's widest and tallest over the call.
-  if (box) take.note({ panel: { x: Math.round(box.x0 * 2), y: Math.round(box.y0 * 2), width: Math.round((box.x1 - box.x0) * 2), height: Math.round((box.y1 - box.y0) * 2) } });
+  // In the recording's pixels, the panel's widest and tallest over the call.
+  if (box) take.note({ panel: { x: Math.round((box.x0 - REGION.x) * SCALE), y: Math.round((box.y0 - REGION.y) * SCALE), width: Math.round((box.x1 - box.x0) * SCALE), height: Math.round((box.y1 - box.y0) * SCALE) } });
   const lines = await page.locator("[role=dialog] [aria-label=Transcript] li").allInnerTexts().catch(() => []);
   const ev = await events();
   const { says } = await schedule();
