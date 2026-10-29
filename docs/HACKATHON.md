@@ -16,7 +16,7 @@ Diego (2026-10-15): "im in the nvidia x nebius hackathon and the more we create 
 | More than one entry | Not needed: Build-a-bot is Diego's only entry (Diego, 2026-10-16: "we're only going to enter build a bot. Not chef."). |
 | Public repository with an open-source license shown on the repo page | Yes: `dpro10/build-a-bot` is public under Apache 2.0 since 2026-10-17, its history scanned for keys first. |
 | A working demo URL, free to use for judges until judging ends | [build-a-bot.site](https://build-a-bot.site), in real mode (nothing simulated). Every account starts with $5 of credit, about 12,000 messages on Nemotron 3.5 Lightning, and no card is needed. |
-| A public YouTube video under 3 minutes, no copyrighted music | Cut: `video/demo`, 2:55 of the real product recorded on 2026-10-28 and 29: the website and its recipes, signing in, Diego building his bot Juno (every brain there is, three apps picked by hand), files and web search, a real call with a cut-in, the desktop app, and how NVIDIA and Nebius are used, named aloud and on screen, over an original score (`video/demo/SCRIPT.md`). To upload. The one-minute promo in `video/` can go alongside it. |
+| A public YouTube video under 3 minutes, no copyrighted music | Cut: `video/demo`, 2:56 of the real product recorded on 2026-10-28 and 29: the website and its recipes, signing in, Diego building his bot Juno (every brain there is, three apps picked by hand), files and web search, a real call with a cut-in, the desktop app, and how NVIDIA and Nebius are used, named aloud and on screen, over an original score (`video/demo/SCRIPT.md`). To upload. The one-minute promo in `video/` can go alongside it. |
 | README with setup steps and how NVIDIA models, Token Factory and Nebius were used | Done: README → *Built on NVIDIA and Nebius*. |
 | Feedback on Token Factory, AI Cloud and NVIDIA tools | Below. |
 
@@ -40,7 +40,7 @@ Diego (2026-10-15): "im in the nvidia x nebius hackathon and the more we create 
 4. **The repository page:** **done** on 2026-10-24. The description is the elevator pitch (below), the website is `https://build-a-bot.site`, and the topics are set.
 
    The old "Desktop app (test build)" pre-release goes on its own: the desktop workflow removes it now that both apps are signed.
-5. **The video:** the final cut is ready: `video/out/demo/build-a-bot-demo.mp4`, 2:55, narrated. The narrator, the caller and the meeting voices are synthesized stand-ins; to read the narration yourself instead, `video/demo/README.md` says how. Put it on YouTube as a public video (not made for kids), with the title, description and chapters below, and paste the link into Devpost.
+5. **The video:** the final cut is ready: `video/out/demo/build-a-bot-demo.mp4`, 2:56, narrated. The narrator, the caller and the meeting voices are synthesized stand-ins; to read the narration yourself instead, `video/demo/README.md` says how. Put it on YouTube as a public video (not made for kids), with the title, description and chapters below, and paste the link into Devpost.
 6. **Submit on Devpost** by October 30, 10:00 am Pacific.
 
 ## What's real on build-a-bot.site
@@ -112,13 +112,13 @@ The cut, beat by beat, with where each claim is true: [`video/demo/SCRIPT.md`](.
 
   0:00 Build-a-bot: the website and its recipes
   0:17 Sign in and build a bot: a face and a name
-  0:32 Its brain: your own key, or 12 open models on Nebius (NVIDIA Nemotron)
-  0:46 Apps, "Ask me first", and where you talk to it
-  1:10 Files into flashcards, and web search with Tavily
-  1:31 Just call it: NVIDIA Parakeet + Magpie
-  2:03 Voice typing on your computer
-  2:20 Meeting notes
-  2:36 Under the hood
+  0:32 Its brain: 12 open models on Nebius (NVIDIA Nemotron), with zero data retention
+  0:47 Apps, "Ask me first", and where you talk to it
+  1:12 Files into flashcards, and web search with Tavily
+  1:32 Just call it: NVIDIA Parakeet + Magpie
+  2:04 Voice typing on your computer
+  2:21 Meeting notes
+  2:38 Under the hood
 
   Try it: https://build-a-bot.site
   Open source (Apache 2.0): https://github.com/dpro10/build-a-bot

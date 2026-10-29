@@ -89,7 +89,7 @@ export const SEGMENTS = [
   },
 
   // 3. Building a bot, start to finish. The app's own scroll back to the top between two steps is
-  // cut (a quick whoosh up the page), and a still moment held where the narration needs it.
+  // cut (a quick whoosh up the page), and still moments held where the narration needs them.
   {
     id: "build",
     kind: "screen",
@@ -99,7 +99,19 @@ export const SEGMENTS = [
       { from: b("face", -0.35), to: b("name", 0.25) },
       // Typing the name and what to call you, quicker.
       { from: b("name", 0.25), to: b("brain", -0.3), speed: 2 },
-      { from: b("brain", -0.3), to: b("apps", -0.24) },
+      { from: b("brain", -0.3), to: b("byok", -0.33) },
+      // A quick look at the other way to give it a brain (your own key), then the open models.
+      { from: b("byok", -0.33), to: b("open-models", -0.18), speed: 2 },
+      { from: b("open-models", -0.18), to: b("fast", 0.75) },
+      // The list held where the cursor rests, while the narration says what the open models bring.
+      { freeze: b("fast", 0.75), dur: 1.2 },
+      { from: b("fast", 0.75), to: b("balanced", 0.72) },
+      { freeze: b("balanced", 0.72), dur: 1.2 },
+      { from: b("balanced", 0.72), to: b("smart", 0.67) },
+      { freeze: b("smart", 0.67), dur: 0.4 },
+      { from: b("smart", 0.67), to: b("smart", 1.35) },
+      { freeze: b("smart", 1.35), dur: 0.35 },
+      { from: b("smart", 1.35), to: b("apps", -0.24) },
       { from: b("apps", 0.6), to: b("trust", -0.23) },
       { from: b("trust", 0.45), to: b("talk", -1.6) },
       { freeze: b("talk", -1.6), dur: 0.5 },
@@ -116,8 +128,8 @@ export const SEGMENTS = [
       { src: b("face", 0.1), z: 1.45, x: 450, y: 390, dur: 1.0 },
       { src: b("name", -0.3), z: 1.6, x: 330, y: 330, dur: 0.8 },
       { src: b("brain", -0.2), z: 1, dur: 0.8 },
-      { src: b("byok", 0.1), z: 1.45, x: 450, y: 470, dur: 0.9 },
-      { src: b("open-models", 0.2), z: 1.3, x: 450, y: 400, dur: 0.9 },
+      { src: b("open-models", -0.1), z: 1.3, x: 450, y: 400, dur: 1.0 },
+      { src: b("fast", 0.3), z: 1.42, x: 450, y: 380, dur: 6.5 },
       { src: b("apps", 0.6), z: 1, dur: 0.6 },
       { src: b("app-grid", -0.4), z: 1.45, x: 450, y: 340, dur: 0.9 },
       { src: b("included", -0.2), z: 1.5, x: 450, y: 460, dur: 0.9 },
@@ -132,9 +144,10 @@ export const SEGMENTS = [
       // "Pick a face and a color," then "name it Juno, and tell it what to call you." on the name step.
       { id: "S06a", src: b("face", 1.2) },
       { id: "S06b", src: b("name", 0.1) },
+      // The open models, Juno getting smarter as you use it, your data and zero data retention.
       { id: "S07", src: b("brain", 0.15) },
-      { id: "S08", src: b("open-models", -0.2) },
-      { id: "S09", src: b("smart", -0.05) },
+      { id: "S08", src: b("fast", 0.74) },
+      { id: "S09", src: b("smart", 0.65) },
       { id: "S10", src: b("apps", 0.7) },
       { id: "S11", src: b("app-grid", 0.15) },
       { id: "S12", src: b("included", 0.7) },

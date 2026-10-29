@@ -32,6 +32,7 @@ const norm = (s) =>
     .replace(/five dollars|\$5\b/g, "fivedollars")
     .replace(/\btwelve\b/g, "12")
     .replace(/\btav[ai]l[iy]\b/g, "tavily")
+    .replace(/\bn[ei]motron\b/g, "nemotron")
     .replace(/\bokay\b/g, "ok")
     .replace(/\bit's\b/g, "its")
     .replace(/\bdot\b/g, " ")
