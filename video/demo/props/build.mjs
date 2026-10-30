@@ -13,7 +13,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const OUT = path.join(HERE, "..", "..", "out", "demo", "props");
 fs.mkdirSync(OUT, { recursive: true });
 
-const browser = await chromium.launch({ channel: "chrome" });
+const browser = await chromium.launch({ channel: process.env.PW_CHANNEL || undefined });
 const page = await browser.newPage();
 
 await page.goto(`file://${path.join(HERE, "syllabus.html")}`);

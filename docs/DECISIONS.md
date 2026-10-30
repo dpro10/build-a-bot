@@ -2,6 +2,102 @@
 
 Copied from the Cookbook workspace "Build-a-bot" (workspace_id cf24d3d7-9eb9-47e0-be0f-0fd1a1debff2) on 2026-10-13, so cloud sessions without the Cookbook MCP have them. If you can reach Cookbook, `recall` there is the live version.
 
+## From the README (moved here on 2026-10-30)
+
+The README is the overview for visitors and the hackathon's judges, so its project notes moved here, as they were (Diego: "make sure evrything is simple and easy to follow").
+
+### Decisions so far
+
+The full notes, with Diego's own words, are below.
+
+**Diego, 2026-10-13**
+
+- **Separate from Cookbook at first:** its own brand and site. When people want their bots to talk to each other, that happens in Cookbook.
+- **Reuse the hackathon stack:** Nebius Token Factory for open-weight models, Tavily for web search.
+- **Bots act on the web:** they need to fill things out online.
+- **Dead-simple setup:** choose an avatar from a small set, a name, and a model, or connect a subscription you already pay for. It must look clean and modern and be easy enough for anyone.
+- **Keep the name** Build-a-bot.
+- **The user picks the model.** Don't apply for Sign in with ChatGPT yet. Subscriptions run the way Cookbook's Bridge does: the user's own CLI, signed in by them. (Reversed on 2026-10-20: no subscriptions, see below.)
+
+**Diego, 2026-10-14**
+
+- **Build the whole product now, end to end:** five cute avatars, a name, a brain (their subscription or an open-weight model on Nebius), apps from an extensive list, how much to trust it (including full faith), and several ways to talk to it.
+- **Meeting notes** (an idea from his mom): the bot notices a meeting, pops up to ask, and stays visible at the very bottom of the screen while it transcribes.
+- **Consent:** "It's one party consent. So as long as one person hits record, we're good." It still asks first and shows it's listening.
+- **Apple:** he already has an Apple Developer account, for signing the Mac app.
+
+**Diego, 2026-10-20**
+
+- **No Claude or ChatGPT plans:** "it goes against a core thing for this product (ZDR) and ... you cant talk to those models if the computer is closed." Then: "yes remove it, keep the api key option." The Bridge is gone from the web app, the desktop app and the repo; bots on a plan moved to the default open model.
+
+**Claude's build choices, for Diego to confirm:**
+
+- the four trust levels and the hard limits;
+- the pricing table (replaced on 2026-10-16: pay for usage, at cost);
+- the morning brief, on by default;
+- web actions on Browser Use Cloud, with Stagehand + Browserbase as the fallback;
+- the meeting-notes safety rules.
+
+"Cookbook on the inside" is still only a proposal: every bot would be a Cookbook agent under the hood, so bots talking to each other means one shared room. v1 is a standalone app with its own Postgres.
+
+### Still open
+
+The longer list is under "Open questions (updated 2026-10-17)", below.
+
+1. **First users:** tinkerers or everyday iPhone users? A 3-week hand-built test with 5 non-developers could decide.
+2. **Pricing:** pay for usage at cost is decided (2026-10-16). The starter credit is $5 (Diego, 2026-10-21). Open: refunding unused credit by hand when asked, and when, if ever, to add a margin.
+3. **Web actions:** confirm Browser Use Cloud, then test with a live key on about 10 real forms before turning it on for everyone.
+4. **Before launch:** a brand-free domain for bot inboxes, Twilio A2P 10DLC registration, and a Composio plan.
+5. **Trademark clearance** before spending on the brand.
+6. **Meeting notes and voice typing before launch:**
+   - a lawyer's look at the consent flow and retention;
+   - signed downloads, since both are only in the app: done on 2026-10-17: the Mac app is signed and notarized, the Windows installer is signed with Azure Artifact Signing, and both download from the public repository's releases.
+7. **Meeting notes, next:** meeting titles from the calendar, telling the call's speakers apart, and languages beyond Parakeet's 25.
+8. **Calls:** the voice server and Twilio are live (2026-10-17); texting waits on A2P 10DLC registration. Next: the bot calling you back when a job is done, a call starting your other agents (research, the cloud browser), and calls heard on your own computer.
+
+### Ground rules
+
+These hold whatever gets built next.
+
+**Subscriptions:**
+- **None** since 2026-10-20: bots don't think with a Claude, ChatGPT or Gemini chat plan, anywhere. Owners bring an API key instead.
+- **Never** collect, store or relay a Claude or ChatGPT login, and never reuse one on our servers.
+
+**Keys:**
+- Users' own API keys are encrypted at rest, never logged, and never sent back to the browser after entry.
+- Our keys (Token Factory, Tavily and the rest) and Apple's signing credentials never go in the repo; they live in environment variables and CI secrets.
+
+**Channels:**
+- Open today: Telegram, Discord DMs, and an email address the bot owns.
+- iMessage: only through gateways Apple hasn't sanctioned.
+- WhatsApp: bans general-purpose assistants in the US.
+- Reading someone's Gmail: needs Google's yearly CASA security audit.
+
+**Costs:**
+- **Model:** Nemotron 3.5 Lightning on Token Factory cost $0.06 per million input tokens and $0.24 per million output (checked for the hackathon). That's about $4 to $5 a month per active bot.
+- **Search:** Tavily includes 1,000 free credits a month, then $0.008 per credit; it's free for students.
+- **Calls:** the voice server's VM is about $124 a month (on Google Cloud's free trial credit for now), whatever the volume. A phone call adds Twilio's $0.0129 a minute (with the audio stream).
+- **Speech-to-text:** nothing: the desktop app hears voice typing and meetings on the user's computer (NVIDIA Parakeet). The optional speech server (`speech/`), a Nebius Serverless AI endpoint, would be about $190 a month for an 8-vCPU machine, whatever the volume. Its backup: NVIDIA Parakeet on Together AI, $0.0015 per audio minute.
+- **Reachability:** Token Factory, Tavily and the cloud-browser hosts all work on Diego's network. Kimi, DeepSeek and Together AI (the speech-to-text backup) are blocked there; the app calls Together from its server, so only local testing is affected.
+
+**Name:**
+- Build-A-Bear defeated a BUILD A BOT trademark application in 2004 (for toys).
+- Keep the brand name out of anything a bot owns (email addresses, phone numbers, handles), so a forced rename doesn't break contacts.
+- No bears or "Workshop", and nothing aimed at kids.
+- Get a clearance check before spending on the brand. The Texas A&M Law Trademark Clinic (tmc-info@law.tamu.edu) is in the USPTO's free clinic program.
+
+**Law:**
+- Say it's an AI, publish a crisis protocol, and launch 18+ only.
+- Meeting notes ask first and show they're listening. The caveats to one-party consent are in `docs/research/meetings-2026-10-14.md` §5.
+
+### Prior work
+
+These live in the Cookbook (dev) workspace:
+- the same research file;
+- the "Text your agents" doc (2026-10-01);
+- Chef / cookbook-dispatch, from the hackathon;
+- the DP jr. setup notes.
+
 ## Decision: Build-a-bot launches as its own brand; bot-to-bot happens in Cookbook
 
 **Diego (2026-10-13):** "at first i want it to be seperate from cookbook, but then if people want to start having their custom agents communicate that will happen in cookbook."
@@ -1226,3 +1322,77 @@ Diego: "Yeah, on Windows the default should just be at one button. No one's gonn
 - **Ctrl + Windows stays as a choice,** for keyboards without a Right Ctrl, and the settings say so. Anyone who picked a shortcut keeps it; anyone on the default gets Right Ctrl with the update.
 - **Not Right Alt:** let go on its own, Alt opens or focuses the menu in Chrome, Firefox and VS Code, and on many keyboards outside the US it types accents (AltGr).
 - **Tests:** the Windows CI holds the real Right Ctrl for voice typing, and still holds Ctrl + Windows (picked in settings) in the learn-from-fixes run, so the guard that keeps the Start menu shut stays checked.
+
+## Decision: the demo video starts with a call, then Diego builds his own bot (Diego, 2026-10-28)
+
+Diego: "I think it should start with me just logging in and creating a bot. I'll show the custom recipes, but then I'm actually gonna just custom configure my own and I'll call it something". Then: "could you make the 3 minute video. I am not good at making these videos.. I trust that you can make a good video I need your best work."
+
+- **The cut** (`video/demo`, about 2:50, under YouTube's 3 minutes for the hackathon): a 17-second cold open of a real call (the hook), then Diego signs in, glances at the ready-made recipes and makes his own bot, **Juno** (Nimbus the cloud, in grape). It then shows files into flashcards with sources, a Tavily web search, the call again with a cut-in and a reminder, voice typing and meeting notes in the desktop app, how it's built, and the promo's end card.
+- **Recorded on the live site** with a fresh account (signed in by email), and the real desktop app paired to it. Nothing is simulated. The edit trims waits: lookups, the Magpie server's pauses between sentences, and the notes being written.
+- **Stand-in voices:** a narrator, Diego's half of the call, and the people in the meeting are synthesized voices. The call and the desktop app hear them through a microphone like any voice. Diego can swap in his own narration in one take (`video/demo/README.md`).
+- **NVIDIA and Nebius are named aloud and on screen**, as the rules ask: Nemotron on Nebius Token Factory (thinking), Parakeet and Magpie (calls, on our voice server), Parakeet on the computer (voice typing and meetings), and Tavily (search).
+- **Cut for time:** the receipts beat ("every action leaves a receipt"). The activity log now holds an earlier take's reminder, and receipts can't be deleted.
+- **Known bug, seen in the call:** after a cut-in, the call panel keeps only the sentence that was cut. The voice server forgets sentences already played (`voice/src/call/speaker.ts`, `played()`), so `heard` and the saved turn lose them. Not fixed here; it's in the follow-ups.
+
+## Decision: a second cut with no narrator, for Diego's own voice-over (Diego, 2026-10-28)
+
+Diego: "I think that it is probably better if it is my voice doing the voice over, could you make another video that shows everything but has no voice. it should show the landing page then some of our recipes, but then it should show the steps to build a bot and what they entail and how easy it is. I really liked the meeting and voice typing clips you had though those were awesome."
+
+- **The cut** (`video/demo/edit-voiceover.mjs`, 2:44, `build-a-bot-demo-voiceover.mp4`): the landing page and the recipe gallery (signed out, `record/site.mjs`), then "Start from scratch" into the builder. The builder plays in a window with its seven steps beside it, each with a line on what it asks, and a stopwatch of the real time on the clock: Juno was built in 52 seconds. Then files, web search, the call, and the same voice typing and meeting clips as the narrated cut, how it's built, and the end card.
+- **No narrator, nothing else lost:** the app's own sounds stay (the call, the dictation, the meeting), with the music. Small notes on screen say what the later scenes are, so the cut also works with the sound off.
+- **Diego's script** is `video/demo/SCRIPT-VOICEOVER.md`: lines to read in one take, with where each one plays and where not to talk. Claude splits the take into sentences and places them.
+- **The music** sits about 3 dB under the call while there's no narrator. When his lines go in, it goes back down to a bed under his voice.
+- **Mixing:** the sound now gets one gain for the whole video plus a limiter, instead of loudnorm. With music-only stretches, loudnorm had turned into an automatic gain: the music came up as loud as the call, then dropped about 5 dB near the end.
+
+## Decision: the cut without a narrator, take two: every brain, apps picked by hand, no stopwatch, the sign-in back (Diego, 2026-10-28)
+
+Diego: "Ok the one thing is, you didn't show all the models/brains that could be used that frame needs to be redone, also get rid of that timer when setting up the bot. Also when you were setting up the bot you didn't click specific apps just groups at the top, how about you click Gmail, docs, and meeting notes to start. Also keep that composio sign in scene, that was really good."
+
+- **Every brain:** the Brain step opens "Your own API key" first: Anthropic, OpenAI, Google Gemini, OpenRouter, Groq, Mistral, xAI, DeepSeek, Together AI, Fireworks, Cerebras, or a custom endpoint. It then goes back to the open models on Nebius and scrolls through all 12 (Fast, Balanced, Smart; three of them NVIDIA Nemotron). Nemotron 3.5 Lightning stays picked.
+- **Apps picked by hand:** Gmail, Google Docs and Meeting notes, from the app grid, with no "what should it help with" groups. Then what every bot always has (web search, files and the rest) and Your own MCP servers. The Trust step now spells out what Juno does on its own in Gmail and Docs, and what it asks first.
+- **No stopwatch:** the builder's frame keeps the seven steps and what each one asks.
+- **The sign-in is back:** the landing take ends on Sign in, in the header, and the email sign-in from the first cut follows on from the same frame. Claude took "the composio sign in scene" to be this one, the only sign-in in either cut; connecting Gmail through Composio has not been filmed.
+- **A second demo account** (`record/builder2.mjs`, `account2.json`) builds this Juno, so the first account's Juno keeps the files, flashcards and meeting the later scenes show. The builder ends on "Say hi to Juno!": the second Juno's first message differs from the one in the files scene.
+- 2:49 long.
+
+## Decision: the final demo video, re-recorded from scratch and narrated (Diego, 2026-10-29)
+
+Diego: "ok, im sorry to ask you this but the video just isnt smooth enough. would you mind redoing the demo video from scratch? honestly, you can provide the narration as well. this needs to be really good we need to really sell this to the judges. this should be the absolute best and final version."
+
+- **Smooth, frame by frame:** every web scene is now recorded on the browser's virtual time (`video/demo/record/frames.mjs`). Each frame of the video is a frame the browser drew after its clock moved exactly 1/60 of a second, so scrolling, the cursor and every animation move evenly at 60 frames a second. The real-time screen grab had repeated about three frames in four while things moved; the final cut repeats under 2%. The call still has to happen in real time (it's the real voice server), so only the call panel's column is grabbed, at 1.5×, which keeps a true 60 frames a second.
+- **A new compositor** (`video/demo/compose.py`) puts each web scene in a browser window on a stage, with a camera that eases in on what matters. Sped-up parts play at whole-number speeds only (2× is every other frame), so they stay smooth too.
+- **Narrated by us:** a synthesized voice (ElevenLabs, "Justin Case"), one take of the whole script, cut into sentences. NVIDIA Parakeet hears every line word for word in the final mix (`video/demo/check-voice.mjs`). Diego can still swap in his own read (`video/demo/README.md`).
+- **The cut, 2:56:** the website and its recipes; sign in by email; the builder, with every brain (the providers for your own key, then all 12 open models on Nebius), Gmail, Google Docs and Meeting notes picked by hand, and no stopwatch; files into flashcards with their sources; a Tavily web search; a real call (the midterm read from the syllabus, then a cut-in and the new answer); voice typing and meeting notes in the desktop app; how it's built; the end card. The web scenes and the call are a fresh account and a new Juno; the desktop scenes are the day before's.
+- **Cut for time:** the call's reminder and goodbye. The call ends on the answer to the cut-in.
+- **Sound:** the narration take came in about 7 dB under the call and the desktop app's sound. `VO_GAIN` in `edit.mjs` levels it, the music sits about 9 dB under the voices, and the whole is −14 LUFS for YouTube.
+- **The cut without a narrator is retired** with its own builder take and script (`edit-voiceover.mjs`, `SCRIPT-VOICEOVER.md`, `record/builder2.mjs`). `record/site.mjs` now records the website and the sign-in in one take, so `record/signin.mjs` is gone too.
+
+## Decision: the brain step's narration is about the open models and your data, not your own key (Diego, 2026-10-29)
+
+Diego, on the final video: "instead of mentioning the api key conenction i think it would be better if you mentioned the open models that get better as you work with them, you own your data, and zero data retention... something a long those lines."
+
+- **The lines now:** "For its brain, pick one of 12 open models on Nebius Token Factory, like NVIDIA Nemotron, at cost. Juno gets smarter the more you use it, and your data stays yours, with zero data retention. Every account starts with $5 of credit." They're a second take in the same voice, level-matched to the first.
+- **"Smarter," said of Juno, not the models:** what gets better is the bot's memory. A bot keeps up to 2,000 memories and uses the ones that matter in each message. The models are never trained on anyone's chats, as the brain step itself says. This is how the promo makes the same claim.
+- **Zero data retention is said over the open models,** because it covers only the included models on our Token Factory organization. A bot on its own API key follows that provider's terms.
+- **Your own key is off screen too.** Diego, next: "it is possible to not even include that scene of you clicking on the api key option". The builder take's detour to "Your own API key" and back is cut. The cursor rests on "Open models on Nebius" just before it and just after it, on the same page, so the cut doesn't show. The "Your own API key" card is still visible on the step. That moment is held while the camera moves in on the open models and what they cost ("…$5.00 of credit … Your chats aren't used to train models"). The model list then holds where the cursor rests, about 6 seconds of holds in all, to give the lines room. The cut is 2:56.
+
+## Decision: the name line says "give it any name, like Juno" (Diego, 2026-10-30)
+
+Diego: "one thing is, you say \"name it Juno\" but you dont have to name it juno." Then: "use that line instead honestly."
+
+- **The line now:** "Pick a face and a color, give it any name, like Juno, and tell it what to call you." It's a third take in the same voice, split at the comma like the first, and level-matched.
+- **Its second half starts as the face step ends,** so "like Juno" lands while Juno is typed. Nothing else in the cut moved: it's still 2:56, and every line still checks word for word.
+
+## Decision: a simple README and judges' guide, with Try it on the live site (Diego, 2026-10-30)
+
+Diego, on the README: "why is the try it some terminal lines? shouldnt they just try it through the site?"
+
+- **Try it** now walks through build-a-bot.site in four steps: build a bot (no account needed), chat with it and sign in by email ($5 of credit, no card), call it, and get the desktop app from the download page. It links to the judges' step by step in `docs/HACKATHON.md`.
+- **Running it locally** comes after, under "Run it on your own computer", with a pointer to `docs/TRY-IT.md`.
+
+Then: "go ahead and merge, make sure evrything is simple and easy to follow."
+
+- **The README** is for visitors and the judges: what it is, the links (the site, the video, the desktop app, the judges' guide), Try it, how it's built on NVIDIA and Nebius, what it does, running it locally, and where things are. Its project notes (decisions so far, still open, ground rules, prior work) moved to the top of this file, as they were.
+- **Fixed on the way:** texts and email aren't claimed as live (the site says they're coming); meeting notes and voice typing lose "(beta)", as on the site; web actions say "coming soon"; zero data retention is named under the brains.
+- **The judges' guide** (`docs/HACKATHON.md`) opens with the links and the testing steps, then what's real on the site, the hackathon's requirements, and the feedback for Nebius and NVIDIA. The submission checklist, the track and prizes, the YouTube text and the Devpost write-up moved to `docs/history/hackathon-submission.md`.
+- **Merged into main** so it's what GitHub shows.

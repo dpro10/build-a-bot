@@ -1,33 +1,48 @@
 # The demo video
 
-A 2:48 walkthrough of the real product for the hackathon (Devpost and YouTube): a real call, building a bot, approvals, the Library's flashcards and quizzes, the desktop app, and how it's built. The script, the shot list and where every claim is true: [`SCRIPT.md`](SCRIPT.md). The promo, its one-minute sibling, is one folder up ([`../README.md`](../README.md)); this video reuses its characters, scenes, synthesizer and end card.
+A walkthrough of the real product for the hackathon (Devpost and YouTube, under 3 minutes; published at https://youtu.be/pamiWbqzm_s), narrated throughout: the website and its recipes, signing in, building Juno (all 12 open models on Nebius, and Gmail, Google Docs and Meeting notes picked by hand), files into flashcards, a web search, a real call with a cut-in, voice typing and meeting notes in the desktop app, and how it's built. The script, the shot list and where every claim is true: [`SCRIPT.md`](SCRIPT.md). The promo, its one-minute sibling, is one folder up ([`../README.md`](../README.md)); this video reuses its end card.
 
 Everything is rebuilt from here, and the media lands in `video/out/demo/` (gitignored):
 
 | Step | Command | What it makes |
 | - | - | - |
-| Class files | `node video/demo/props/build.mjs` | a syllabus PDF, a lecture deck PDF, a photo of handwritten notes (made up for the video) |
-| Recordings | `node video/demo/record/<scene>.mjs` | `clips/<scene>.mp4` + markers: `builder`, `chat`, `library`, `call`, `pages` |
-| Narration | `node video/demo/vo/make.mjs` | Otto's lines in its own voice (NVIDIA Magpie, Sofia), picked by NVIDIA Parakeet |
-| Brand pieces | `npx tsx video/scripts/export-assets.tsx` | the app's characters, logo and fonts for the cards and the promo's scenes |
-| Score | `video/out/venv/bin/python video/demo/music.py` | an original score in the promo's world, under the demo's beats |
-| The cut | `node video/demo/assemble.mjs [--sheet]` | `build-a-bot-demo.mp4` (1920×1080, 60 fps, −14 LUFS) |
+| Class files | `node video/demo/props/build.mjs` | a syllabus PDF, a lecture PDF, a photo of handwritten notes (made up for the video) |
+| The website and an account | `BAB_VIDEO_EMAIL=… node video/demo/record/site.mjs` | the landing page, the recipes and the sign-in in one take, then it waits for the sign-in link in `signin-link.txt` and saves the account |
+| Web scenes | `node video/demo/record/<scene>.mjs` | `clips/<scene>.mp4` + markers, in this order: `builder` (makes Juno), `files`, `web`, `call`, then `pages` (the meeting's notes, after the meeting) |
+| Desktop scenes | `BAB_SPEECH_FILES=… node video/demo/record/desktop.mjs voice` (then `meeting`) | the real desktop app, paired to the account: voice typing, and meeting notes |
+| Narration | one take as a WAV, transcribed by Parakeet, then `vo/split.py` (below) | `vo3/S01.wav` … one file per sentence (S07 to S09, the brain step, are from a second take, `el/narr4.1.wav`, and S06 from a third, `el/narr5.1.wav`, each level-matched to the first) |
+| Brand pieces | `npx tsx video/scripts/export-assets.tsx` | the app's characters, icons and fonts for the cards |
+| Score | `python3 video/demo/music.py` | an original score in the promo's world, under the demo's beats |
+| The cut | `node video/demo/assemble.mjs [--sheet]` | `build-a-bot-demo.mp4` (1920×1080, 60 fps, BT.709, −14 LUFS) |
 | Checks | `node video/demo/check-voice.mjs` | every narration line, cut from the final mix, transcribed word for word |
 
-Needs: Node 22 with the repo's packages, Google Chrome (the recorder uses it), ffmpeg, NeMo-Speech.cpp and Parakeet (the desktop app's copies are used by default; Magpie downloads itself the first time), and Python 3 with numpy and scipy for the score (`python3 -m venv video/out/venv && video/out/venv/bin/pip install numpy scipy`). The score follows the cut, so after changing the edit run `assemble.mjs`, then `music.py`, then `assemble.mjs --reuse` again.
+Needs: Node 22 with the repo's packages (and `desktop/`'s, for the desktop scenes), Playwright's Chromium (its headless shell for the web scenes), ffmpeg, Xvfb and xdotool for the call and the desktop scenes (Linux), Python 3 with numpy, scipy and OpenCV for the compositor and the score, and NeMo-Speech.cpp with Parakeet's GGUF for the desktop scenes and the checks (`BAB_SPEECH_FILES` is a folder with the runtime archive and the model; `NEMO_SPEECH_BIN` and `PARAKEET_GGUF` for the scripts). The score follows the cut, so after changing the edit run `assemble.mjs --plan`, then `music.py`, then `assemble.mjs`.
 
 ## How the recordings are made
 
-`record/recorder.mjs` drives Chrome against build-a-bot.site:
+- **Web scenes, frame by frame** (`record/frames.mjs`): Chromium's headless shell on virtual time. Each frame of the video is a frame the browser drew after its clock moved exactly 1/60 of a second (`HeadlessExperimental.beginFrame`), so scrolling, the cursor and every animation move perfectly evenly at 60 frames a second, however long the browser took to draw. The network runs in real time, so a wait for the model shows about six times shorter than it was, and the edit speeds through what's left. The cursor is drawn in the page and placed every frame; clicks ripple; typing is at a human pace. Uploads go through XMLHttpRequest while recording, because a streamed upload stalls on virtual time.
+- **The call, in real time** (`record/call.mjs`): a real Chromium window on a virtual display, the call panel's column grabbed by ffmpeg at 60 frames a second. The page gets a microphone the script can make talk (it plays the caller's lines into it, turn by turn, watching the voice server's own events), and a copy of everything the voice server sends. The call's sound is rebuilt exactly as the page played it, including the moment a cut-in stops Juno mid-sentence (`call.wav`).
+- **Markers:** each scene marks its moments ("cards-made", "cut-in"), and `edit.mjs` cuts on them.
+- **One account, one bot:** `site.mjs` signs in by email; `builder.mjs` deletes the account's previous bot and builds Juno, and the later scenes use that bot (`BAB_VIDEO_ACCOUNT` and `BAB_VIDEO_SESSION` pick other files for another account).
+- **The desktop app** (`record/desktop.mjs`) runs from `desktop/` under its own virtual display with a compositor, on a made-up desktop (`desktop/scene.cjs`: a compose window and a video call), paired to the account. Its microphone is a test file (`--use-file-for-fake-audio-capture`): what it hears is real speech, heard by NVIDIA Parakeet in the app. Clicks and the Right Ctrl key go through XTest (`desktop/xinput.py`), so the app sees a real key.
 
-- **Picture:** Chrome's own screencast of a 1280×720 window at 2× (2560×1440, about 60 frames a second), with a visible cursor that clicks with a ripple, mouse moves along gentle curves, and typing at a human pace. The window itself is sized (Chrome's screencast ignores viewport emulation).
-- **Markers:** each scene marks its moments ("cards-made", "approved"), and `edit.mjs` cuts on them.
-- **A real call with both voices:** the page gets a microphone the script can make talk (it plays WAV files into it at the right moments, turn by turn, watching the voice server's own events), and a copy of everything the voice server sends. The call's sound is rebuilt exactly as the page played it, including the moment a cut-in stops Otto mid-word.
-- **Hidden while recording:** the demo site's yellow "Demo mode" strip and a guest account's "Save your account" nudges.
-- Each scene makes its own guest account and Otto and deletes it afterwards (guests get 5 messages before signing in, so the call scene adds its files on the Library page, which costs none).
+## The cut
 
-## Swapping in Diego's own recordings
+`edit.mjs` is the edit list: each segment is pieces of one recording (sped up, held, pushed into), the call (its panel beside big captions, with the waits trimmed), or a card from `cards/cards.html`. `compose.py` draws each segment frame by frame: a web recording in a browser window on a stage, with a camera that pushes in and follows (eased, sub-pixel); a recording filling the frame (the desktop app); the call's panel through a rounded window; a card. Every frame of the video is a real frame of a recording: speeds are whole numbers (2× is every other frame) and ease into each other, and a held frame only where nothing moves. Narration cues and the sound each take recorded are placed on one timeline, the music ducks under every voice, and the mix is brought to −14 LUFS. `assemble.mjs` refuses a cut where the narration talks over itself, the call, or the desktop app's sound.
 
-- **His half of the call:** put his six files (SCRIPT.md lists them) in a folder, convert them to 48 kHz mono WAV (`ffmpeg -i in.m4a -ar 48000 -ac 1 line1.wav`), and run `CALLER_DIR=/that/folder node video/demo/record/call.mjs`. Then update the call ranges and captions in `edit.mjs` from the new `clips/call.transcript.json` (speech runs and Otto's replies), and run `assemble.mjs`.
-- **Voice typing and meeting notes:** save his screen recordings as `clips/voice.mp4` and `clips/meetings.mp4` (any size; they're scaled to 1080p), set each segment's `pieces` in `edit.mjs` to the seconds worth showing, and drop the `zoom`.
-- **His voice as the narrator:** record each line of `vo/lines.json` as `vo/<id>.wav` in `video/out/demo/`, and keep the timing in `edit.mjs` (lines that run long move the next one).
+- `--plan` lists where every segment and line lands (and writes `timeline.json`, which `music.py` and `check-voice.mjs` follow) without rendering.
+- `--reuse --only build` renders one segment again and keeps the rest; `--reuse --sound-only` remixes the sound only.
+- The narration take sits at about −25.5 LUFS; `VO_GAIN` in `edit.mjs` brings it level with the call and the desktop's sound (about −18 each before the mix), and the music sits about 9 dB under the voices.
+- The sound gets one gain for the whole video, to −14 LUFS, and a limiter keeps the loudest syllables under −1.5 dBTP, so the music stays at the level the edit sets (loudnorm alone would turn into an automatic gain and push the music up between voices).
+
+## Swapping in Diego's own voice
+
+- **The narration:** read `vo/lines.json` in order, in one take, and save it as `video/out/demo/el/narr.diego.wav`. Then:
+
+  ```sh
+  nemo-speech transcribe video/out/demo/el/narr.diego.wav --model parakeet-tdt-0.6b-v3.q8_0.gguf -f json --quiet > video/out/demo/el/narr.diego.json
+  python3 video/demo/vo/split.py video/out/demo/el/narr.diego.wav video/out/demo/el/narr.diego.json video/out/demo/vo-diego
+  ```
+
+  set `VO_DIR` in `edit.mjs` to `vo-diego` (and `VO_GAIN` to bring his take to about −18 LUFS), split `S06` at its comma into `S06a` and `S06b` as for the synthesized take, and run `assemble.mjs --plan`, `music.py` and `assemble.mjs`. Lines that run long move the next one (the assembler says which).
+- **His half of the call:** put his four lines (`call.mjs` lists them) in a folder as 48 kHz mono WAVs and run `CALLER_DIR=/that/folder node video/demo/record/call.mjs`. Then update the call's ranges and captions in `edit.mjs` from the new `clips/call.transcript.json`.

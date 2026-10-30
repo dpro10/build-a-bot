@@ -12,30 +12,35 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { Avatar } from "../../src/components/avatar/Avatar";
 import { LogoMark } from "../../src/components/brand/Logo";
 import * as Lucide from "lucide-react";
-import type { AvatarId, AvatarMood } from "../../src/lib/avatars";
+import type { AvatarId, AvatarMood, ColorwayId } from "../../src/lib/avatars";
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../..");
 const out = path.join(root, "video/stage/generated");
 
-type Pose = { key: string; avatar: AvatarId; mood: AvatarMood; size: number };
+type Pose = { key: string; avatar: AvatarId; mood: AvatarMood; size: number; color?: ColorwayId };
 const poses: Pose[] = [];
 const full = (avatar: AvatarId, moods: AvatarMood[]) => moods.forEach((mood) => poses.push({ key: `${avatar}-${mood}`, avatar, mood, size: 200 }));
 const small = (avatar: AvatarId, moods: AvatarMood[]) => moods.forEach((mood) => poses.push({ key: `${avatar}-${mood}-sm`, avatar, mood, size: 48 }));
 full("otto", ["idle", "happy", "thinking", "working", "alert", "listening"]);
 small("otto", ["idle", "happy", "thinking"]);
 for (const a of ["blip", "nimbus", "sprout", "ember"] as const) full(a, ["idle", "happy"]);
+// Juno, the demo video's bot: Nimbus in Grape.
+for (const mood of ["idle", "happy", "thinking"] as const) {
+  poses.push({ key: `juno-${mood}`, avatar: "nimbus", mood, size: 200, color: "grape" });
+  poses.push({ key: `juno-${mood}-sm`, avatar: "nimbus", mood, size: 48, color: "grape" });
+}
 
 // One render, so every useId (gradient ids) is unique across the page.
 const tree = createElement(
   Fragment,
   null,
-  ...poses.map((p) => createElement("div", { key: p.key, "data-k": p.key }, createElement(Avatar, { avatar: p.avatar, mood: p.mood, size: p.size, animated: true }))),
+  ...poses.map((p) => createElement("div", { key: p.key, "data-k": p.key }, createElement(Avatar, { avatar: p.avatar, mood: p.mood, size: p.size, color: p.color, animated: true }))),
   createElement("div", { key: "logo", "data-k": "logo" }, createElement(LogoMark, { size: 48 })),
 );
 const html = renderToStaticMarkup(tree);
 
 // Interface icons, from the same set the app uses (lucide).
-const ICONS = ["Check", "Cake", "User", "Footprints", "Mail", "Leaf", "Lock", "Download", "Trash2", "Pencil", "Eye", "KeyRound", "Laptop", "Cpu", "ShieldCheck", "Code2", "Mic", "CloudOff", "Database", "Sparkles", "MessageCircle", "Brain", "Puzzle", "Repeat", "Paperclip", "ArrowUp", "ArrowRight", "FileJson", "CircleCheck", "Ban", "EyeOff", "Server"];
+const ICONS = ["Check", "Cake", "User", "Footprints", "Mail", "Leaf", "Lock", "Download", "Trash2", "Pencil", "Eye", "KeyRound", "Laptop", "Cpu", "ShieldCheck", "Code2", "Mic", "CloudOff", "Database", "Sparkles", "MessageCircle", "Brain", "Puzzle", "Repeat", "Paperclip", "ArrowUp", "ArrowRight", "FileJson", "CircleCheck", "Ban", "EyeOff", "Server", "Search", "Globe", "Phone", "BookOpen", "Receipt", "Keyboard", "Timer", "Video"];
 const icons: Record<string, string> = {};
 for (const name of ICONS) {
   const C = (Lucide as unknown as Record<string, ComponentType<{ size?: number; strokeWidth?: number }>>)[name];

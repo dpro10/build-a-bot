@@ -5,6 +5,7 @@
  *   node video/demo/cards/render.mjs todo 9 '{"title":"Voice typing","body":"…"}' todo-voice
  *   node video/demo/cards/render.mjs built --still 6        (one PNG, to check it)
  *   node video/demo/cards/render.mjs caption '{"who":"otto","text":"…"}' --png cap1.png   (transparent overlay)
+ *   node video/demo/cards/render.mjs stage '{"win":{…}}' --png stage.png --scale 2      (at 3840×2160)
  * Needs the promo's exported assets first: npx tsx video/scripts/export-assets.tsx
  */
 import { spawn } from "node:child_process";
@@ -19,18 +20,20 @@ fs.mkdirSync(OUT, { recursive: true });
 // name, then in any order: a duration, {options}, an output name, --still t, --png file.
 const argv = process.argv.slice(2);
 const name = argv[0];
-const flagged = new Set(["--still", "--png"].flatMap((f) => (argv.includes(f) ? [argv.indexOf(f), argv.indexOf(f) + 1] : [])));
+const flagged = new Set(["--still", "--png", "--scale"].flatMap((f) => (argv.includes(f) ? [argv.indexOf(f), argv.indexOf(f) + 1] : [])));
 const rest = argv.slice(1).filter((a, i) => !flagged.has(i + 1));
 const dur = rest.find((a) => /^\d+(\.\d+)?$/.test(a));
 const opts = JSON.parse(rest.find((a) => a.startsWith("{")) ?? "{}");
 const outName = rest.find((a) => a !== dur && !a.startsWith("{")) ?? name;
 const still = process.argv.indexOf("--still");
 const FPS = 60;
+// --scale 2 draws at twice the size (3840×2160), for a picture the video zooms into.
+const SCALE = argv.includes("--scale") ? Number(argv[argv.indexOf("--scale") + 1]) : 1;
 
 // Installed Chrome cuts screenshots to its real window, so the window is sized to 1920×1080 itself.
 let browser, page;
 for (let top = 87, i = 0; ; i++) {
-  browser = await chromium.launch({ channel: process.env.PW_CHANNEL ?? "chrome", args: ["--force-color-profile=srgb", "--font-render-hinting=none", "--disable-lcd-text", "--hide-scrollbars", `--window-size=1920,${1080 + top}`, "--force-device-scale-factor=1"] });
+  browser = await chromium.launch({ channel: process.env.PW_CHANNEL || undefined, args: ["--force-color-profile=srgb", "--font-render-hinting=none", "--disable-lcd-text", "--hide-scrollbars", `--window-size=1920,${1080 + top}`, `--force-device-scale-factor=${SCALE}`] });
   page = await browser.newPage({ viewport: null });
   const h = await page.evaluate(() => innerHeight);
   if (h === 1080 || i > 2) break;
