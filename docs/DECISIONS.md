@@ -1279,3 +1279,10 @@ Diego, on the final video: "instead of mentioning the api key conenction i think
 - **"Smarter," said of Juno, not the models:** what gets better is the bot's memory. A bot keeps up to 2,000 memories and uses the ones that matter in each message. The models are never trained on anyone's chats, as the brain step itself says. This is how the promo makes the same claim.
 - **Zero data retention is said over the open models,** because it covers only the included models on our Token Factory organization. A bot on its own API key follows that provider's terms.
 - **Your own key is off screen too.** Diego, next: "it is possible to not even include that scene of you clicking on the api key option". The builder take's detour to "Your own API key" and back is cut. The cursor rests on "Open models on Nebius" just before it and just after it, on the same page, so the cut doesn't show. The "Your own API key" card is still visible on the step. That moment is held while the camera moves in on the open models and what they cost ("…$5.00 of credit … Your chats aren't used to train models"). The model list then holds where the cursor rests, about 6 seconds of holds in all, to give the lines room. The cut is 2:56.
+
+## Decision: the name line says "give it any name, like Juno" (Diego, 2026-10-30)
+
+Diego: "one thing is, you say \"name it Juno\" but you dont have to name it juno." Then: "use that line instead honestly."
+
+- **The line now:** "Pick a face and a color, give it any name, like Juno, and tell it what to call you." It's a third take in the same voice, split at the comma like the first, and level-matched.
+- **Its second half starts as the face step ends,** so "like Juno" lands while Juno is typed. Nothing else in the cut moved: it's still 2:56, and every line still checks word for word.

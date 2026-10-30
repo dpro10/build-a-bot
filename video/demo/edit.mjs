@@ -145,9 +145,10 @@ export const SEGMENTS = [
       { src: b("born", 0.5), z: 1.35, x: 800, y: 250, dur: 1.2 },
     ],
     vo: [
-      // "Pick a face and a color," then "name it Juno, and tell it what to call you." on the name step.
+      // "Pick a face and a color," then "give it any name, like Juno, and tell it what to call you.",
+      // starting as the face step ends so "like Juno" lands as Juno is typed.
       { id: "S06a", src: b("face", 1.2) },
-      { id: "S06b", src: b("name", 0.1) },
+      { id: "S06b", src: b("name", -0.95) },
       // The open models, Juno getting smarter as you use it, your data and zero data retention.
       { id: "S07", src: b("brain", 0.15) },
       // Each just after a held moment (a cue can't start inside one).

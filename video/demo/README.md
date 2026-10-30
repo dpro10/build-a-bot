@@ -10,7 +10,7 @@ Everything is rebuilt from here, and the media lands in `video/out/demo/` (gitig
 | The website and an account | `BAB_VIDEO_EMAIL=… node video/demo/record/site.mjs` | the landing page, the recipes and the sign-in in one take, then it waits for the sign-in link in `signin-link.txt` and saves the account |
 | Web scenes | `node video/demo/record/<scene>.mjs` | `clips/<scene>.mp4` + markers, in this order: `builder` (makes Juno), `files`, `web`, `call`, then `pages` (the meeting's notes, after the meeting) |
 | Desktop scenes | `BAB_SPEECH_FILES=… node video/demo/record/desktop.mjs voice` (then `meeting`) | the real desktop app, paired to the account: voice typing, and meeting notes |
-| Narration | one take as a WAV, transcribed by Parakeet, then `vo/split.py` (below) | `vo3/S01.wav` … one file per sentence (S07 to S09, the brain step, are from a second take, `el/narr4.1.wav`, level-matched to the first) |
+| Narration | one take as a WAV, transcribed by Parakeet, then `vo/split.py` (below) | `vo3/S01.wav` … one file per sentence (S07 to S09, the brain step, are from a second take, `el/narr4.1.wav`, and S06 from a third, `el/narr5.1.wav`, each level-matched to the first) |
 | Brand pieces | `npx tsx video/scripts/export-assets.tsx` | the app's characters, icons and fonts for the cards |
 | Score | `python3 video/demo/music.py` | an original score in the promo's world, under the demo's beats |
 | The cut | `node video/demo/assemble.mjs [--sheet]` | `build-a-bot-demo.mp4` (1920×1080, 60 fps, BT.709, −14 LUFS) |

@@ -4,7 +4,7 @@
   {"id": "S03", "beat": 1, "text": "Choose a face, a name and a brain, give it your apps, and talk to it anywhere, even on the phone."},
   {"id": "S04", "beat": 1, "text": "Start from a ready-made recipe, like a tutor or a job applier, or start from scratch."},
   {"id": "S05", "beat": 2, "text": "Sign in with just your email, no password."},
-  {"id": "S06", "beat": 3, "text": "Pick a face and a color, name it Juno, and tell it what to call you.", "parts": {"S06a": "Pick a face and a color,", "S06b": "name it Juno, and tell it what to call you."}},
+  {"id": "S06", "beat": 3, "text": "Pick a face and a color, give it any name, like Juno, and tell it what to call you.", "parts": {"S06a": "Pick a face and a color,", "S06b": "give it any name, like Juno, and tell it what to call you."}},
   {"id": "S07", "beat": 3, "text": "For its brain, pick one of 12 open models on Nebius Token Factory, like NVIDIA Nemotron, at cost."},
   {"id": "S08", "beat": 3, "text": "Juno gets smarter the more you use it, and your data stays yours, with zero data retention."},
   {"id": "S09", "beat": 3, "text": "Every account starts with $5 of credit."},
