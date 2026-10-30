@@ -16,7 +16,7 @@ Diego (2026-10-15): "im in the nvidia x nebius hackathon and the more we create 
 | More than one entry | Not needed: Build-a-bot is Diego's only entry (Diego, 2026-10-16: "we're only going to enter build a bot. Not chef."). |
 | Public repository with an open-source license shown on the repo page | Yes: `dpro10/build-a-bot` is public under Apache 2.0 since 2026-10-17, its history scanned for keys first. |
 | A working demo URL, free to use for judges until judging ends | [build-a-bot.site](https://build-a-bot.site), in real mode (nothing simulated). Every account starts with $5 of credit, about 12,000 messages on Nemotron 3.5 Lightning, and no card is needed. |
-| A public YouTube video under 3 minutes, no copyrighted music | Cut: `video/demo`, 2:56 of the real product recorded on 2026-10-28 and 29: the website and its recipes, signing in, Diego building his bot Juno (all 12 open models on Nebius, three apps picked by hand), files and web search, a real call with a cut-in, the desktop app, and how NVIDIA and Nebius are used, named aloud and on screen, over an original score (`video/demo/SCRIPT.md`). To upload. The one-minute promo in `video/` can go alongside it. |
+| A public YouTube video under 3 minutes, no copyrighted music | Cut: `video/demo`, 2:56 of the real product recorded on 2026-10-28 and 29: the website and its recipes, signing in, Diego building his bot Juno (all 12 open models on Nebius, three apps picked by hand), files and web search, a real call with a cut-in, the desktop app, and how NVIDIA and Nebius are used, named aloud and on screen, over an original score (`video/demo/SCRIPT.md`). On YouTube, public: https://youtu.be/pamiWbqzm_s. |
 | README with setup steps and how NVIDIA models, Token Factory and Nebius were used | Done: README → *Built on NVIDIA and Nebius*. |
 | Feedback on Token Factory, AI Cloud and NVIDIA tools | Below. |
 
@@ -40,7 +40,7 @@ Diego (2026-10-15): "im in the nvidia x nebius hackathon and the more we create 
 4. **The repository page:** **done** on 2026-10-24. The description is the elevator pitch (below), the website is `https://build-a-bot.site`, and the topics are set.
 
    The old "Desktop app (test build)" pre-release goes on its own: the desktop workflow removes it now that both apps are signed.
-5. **The video:** the final cut is ready: `video/out/demo/build-a-bot-demo.mp4`, 2:56, narrated. The narrator, the caller and the meeting voices are synthesized stand-ins; to read the narration yourself instead, `video/demo/README.md` says how. Put it on YouTube as a public video (not made for kids), with the title, description and chapters below, and paste the link into Devpost.
+5. **The video:** **done** on 2026-10-30. It's public on YouTube: https://youtu.be/pamiWbqzm_s (2:56, narrated; the narrator, the caller and the meeting voices are synthesized stand-ins). The link goes in Devpost's video field.
 6. **Submit on Devpost** by October 30, 10:00 am Pacific.
 
 ## What's real on build-a-bot.site
@@ -94,7 +94,7 @@ Nothing on the live site is simulated. Each service that isn't set up says "Comi
 
 ## Demo video
 
-The cut, beat by beat, with where each claim is true: [`video/demo/SCRIPT.md`](../video/demo/SCRIPT.md). How it's recorded and rebuilt, and how to swap in Diego's own voice: [`video/demo/README.md`](../video/demo/README.md).
+On YouTube: https://youtu.be/pamiWbqzm_s. The cut, beat by beat, with where each claim is true: [`video/demo/SCRIPT.md`](../video/demo/SCRIPT.md). How it's recorded and rebuilt, and how to swap in Diego's own voice: [`video/demo/README.md`](../video/demo/README.md).
 
 **For YouTube** (Public; Audience: "No, it's not made for kids"; Category: Science & Technology; Language: English):
 
@@ -133,7 +133,7 @@ The cut, beat by beat, with where each claim is true: [`video/demo/SCRIPT.md`](.
 **For the form:**
 - **Elevator pitch** (195 of Devpost's 200 characters): `Your own AI agent in a minute: NVIDIA Nemotron on Nebius, your apps, approvals enforced in code. Call it or chat with it; it turns meetings into action items and types by voice, on your computer.`
 - **Try it out:** https://build-a-bot.site, https://github.com/dpro10/build-a-bot and https://build-a-bot.site/download
-- **Video:** the YouTube link, once it's up.
+- **Video:** https://youtu.be/pamiWbqzm_s
 - **Track:** Personal AI. Also enter **Best Use of Tavily**.
 - **Built with:** `nvidia-nemotron`, `nvidia-parakeet`, `nvidia-magpie`, `nemo-speech.cpp`, `nebius-token-factory`, `tavily`, `composio`, `mcp`, `next.js`, `react`, `typescript`, `postgresql`, `vercel`, `electron`, `twilio`, `google-cloud`
 
