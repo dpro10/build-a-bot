@@ -99,18 +99,20 @@ export const SEGMENTS = [
       { from: b("face", -0.35), to: b("name", 0.25) },
       // Typing the name and what to call you, quicker.
       { from: b("name", 0.25), to: b("brain", -0.3), speed: 2 },
-      { from: b("brain", -0.3), to: b("byok", -0.33) },
-      // A quick look at the other way to give it a brain (your own key), then the open models.
-      { from: b("byok", -0.33), to: b("open-models", -0.18), speed: 2 },
-      { from: b("open-models", -0.18), to: b("fast", 0.75) },
+      // The open models only: the take's detour to "Your own API key" and back is left out. The
+      // cursor rests on "Open models on Nebius" just before it and just after it, on the same page,
+      // so the cut doesn't show; the second moment is held while the open models are introduced.
+      { from: b("brain", -0.3), to: b("byok", -1.03) },
+      { freeze: b("open-models", 0.217), dur: 2.2 },
+      { from: b("open-models", 0.217), to: b("fast", 0.75) },
       // The list held where the cursor rests, while the narration says what the open models bring.
-      { freeze: b("fast", 0.75), dur: 1.2 },
+      { freeze: b("fast", 0.75), dur: 0.8 },
       { from: b("fast", 0.75), to: b("balanced", 0.72) },
-      { freeze: b("balanced", 0.72), dur: 1.2 },
+      { freeze: b("balanced", 0.72), dur: 1.6 },
       { from: b("balanced", 0.72), to: b("smart", 0.67) },
-      { freeze: b("smart", 0.67), dur: 0.4 },
+      { freeze: b("smart", 0.67), dur: 0.78 },
       { from: b("smart", 0.67), to: b("smart", 1.35) },
-      { freeze: b("smart", 1.35), dur: 0.35 },
+      { freeze: b("smart", 1.35), dur: 0.75 },
       { from: b("smart", 1.35), to: b("apps", -0.24) },
       { from: b("apps", 0.6), to: b("trust", -0.23) },
       { from: b("trust", 0.45), to: b("talk", -1.6) },
@@ -128,8 +130,10 @@ export const SEGMENTS = [
       { src: b("face", 0.1), z: 1.45, x: 450, y: 390, dur: 1.0 },
       { src: b("name", -0.3), z: 1.6, x: 330, y: 330, dur: 0.8 },
       { src: b("brain", -0.2), z: 1, dur: 0.8 },
-      { src: b("open-models", -0.1), z: 1.3, x: 450, y: 400, dur: 1.0 },
-      { src: b("fast", 0.3), z: 1.42, x: 450, y: 380, dur: 6.5 },
+      // In on the open models and what they cost ("…$5.00 of credit … Your chats aren't used to train models").
+      { src: b("brain", 0.9), z: 1.55, x: 380, y: 400, dur: 1.6 },
+      { src: b("open-models", 1.2), z: 1.35, x: 450, y: 380, dur: 1.0 },
+      { src: b("fast", 0.3), z: 1.45, x: 450, y: 380, dur: 7.0 },
       { src: b("apps", 0.6), z: 1, dur: 0.6 },
       { src: b("app-grid", -0.4), z: 1.45, x: 450, y: 340, dur: 0.9 },
       { src: b("included", -0.2), z: 1.5, x: 450, y: 460, dur: 0.9 },
@@ -146,8 +150,9 @@ export const SEGMENTS = [
       { id: "S06b", src: b("name", 0.1) },
       // The open models, Juno getting smarter as you use it, your data and zero data retention.
       { id: "S07", src: b("brain", 0.15) },
-      { id: "S08", src: b("fast", 0.74) },
-      { id: "S09", src: b("smart", 0.65) },
+      // Each just after a held moment (a cue can't start inside one).
+      { id: "S08", src: b("fast", 0.751) },
+      { id: "S09", src: b("smart", 0.671) },
       { id: "S10", src: b("apps", 0.7) },
       { id: "S11", src: b("app-grid", 0.15) },
       { id: "S12", src: b("included", 0.7) },
@@ -245,7 +250,7 @@ export const SEGMENTS = [
     src: "voice",
     fade: 0.4,
     pieces: [
-      { freeze: 0.0, dur: 1.0 },
+      { freeze: 0.0, dur: 1.1 },
       { from: 0.0, to: 12.6 },
       { from: 12.6, to: 16.0, speed: 2 },
       { from: 16.0, to: 18.0 },
@@ -260,8 +265,9 @@ export const SEGMENTS = [
       { src: 12.55, until: 16.2, who: "YOU SAID", y: 540, text: "“Hey team, um, the lab report draft is in the shared folder.\nI'll finish the methods by Thursday. Actually, Wednesday.”" },
     ],
     vo: [
-      { id: "S22", at: 0.35 },
-      { id: "S23", at: 3.22 },
+      // After the call's last word (the crossfade is 0.4 s), and done before the dictation starts.
+      { id: "S22", at: 0.4 },
+      { id: "S23", at: 3.28 },
       { id: "S24", src: 12.62 },
     ],
   },

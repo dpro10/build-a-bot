@@ -1,6 +1,6 @@
 # The demo video
 
-A walkthrough of the real product for the hackathon (Devpost and YouTube, under 3 minutes), narrated throughout: the website and its recipes, signing in, building Juno (every brain there is, and Gmail, Google Docs and Meeting notes picked by hand), files into flashcards, a web search, a real call with a cut-in, voice typing and meeting notes in the desktop app, and how it's built. The script, the shot list and where every claim is true: [`SCRIPT.md`](SCRIPT.md). The promo, its one-minute sibling, is one folder up ([`../README.md`](../README.md)); this video reuses its end card.
+A walkthrough of the real product for the hackathon (Devpost and YouTube, under 3 minutes), narrated throughout: the website and its recipes, signing in, building Juno (all 12 open models on Nebius, and Gmail, Google Docs and Meeting notes picked by hand), files into flashcards, a web search, a real call with a cut-in, voice typing and meeting notes in the desktop app, and how it's built. The script, the shot list and where every claim is true: [`SCRIPT.md`](SCRIPT.md). The promo, its one-minute sibling, is one folder up ([`../README.md`](../README.md)); this video reuses its end card.
 
 Everything is rebuilt from here, and the media lands in `video/out/demo/` (gitignored):
 
