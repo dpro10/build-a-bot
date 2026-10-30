@@ -17,6 +17,17 @@ Anyone makes their own AI agent in about a minute: pick a face, give it a name, 
 
 ## Try it
 
+On [build-a-bot.site](https://build-a-bot.site), with nothing to install:
+
+1. **Build a bot:** click **Build your bot** (no account needed), or start from a recipe. Pick a face and a name, keep Nemotron 3.5 Lightning as the brain, add a couple of apps, and finish.
+2. **Chat with it:** the first five messages are free. Then sign in with your email (a link, no password), and your $5 of starter credit comes with it, no card needed.
+3. **Call it:** click **Call** in the bot's header and allow the microphone. NVIDIA Parakeet hears you, NVIDIA Magpie answers, and you can cut in anytime.
+4. **Voice typing and meeting notes** are in the desktop app for Mac and Windows: get it from [build-a-bot.site/download](https://build-a-bot.site/download), and pair it from the site's **Desktop app** page.
+
+Step by step, with what to ask it: [`docs/HACKATHON.md`](docs/HACKATHON.md#for-the-judges-testing-instructions).
+
+### Run it on your own computer
+
 ```bash
 npm install
 npm run dev        # http://localhost:3000, demo mode: simulated brain, apps and channels
@@ -30,7 +41,7 @@ npm install
 npm run dev        # pairs with http://localhost:3000
 ```
 
-Pair it from the web app: **Desktop app** → **Get a pairing code**. Real keys go in `.env.local` (see `.env.example`); anything left out stays simulated.
+Pair it from the web app: **Desktop app** → **Get a pairing code**. Real keys go in `.env.local` (see `.env.example`); anything left out stays simulated. [`docs/TRY-IT.md`](docs/TRY-IT.md) walks through everything in a local copy.
 
 ## What it does
 

@@ -1286,3 +1286,10 @@ Diego: "one thing is, you say \"name it Juno\" but you dont have to name it juno
 
 - **The line now:** "Pick a face and a color, give it any name, like Juno, and tell it what to call you." It's a third take in the same voice, split at the comma like the first, and level-matched.
 - **Its second half starts as the face step ends,** so "like Juno" lands while Juno is typed. Nothing else in the cut moved: it's still 2:56, and every line still checks word for word.
+
+## Decision: the README's "Try it" is the live site (Diego, 2026-10-30)
+
+Diego, on the README: "why is the try it some terminal lines? shouldnt they just try it through the site?"
+
+- **Try it** now walks through build-a-bot.site in four steps: build a bot (no account needed), chat with it and sign in by email ($5 of credit, no card), call it, and get the desktop app from the download page. It links to the judges' step by step in `docs/HACKATHON.md`.
+- **Running it locally** comes after, under "Run it on your own computer", with a pointer to `docs/TRY-IT.md`.
