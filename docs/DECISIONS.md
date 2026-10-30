@@ -2,6 +2,102 @@
 
 Copied from the Cookbook workspace "Build-a-bot" (workspace_id cf24d3d7-9eb9-47e0-be0f-0fd1a1debff2) on 2026-10-13, so cloud sessions without the Cookbook MCP have them. If you can reach Cookbook, `recall` there is the live version.
 
+## From the README (moved here on 2026-10-30)
+
+The README is the overview for visitors and the hackathon's judges, so its project notes moved here, as they were (Diego: "make sure evrything is simple and easy to follow").
+
+### Decisions so far
+
+The full notes, with Diego's own words, are below.
+
+**Diego, 2026-10-13**
+
+- **Separate from Cookbook at first:** its own brand and site. When people want their bots to talk to each other, that happens in Cookbook.
+- **Reuse the hackathon stack:** Nebius Token Factory for open-weight models, Tavily for web search.
+- **Bots act on the web:** they need to fill things out online.
+- **Dead-simple setup:** choose an avatar from a small set, a name, and a model, or connect a subscription you already pay for. It must look clean and modern and be easy enough for anyone.
+- **Keep the name** Build-a-bot.
+- **The user picks the model.** Don't apply for Sign in with ChatGPT yet. Subscriptions run the way Cookbook's Bridge does: the user's own CLI, signed in by them. (Reversed on 2026-10-20: no subscriptions, see below.)
+
+**Diego, 2026-10-14**
+
+- **Build the whole product now, end to end:** five cute avatars, a name, a brain (their subscription or an open-weight model on Nebius), apps from an extensive list, how much to trust it (including full faith), and several ways to talk to it.
+- **Meeting notes** (an idea from his mom): the bot notices a meeting, pops up to ask, and stays visible at the very bottom of the screen while it transcribes.
+- **Consent:** "It's one party consent. So as long as one person hits record, we're good." It still asks first and shows it's listening.
+- **Apple:** he already has an Apple Developer account, for signing the Mac app.
+
+**Diego, 2026-10-20**
+
+- **No Claude or ChatGPT plans:** "it goes against a core thing for this product (ZDR) and ... you cant talk to those models if the computer is closed." Then: "yes remove it, keep the api key option." The Bridge is gone from the web app, the desktop app and the repo; bots on a plan moved to the default open model.
+
+**Claude's build choices, for Diego to confirm:**
+
+- the four trust levels and the hard limits;
+- the pricing table (replaced on 2026-10-16: pay for usage, at cost);
+- the morning brief, on by default;
+- web actions on Browser Use Cloud, with Stagehand + Browserbase as the fallback;
+- the meeting-notes safety rules.
+
+"Cookbook on the inside" is still only a proposal: every bot would be a Cookbook agent under the hood, so bots talking to each other means one shared room. v1 is a standalone app with its own Postgres.
+
+### Still open
+
+The longer list is under "Open questions (updated 2026-10-17)", below.
+
+1. **First users:** tinkerers or everyday iPhone users? A 3-week hand-built test with 5 non-developers could decide.
+2. **Pricing:** pay for usage at cost is decided (2026-10-16). The starter credit is $5 (Diego, 2026-10-21). Open: refunding unused credit by hand when asked, and when, if ever, to add a margin.
+3. **Web actions:** confirm Browser Use Cloud, then test with a live key on about 10 real forms before turning it on for everyone.
+4. **Before launch:** a brand-free domain for bot inboxes, Twilio A2P 10DLC registration, and a Composio plan.
+5. **Trademark clearance** before spending on the brand.
+6. **Meeting notes and voice typing before launch:**
+   - a lawyer's look at the consent flow and retention;
+   - signed downloads, since both are only in the app: done on 2026-10-17: the Mac app is signed and notarized, the Windows installer is signed with Azure Artifact Signing, and both download from the public repository's releases.
+7. **Meeting notes, next:** meeting titles from the calendar, telling the call's speakers apart, and languages beyond Parakeet's 25.
+8. **Calls:** the voice server and Twilio are live (2026-10-17); texting waits on A2P 10DLC registration. Next: the bot calling you back when a job is done, a call starting your other agents (research, the cloud browser), and calls heard on your own computer.
+
+### Ground rules
+
+These hold whatever gets built next.
+
+**Subscriptions:**
+- **None** since 2026-10-20: bots don't think with a Claude, ChatGPT or Gemini chat plan, anywhere. Owners bring an API key instead.
+- **Never** collect, store or relay a Claude or ChatGPT login, and never reuse one on our servers.
+
+**Keys:**
+- Users' own API keys are encrypted at rest, never logged, and never sent back to the browser after entry.
+- Our keys (Token Factory, Tavily and the rest) and Apple's signing credentials never go in the repo; they live in environment variables and CI secrets.
+
+**Channels:**
+- Open today: Telegram, Discord DMs, and an email address the bot owns.
+- iMessage: only through gateways Apple hasn't sanctioned.
+- WhatsApp: bans general-purpose assistants in the US.
+- Reading someone's Gmail: needs Google's yearly CASA security audit.
+
+**Costs:**
+- **Model:** Nemotron 3.5 Lightning on Token Factory cost $0.06 per million input tokens and $0.24 per million output (checked for the hackathon). That's about $4 to $5 a month per active bot.
+- **Search:** Tavily includes 1,000 free credits a month, then $0.008 per credit; it's free for students.
+- **Calls:** the voice server's VM is about $124 a month (on Google Cloud's free trial credit for now), whatever the volume. A phone call adds Twilio's $0.0129 a minute (with the audio stream).
+- **Speech-to-text:** nothing: the desktop app hears voice typing and meetings on the user's computer (NVIDIA Parakeet). The optional speech server (`speech/`), a Nebius Serverless AI endpoint, would be about $190 a month for an 8-vCPU machine, whatever the volume. Its backup: NVIDIA Parakeet on Together AI, $0.0015 per audio minute.
+- **Reachability:** Token Factory, Tavily and the cloud-browser hosts all work on Diego's network. Kimi, DeepSeek and Together AI (the speech-to-text backup) are blocked there; the app calls Together from its server, so only local testing is affected.
+
+**Name:**
+- Build-A-Bear defeated a BUILD A BOT trademark application in 2004 (for toys).
+- Keep the brand name out of anything a bot owns (email addresses, phone numbers, handles), so a forced rename doesn't break contacts.
+- No bears or "Workshop", and nothing aimed at kids.
+- Get a clearance check before spending on the brand. The Texas A&M Law Trademark Clinic (tmc-info@law.tamu.edu) is in the USPTO's free clinic program.
+
+**Law:**
+- Say it's an AI, publish a crisis protocol, and launch 18+ only.
+- Meeting notes ask first and show they're listening. The caveats to one-party consent are in `docs/research/meetings-2026-10-14.md` §5.
+
+### Prior work
+
+These live in the Cookbook (dev) workspace:
+- the same research file;
+- the "Text your agents" doc (2026-10-01);
+- Chef / cookbook-dispatch, from the hackathon;
+- the DP jr. setup notes.
+
 ## Decision: Build-a-bot launches as its own brand; bot-to-bot happens in Cookbook
 
 **Diego (2026-10-13):** "at first i want it to be seperate from cookbook, but then if people want to start having their custom agents communicate that will happen in cookbook."
@@ -1287,9 +1383,16 @@ Diego: "one thing is, you say \"name it Juno\" but you dont have to name it juno
 - **The line now:** "Pick a face and a color, give it any name, like Juno, and tell it what to call you." It's a third take in the same voice, split at the comma like the first, and level-matched.
 - **Its second half starts as the face step ends,** so "like Juno" lands while Juno is typed. Nothing else in the cut moved: it's still 2:56, and every line still checks word for word.
 
-## Decision: the README's "Try it" is the live site (Diego, 2026-10-30)
+## Decision: a simple README and judges' guide, with Try it on the live site (Diego, 2026-10-30)
 
 Diego, on the README: "why is the try it some terminal lines? shouldnt they just try it through the site?"
 
 - **Try it** now walks through build-a-bot.site in four steps: build a bot (no account needed), chat with it and sign in by email ($5 of credit, no card), call it, and get the desktop app from the download page. It links to the judges' step by step in `docs/HACKATHON.md`.
 - **Running it locally** comes after, under "Run it on your own computer", with a pointer to `docs/TRY-IT.md`.
+
+Then: "go ahead and merge, make sure evrything is simple and easy to follow."
+
+- **The README** is for visitors and the judges: what it is, the links (the site, the video, the desktop app, the judges' guide), Try it, how it's built on NVIDIA and Nebius, what it does, running it locally, and where things are. Its project notes (decisions so far, still open, ground rules, prior work) moved to the top of this file, as they were.
+- **Fixed on the way:** texts and email aren't claimed as live (the site says they're coming); meeting notes and voice typing lose "(beta)", as on the site; web actions say "coming soon"; zero data retention is named under the brains.
+- **The judges' guide** (`docs/HACKATHON.md`) opens with the links and the testing steps, then what's real on the site, the hackathon's requirements, and the feedback for Nebius and NVIDIA. The submission checklist, the track and prizes, the YouTube text and the Devpost write-up moved to `docs/history/hackathon-submission.md`.
+- **Merged into main** so it's what GitHub shows.
